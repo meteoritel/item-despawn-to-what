@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.core.network.transport;
 
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveStatus;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleSaveStatus;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -8,7 +8,6 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
-import java.util.function.Consumer;
 
 /**
  * S2C：服务端要求客户端打开规则编辑入口，并携带会话握手信息。
@@ -27,9 +26,6 @@ public record OpenRuleEditorPayload(String sessionId, String targetId, int proto
     public static final StreamCodec<FriendlyByteBuf, OpenRuleEditorPayload> STREAM_CODEC =
             StreamCodec.of(OpenRuleEditorPayload::encode, OpenRuleEditorPayload::decode);
 
-    // 客户端结构化载荷消费者；由 client/net 的 RuleEditClientWorkspace 安装，是唯一的开屏路径
-    private static volatile Consumer<OpenRuleEditorPayload> payloadSink;
-
     public OpenRuleEditorPayload {
         sessionId = sessionId == null ? "" : sessionId;
         targetId = targetId == null ? "" : targetId;
@@ -37,22 +33,6 @@ public record OpenRuleEditorPayload(String sessionId, String targetId, int proto
         statusCode = statusCode == null ? RuleSaveStatus.UNAVAILABLE.id() : statusCode;
         messageArgs = messageArgs == null ? List.of() : List.copyOf(messageArgs);
         fallbackMessage = fallbackMessage == null ? "" : fallbackMessage;
-    }
-
-    // 安装/清除结构化载荷消费者；传 null 表示清除
-    public static void installOpenEditorPayloadSink(Consumer<OpenRuleEditorPayload> sink) {
-        payloadSink = sink;
-    }
-
-    // 分发完整载荷：只交给结构化消费者（client/net 工作区），尚无消费者时静默丢弃
-    public static void dispatchOpenEditor(OpenRuleEditorPayload payload) {
-        if (payload == null) {
-            return;
-        }
-        Consumer<OpenRuleEditorPayload> sink = payloadSink;
-        if (sink != null) {
-            sink.accept(payload);
-        }
     }
 
     // 编码：字段顺序固定

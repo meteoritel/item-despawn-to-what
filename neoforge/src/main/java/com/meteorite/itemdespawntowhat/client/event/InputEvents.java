@@ -15,4 +15,15 @@ public class InputEvents {
     public static void onClientTick(ClientTickEvent.Post event) {
         RuleEditClientWorkspace.instance().tick();
     }
+    /** 登录时创建该连接的编辑接收对象。 */
+    @net.neoforged.bus.api.SubscribeEvent
+    public static void connected(net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingIn event) {
+        RuleEditClientWorkspace.instance().bindConnection(event.getConnection());
+    }
+
+    /** 断开时只清理对应连接。 */
+    @net.neoforged.bus.api.SubscribeEvent
+    public static void disconnected(net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingOut event) {
+        RuleEditClientWorkspace.instance().unbindConnection(event.getConnection());
+    }
 }

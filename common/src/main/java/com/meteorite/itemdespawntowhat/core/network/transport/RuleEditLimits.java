@@ -24,16 +24,6 @@ public final class RuleEditLimits {
     // 一次变更集的字节上限
     public static final int MAX_CHANGE_SET_BYTES = 4 * 1024 * 1024;
 
-    // 单次变更集最多 2048 条；协议解析与文件写入层均复用该上限。
-    public static final int MAX_EDITS_PER_CHANGE_SET = 2048;
-
-    // 单次保存步骤最多处理 8 条；同时受公共 tick 预算与本步骤 1ms 软预算约束。
-    public static final int SAVE_ENTRIES_PER_STEP = 8;
-    public static final long SAVE_STEP_BUDGET_NANOS = 1_000_000L;
-
-    // 单次快照步骤最多处理 32 条；只按条数与公共 tick 预算节流，不设单步时间预算。
-    public static final int SNAPSHOT_ENTRIES_PER_STEP = 32;
-
     // 快照分片投递节拍：每 tick 最多下发 4 片，缩短大快照的投递 tick 数。
     public static final int SNAPSHOT_CHUNKS_PER_TICK = 4;
 
@@ -81,6 +71,9 @@ public final class RuleEditLimits {
 
     // 单条消息参数的字符上限
     public static final int MAX_MESSAGE_ARG_CHARS = 256;
+
+    /** 保存进度当前内容的展示字符上限。 */
+    public static final int MAX_PROGRESS_CURRENT_CHARS = 512;
 
     // 单次回执携带的结构化问题条数上限
     public static final int MAX_ISSUES_PER_RESULT = 64;

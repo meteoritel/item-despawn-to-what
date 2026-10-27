@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.core.network.transport;
 
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveProgress;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleSaveProgress;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -31,7 +31,7 @@ public record RuleSaveProgressPayload(String sessionId, String operationId, long
         buffer.writeEnum(progress.stage());
         buffer.writeVarInt(progress.completed());
         buffer.writeVarInt(progress.total());
-        buffer.writeUtf(progress.current(), RuleSaveProgress.MAX_CURRENT_CHARS);
+        buffer.writeUtf(RuleEditPayloadCodec.diagnosticText(progress.current(), RuleEditLimits.MAX_PROGRESS_CURRENT_CHARS), RuleEditLimits.MAX_PROGRESS_CURRENT_CHARS);
         buffer.writeBoolean(progress.cancellable());
     }
 
@@ -39,7 +39,7 @@ public record RuleSaveProgressPayload(String sessionId, String operationId, long
         return new RuleSaveProgressPayload(buffer.readUtf(RuleEditLimits.MAX_ID_CHARS),
                 buffer.readUtf(RuleEditLimits.MAX_ID_CHARS), buffer.readVarLong(),
                 new RuleSaveProgress(buffer.readEnum(RuleSaveProgress.Stage.class), buffer.readVarInt(),
-                        buffer.readVarInt(), buffer.readUtf(RuleSaveProgress.MAX_CURRENT_CHARS), buffer.readBoolean()));
+                        buffer.readVarInt(), buffer.readUtf(RuleEditLimits.MAX_PROGRESS_CURRENT_CHARS), buffer.readBoolean()));
     }
 
     /** @return 保存进度载荷类型 */

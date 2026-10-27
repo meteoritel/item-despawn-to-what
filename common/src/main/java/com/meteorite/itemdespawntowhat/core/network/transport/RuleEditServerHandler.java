@@ -1,336 +1,131 @@
 package com.meteorite.itemdespawntowhat.core.network.transport;
 
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveStatus;
-import com.meteorite.itemdespawntowhat.core.service.EditSessionManager;
+import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEditProtocol;
 import com.meteorite.itemdespawntowhat.core.service.RuleEditService;
-import com.meteorite.itemdespawntowhat.core.service.RuleEditPermissions;
-import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleEditRequest;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleEditReply;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleSaveStatus;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.Nullable;
-
-import java.nio.file.Path;
-import java.util.List;
-import java.util.Objects;
 import java.util.UUID;
 
-/**
- * 独占编辑会话的网络入口（薄转发）：payload -> RuleEditService -> 结果载荷下发。
- * 会话状态机与业务编排在 EditSessionManager / RuleEditService；本类只负责
- * 就绪与权限检查、活动 tick 取值、把结果写回对应玩家。
- * 时钟一律使用 MinecraftServer.getTickCount()（暂停时不再流逝）。
- */
+/** 无状态网络入口：把已解码帧映射为请求，交给当前服务端的业务与传输实例。 */
 public final class RuleEditServerHandler {
+    private RuleEditServerHandler() { }
 
-    private static final Logger LOGGER = LogManager.getLogger();
-
-    // 当前覆盖层根目录对应的会话状态机与服务层；根目录变化时整体重建
-    private static EditSessionManager sessionManager;
-    private static RuleEditService editService;
-    private static Path sessionOverlayRoot;
-
-    private RuleEditServerHandler() {
-        throw new UnsupportedOperationException("Utility class");
-    }
-
-    // 会话状态机；覆盖层根目录不可用时返回 null（调用方需按不可用处理）
-    public static synchronized @Nullable EditSessionManager sessionManager(RuleEditServerContext context) {
-        if (context == null || context.overlayRoot() == null) {
-            return null;
-        }
-        return sessions(context);
-    }
-
-    // 服务层；覆盖层根目录不可用时返回 null
-    public static synchronized @Nullable RuleEditService service(RuleEditServerContext context) {
-        if (context == null || context.overlayRoot() == null) {
-            return null;
-        }
-        sessions(context);
-        return editService;
-    }
-
-    // 运行时是否就绪：覆盖层根目录与类型注册表都可用
+    /** 当前上下文的业务能力是否可用。 */
     public static boolean isReady(@Nullable RuleEditServerContext context) {
-        return context != null && context.overlayRoot() != null && context.typeRegistries() != null;
+        return context != null && context.editService() != null && context.transport() != null
+                && context.overlayRoot() != null && context.typeRegistries() != null;
     }
 
-    /**
-     * 按命令相同口径判定玩家编辑权限。
-     *
-     * @param player 当前玩家；null 表示没有可鉴权的执行者
-     * @return 单人存档房主或权限等级达标时为 true
-     */
-    public static boolean canEdit(@Nullable ServerPlayer player) {
-        if (player == null) {
-            return false;
-        }
-        MinecraftServer server = player.getServer();
-        if (server == null) {
-            return false;
-        }
-        return RuleEditPermissions.hasAccess(player.createCommandSourceStack());
-    }
-
-    // 取当前覆盖层根目录对应的状态机：根目录变化则重建状态机与服务层
-    private static synchronized EditSessionManager sessions(RuleEditServerContext context) {
-        Path root = Objects.requireNonNull(context.overlayRoot(), "overlayRoot");
-        if (sessionManager == null || !root.equals(sessionOverlayRoot)) {
-            sessionManager = new EditSessionManager(root);
-            editService = new RuleEditService(sessionManager, RuleEditServerHandler::canEdit);
-            sessionOverlayRoot = root;
-        }
-        return sessionManager;
-    }
-
-    // 「打开编辑器」唯一入口：先原子取锁，成功或失败都把结论下发客户端；未就绪或无权限返回 null
-    public static @Nullable RuleEditService.OpenOutcome openEditor(ServerPlayer player,
-                                                                   RuleEditServerContext context) {
-        RuleEditService service = readyService(player, context, "");
-        if (service == null) {
-            return null;
-        }
-        RuleEditService.OpenOutcome outcome = service.openEditor(player, tick(player), context.maxPlaceBlockRadius());
-        context.sendTo(player, outcome.payload());
-        return outcome;
-    }
-
-    // C2S 确认：进入 ACTIVE 并回发快照
-    public static void handleConfirm(ServerPlayer player, RuleEditServerContext context,
-                                     ConfirmRuleEditorPayload payload) {
-        RuleEditService service = readyService(player, context, sessionId(payload == null ? null : payload.sessionId()));
-        if (service == null || payload == null) {
+    /** 握手版本属于传输契约，校验成功后才确认业务会话。 */
+    public static void handleConfirm(ServerPlayer player, RuleEditServerContext context, ConfirmRuleEditorPayload payload) {
+        if (payload.protocolVersion() != RuleEditProtocol.VERSION) {
+            context.sendTo(player, new RuleSessionEventPayload(payload.sessionId(), RuleSaveStatus.INVALID_REQUEST.id()));
             return;
         }
-        dispatch(context, player, service.confirm(player, context, serverOf(player), payload, tick(player)));
+        handle(player, context, new RuleEditRequest.Confirm(payload.sessionId()));
     }
 
-    // C2S 心跳：正常无回执，失效回 SESSION_EXPIRED
-    public static void handleHeartbeat(ServerPlayer player, RuleEditServerContext context,
-                                       HeartbeatRuleEditorPayload payload) {
-        RuleEditService service = readyService(player, context, sessionId(payload == null ? null : payload.sessionId()));
-        if (service == null || payload == null) {
-            return;
-        }
-        dispatch(context, player, service.heartbeat(player, payload, tick(player)));
+    /** 将 HeartbeatRuleEditorPayload 转交业务请求入口。 */
+    public static void handleHeartbeat(ServerPlayer player, RuleEditServerContext context, HeartbeatRuleEditorPayload payload) {
+        handle(player, context, new RuleEditRequest.Heartbeat(payload.sessionId()));
     }
 
-    // C2S 关闭：请求释放会话，保存期间延后到后台收尾
-    public static void handleClose(ServerPlayer player, RuleEditServerContext context,
-                                   CloseRuleEditorPayload payload) {
-        RuleEditService service = readyService(player, context, sessionId(payload == null ? null : payload.sessionId()));
-        if (service == null || payload == null) {
-            return;
-        }
-        dispatch(context, player, service.close(player, payload));
+    /** 将 CloseRuleEditorPayload 转交业务请求入口。 */
+    public static void handleClose(ServerPlayer player, RuleEditServerContext context, CloseRuleEditorPayload payload) {
+        handle(player, context, new RuleEditRequest.Close(payload.sessionId()));
     }
 
-    // C2S 快照请求：仅当前会话持有者有效
-    public static void handleSnapshotRequest(ServerPlayer player, RuleEditServerContext context,
-                                             RequestRuleSnapshotPayload payload) {
-        RuleEditService service = readyService(player, context, sessionId(payload == null ? null : payload.sessionId()));
-        if (service == null || payload == null) {
-            return;
-        }
-        dispatch(context, player, service.requestSnapshot(player, context, serverOf(player), payload, tick(player)));
+    /** 将 RequestRuleSnapshotPayload 转交业务请求入口。 */
+    public static void handleSnapshotRequest(ServerPlayer player, RuleEditServerContext context, RequestRuleSnapshotPayload payload) {
+        handle(player, context, new RuleEditRequest.Snapshot(payload.sessionId(), payload.requestId()));
     }
 
-    // C2S 目录请求：应答当前会话已确认后按来源分页下发
-    public static void handleCatalogRequest(ServerPlayer player, RuleEditServerContext context,
-                                            RequestRuleCatalogPayload payload) {
-        RuleEditService service = readyService(player, context, sessionId(payload == null ? null : payload.sessionId()));
-        if (service == null || payload == null) {
-            return;
-        }
-        dispatch(context, player, service.requestCatalog(player, payload, tick(player)));
+    /** 将 RequestRuleCatalogPayload 转交业务请求入口。 */
+    public static void handleCatalogRequest(ServerPlayer player, RuleEditServerContext context, RequestRuleCatalogPayload payload) {
+        handle(player, context, new RuleEditRequest.Catalog(payload.sessionId(), payload.requestId(), payload.catalogType(), payload.filter(), payload.page(), payload.pageSize()));
     }
 
-    /**
-     * 转发来源视图请求：仅当前会话持有者有效，应答来自最近一次快照装配的来源索引。
-     *
-     * @param player 请求玩家
-     * @param context 平台运行时上下文
-     * @param payload 来源视图请求
-     */
-    public static void handleSourceViewRequest(ServerPlayer player, RuleEditServerContext context,
-                                               RequestRuleSourceViewPayload payload) {
-        RuleEditService service = readyService(player, context, sessionId(payload == null ? null : payload.sessionId()));
-        if (service == null || payload == null) {
-            return;
-        }
-        dispatch(context, player, service.requestSourceView(player, payload, tick(player)));
+    /** 将 RequestRuleSourceViewPayload 转交业务请求入口。 */
+    public static void handleSourceViewRequest(ServerPlayer player, RuleEditServerContext context, RequestRuleSourceViewPayload payload) {
+        handle(player, context, new RuleEditRequest.SourceView(payload.sessionId(), payload.requestId(), payload.ruleId()));
     }
 
-    /**
-     * 转发已授权编辑器的统一参考寿命查询。
-     * @param player 请求玩家
-     * @param context 平台运行时上下文
-     * @param payload 查询载荷
-     */
-    public static void handleLifespanRequest(ServerPlayer player, RuleEditServerContext context,
-                                            RequestRuleLifespanPayload payload) {
-        RuleEditService service = readyService(player, context, sessionId(payload == null ? null : payload.sessionId()));
-        if (service == null || payload == null) {
-            return;
-        }
-        dispatch(context, player, service.requestLifespan(player, context, payload, tick(player)));
+    /** 将 RequestRuleLifespanPayload 转交业务请求入口。 */
+    public static void handleLifespanRequest(ServerPlayer player, RuleEditServerContext context, RequestRuleLifespanPayload payload) {
+        handle(player, context, new RuleEditRequest.Lifespan(payload.sessionId(), payload.requestId()));
     }
 
-    /**
-     * 转发对应保存的取消信号，回滚与完成回执仍由服务端续接任务处理。
-     * @param player 请求玩家
-     * @param context 平台上下文
-     * @param payload 保存操作标识
-     */
+    /** 将 CancelRuleSavePayload 转交业务请求入口。 */
     public static void handleCancelSave(ServerPlayer player, RuleEditServerContext context, CancelRuleSavePayload payload) {
-        // 取消不新增写入权限；原持有者即使刚失去编辑权限，也必须等在途写盘收尾后才收到终态。
-        RuleEditService service = service(context);
-        if (service != null) { dispatch(context, player, service.cancelSave(player, payload)); }
+        RuleEditTransport transport = context.transport();
+        if (transport != null) { transport.cancel(player, context, new RuleEditRequest.Cancel(payload.sessionId(), payload.operationId())); }
+        else { handle(player, context, new RuleEditRequest.Cancel(payload.sessionId(), payload.operationId())); }
     }
 
-    // C2S 变更集提交
-    public static void handleChangeSet(ServerPlayer player, RuleEditServerContext context,
-                                       SaveRuleChangeSetPayload payload) {
-        RuleEditService service = readyService(player, context, sessionId(payload == null ? null : payload.sessionId()), payload == null ? "" : payload.operationId());
-        if (service == null || payload == null) {
-            return;
-        }
-        dispatch(context, player, service.submitChangeSet(player, context, serverOf(player), payload, tick(player)));
+    /** 直发文本经过通道限额检查后进入保存。 */
+    public static void handleChangeSet(ServerPlayer player, RuleEditServerContext context, SaveRuleChangeSetPayload payload) {
+        if (rejectUnavailableSave(player, context, payload.sessionId(), payload.operationId())) { return; }
+        java.util.Objects.requireNonNull(context.transport()).save(player, context, payload.sessionId(), payload.operationId(), payload::changeSetJson);
     }
 
-    // C2S 变更集分片
-    public static void handleChangeSetChunk(ServerPlayer player, RuleEditServerContext context,
-                                            RuleChunkPayload payload) {
-        RuleEditService service = readyService(player, context, sessionId(payload == null ? null : payload.sessionId()), payload == null ? "" : payload.correlationId());
-        if (service == null || payload == null) {
-            return;
-        }
-        dispatch(context, player, service.submitChunk(player, context, serverOf(player), payload, tick(player)));
+    /** 分片在当前服务端的传输容器重组。 */
+    public static void handleChangeSetChunk(ServerPlayer player, RuleEditServerContext context, RuleChunkPayload payload) {
+        if (rejectUnavailableSave(player, context, payload.sessionId(), payload.correlationId())) { return; }
+        java.util.Objects.requireNonNull(context.transport()).chunk(player, context, payload);
     }
 
-    // 每 20 tick 由服务端 tick 事件驱动：检查确认窗口与租约
-    public static synchronized void expireIdle(@Nullable MinecraftServer server,
-                                               @Nullable RuleEditServerContext context) {
-        if (server == null || context == null || editService == null) {
-            return;
-        }
-        RuleEditService.Expired expired = editService.expireSessions(server, server.getTickCount());
-        RuleEditService.LifespanReply reply = editService.pollLifespan(server, context);
-        if (reply != null) context.sendTo(reply.player(), reply.payload());
-        if (expired.target() != null) {
-            dispatch(context, expired.target(), expired.outbound());
-        }
+    private static boolean rejectUnavailableSave(ServerPlayer player, RuleEditServerContext context, String sessionId, String operationId) {
+        if (isReady(context)) { return false; }
+        RuleEditService service = context.editService();
+        if (service != null && service.abortReplayedSave(player, sessionId, operationId)) { return true; }
+        context.sendTo(player, RuleSaveResultPayload.of(sessionId, operationId, RuleSaveStatus.UNAVAILABLE,
+                RuleEditMessages.key(RuleSaveStatus.UNAVAILABLE), java.util.List.of(), 0, false, false, java.util.List.of()));
+        return true;
     }
 
-    /**
-     * 每 tick 交付保存续接任务的完成回执。
-     * @param server 当前服务端
-     * @param context 平台网络上下文
-     */
-    public static void tick(MinecraftServer server, RuleEditServerContext context) {
-        if (editService == null) { return; }
-        RuleEditService.SaveReply progress = editService.pollSaveProgress(server);
-        if (progress != null) { dispatch(context, progress.player(), progress.outbound()); }
-        RuleEditService.SaveReply reply = editService.pollSave(server);
-        if (reply != null) { dispatch(context, reply.player(), reply.outbound()); }
-        RuleEditService.SaveReply snapshot = editService.pollSnapshot(server, context);
-        if (snapshot != null) { dispatch(context, snapshot.player(), snapshot.outbound()); }
-    }
-
-    /**
-     * 保存期间延后规则重载，防止重载读取文件替换的中间状态。
-     * @param reload 服务端线程上的重载动作
-     * @return 是否已延后
-     */
-    public static boolean deferReload(Runnable reload) {
-        return editService != null && editService.deferReload(reload);
-    }
-
-    /**
-     * 查询磁盘保存是否占用编辑目标，供同步规则命令避开文件替换中的目录。
-     * @return 是否存在未结束保存或覆盖层恢复隔离
-     */
-    public static boolean isSaving() { return editService != null && editService.saving(); }
-
-    // 玩家断开：清分片缓存；在途保存请求延后释放，其它会话按租约回收
-    public static synchronized void clearPlayer(UUID playerId) {
-        if (editService != null) {
-            editService.clearPlayer(playerId);
-        }
-    }
-
-    // 停服：清空分片与幂等记录，并丢弃当前状态机
-    public static void reset() {
-        if (editService != null) {
-            editService.reset();
-        }
-        sessionManager = null;
-        editService = null;
-        sessionOverlayRoot = null;
-    }
-
-    // 就绪检查与转发；会话号、持有者与权限由服务层准入判定
-    private static @Nullable RuleEditService readyService(ServerPlayer player, @Nullable RuleEditServerContext context,
-                                                          String sessionId) {
-        return readyService(player, context, sessionId, "");
-    }
-
-    private static @Nullable RuleEditService readyService(ServerPlayer player, @Nullable RuleEditServerContext context,
-                                                          String sessionId, String operationId) {
-        if (context == null) {
-            LOGGER.warn("编辑请求被忽略：运行时上下文不可用");
-            return null;
-        }
+    private static void handle(ServerPlayer player, RuleEditServerContext context, RuleEditRequest request) {
         if (!isReady(context)) {
-            // 重发在途保存不提前回 UNAVAILABLE：先中止该次保存，终态统一在收尾后发送
-            if (editService != null && editService.abortReplayedSave(player, sessionId, operationId)) {
-                return null;
+            RuleEditReply refusal = switch (request) {
+                case RuleEditRequest.Snapshot value -> new RuleEditReply.QueryResult(RuleEditRequest.Kind.SNAPSHOT, value.sessionId(), value.requestId(), RuleSaveStatus.UNAVAILABLE);
+                case RuleEditRequest.Catalog value -> new RuleEditReply.QueryResult(RuleEditRequest.Kind.CATALOG, value.sessionId(), value.requestId(), RuleSaveStatus.UNAVAILABLE);
+                case RuleEditRequest.SourceView value -> new RuleEditReply.QueryResult(RuleEditRequest.Kind.SOURCE_VIEW, value.sessionId(), value.requestId(), RuleSaveStatus.UNAVAILABLE);
+                case RuleEditRequest.Lifespan value -> new RuleEditReply.QueryResult(RuleEditRequest.Kind.LIFESPAN, value.sessionId(), value.requestId(), RuleSaveStatus.UNAVAILABLE);
+                case RuleEditRequest.Cancel value -> new RuleEditReply.Save(value.sessionId(), value.operationId(), RuleSaveStatus.UNAVAILABLE, java.util.List.of(), 0, false, false, java.util.List.of());
+                default -> new RuleEditReply.SessionEvent(request.sessionId(), RuleSaveStatus.UNAVAILABLE);
+            };
+            switch (refusal) {
+                case RuleEditReply.QueryResult(var kind, var session, var requestId, var status) ->
+                        context.sendTo(player, new RuleQueryResultPayload(kind.name(), session, requestId, status.id()));
+                case RuleEditReply.Save(var session, var operation, var status, var args, var version, var written, var reloaded, var issues) ->
+                        context.sendTo(player, RuleSaveResultPayload.of(session, operation, status, RuleEditMessages.key(status), args, version, written, reloaded, issues));
+                default -> context.sendTo(player, new RuleSessionEventPayload(request.sessionId(), RuleSaveStatus.UNAVAILABLE.id()));
             }
-            sendUnavailable(context, player, sessionId, operationId);
-            return null;
-        }
-        RuleEditService service = service(context);
-        if (service == null) {
-            sendUnavailable(context, player, sessionId, operationId);
-            return null;
-        }
-        return service;
-    }
-
-    // 运行时不可用回执；保存请求保留原操作号，以便客户端配对
-    private static void sendUnavailable(RuleEditServerContext context, ServerPlayer player, String sessionId,
-                                        String operationId) {
-        context.sendTo(player, RuleSaveResultPayload.of(sessionId(sessionId), operationId,
-                RuleSaveStatus.UNAVAILABLE, RuleSaveStatus.UNAVAILABLE.messageKey(),
-                List.of(), 0, false, false, List.of()));
-    }
-
-    // 按顺序下发一次请求产生的全部载荷
-    private static void dispatch(RuleEditServerContext context, ServerPlayer player,
-                                 RuleEditService.Outbound outbound) {
-        if (outbound == null) {
             return;
         }
-        for (CustomPacketPayload packet : outbound.packets()) {
-            context.sendTo(player, packet);
-        }
+        java.util.Objects.requireNonNull(context.transport()).send(context, player, java.util.Objects.requireNonNull(context.editService()).handle(player, context, player.getServer(), request, tick(player)));
     }
 
-    // 活动 tick；服务端缺失时退化为 0（会话会因租约立即到期而释放）
-    private static long tick(ServerPlayer player) {
-        MinecraftServer server = player.getServer();
-        return server == null ? 0L : server.getTickCount();
+    /** 推进当前宿主的业务完成与传输交付。 */
+    public static void tick(MinecraftServer server, RuleEditServerContext context) {
+        RuleEditTransport transport = context.transport();
+        if (transport != null) { transport.tick(server, context); }
     }
 
-    // 取服务端实例；缺失由服务层按 UNAVAILABLE 处理
-    private static @Nullable MinecraftServer serverOf(ServerPlayer player) {
-        return player.getServer();
+    /** 检查本次服务端的会话与分片租约。 */
+    public static void expireIdle(MinecraftServer server, RuleEditServerContext context) {
+        RuleEditTransport transport = context.transport();
+        if (transport != null) { transport.expire(server, context); }
     }
 
-    // sessionId 归一化：空值统一为空串，避免 NPE 并让回执可被客户端识别
-    private static String sessionId(@Nullable String value) {
-        return value == null ? "" : value;
+    /** 清理当前服务端的玩家断开状态。 */
+    public static void clearPlayer(UUID owner, RuleEditServerContext context) {
+        RuleEditTransport transport = context.transport();
+        if (transport != null) { transport.clearPlayer(owner); }
     }
+
+    private static long tick(ServerPlayer player) { return java.util.Objects.requireNonNull(player.getServer()).getTickCount(); }
 }

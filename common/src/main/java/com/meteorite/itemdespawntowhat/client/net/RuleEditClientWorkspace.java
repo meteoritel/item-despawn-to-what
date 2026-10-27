@@ -4,14 +4,14 @@ import com.google.gson.JsonObject;
 import com.mojang.serialization.DataResult;
 import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.api.DevelopmentDiagnostics;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalog;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogEntry;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
+import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalog;
+import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalogEntry;
+import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalogType;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEditProtocol;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveProgress;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveStatus;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshot;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSourceView;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleSaveProgress;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleSaveStatus;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleSnapshot;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleSourceView;
 import com.meteorite.itemdespawntowhat.core.network.transport.CancelRuleSavePayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.CloseRuleEditorPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.ConfirmRuleEditorPayload;
@@ -33,6 +33,11 @@ import com.meteorite.itemdespawntowhat.core.network.transport.RuleSourceViewPayl
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleTextChunker;
 import com.meteorite.itemdespawntowhat.core.service.RuleEditSessionLimits;
 import net.minecraft.client.Minecraft;
+import net.minecraft.network.Connection;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditClientReceiver;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleQueryResultPayload;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleSessionEventPayload;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleEditRequest;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
@@ -108,7 +113,10 @@ public final class RuleEditClientWorkspace {
     // 上行发送器；未注入时所有上行报文丢弃并记日志
     private @Nullable PacketSender sender;
 
-    private boolean sinksInstalled;
+    private @Nullable Connection receiverConnection;
+    private String snapshotRequestId = "";
+    private boolean snapshotPending;
+    private boolean sessionInvalidated;
 
     // ---- 会话状态 ----
     private RuleEditClientState state = RuleEditClientState.FREE;
@@ -179,11 +187,6 @@ public final class RuleEditClientWorkspace {
     // 注入/清除上行发送器（客户端初始化时调用）
     public static void installSender(@Nullable PacketSender sender) {
         INSTANCE.setSender(sender);
-    }
-
-    // 安装 S2C 消费者：客户端初始化时调用一次；重复调用安全
-    public static void installSinks() {
-        INSTANCE.installRouterSinks();
     }
 
     // 生成新的操作 id（服务端据此做幂等）
@@ -313,7 +316,11 @@ public final class RuleEditClientWorkspace {
         if (sessionId.isEmpty() || !connected()) {
             return;
         }
-        send(new RequestRuleSnapshotPayload(sessionId, UUID.randomUUID().toString()));
+        snapshotPending = true;
+        snapshotRequestId = UUID.randomUUID().toString();
+        snapshotFailure = null;
+        chunkBuffer.clear();
+        if (!send(new RequestRuleSnapshotPayload(sessionId, snapshotRequestId))) { snapshotRequestId = ""; }
     }
 
     // ---- 来源视图（按需加载） ----
@@ -472,7 +479,7 @@ public final class RuleEditClientWorkspace {
         }
         if (!connected()) {
             LOGGER.info("客户端已断开服务器连接，重置编辑会话工作区");
-            reset();
+            unbindConnection(receiverConnection);
             return;
         }
         long tick = currentTick();
@@ -486,20 +493,31 @@ public final class RuleEditClientWorkspace {
         this.sender = sender;
     }
 
-    // 安装 S2C 消费者（幂等）
-    private synchronized void installRouterSinks() {
-        if (sinksInstalled) {
-            return;
-        }
-        sinksInstalled = true;
-        RuleEditPayloadRouter.installSnapshotPayloadSink(this::onSnapshot);
-        RuleEditPayloadRouter.installChunkSink(this::onChunk);
-        RuleEditPayloadRouter.installResultPayloadSink(this::onResult);
-        RuleEditPayloadRouter.installProgressSink(this::onProgress);
-        RuleEditPayloadRouter.installCatalogSink(this::onCatalog);
-        RuleEditPayloadRouter.installLifespanSink(this::onLifespan);
-        RuleEditPayloadRouter.installSourceViewSink(this::onSourceView);
-        OpenRuleEditorPayload.installOpenEditorPayloadSink(this::onOpen);
+    /** 连接建立时创建本连接的接收对象，并清理上一个连接的编辑状态。 */
+    public synchronized void bindConnection(Connection connection) {
+        if (receiverConnection == connection) { return; }
+        if (receiverConnection != null) { RuleEditPayloadRouter.unbind(receiverConnection); }
+        reset(); receiverConnection = connection;
+        RuleEditPayloadRouter.bind(connection, new RuleEditClientReceiver() {
+            @Override public void open(OpenRuleEditorPayload payload) { onOpen(payload); }
+            @Override public void snapshot(RuleSnapshotPayload payload) { onSnapshot(payload); }
+            @Override public void chunk(RuleChunkPayload payload) { onChunk(payload); }
+            @Override public void result(RuleSaveResultPayload payload) { onResult(payload); }
+            @Override public void progress(RuleSaveProgressPayload payload) { onProgress(payload); }
+            @Override public void catalog(RuleCatalogPayload payload) { onCatalog(payload); }
+            @Override public void lifespan(RuleLifespanPayload payload) { onLifespan(payload); }
+            @Override public void sourceView(RuleSourceViewPayload payload) { onSourceView(payload); }
+            @Override public void queryResult(RuleQueryResultPayload payload) { onQueryResult(payload); }
+            @Override public void sessionEvent(RuleSessionEventPayload payload) { onSessionEvent(payload); }
+        });
+    }
+
+    /** 断开时只解除原连接；延后的旧断开事件不会清理新工作区。 */
+    public synchronized void unbindConnection(@Nullable Connection connection) {
+        if (connection != null && receiverConnection != connection) { return; }
+        RuleEditPayloadRouter.unbind(receiverConnection);
+        receiverConnection = null;
+        reset();
     }
 
     /**
@@ -595,6 +613,7 @@ public final class RuleEditClientWorkspace {
         if (payload == null || !payload.sessionId().equals(sessionId)) {
             return;
         }
+        if (pendingSourceView(payload.correlationId()) == null) { return; }
         String json = sourceViewChunks.accept(payload, currentTick());
         if (json != null) {
             onSourceView(new RuleSourceViewPayload(payload.sessionId(), payload.correlationId(),
@@ -648,6 +667,9 @@ public final class RuleEditClientWorkspace {
         openRequest = request;
         snapshot = null;
         snapshotFailure = null;
+        snapshotRequestId = "";
+        snapshotPending = true;
+        sessionInvalidated = false;
         snapshotRecvStartedNanos = 0L;
         snapshotRecvTransferId = "";
         snapshotRecvChunks = 0;
@@ -674,6 +696,9 @@ public final class RuleEditClientWorkspace {
             LOGGER.debug("忽略非当前会话的快照: session={}", payload.sessionId());
             return;
         }
+        if (!payload.requestId().isEmpty() && !payload.requestId().equals(snapshotRequestId)) { return; }
+        snapshotRequestId = "";
+        snapshotPending = false;
         applySnapshot(payload.snapshotJson(), false);
     }
 
@@ -726,6 +751,7 @@ public final class RuleEditClientWorkspace {
         if (payload == null || !payload.sessionId().equals(sessionId)) {
             return;
         }
+        if (!payload.correlationId().isEmpty() && !payload.correlationId().equals(snapshotRequestId)) { return; }
         if (DevelopmentDiagnostics.enabled()) {
             // 新传输批次从首片重新计时，避免把上一批的空闲时间算进本次接收
             if (snapshotRecvStartedNanos == 0L || !payload.transferId().equals(snapshotRecvTransferId)) {
@@ -737,8 +763,59 @@ public final class RuleEditClientWorkspace {
         }
         String json = chunkBuffer.accept(payload, currentTick());
         if (json != null) {
+            snapshotRequestId = "";
+            snapshotPending = false;
             applySnapshot(json, true);
         }
+    }
+
+    private synchronized void onQueryResult(RuleQueryResultPayload payload) {
+        if (sessionId.isEmpty() || !sessionId.equals(payload.sessionId())) { return; }
+        RuleEditRequest.Kind kind;
+        try { kind = RuleEditRequest.Kind.valueOf(payload.kind()); }
+        catch (IllegalArgumentException unknown) { return; }
+        boolean matched = false;
+        switch (kind) {
+            case SNAPSHOT -> {
+                if (snapshotPending && snapshotRequestId.equals(payload.requestId())) {
+                    matched = true; snapshotPending = false; snapshotRequestId = ""; chunkBuffer.clear();
+                    snapshotFailure = payload.statusCode();
+                }
+            }
+            case SOURCE_VIEW -> {
+                SourceViewLoad load = pendingSourceView(payload.requestId());
+                if (load != null) { matched = true; load.requestId = ""; load.deadline = 0; load.failed = true; }
+            }
+            case CATALOG -> {
+                for (var entry : catalogRequestIds.entrySet()) {
+                    if (!entry.getValue().equals(payload.requestId())) { continue; }
+                    matched = true;
+                    DirectoryLoad load = directories.get(entry.getKey());
+                    if (load != null) { load.waiting = false; load.failed = true; load.validating = false; }
+                    catalogRequestIds.remove(entry.getKey());
+                    break;
+                }
+            }
+            case LIFESPAN -> {
+                if (lifespanRequestId.equals(payload.requestId())) { matched = true; lifespanRequestId = ""; }
+            }
+        }
+        if (matched && sessionLost(RuleSaveStatus.fromId(payload.statusCode()))) { invalidateSession(); }
+    }
+
+    private synchronized void onSessionEvent(RuleSessionEventPayload payload) {
+        if (sessionId.isEmpty() || !sessionId.equals(payload.sessionId())) { return; }
+        invalidateSession();
+    }
+
+    private void invalidateSession() {
+        if (state == RuleEditClientState.APPLYING) { sessionInvalidated = true; cancelSave(); }
+        else { endSession(); }
+    }
+
+    private static boolean sessionLost(@Nullable RuleSaveStatus status) {
+        return status == RuleSaveStatus.SESSION_EXPIRED || status == RuleSaveStatus.LOCK_NOT_OWNED
+                || status == RuleSaveStatus.LOCK_BUSY || status == RuleSaveStatus.NO_PERMISSION;
     }
 
     private synchronized void onProgress(RuleSaveProgressPayload payload) {
@@ -762,16 +839,11 @@ public final class RuleEditClientWorkspace {
             LOGGER.debug("忽略非当前会话的回执: session={}", payload.sessionId());
             return;
         }
-        if (state == RuleEditClientState.APPLYING) {
-            if (!sessionId.equals(payload.sessionId()) || !savingOperationId.equals(payload.operationId())) { return; }
-        } else if (!payload.operationId().isEmpty()) {
-            // 本次保存已结束；迟到的重复回执不能覆盖后续请求或版本。
-            return;
-        }
+        if (state != RuleEditClientState.APPLYING || !sessionId.equals(payload.sessionId())
+                || !savingOperationId.equals(payload.operationId())) { return; }
         lastResult = payload;
         RuleSaveStatus status = RuleSaveStatus.fromId(payload.statusCode());
-        if (status == RuleSaveStatus.SESSION_EXPIRED || status == RuleSaveStatus.LOCK_NOT_OWNED
-                || status == RuleSaveStatus.LOCK_BUSY) {
+        if (sessionInvalidated || sessionLost(status)) {
             LOGGER.info("编辑会话已失效: status={}", payload.statusCode());
             endSession();
             return;
@@ -785,6 +857,7 @@ public final class RuleEditClientWorkspace {
                 cancelRequested = false;
             }
             contextRevision = payload.resultVersion();
+            if (status == RuleSaveStatus.VERSION_CONFLICT || status == RuleSaveStatus.SAVED_NOT_RELOADED) { snapshotPending = true; snapshotRequestId = ""; }
             // 保存成功/无变化时服务端不附送快照，回到 ACTIVE 后主动补一次快照请求，
             // 使列表内容与 contextRevision 同源；VERSION_CONFLICT/SAVED_NOT_RELOADED
             // 由服务端随回执推送，不再重复请求
@@ -807,16 +880,8 @@ public final class RuleEditClientWorkspace {
             LOGGER.warn("规则目录解析失败: type={} bytes={}", payload.catalogType(), payload.json().length());
             return;
         }
-        // 过时响应直接丢弃：只接受与本类型最近一次请求 requestId 相符的响应；
-        // requestId 缺失（旧路径/兼容）时退回仅按 sessionId 接受
-        String latestRequestId = catalogRequestIds.get(type);
-        String responseRequestId = payload.requestId();
-        if (latestRequestId != null && responseRequestId != null && !responseRequestId.isEmpty()
-                && !latestRequestId.equals(responseRequestId)) {
-            LOGGER.debug("忽略过时目录响应: type={} requestId={} latest={}", payload.catalogType(), responseRequestId,
-                    latestRequestId);
-            return;
-        }
+        if (!payload.requestId().equals(catalogRequestIds.get(type))) { return; }
+        catalogRequestIds.remove(type);
         catalogs.put(type, parsed);
         acceptDirectory(type, parsed);
     }
@@ -843,6 +908,9 @@ public final class RuleEditClientWorkspace {
             contextRevision = 0;
             snapshot = null;
             snapshotFailure = null;
+            snapshotRequestId = "";
+            snapshotPending = false;
+            sessionInvalidated = false;
             catalogs.clear();
             directories.clear();
             catalogRequestIds.clear();

@@ -21,7 +21,6 @@ public class ClientSetup {
         // FMLClientSetupEvent 是并行分发事件，接线统一排到客户端主线程执行
         event.enqueueWork(() -> {
             // 客户端编辑工作区接线：安装 S2C 消费者与上行发送器
-            RuleEditClientWorkspace.installSinks();
             RuleEditClientWorkspace.installSender(PacketDistributor::sendToServer);
             // 编辑界面接线：把编辑器主屏注册为 EditorScreenHooks 的实现
             RuleEditorOpener.bootstrap();

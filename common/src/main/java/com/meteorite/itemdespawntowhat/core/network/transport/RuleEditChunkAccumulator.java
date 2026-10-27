@@ -16,11 +16,10 @@ import java.util.UUID;
 public final class RuleEditChunkAccumulator {
 
     // 玩家 UUID -> (transferId -> 在途批次)；插入序即淘汰序
-    private static final Map<UUID, Map<String, RuleChunkAssembly.Batch>> SESSIONS = new LinkedHashMap<>();
+    private final Map<UUID, Map<String, RuleChunkAssembly.Batch>> SESSIONS = new LinkedHashMap<>();
 
-    private RuleEditChunkAccumulator() {
-        throw new UnsupportedOperationException("Utility class");
-    }
+    /** 创建本次服务端生命周期的分片容器。 */
+    public RuleEditChunkAccumulator() { }
 
     /**
      * 分片重组结果：收齐时 complete=true 且 json 为完整文本；收齐后超过变更集总量上限时 rejected=true；
@@ -43,7 +42,7 @@ public final class RuleEditChunkAccumulator {
      * @param tick 服务端活动刻
      * @return 重组结果
      */
-    public static synchronized AcceptResult acceptValidated(Player player, @Nullable RuleChunkAssembly.Chunk validated, long tick) {
+    public synchronized AcceptResult acceptValidated(Player player, @Nullable RuleChunkAssembly.Chunk validated, long tick) {
         if (player == null || validated == null) {
             return AcceptResult.PENDING;
         }
@@ -91,7 +90,7 @@ public final class RuleEditChunkAccumulator {
      * 清理超过空闲阈值的分片传输（按活动 tick 计）。
      * @param tick 服务端活动刻
      */
-    public static synchronized void expireIdle(long tick) {
+    public synchronized void expireIdle(long tick) {
         Iterator<Map.Entry<UUID, Map<String, RuleChunkAssembly.Batch>>> players = SESSIONS.entrySet().iterator();
         while (players.hasNext()) {
             Map<String, RuleChunkAssembly.Batch> byTransfer = players.next().getValue();
@@ -106,14 +105,14 @@ public final class RuleEditChunkAccumulator {
      * 清理某玩家的全部在途传输。
      * @param playerId 玩家 UUID
      */
-    public static synchronized void clear(@Nullable UUID playerId) {
+    public synchronized void clear(@Nullable UUID playerId) {
         if (playerId != null) {
             SESSIONS.remove(playerId);
         }
     }
 
     // 清空全部在途传输（停服时调用）
-    public static synchronized void clearAll() {
+    public synchronized void clearAll() {
         SESSIONS.clear();
     }
 }

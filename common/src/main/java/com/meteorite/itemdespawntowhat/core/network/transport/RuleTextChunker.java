@@ -1,6 +1,5 @@
 package com.meteorite.itemdespawntowhat.core.network.transport;
 
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveStatus;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import org.jetbrains.annotations.Nullable;
 
@@ -19,57 +18,15 @@ public final class RuleTextChunker {
      * 文本传输通道族：决定总量上限、分片通道 id 与直发载荷形态。
      */
     public enum Family {
+        CHANGE_SET, SNAPSHOT, SOURCE_VIEW;
 
-        // C2S：变更集提交
-        CHANGE_SET(RuleEditLimits.MAX_CHANGE_SET_BYTES, RuleChunkPayload.CHANGE_SET) {
-            @Override
-            RuleTextPayload direct(String sessionId, String correlationId, String json) {
-                return new SaveRuleChangeSetPayload(sessionId, correlationId, json);
-            }
-        },
-
-        // S2C：快照下发
-        SNAPSHOT(RuleEditLimits.MAX_SNAPSHOT_BYTES, RuleChunkPayload.SNAPSHOT) {
-            @Override
-            RuleTextPayload direct(String sessionId, String correlationId, String json) {
-                return new RuleSnapshotPayload(sessionId, correlationId, json);
-            }
-        },
-
-        // S2C：来源视图下发
-        SOURCE_VIEW(RuleEditLimits.MAX_SOURCE_VIEW_BYTES, RuleChunkPayload.SOURCE_VIEW) {
-            @Override
-            RuleTextPayload direct(String sessionId, String correlationId, String json) {
-                return new RuleSourceViewPayload(sessionId, correlationId, RuleSaveStatus.SUCCESS.id(), json);
-            }
-        };
-
-        private final int maxBytes;
-        private final CustomPacketPayload.Type<RuleChunkPayload> chunkType;
-
-        Family(int maxBytes, CustomPacketPayload.Type<RuleChunkPayload> chunkType) {
-            this.maxBytes = maxBytes;
-            this.chunkType = chunkType;
+        /** 本 family 的总字节限额来自通道声明。 */
+        public int maxBytes() { return RuleEditChannels.text(this).maxBytes(); }
+        /** 本 family 的分片类型来自通道声明。 */
+        public CustomPacketPayload.Type<RuleChunkPayload> chunkType() { return RuleEditChannels.text(this).chunkType(); }
+        RuleTextPayload direct(String sessionId, String correlationId, String json) {
+            return RuleEditChannels.text(this).direct().create(sessionId, correlationId, json);
         }
-
-        /**
-         * 本次传输的文本总量上限（UTF-8 字节）。
-         * @return 字节上限
-         */
-        public int maxBytes() {
-            return maxBytes;
-        }
-
-        /**
-         * 分片通道 id。
-         * @return 通道 id
-         */
-        public CustomPacketPayload.Type<RuleChunkPayload> chunkType() {
-            return chunkType;
-        }
-
-        // 不超过直发上限时的整包载荷
-        abstract RuleTextPayload direct(String sessionId, String correlationId, String json);
     }
 
     private RuleTextChunker() {

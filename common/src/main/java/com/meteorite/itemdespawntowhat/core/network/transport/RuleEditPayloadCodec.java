@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.core.network.transport;
 
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleIssue;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleIssue;
 import io.netty.handler.codec.DecoderException;
 import net.minecraft.network.FriendlyByteBuf;
 
@@ -19,10 +19,10 @@ final class RuleEditPayloadCodec {
 
     // 写入字符串列表：先写条数，再逐条写入
     static void writeStrings(FriendlyByteBuf buffer, List<String> values) {
-        List<String> safe = values == null ? List.of() : values;
+        List<String> safe = values == null ? List.of() : values.subList(0, Math.min(values.size(), RuleEditLimits.MAX_MESSAGE_ARGS));
         buffer.writeVarInt(safe.size());
         for (String value : safe) {
-            buffer.writeUtf(value == null ? "" : value, RuleEditLimits.MAX_MESSAGE_ARG_CHARS);
+            buffer.writeUtf(diagnosticText(value, RuleEditLimits.MAX_MESSAGE_ARG_CHARS), RuleEditLimits.MAX_MESSAGE_ARG_CHARS);
         }
     }
 
@@ -43,7 +43,7 @@ final class RuleEditPayloadCodec {
     static void writeNullableString(FriendlyByteBuf buffer, String value) {
         buffer.writeBoolean(value != null);
         if (value != null) {
-            buffer.writeUtf(diagnosticText(value, RuleEditLimits.MAX_CODE_CHARS), RuleEditLimits.MAX_CODE_CHARS);
+            buffer.writeUtf(value, RuleEditLimits.MAX_CODE_CHARS);
         }
     }
 
@@ -63,14 +63,13 @@ final class RuleEditPayloadCodec {
             buffer.writeUtf(diagnosticText(issue.origin(), RuleEditLimits.MAX_CODE_CHARS), RuleEditLimits.MAX_CODE_CHARS);
             buffer.writeUtf(diagnosticText(issue.fieldPath(), RuleEditLimits.MAX_FALLBACK_CHARS), RuleEditLimits.MAX_FALLBACK_CHARS);
             buffer.writeUtf(diagnosticText(issue.messageCode(), RuleEditLimits.MAX_CODE_CHARS), RuleEditLimits.MAX_CODE_CHARS);
-            writeStrings(buffer, issue.messageArgs().stream().limit(RuleEditLimits.MAX_MESSAGE_ARGS)
-                    .map(value -> diagnosticText(value, RuleEditLimits.MAX_MESSAGE_ARG_CHARS)).toList());
+            writeStrings(buffer, issue.messageArgs());
             buffer.writeUtf(diagnosticText(issue.fallbackMessage(), RuleEditLimits.MAX_FALLBACK_CHARS), RuleEditLimits.MAX_FALLBACK_CHARS);
         }
     }
 
     // FriendlyByteBuf 按 UTF-16 长度和最多三倍字节数限额；完整代理对的 UTF-8 编码同样满足该字节界限。
-    private static String diagnosticText(String value, int maxChars) {
+    static String diagnosticText(String value, int maxChars) {
         if (value == null) {
             return "";
         }

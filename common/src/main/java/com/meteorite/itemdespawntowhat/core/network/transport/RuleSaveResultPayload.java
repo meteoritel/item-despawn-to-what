@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.core.network.transport;
 
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleIssue;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveStatus;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleIssue;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleSaveStatus;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
