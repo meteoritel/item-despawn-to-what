@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Stream;
+import java.util.stream.Collectors;
 
 /**
  * 规则及其条件树的编解码入口。
@@ -47,43 +48,6 @@ public final class RuleCodecs {
 
     /** 规则内容未声明 enabled 时的默认启用值：默认启用是本服状态缺席时的继承值 */
     public static final boolean DEFAULT_ENABLED = true;
-
-    /** 规则文件允许出现的顶层字段；启用状态不在此列，它由本服状态层单独保存 */
-    public static final Set<String> KNOWN_RULE_FIELDS = Set.of(
-            RuleFields.ID,
-            RuleFields.ENABLED,
-            RuleFields.PRIORITY,
-            RuleFields.DISPLAY_NAME,
-            RuleFields.NOTES,
-            RuleFields.SOURCE,
-            RuleFields.CONDITIONS,
-            RuleFields.TRIGGER_AFTER_SECONDS,
-            RuleFields.EFFECTS,
-            RuleFields.TRIGGERS,
-            RuleFields.SOURCE_COST,
-            RuleFields.CATALYST_COST,
-            RuleFields.CONSUME_FLUID,
-            RuleFields.COMBINATION,
-            RuleFields.OUTCOMES,
-            RuleFields.SCHEMA_VERSION,
-            RuleFields.CATEGORY
-    );
-
-    // 候选结果对象允许出现的字段（未知字段与效果类型一致，采用错误级严格检查）
-    private static final Set<String> OUTCOME_FIELDS = Set.of(
-            RuleFields.CANDIDATE_ID,
-            RuleFields.CANDIDATE_EFFECTS,
-            RuleFields.SAFE_SPAWN,
-            RuleFields.FILL_ORIGIN
-    );
-
-    // 催化剂固定成本对象允许出现的字段；未知字段（含 chance / conditions / delay_ticks）按错误级拒绝
-    private static final Set<String> CATALYST_COST_FIELDS = Set.of(
-            RuleFields.CATALYST_ITEMS,
-            RuleFields.ITEM_COUNTS,
-            RuleFields.CONSUME_COUNTS,
-            RuleFields.CATALYST_RADIUS
-    );
 
     // 条件二维数组写法的分组字段名：仅用于识别该写法并报错
     private static final String LEGACY_GROUPS = "groups";
@@ -137,13 +101,27 @@ public final class RuleCodecs {
         return TypeDispatch.flat(effectTypes, Effect::type).codec();
     }
 
-    /** 规则编解码器 */
+    /** 规则字段 codec；字段名由本构件唯一声明。 */
+    public static MapCodec<Rule> mapCodec(TypeRegistry<EffectType<?>> effectTypes,
+                                         TypeRegistry<ConditionType<?>> conditionTypes) {
+        return codecs(effectTypes, conditionTypes).rule();
+    }
+
+    /** 规则编解码器，保持扁平 JSON 契约。 */
     public static Codec<Rule> codec(TypeRegistry<EffectType<?>> effectTypes,
+                                   TypeRegistry<ConditionType<?>> conditionTypes) {
+        return mapCodec(effectTypes, conditionTypes).codec();
+    }
+
+    private record RuleCodecSet(MapCodec<Rule> rule, MapCodec<OutcomeCandidate> outcome) {}
+
+    // 一次装配同时保留规则与候选的实际字段 codec，解码与字段检查共享它们。
+    private static RuleCodecSet codecs(TypeRegistry<EffectType<?>> effectTypes,
                                     TypeRegistry<ConditionType<?>> conditionTypes) {
         Codec<ConditionExpression> expressionCodec = conditionExpressionCodec(conditionTypes);
         Codec<Effect> effectCodec = effectCodec(effectTypes);
-        Codec<OutcomeCandidate> outcomeCodec = OutcomeCandidate.codec(effectCodec);
-        return RecordCodecBuilder.create(instance -> instance.group(
+        MapCodec<OutcomeCandidate> outcomeCodec = OutcomeCandidate.mapCodec(effectCodec);
+        MapCodec<Rule> ruleCodec = RecordCodecBuilder.mapCodec(instance -> instance.group(
                 ResourceLocation.CODEC.fieldOf(RuleFields.ID).forGetter(Rule::id),
                 Codec.BOOL.optionalFieldOf(RuleFields.ENABLED, DEFAULT_ENABLED).forGetter(Rule::enabled),
                 Codec.INT.optionalFieldOf(RuleFields.PRIORITY, 0).forGetter(Rule::priority),
@@ -165,7 +143,7 @@ public final class RuleCodecs {
                 Codec.BOOL.optionalFieldOf(RuleFields.CONSUME_FLUID, Boolean.FALSE).forGetter(Rule::consumeFluid),
                 CombinationMode.CODEC.optionalFieldOf(RuleFields.COMBINATION, CombinationMode.ROUND_ROBIN)
                         .forGetter(Rule::combination),
-                outcomeCodec.listOf().optionalFieldOf(RuleFields.OUTCOMES, List.of())
+                outcomeCodec.codec().listOf().optionalFieldOf(RuleFields.OUTCOMES, List.of())
                         .forGetter(Rule::outcomes),
                 effectCodec.listOf().optionalFieldOf(RuleFields.EFFECTS, List.of()).forGetter(Rule::effects),
                 Codec.INT.optionalFieldOf(RuleFields.SCHEMA_VERSION, DEFAULT_SCHEMA_VERSION)
@@ -175,6 +153,7 @@ public final class RuleCodecs {
                 new Rule(id, enabled, priority, displayName.orElse(null), notes.orElse(null), source, conditions,
                         triggerAfterSeconds, effects, new LinkedHashSet<>(triggers), sourceCost.orElse(null),
                         catalystCost.orElse(null), consumeFluid, combination, outcomes, schemaVersion)));
+        return new RuleCodecSet(ruleCodec, outcomeCodec);
     }
 
     // 构造加载层可用的解码器；未知顶层字段不阻断加载，但会作为 WARN 进入 IssueCollector。
@@ -190,12 +169,16 @@ public final class RuleCodecs {
     public static RuleDecoder<Rule> decoder(RegistryAccess registryAccess,
                                             TypeRegistry<EffectType<?>> effectTypes,
                                             TypeRegistry<ConditionType<?>> conditionTypes) {
-        Codec<Rule> ruleCodec = codec(effectTypes, conditionTypes);
+        RuleCodecSet codecs = codecs(effectTypes, conditionTypes);
+        Codec<Rule> ruleCodec = codecs.rule().codec();
         DynamicOps<JsonElement> ops = RegistryOps.create(JsonOps.INSTANCE, registryAccess);
+        Set<String> ruleFields = fields(codecs.rule(), ops);
+        Set<String> outcomeFields = fields(codecs.outcome(), ops);
+        Set<String> catalystFields = fields(CatalystCost.MAP_CODEC, ops);
         return (body, issues) -> {
-            warnUnknownFields(body, issues);
-            boolean fieldsValid = checkOutcomeFields(body, issues);
-            fieldsValid &= checkCatalystCostFields(body, issues);
+            warnUnknownFields(body, issues, ruleFields);
+            boolean fieldsValid = checkOutcomeFields(body, issues, outcomeFields);
+            fieldsValid &= checkCatalystCostFields(body, issues, catalystFields);
             if (!fieldsValid) {
                 return DataResult.error(() -> "候选结果或 catalyst_cost 字段非法");
             }
@@ -208,17 +191,23 @@ public final class RuleCodecs {
         };
     }
 
+    // MapCodec 的键均为对象字段名；在解码器构造时派生一次，而非逐条规则重建。
+    private static <T> Set<String> fields(MapCodec<?> codec, DynamicOps<T> ops) {
+        return codec.keys(ops).map(key -> ops.getStringValue(key).result().orElseThrow())
+                .collect(Collectors.toUnmodifiableSet());
+    }
+
     // 顶层未知字段告警
-    private static void warnUnknownFields(JsonObject body, IssueCollector issues) {
+    private static void warnUnknownFields(JsonObject body, IssueCollector issues, Set<String> fields) {
         for (String key : body.keySet()) {
-            if (!KNOWN_RULE_FIELDS.contains(key)) {
+            if (!fields.contains(key) && !RuleFields.CATEGORY.equals(key)) {
                 issues.warn("未知字段: " + key, null, key);
             }
         }
     }
 
     // 候选结果对象的未知字段：与效果类型一致采用错误级严格检查
-    private static boolean checkOutcomeFields(JsonObject body, IssueCollector issues) {
+    private static boolean checkOutcomeFields(JsonObject body, IssueCollector issues, Set<String> fields) {
         JsonElement raw = body.get(RuleFields.OUTCOMES);
         if (raw == null || !raw.isJsonArray()) {
             return true;
@@ -228,7 +217,7 @@ public final class RuleCodecs {
         for (JsonElement element : raw.getAsJsonArray()) {
             if (element.isJsonObject()) {
                 for (String key : element.getAsJsonObject().keySet()) {
-                    if (!OUTCOME_FIELDS.contains(key)) {
+                    if (!fields.contains(key)) {
                         valid = false;
                         issues.error("候选结果存在未知字段: " + key, null,
                                 RuleFields.OUTCOMES + "[" + index + "]." + key);
@@ -241,7 +230,7 @@ public final class RuleCodecs {
     }
 
     // 催化剂固定成本：整数写法与对象内未知字段都按错误级拒绝（不做静默兼容）
-    private static boolean checkCatalystCostFields(JsonObject body, IssueCollector issues) {
+    private static boolean checkCatalystCostFields(JsonObject body, IssueCollector issues, Set<String> fields) {
         JsonElement raw = body.get(RuleFields.CATALYST_COST);
         if (raw == null) {
             return true;
@@ -252,7 +241,7 @@ public final class RuleCodecs {
         }
         boolean valid = true;
         for (String key : raw.getAsJsonObject().keySet()) {
-            if (!CATALYST_COST_FIELDS.contains(key)) {
+            if (!fields.contains(key)) {
                 valid = false;
                 issues.error("catalyst_cost 存在未知字段: " + key, null, RuleFields.CATALYST_COST + "." + key);
             }

@@ -11,7 +11,7 @@
 ## 决策
 
 1. **Rule 增加可选展示名**：当前 `public record Rule(ResourceLocation id, boolean enabled, int priority, @Nullable String displayName, @Nullable String notes, SourceMatcher source, ConditionExpression conditions, int triggerAfterSeconds, List<Effect> effects, Set<TriggerKind> triggers, @Nullable SourceCost sourceCost, @Nullable CatalystCost catalystCost, boolean consumeFluid, CombinationMode combination, List<OutcomeCandidate> outcomes, int schemaVersion)` —— `displayName` 紧跟在 `priority` 之后、`notes` 之前（字段顺序是契约的一部分）；`effects` 之后的扩展字段见 [ADR-0043](0043-result-budget-and-source-settlement.md)，不影响 `displayName` 的位置与语义。
-2. **JSON 字段名 `display_name`**（`RuleFields.DISPLAY_NAME`），加入 `KNOWN_RULE_FIELDS`，因此未知字段检查不会把它当成噪声。
+2. **JSON 字段名 `display_name`**（`RuleFields.DISPLAY_NAME`），由规则 MapCodec 声明，未知字段集合从其 keys 派生。
 3. **规范化**：`strip` 后为空串 → 视为未命名（`null`）；长度按 **Unicode code point** 计，超过 `ConditionLimits.MAX_DISPLAY_NAME_CODEPOINTS`（128）即校验失败（`RuleValidation`）。
 4. **技术 id 仍是唯一身份**：覆盖、删除、索引、命令、日志与覆盖文件名一律按 id 匹配；`display_name` **不参与**任何身份判定，也不影响规则排序（排序键为优先级 desc → 条件叶数 desc → 定义序）。
 5. **覆盖文件命名由 id 派生**：`<namespace>/<path>.json`，命名空间为一级目录、路径可含子目录；一个文件一条规则。

@@ -68,8 +68,8 @@ flowchart LR
 | 类型（`core/model` 下） | 角色 | 职责 | 协作对象 |
 |---|---|---|---|
 | `Rule` | 聚合根 | 规则唯一配置单元；紧凑构造器规范化展示名、空条件、空消失方式与空候选；派生 `complexity()`、`isRunnable()`、`effectiveTriggers()`、`effectiveOutcomes()`、`allEffects()` | `RuleCodecs` 解码、`RuleValidation` 校验、运行时索引 |
-| `RuleCodecs` | 编解码入口 | 组装规则 Codec 与递归条件树 Codec；`decoder(...)` 在解码前做顶层未知字段告警、候选结果与 `catalyst_cost` 的未知字段报错、条件树规模预检 | `TypeDispatch`、`RuleDecodeBudget`、`OutcomeCandidate`、各枚举 CODEC |
-| `RuleValidation` | 校验入口 | 结构档检查 id、触发时间、源匹配、`effects`/`outcomes` 二选一、`schema_version`、固定成本、展示名码点、条件树结构与规模；注册表档追加逐效果/逐叶的类型参数校验与未注册类型报错；运行期上限档再叠加服务端配置的放置半径上限 | `IssueCollector`、`ParamChecks`、`RefChecks`、`TypeRegistry` |
+| `RuleCodecs` | 编解码入口 | 保留规则、候选与催化剂的 MapCodec，以实际 keys 派生解码字段集合；组装递归条件树 Codec；`decoder(...)` 在解码前做顶层未知字段告警、候选结果与 `catalyst_cost` 的未知字段报错、条件树规模预检 | `TypeDispatch`、`RuleDecodeBudget`、`OutcomeCandidate`、各枚举 CODEC |
+| `RuleValidation` | 校验入口 | 结构档检查 id、触发时间、源匹配、`effects`/`outcomes` 二选一、`schema_version`、固定成本、展示名码点、条件树结构与规模；注册表档对每个效果与条件叶先执行绑定声明检查，再调业务语义和运行期限额钩子，并报告未注册类型；运行期上限档再叠加服务端配置的放置半径上限 | `IssueCollector`、`ParamChecks`、`RefChecks`、`TypeRegistry` |
 | `ConditionExpression` / `ConditionNode` / `ConditionTrees` / `ConditionLimits` | 条件树（数据 + 算法 + 限额） | 表达式只有一个根节点，`null` 表示无条件；节点分组合、取反与条件叶，构造器只做不可变拷贝，非空与规模在 `isStructurallyValid()` 与解码期判定；遍历产出与 JSON 一致的字段路径并统计叶数/节点数/深度，`replaceAt`/`updateTermsAt` 为纯函数结构变换（非法路径返回原树并记 WARN）；叶数、节点数、深度、效果数与源匹配项上限集中在限额常量，节点与深度直接引用 `RuleDecodeBudget` 的同一常量 | `RuleCodecs`、运行时求值器、编辑器、`RuleValidation` |
 | `Effect` / `EffectType` / `SimpleEffectType` / `Condition` / `ConditionType` / `SimpleConditionType` | 类型定义扩展点 | 参数对象实现 `Effect`（类型 id、延迟、概率）或 `Condition`（类型 id）；`EffectType` 追加执行器、一次性标记、产出类别与每轮一组容量需求（`capacityDemand`），`ConditionType` 追加求值器与可求值性门禁；`Simple*` 用 id + MapCodec + 校验器 + 执行器或求值器 + 参数声明一行注册 | `core/api` 的执行器与求值器契约、注册表 |
 | `CommonFields` | 共用参数声明 | 效果通用字段（延迟、概率）的 spec 声明、默认值与 `EFFECT_PARAMS`；各效果把它拼进自己的 `PARAMS` | 各效果参数记录 |
@@ -112,7 +112,7 @@ flowchart LR
 
 ### 扩展点
 
-- **扩规则级字段**：在 `RuleFields` 加常量 → 在 `RuleCodecs.codec(...)` 的 `RecordCodecBuilder` 组里加可选字段 → 在 `Rule` 加分量 → 需要的语义检查写进 `RuleValidation` → 同步 `RuleCodecs.KNOWN_RULE_FIELDS`。纯展示字段只加常量与白名单，由快照装配直接读原始 JSON，保持 `Rule` 只承载规则语义字段。
+- **扩规则级字段**：在 `RuleFields` 加常量 → 在 `RuleCodecs.mapCodec(...)` 使用的 `RecordCodecBuilder` 组里加字段 → 在 `Rule` 加分量 → 需要的语义检查写进 `RuleValidation`。未知字段集合从实际 MapCodec 派生；`category` 作为原始来源的展示元数据在顶层检查中显式放行，由快照装配读取。
 - **扩枚举取值**：消失方式在 `TriggerKind` 加常量，组合模式在 `CombinationMode` 加常量，两者都沿用 `key()` 的小写下划线序列化与大小写不敏感解析；新增产出类别在 `ProductKind` 加常量并给出分类标识，分类组合语义集中在本模块的分类器里。
 - **扩条件节点类型**：改 `ConditionNode` 的 `permits` 与记录 → 补 `ConditionTrees` 的遍历/统计/结构变换 → 补 `RuleCodecs` 的节点编解码与节点字段白名单 → 同步 `ConditionExpression.isStructurallyValid()` → 若节点会加深树，同步 `RuleDecodeBudget` 的预算遍历，并在 `RuleFields` 补节点字段名。
 - **扩通用效果字段**：改 `CommonFields` 的 spec 声明（含默认值、单位与编辑器窗口）；各效果已引用同一 `EFFECT_PARAMS`，无需逐类型修改。

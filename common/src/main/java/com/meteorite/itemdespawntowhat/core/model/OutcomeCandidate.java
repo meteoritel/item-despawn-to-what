@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.core.model;
 
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.mojang.serialization.Codec;
+import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 
 import java.util.List;
@@ -30,9 +31,9 @@ public record OutcomeCandidate(
         effects = effects == null ? List.of() : List.copyOf(effects);
     }
 
-    // 候选结果编解码器；效果编解码器由调用方按注册表提供
-    public static Codec<OutcomeCandidate> codec(Codec<Effect> effectCodec) {
-        return RecordCodecBuilder.create(instance -> instance.group(
+    /** 候选结果的字段 codec；字段预检与规则解码共用同一实例。 */
+    public static MapCodec<OutcomeCandidate> mapCodec(Codec<Effect> effectCodec) {
+        return RecordCodecBuilder.mapCodec(instance -> instance.group(
                 Codec.STRING.fieldOf(RuleFields.CANDIDATE_ID).forGetter(OutcomeCandidate::id),
                 effectCodec.listOf().optionalFieldOf(RuleFields.CANDIDATE_EFFECTS, List.of())
                         .forGetter(OutcomeCandidate::effects),
@@ -43,7 +44,12 @@ public record OutcomeCandidate(
         ).apply(instance, OutcomeCandidate::new));
     }
 
-    // 隐式候选：把顶层 effects 映射成唯一候选（仅内存态，不写入 JSON）
+    /** 效果编解码器由调用方按类型注册表提供。 */
+    public static Codec<OutcomeCandidate> codec(Codec<Effect> effectCodec) {
+        return mapCodec(effectCodec).codec();
+    }
+
+    /** 隐式候选：把顶层 effects 映射成唯一候选（仅内存态，不写入 JSON） */
     public static OutcomeCandidate implicit(List<Effect> effects) {
         return new OutcomeCandidate(IMPLICIT_ID, effects, DEFAULT_SAFE_SPAWN, DEFAULT_FILL_ORIGIN);
     }

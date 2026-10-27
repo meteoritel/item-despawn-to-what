@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.core.model;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.mojang.serialization.Codec;
+import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 
 import java.util.List;
@@ -62,7 +63,7 @@ public record CatalystCost(
     }
 
     /** 对象编解码：items 必填；门槛缺省为 1，消耗缺省为 0，半径缺省为 1。 */
-    public static final Codec<CatalystCost> CODEC = RecordCodecBuilder.create(instance -> instance.group(
+    public static final MapCodec<CatalystCost> MAP_CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
             TaggedId.CODEC.listOf().fieldOf(RuleFields.CATALYST_ITEMS).forGetter(CatalystCost::items),
             Codec.intRange(MIN_RADIUS, MAX_RADIUS).optionalFieldOf(RuleFields.CATALYST_RADIUS, DEFAULT_RADIUS)
                     .forGetter(CatalystCost::radius),
@@ -71,4 +72,7 @@ public record CatalystCost(
             Codec.unboundedMap(TaggedId.CODEC, Codec.intRange(MIN_CONSUME_COUNT, MAX_COUNT))
                     .optionalFieldOf(RuleFields.CONSUME_COUNTS, Map.of()).forGetter(CatalystCost::consumeCounts)
     ).apply(instance, CatalystCost::new));
+    /** 保持对象 codec 出口，字段集合由 MAP_CODEC 派生。 */
+    public static final Codec<CatalystCost> CODEC = MAP_CODEC.codec();
+
 }
