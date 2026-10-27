@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.shared;
 
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
+import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalogType;
 import java.util.Locale;
 import org.jetbrains.annotations.Nullable;
 

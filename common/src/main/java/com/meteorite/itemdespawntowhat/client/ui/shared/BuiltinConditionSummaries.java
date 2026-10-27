@@ -7,7 +7,7 @@ import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
+import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalogType;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;

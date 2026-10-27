@@ -1,7 +1,5 @@
 package com.meteorite.itemdespawntowhat.core.catalog;
 
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogEntry;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;

@@ -1,4 +1,4 @@
-package com.meteorite.itemdespawntowhat.core.network.protocol;
+package com.meteorite.itemdespawntowhat.core.catalog;
 
 import org.jetbrains.annotations.Nullable;
 
@@ -6,7 +6,7 @@ import java.util.Locale;
 
 /**
  * 选择目录类型：物品/方块/实体/战利品表/群系/维度/标签/流体/状态效果。
- * 与 core/catalog 的数据源、core/network/catalog 的分页缓存配套使用。
+ * 与 core/catalog 的数据源、同包的实例分页缓存配套使用。
  */
 public enum RuleCatalogType {
     ITEM,
@@ -19,12 +19,16 @@ public enum RuleCatalogType {
     FLUID,
     MOB_EFFECT;
 
-    // 线上传输用的类型名（枚举名，客户端按同名字符串比较）
+    /**
+     * 线上传输用的类型名（枚举名，客户端按同名字符串比较）
+     */
     public String id() {
         return name();
     }
 
-    // 宽松解析：未知类型返回 null，调用方回 INVALID_REQUEST
+    /**
+     * 宽松解析：未知类型返回 null，调用方回 INVALID_REQUEST
+     */
     public static @Nullable RuleCatalogType fromId(@Nullable String id) {
         if (id == null || id.isBlank()) {
             return null;

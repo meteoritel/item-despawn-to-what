@@ -2,7 +2,7 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.ui.shared.FluidPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCatalogGrid;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
+import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalogType;
 import java.util.Set;
 import org.jetbrains.annotations.Nullable;
 

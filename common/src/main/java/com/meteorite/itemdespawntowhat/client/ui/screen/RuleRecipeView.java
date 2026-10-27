@@ -22,7 +22,7 @@ import com.meteorite.itemdespawntowhat.core.model.OutcomeCandidate;
 import com.meteorite.itemdespawntowhat.core.model.ProductKind;
 import com.meteorite.itemdespawntowhat.core.model.RuleCategoryClassifier;
 import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
+import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalogType;
 import com.mojang.serialization.Codec;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;

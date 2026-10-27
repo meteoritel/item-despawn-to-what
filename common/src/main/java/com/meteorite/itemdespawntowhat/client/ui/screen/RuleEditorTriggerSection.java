@@ -24,7 +24,7 @@ import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
 import com.meteorite.itemdespawntowhat.core.model.ConditionNode;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
+import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalogType;
 import com.meteorite.itemdespawntowhat.core.type.condition.BiomeCondition;
 import java.util.ArrayList;
 import java.util.List;

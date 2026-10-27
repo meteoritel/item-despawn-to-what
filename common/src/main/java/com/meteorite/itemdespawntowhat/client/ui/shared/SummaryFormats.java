@@ -4,7 +4,7 @@ import com.meteorite.itemdespawntowhat.client.edit.FieldNumbers;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
+import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalogType;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;

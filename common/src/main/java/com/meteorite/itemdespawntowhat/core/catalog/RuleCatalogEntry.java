@@ -1,4 +1,4 @@
-package com.meteorite.itemdespawntowhat.core.network.protocol;
+package com.meteorite.itemdespawntowhat.core.catalog;
 
 import com.google.gson.JsonObject;
 
@@ -8,7 +8,9 @@ import com.google.gson.JsonObject;
  */
 public record RuleCatalogEntry(String id, String label, String subLabel, String icon) {
 
-    // 线上 JSON 字段键
+    /**
+     * 线上 JSON 字段键
+     */
     public static final String KEY_ID = "id";
     public static final String KEY_LABEL = "label";
     public static final String KEY_SUB_LABEL = "sub_label";
@@ -21,7 +23,9 @@ public record RuleCatalogEntry(String id, String label, String subLabel, String 
         icon = icon == null ? "" : icon;
     }
 
-    // 条目序列化
+    /**
+     * 条目序列化
+     */
     public JsonObject toJson() {
         JsonObject json = new JsonObject();
         json.addProperty(KEY_ID, id);

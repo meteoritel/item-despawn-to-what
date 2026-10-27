@@ -1,7 +1,5 @@
 package com.meteorite.itemdespawntowhat.core.catalog;
 
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogEntry;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 

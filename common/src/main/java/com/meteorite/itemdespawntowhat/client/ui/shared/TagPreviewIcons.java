@@ -3,7 +3,7 @@ package com.meteorite.itemdespawntowhat.client.ui.shared;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiCarousel;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
+import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalogType;
 import java.util.List;
 import net.minecraft.Util;
 import net.minecraft.core.registries.BuiltInRegistries;

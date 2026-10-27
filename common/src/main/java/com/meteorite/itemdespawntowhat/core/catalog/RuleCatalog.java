@@ -1,4 +1,4 @@
-package com.meteorite.itemdespawntowhat.core.network.protocol;
+package com.meteorite.itemdespawntowhat.core.catalog;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -15,7 +15,9 @@ import java.util.List;
  */
 public record RuleCatalog(RuleCatalogType type, int revision, List<RuleCatalogEntry> entries, boolean lastPage) {
 
-    // 线上 JSON 字段键
+    /**
+     * 线上 JSON 字段键
+     */
     public static final String KEY_TYPE = "type";
     public static final String KEY_REVISION = "revision";
     public static final String KEY_ENTRIES = "entries";
@@ -25,12 +27,16 @@ public record RuleCatalog(RuleCatalogType type, int revision, List<RuleCatalogEn
         entries = entries == null ? List.of() : List.copyOf(entries);
     }
 
-    // 空目录（类型合法但来源为空时使用）
+    /**
+     * 空目录（类型合法但来源为空时使用）
+     */
     public static RuleCatalog empty(RuleCatalogType type, int revision) {
         return new RuleCatalog(type, revision, List.of(), true);
     }
 
-    // 序列化为 JSON 文本
+    /**
+     * 序列化为 JSON 文本
+     */
     public String serialize() {
         JsonObject root = new JsonObject();
         root.addProperty(KEY_TYPE, type == null ? "" : type.id());
@@ -44,7 +50,9 @@ public record RuleCatalog(RuleCatalogType type, int revision, List<RuleCatalogEn
         return root.toString();
     }
 
-    // 解析 JSON 文本；类型未知或结构非法时返回失败结果
+    /**
+     * 解析 JSON 文本；类型未知或结构非法时返回失败结果
+     */
     public static DataResult<RuleCatalog> parse(String text) {
         if (text == null || text.isBlank()) {
             return DataResult.error(() -> "目录为空");

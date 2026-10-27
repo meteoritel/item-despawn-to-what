@@ -3,7 +3,7 @@ package com.meteorite.itemdespawntowhat.client.ui.shared;
 import com.meteorite.itemdespawntowhat.client.edit.EditorRegistries;
 import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
+import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalogType;
 import java.util.Locale;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.locale.Language;

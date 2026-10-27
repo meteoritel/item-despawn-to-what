@@ -1,7 +1,5 @@
 package com.meteorite.itemdespawntowhat.core.catalog;
 
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogEntry;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
@@ -32,34 +30,26 @@ import java.util.Set;
  *   <li>icon：物品与方块为条目 id 字符串（客户端据此取物品/方块模型），其余类型为空串；
  *       客户端解析失败必须走缺省渲染，不得抛异常。</li>
  * </ul>
- * <p>列表按 id 字典序稳定排序；结果缓存在数据源实例内，而实例按服务端实例复用，因此重复请求不会重建全部字符串。
+ * <p>列表按 id 字典序稳定排序；结果缓存在数据源实例内，而实例由服务端编辑宿主复用，因此重复请求不会重建全部字符串。
  * {@code revision()} 每次现场按可展示内容的内容哈希计算、不缓存：注册表类数据源哈希 id 集合，标签数据源哈希
  * 「标签 id → 注册表短名」映射；内容未变时稳定，reload 后内容变化即改变。</p>
  * <p>全部方法只在服务端主线程调用。</p>
  */
 public final class RuleCatalogSources {
 
-    // 按服务端实例缓存的源列表：换服（或换存档）时整体重建，前一个服务端实例随之可回收
-    private static volatile CacheEntry cache;
-
     private RuleCatalogSources() {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    // 服务端内置候选数据源
-    // 此处借用 Minecraft 管理的实例，生命周期由游戏负责，不能在此关闭。
-    @SuppressWarnings("resource")
+    /**
+     * 服务端内置候选数据源
+     * 此处借用 Minecraft 管理的实例，生命周期由游戏负责，不能在此关闭。
+     */
     public static List<RuleCatalogSource> builtin(MinecraftServer server) {
         if (server == null) {
             return List.of();
         }
-        CacheEntry cached = cache;
-        if (cached != null && cached.server() == server) {
-            return cached.sources();
-        }
-        List<RuleCatalogSource> sources = create(server);
-        cache = new CacheEntry(server, sources);
-        return sources;
+        return create(server);
     }
 
     // 按 RuleCatalogType 的声明顺序建立九类数据源
@@ -170,5 +160,4 @@ public final class RuleCatalogSources {
     }
 
     // 源列表与其所属服务端：同一服务端复用实例，从而复用 all() 的条目缓存
-    private record CacheEntry(MinecraftServer server, List<RuleCatalogSource> sources) {}
 }
