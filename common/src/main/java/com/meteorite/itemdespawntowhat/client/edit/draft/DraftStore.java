@@ -28,7 +28,7 @@ import org.jetbrains.annotations.Nullable;
  * 编辑锁与覆盖层是服务端的事，草稿只是本机未提交的编辑中间态。
  * <p>本类只做同步文件操作，不持有队列：读写次序由 {@link DraftWriter} 单线程串行调用保证。
  */
-public record DraftStore(Path directory) {
+record DraftStore(Path directory) {
 
     // 相对游戏根目录的草稿目录
     public static final String DIRECTORY = "config/" + Constants.MOD_ID + "/client/editor-drafts";

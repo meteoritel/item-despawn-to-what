@@ -1,6 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.edit.draft;
 
+import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.Constants;
+import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -8,7 +10,7 @@ import java.util.Map;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 草稿落盘节流器：内存里记住「哪些目标待写盘」，按时间窗口合并写盘请求。
+ * 草稿保留策略、基线与落盘生命周期：按业务状态决定保留或删除，再按时间窗口合并写盘。
  * <p>节流窗口 {@link #SAVE_DELAY_MS} 毫秒：连续编辑只在停顿后写一次盘，
  * 避免每次按键/每次结构变换都碰磁盘；界面关闭、会话失效等关键时刻调用
  * {@link #flushAll()} 立即写盘，保证草稿不丢。
@@ -18,12 +20,18 @@ import org.jetbrains.annotations.Nullable;
  */
 public final class DraftJournal {
 
-    // 编辑停顿多久后写盘
+    /**
+     * 编辑停顿多久后写盘
+     */
     public static final long SAVE_DELAY_MS = 2000L;
-    // 关闭界面/存档等关键点等待写盘完成的上限
+    /**
+     * 关闭界面/存档等关键点等待写盘完成的上限
+     */
     public static final long DRAIN_WAIT_MS = 1500L;
 
-    private final DraftStore store;
+    private final DraftStore store = new DraftStore();
+    // 已确认的保存基线；只在建立会话、玩家保留草稿或应用成功时推进。
+    private final Map<String, JsonObject> baselines = new LinkedHashMap<>();
     // 磁盘写入的单写入者：所有 save/delete/clear 都经它按提交顺序串行执行
     private final DraftWriter writer;
     // 目标 id -> 最近一次待写/已写内容
@@ -31,47 +39,75 @@ public final class DraftJournal {
     // 目标 id -> 允许写盘的时间点（毫秒时间戳）
     private final Map<String, Long> pending = new LinkedHashMap<>();
 
-    public DraftJournal(DraftStore store) {
-        this.store = store;
-        this.writer = new DraftWriter(store);
+    /** 装配本地仓库与单写入者，界面只接触业务状态。 */
+    public DraftJournal() {
+        this.writer = new DraftWriter(this.store);
     }
 
-    public DraftStore store() {
-        return this.store;
-    }
-
-    // 从磁盘恢复全部草稿（同 id 保留 saved_at 较新的一份）；只在写入者空闲时调用（界面打开阶段）
-    public List<PersistedDraft> restore() {
+    /** 恢复业务状态；同目标保留 saved_at 较新的一份，原始基线留给后续冲突处理。 */
+    public List<RestoredDraft> restore() {
         for (PersistedDraft draft : this.store.loadAll()) {
             PersistedDraft current = this.entries.get(draft.targetId());
             if (current == null || draft.savedAt() >= current.savedAt()) {
                 this.entries.put(draft.targetId(), draft);
             }
         }
-        return new ArrayList<>(this.entries.values());
+        List<RestoredDraft> restored = new ArrayList<>();
+        for (PersistedDraft draft : this.entries.values()) {
+            if (draft.baseline() != null) {
+                this.baselines.put(draft.targetId(), draft.baseline());
+            }
+            restored.add(new RestoredDraft(draft.targetId(), draft.created(), draft.deleted(), draft.enableIntent(),
+                    draft.baseline() == null ? null : RuleDraft.of(draft.baseline()).root(),
+                    draft.draft().isEmpty() ? null : RuleDraft.of(draft.draft()).root()));
+        }
+        return restored;
     }
 
-    public boolean has(String targetId) {
-        return this.entries.containsKey(targetId);
+    /** 捕获已确认的服务端基线；快照独立保存，后续落盘直接复用。 */
+    public void captureBaseline(String targetId, @Nullable JsonObject serverBody) {
+        if (serverBody == null) {
+            this.baselines.remove(targetId);
+        } else {
+            this.baselines.put(targetId, serverBody.deepCopy());
+        }
     }
 
-    public @Nullable PersistedDraft get(String targetId) {
-        return this.entries.get(targetId);
-    }
-
-    // 记录改动并安排延迟写盘：只更新内存状态，真正写盘发生在到期后的 flushDue/flushAll
-    public void markDirty(PersistedDraft snapshot) {
+    /** 依据内容、可写性与意图保留或删除草稿，连续改动按窗口合并。 */
+    public void markDirty(DraftState state) {
+        PersistedDraft snapshot = snapshotOf(state);
+        if (snapshot == null) {
+            drop(state.targetId());
+            return;
+        }
         this.entries.put(snapshot.targetId(), snapshot);
         this.pending.put(snapshot.targetId(), System.currentTimeMillis() + SAVE_DELAY_MS);
     }
 
-    // 取走并清空写盘失败事件计数（界面提示用）
+    private @Nullable PersistedDraft snapshotOf(DraftState state) {
+        RuleDraft content = state.content();
+        boolean writableContent = !state.readOnly() && content != null;
+        boolean keepContent = writableContent && (content.isDirty() || state.created() || state.unresolvedConflict());
+        boolean keepIntent = state.enableIntent() != null && (writableContent || state.readOnly());
+        if (!keepContent && !keepIntent) {
+            return null;
+        }
+        return new PersistedDraft(state.targetId(), writableContent && state.created(),
+                writableContent && content.isDeleted(), state.enableIntent(), this.baselines.get(state.targetId()),
+                writableContent ? content.toJson() : new JsonObject(), System.currentTimeMillis());
+    }
+
+    /**
+     * 取走并清空写盘失败事件计数（界面提示用）
+     */
     public int consumeFailures() {
         return this.writer.consumeFailures();
     }
 
-    // 显式重试上次写失败的草稿：由玩家的保存/关闭动作触发，后台不会自动重排。
-    // 重试取内存里的最新快照，而不是写入者记住的那份旧内容；已被丢弃的目标不再写回
+    /**
+     * 显式重试上次写失败的草稿：由玩家的保存/关闭动作触发，后台不会自动重排。
+     * 重试取内存里的最新快照，而不是写入者记住的那份旧内容；已被丢弃的目标不再写回
+     */
     public void retryFailed() {
         for (PersistedDraft failed : this.writer.takeFailures()) {
             PersistedDraft latest = this.entries.get(failed.targetId());
@@ -81,14 +117,23 @@ public final class DraftJournal {
         }
     }
 
-    // 立即交出单个目标的写盘任务（冲突处理、应用失败后保留草稿等关键时刻）
-    public void writeNow(PersistedDraft snapshot) {
+    /**
+     * 立即交出单个目标的写盘任务（冲突处理、应用失败后保留草稿等关键时刻）
+     */
+    public void writeNow(DraftState state) {
+        PersistedDraft snapshot = snapshotOf(state);
+        if (snapshot == null) {
+            drop(state.targetId());
+            return;
+        }
         this.entries.put(snapshot.targetId(), snapshot);
         this.pending.remove(snapshot.targetId());
         this.writer.submitSave(snapshot);
     }
 
-    // 交出所有到期条目的写盘任务
+    /**
+     * 交出所有到期条目的写盘任务
+     */
     public void flushDue(long now) {
         for (String targetId : new ArrayList<>(this.pending.keySet())) {
             Long deadline = this.pending.get(targetId);
@@ -104,7 +149,9 @@ public final class DraftJournal {
         }
     }
 
-    // 无视节流窗口立即交出全部待写条目（界面关闭时调用）
+    /**
+     * 无视节流窗口立即交出全部待写条目（界面关闭时调用）
+     */
     public void flushAll() {
         for (String targetId : new ArrayList<>(this.pending.keySet())) {
             PersistedDraft snapshot = this.entries.get(targetId);
@@ -131,17 +178,22 @@ public final class DraftJournal {
         }
     }
 
-    // 丢弃单个目标的草稿（同时删文件）：删除排在已提交的写入之后，同目标合并时删除生效
+    /**
+     * 丢弃单个目标的草稿（同时删文件）：删除排在已提交的写入之后，同目标合并时删除生效
+     */
     public void drop(String targetId) {
         this.entries.remove(targetId);
         this.pending.remove(targetId);
         this.writer.submitDelete(targetId);
     }
 
-    // 丢弃全部草稿（同时删文件）：清空是屏障，先前排队的写入被丢弃，不会把已放弃的草稿写回来；
-    // 顺带清掉 json 与写盘残留的 .tmp，覆盖「条目已不在跟踪表里但文件还在」的情况
+    /**
+     * 丢弃全部草稿（同时删文件）：清空是屏障，先前排队的写入被丢弃，不会把已放弃的草稿写回来；
+     * 顺带清掉 json 与写盘残留的 .tmp，覆盖「条目已不在跟踪表里但文件还在」的情况
+     */
     public void dropAll() {
         this.entries.clear();
+        this.baselines.clear();
         this.pending.clear();
         this.writer.submitClear();
     }

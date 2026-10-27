@@ -4,13 +4,12 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.client.edit.EditorChangeSet;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
-import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.core.service.edit.RuleEdit;
 import org.jetbrains.annotations.Nullable;
 
 /**
  * 未应用草稿的落盘载体：一个编辑目标一份。
- * <p>除了草稿内容本身，还记录建立草稿时的服务端基线与修订号，用于「整条规则比较」：
+ * <p>除了草稿内容本身，还记录建立草稿时的服务端基线，用于「整条规则比较」：
  * 重启或断线重连后用服务端最新快照与 {@link #baseline()} 比较，
  * 不一致即视为外部变更冲突，交由玩家选择保留草稿还是采用服务端版本。
  * <p>字段全部可缺省（缺省即按 false/0/null 处理），损坏的文件由 {@link #fromJson(JsonObject)}
@@ -21,29 +20,17 @@ import org.jetbrains.annotations.Nullable;
  * <p>只读条目的内容属沙盒，不落盘；但它仍可能需要保留本服启停意图，
  * 因此 {@link #enableIntent()} 独立于草稿内容存在：内容为空对象时表示这条记录只承载启停意图。
  */
-public record PersistedDraft(
+record PersistedDraft(
         String targetId,
         boolean created,
         boolean deleted,
         @Nullable RuleEdit.Action enableIntent,
         @Nullable JsonObject baseline,
         JsonObject draft,
-        int baseVersion,
-        int baseContextRevision,
         long savedAt) {
 
     // 落盘格式版本：2 起记录本服启停意图；将来结构变更时可据此迁移或丢弃
     public static final int FORMAT_VERSION = 2;
-
-    // 建立草稿时的服务端基线（动态值快照）；缺省返回 null
-    public @Nullable RuleValue baselineValue() {
-        return baseline == null ? null : RuleDraft.of(baseline).root();
-    }
-
-    // 草稿内容（动态值快照）
-    public RuleValue draftValue() {
-        return RuleDraft.of(draft).root();
-    }
 
     // 序列化为落盘 JSON
     public JsonObject toJson() {
@@ -55,8 +42,6 @@ public record PersistedDraft(
         if (enableIntent != null) {
             json.addProperty("enable_intent", enableIntent.id());
         }
-        json.addProperty("base_version", baseVersion);
-        json.addProperty("base_context_revision", baseContextRevision);
         json.addProperty("saved_at", savedAt);
         if (baseline != null) {
             json.add("baseline", baseline);
@@ -84,8 +69,6 @@ public record PersistedDraft(
                 readEnableIntent(json),
                 baseline,
                 draft.getAsJsonObject(),
-                readInt(json, "base_version"),
-                readInt(json, "base_context_revision"),
                 readSavedAt(json));
     }
 
@@ -103,13 +86,6 @@ public record PersistedDraft(
         }
         RuleEdit.Action action = RuleEdit.Action.fromId(json.get("enable_intent").getAsString());
         return EditorChangeSet.isStateAction(action) ? action : null;
-    }
-
-    private static int readInt(JsonObject json, String name) {
-        if (!json.has(name) || !json.get(name).isJsonPrimitive() || !json.get(name).getAsJsonPrimitive().isNumber()) {
-            return 0;
-        }
-        return json.get(name).getAsInt();
     }
 
     private static long readSavedAt(JsonObject json) {

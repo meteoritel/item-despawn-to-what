@@ -24,7 +24,7 @@ import org.jetbrains.annotations.Nullable;
  * 重新写盘的入口是玩家的显式动作（再次编辑、保存或关闭界面触发的 {@link DraftJournal#flushAll()}/{@link DraftJournal#retryFailed()}）。
  * 线程是 daemon 且空闲 {@link #IDLE_TIMEOUT_MS} 毫秒后自行退出，不会挂住游戏进程。
  */
-public final class DraftWriter {
+final class DraftWriter {
 
     // 空闲多久后释放线程（下次提交时按需重建）
     private static final long IDLE_TIMEOUT_MS = 10_000L;

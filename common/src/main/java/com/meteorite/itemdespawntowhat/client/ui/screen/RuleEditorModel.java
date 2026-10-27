@@ -1,6 +1,5 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
-import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDefaults;
 import com.meteorite.itemdespawntowhat.client.edit.DebugTestRules;
@@ -12,8 +11,9 @@ import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.draft.DraftConflict;
 import com.meteorite.itemdespawntowhat.client.edit.draft.DraftJournal;
-import com.meteorite.itemdespawntowhat.client.edit.draft.DraftStore;
-import com.meteorite.itemdespawntowhat.client.edit.draft.PersistedDraft;
+import com.meteorite.itemdespawntowhat.client.edit.draft.DraftState;
+import com.meteorite.itemdespawntowhat.client.edit.draft.DraftConflicts;
+import com.meteorite.itemdespawntowhat.client.edit.draft.RestoredDraft;
 import com.meteorite.itemdespawntowhat.core.service.edit.RuleEdit;
 import com.meteorite.itemdespawntowhat.core.service.edit.RuleIssue;
 import com.meteorite.itemdespawntowhat.core.service.edit.RuleSnapshot;
@@ -60,12 +60,9 @@ public final class RuleEditorModel {
     private int intentRevision;
 
     // 草稿落盘日志（跨界面关闭 / 断线 / 重启恢复）
-    private final DraftJournal journal = new DraftJournal(new DraftStore());
+    private final DraftJournal journal = new DraftJournal();
     // 从磁盘读回、等待绑定到服务端快照的草稿（按目标 id）
-    private final LinkedHashMap<String, PersistedDraft> restored = new LinkedHashMap<>();
-    // 草稿建立时的服务端整条规则基线（按目标 id，缺席表示当时服务端没有该规则）
-    // 只保留 JSON 形态：建立基线时转换一次，落盘快照直接复用，避免每次写盘都重新派生整棵树
-    private final LinkedHashMap<String, JsonObject> baselineJson = new LinkedHashMap<>();
+    private final LinkedHashMap<String, RestoredDraft> restored = new LinkedHashMap<>();
     // 与服务端不一致、等待玩家选择的规则（按目标 id）
     private final LinkedHashMap<String, DraftConflict> conflicts = new LinkedHashMap<>();
     // 本次恢复到的草稿数量（界面提示一次后清空）
@@ -76,7 +73,7 @@ public final class RuleEditorModel {
     // 构造：读回磁盘草稿；真正绑定要等服务端快照，放在 refresh() 里
     public RuleEditorModel(EditorWorkspaceView workspace) {
         this.workspace = workspace;
-        for (PersistedDraft draft : this.journal.restore()) {
+        for (RestoredDraft draft : this.journal.restore()) {
             this.restored.put(draft.targetId(), draft);
         }
     }
@@ -127,7 +124,7 @@ public final class RuleEditorModel {
                 continue;
             }
             // 未改动且非本次新建的会话重新绑定到服务端内容
-            if (this.createdIds.contains(id) || session.isDirty()) {
+            if (this.createdIds.contains(id) || session.isDirty() || this.conflicts.containsKey(id)) {
                 continue;
             }
             RuleSnapshotEntry entry = this.entries.get(id);
@@ -136,6 +133,7 @@ public final class RuleEditorModel {
                 iterator.remove();
                 continue;
             }
+            this.journal.captureBaseline(id, entry.effective());
             session.load(RuleDraft.of(categorySeeded(entry, body)));
             session.clearHistory();
         }
@@ -386,16 +384,7 @@ public final class RuleEditorModel {
         if (this.draftsDiscarded) {
             return;
         }
-        EditSession session = this.sessions.get(id);
-        if (session == null && !isReadOnly(id)) {
-            this.journal.drop(id);
-            return;
-        }
-        if (this.isJournalWorthy(id, session)) {
-            this.journal.markDirty(snapshotOf(id, session));
-        } else {
-            this.journal.drop(id);
-        }
+        this.journal.markDirty(draftState(id, this.sessions.get(id)));
     }
 
     // 某条规则的草稿会话
@@ -434,7 +423,7 @@ public final class RuleEditorModel {
         EditSession session = new EditSession(id, RuleDraft.of(categorySeeded(entry, body)));
         this.sessions.put(id, session);
         // 基线取服务端「生效视图」；没有生效视图时记为不存在（快照内部会做一次独立拷贝）
-        this.captureBaseline(id, entry.effective());
+        this.journal.captureBaseline(id, entry.effective());
         this.bindSession(id, session);
         return session;
     }
@@ -506,7 +495,7 @@ public final class RuleEditorModel {
         this.sessions.put(id, session);
         this.createdIds.add(id);
         // 新建规则在服务端还没有内容，基线为「不存在」
-        this.captureBaseline(id, null);
+        this.journal.captureBaseline(id, null);
         this.bindSession(id, session);
     }
 
@@ -514,7 +503,7 @@ public final class RuleEditorModel {
     public void dropSession(String id) {
         this.sessions.remove(id);
         this.createdIds.remove(id);
-        this.baselineJson.remove(id);
+        this.journal.captureBaseline(id, null);
         this.conflicts.remove(id);
         if (this.enableIntents.remove(id) != null) {
             this.intentRevision++;
@@ -701,28 +690,28 @@ public final class RuleEditorModel {
             session.clearHistory();
             this.createdIds.remove(id);
             // 服务端已接受的内容成为新的草稿基线，并删掉落盘草稿
-            this.captureBaseline(id, session.draft().toJson());
+            this.journal.captureBaseline(id, session.draft().toJson());
             this.conflicts.remove(id);
             this.journal.drop(id);
         }
     }
 
-    // ---- P6：草稿落盘 / 恢复 / 冲突 ----
+    // ---- 草稿落盘 / 恢复 / 冲突 ----
 
     // 把磁盘草稿绑定到最新快照：整条规则比较与基线一致才无冲突
     private void applyRestoredDrafts() {
         if (this.restored.isEmpty()) {
             return;
         }
-        List<PersistedDraft> drafts = new ArrayList<>(this.restored.values());
+        List<RestoredDraft> drafts = new ArrayList<>(this.restored.values());
         this.restored.clear();
-        for (PersistedDraft stored : drafts) {
+        for (RestoredDraft stored : drafts) {
             String id = stored.targetId();
             if (this.sessions.containsKey(id)) {
                 continue;
             }
-            // 只读条目的内容属沙盒、无法提交：只恢复本服启停意图，不建会话也不判内容冲突
-            if (isReadOnly(id)) {
+            // 沙盒内容不恢复；意图专用记录按当前可写性建立真实会话，不把空对象当成规则。
+            if (isReadOnly(id) || stored.content() == null) {
                 RuleEdit.Action intent = stored.enableIntent();
                 if (intent == null) {
                     this.journal.drop(id);
@@ -730,7 +719,8 @@ public final class RuleEditorModel {
                 }
                 this.enableIntents.put(id, intent);
                 this.intentRevision++;
-                this.journal.markDirty(snapshotOf(id, null));
+                ensureSessionForIntent(id);
+                this.journal.markDirty(draftState(id, this.sessions.get(id)));
                 this.restoredCount++;
                 continue;
             }
@@ -738,19 +728,12 @@ public final class RuleEditorModel {
             // 服务端当前内容的值快照；没有生效视图即视为目标不存在
             RuleValue serverBody = entry == null || entry.effective() == null
                     ? null : RuleDraft.of(entry.effective()).root();
-            // 落盘草稿的基线快照；既有草稿未记录基线时为 null，表示基线未知
-            RuleValue baseline = stored.baselineValue();
-            // 整条规则比较（不做逐字段合并）：目标消失、同名新规则、内容被改都会提示
-            if (stored.created() && serverBody != null) {
-                this.conflicts.put(id, new DraftConflict(id, DraftConflict.Reason.TARGET_EXISTS));
-            } else if (!stored.created() && serverBody == null) {
-                this.conflicts.put(id, new DraftConflict(id, DraftConflict.Reason.TARGET_MISSING));
-            } else if (serverBody != null && (baseline == null || !baseline.equals(serverBody))) {
-                // 基线缺失（既有草稿未记录基线）或内容确实变了：保守判为远端已变，交给玩家选
-                this.conflicts.put(id, new DraftConflict(id, DraftConflict.Reason.REMOTE_CHANGED));
+            DraftConflict conflict = DraftConflicts.classify(stored, serverBody, false);
+            if (conflict != null) {
+                this.conflicts.put(id, conflict);
             }
             RuleDraft draft = RuleDraft.of(categorySeeded(entry, serverBody));
-            draft.replaceWith(stored.draftValue());
+            draft.replaceWith(stored.content());
             draft.setDeleted(stored.deleted());
             EditSession session = new EditSession(id, draft);
             if (stored.created()) {
@@ -761,9 +744,8 @@ public final class RuleEditorModel {
                 this.intentRevision++;
             }
             this.sessions.put(id, session);
-            this.captureBaseline(id, entry == null ? null : entry.effective());
+            // Journal 保留磁盘里的原始保存基线；建立当前会话不代表玩家已接受远端内容。
             this.bindSession(id, session);
-            this.journal.markDirty(snapshotOf(id, session));
             this.restoredCount++;
         }
     }
@@ -771,56 +753,21 @@ public final class RuleEditorModel {
     // 把会话接到草稿日志：此后每次可撤销操作都会（节流）落盘
     private void bindSession(String id, EditSession session) {
         session.addListener(() -> this.onSessionChanged(id, session));
-        if (this.isJournalWorthy(id, session)) {
-            this.journal.writeNow(snapshotOf(id, session));
-        }
+        this.journal.writeNow(draftState(id, session));
     }
 
-    // 会话内容变化：有未应用改动就落盘，回到干净状态就删文件
+    // 会话内容变化由日志统一决定保留或删除；放弃全部后的监听不再产生写入。
     private void onSessionChanged(String id, EditSession session) {
-        if (this.draftsDiscarded || !this.isJournalWorthy(id, session)) {
-            this.journal.drop(id);
+        if (this.draftsDiscarded) {
             return;
         }
-        this.journal.markDirty(snapshotOf(id, session));
+        this.journal.markDirty(draftState(id, session));
     }
 
-    // 是否值得落盘：有内容改动、本次新建或存在启停意图；只读条目的沙盒内容不产生草稿。
-    // 可写条目没有会话说明服务端没有可读内容，只写意图会落出「内容为空」的假草稿，重启时被误判冲突。
-    private boolean isJournalWorthy(String id, @Nullable EditSession session) {
-        if (this.enableIntents.containsKey(id)) {
-            return session != null || isReadOnly(id);
-        }
-        return session != null && !isReadOnly(id) && (session.isDirty() || this.createdIds.contains(id));
-    }
-
-    // 当前草稿快照（含基线与启停意图，供落盘与冲突比较）
-    private PersistedDraft snapshotOf(String id, @Nullable EditSession session) {
-        // 基线 JSON 在建立基线时已转换好且此后不再修改，这里直接交给快照，不再重复深拷贝
-        JsonObject baseline = this.baselineJson.get(id);
-        boolean readOnly = isReadOnly(id);
-        // 沙盒内容不落盘：只读条目只保留启停意图，草稿内容写空对象
-        JsonObject content = readOnly || session == null ? new JsonObject() : session.draft().toJson();
-        boolean deleted = !readOnly && session != null && session.draft().isDeleted();
-        return new PersistedDraft(
-                id,
-                this.createdIds.contains(id),
-                deleted,
-                this.enableIntents.get(id),
-                baseline,
-                content,
-                this.snapshotVersion,
-                this.workspace.contextRevision(),
-                System.currentTimeMillis());
-    }
-
-    // 记录草稿建立时的服务端整条规则内容：这里拷一份独立快照，之后不再随快照对象变化
-    private void captureBaseline(String id, @Nullable JsonObject serverBody) {
-        if (serverBody == null) {
-            this.baselineJson.remove(id);
-            return;
-        }
-        this.baselineJson.put(id, serverBody.deepCopy());
+    // 只传递业务状态；快照构造、保留策略与保存基线均由 Journal 负责。
+    private DraftState draftState(String id, @Nullable EditSession session) {
+        return new DraftState(id, session == null ? null : session.draft(), this.createdIds.contains(id),
+                isReadOnly(id), this.conflicts.containsKey(id), this.enableIntents.get(id));
     }
 
     // 节流写盘（界面每帧调用）
@@ -838,9 +785,7 @@ public final class RuleEditorModel {
         ids.addAll(this.enableIntents.keySet());
         for (String id : ids) {
             EditSession session = this.sessions.get(id);
-            if (this.isJournalWorthy(id, session)) {
-                this.journal.writeNow(snapshotOf(id, session));
-            }
+            this.journal.writeNow(draftState(id, session));
         }
         // 交出剩余条目并等写入完成：这里可能紧接着关闭界面甚至退出游戏，草稿必须已经落盘；
         // 等待有上限，磁盘异常慢时宁可放弃等待也不卡住客户端线程。
@@ -873,7 +818,7 @@ public final class RuleEditorModel {
         // 只读来源不能保留本地草稿：冲突解决只能回到服务端内容，仅保留启停意图
         if (isReadOnly(id)) {
             if (this.enableIntents.containsKey(id)) {
-                this.journal.markDirty(snapshotOf(id, null));
+                this.journal.markDirty(draftState(id, null));
             } else {
                 this.journal.drop(id);
             }
@@ -884,7 +829,7 @@ public final class RuleEditorModel {
         RuleValue serverBody = entry == null || entry.effective() == null
                 ? null : RuleDraft.of(entry.effective()).root();
         if (keepDraft) {
-            this.captureBaseline(id, entry == null ? null : entry.effective());
+            this.journal.captureBaseline(id, entry == null ? null : entry.effective());
             // 目标已不存在时草稿转为「新建规则」；目标已存在则不再是新建
             if (serverBody == null) {
                 this.createdIds.add(id);
@@ -892,12 +837,15 @@ public final class RuleEditorModel {
                 this.createdIds.remove(id);
             }
             if (session != null) {
-                this.journal.writeNow(snapshotOf(id, session));
+                this.journal.writeNow(draftState(id, session));
             }
             return;
         }
         this.journal.drop(id);
-        this.baselineJson.remove(id);
+        this.journal.captureBaseline(id, null);
+        if (this.enableIntents.remove(id) != null) {
+            this.intentRevision++;
+        }
         if (session == null) {
             return;
         }
@@ -909,7 +857,7 @@ public final class RuleEditorModel {
         session.load(RuleDraft.of(categorySeeded(entry, serverBody)));
         session.clearHistory();
         this.createdIds.remove(id);
-        this.captureBaseline(id, entry.effective());
+        this.journal.captureBaseline(id, entry.effective());
     }
 
     // 玩家确认放弃全部草稿：删盘且本模型不再写盘
