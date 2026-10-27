@@ -1,14 +1,9 @@
 package com.meteorite.itemdespawntowhat.core.command;
 
-import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.core.load.RuleLoadResult;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEdit;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshot;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshotEntry;
-import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleEdit;
 import com.meteorite.itemdespawntowhat.core.service.RuleEnableApplyService;
-import com.meteorite.itemdespawntowhat.core.service.RuleSnapshotAssembler;
 import com.meteorite.itemdespawntowhat.core.state.RuleEnableState;
 import com.mojang.brigadier.arguments.ArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
@@ -26,7 +21,7 @@ import java.util.List;
 
 /**
  * /idtw rule 子命令组：list / show &lt;id&gt; / &lt;id&gt; enable|disable|default / orphans [clear]。
- * show 输出的是覆盖层文件原始 JSON（经 RuleSnapshotAssembler 装配），便于手改后核对；
+ * show 在文件队列按 id 读取胜出来源的原始 JSON，保留未解码字段；
  * 启停与恢复默认只改本服启用状态，随后按保存链路同一路径重建索引并回扫全部维度。
  */
 final class RuleQueryCommands {
@@ -62,7 +57,7 @@ final class RuleQueryCommands {
 
     // rule list：紧凑清单（id / 来源层 / 生效启用 / 来源标识）
     private static int list(CommandContext<CommandSourceStack> ctx, RuleCommandContext context) {
-        if (RuleEditServerHandler.isSaving()) { return RuleCommandTree.saveBusy(ctx); }
+        if (context.editingBusy()) { return RuleCommandTree.saveBusy(ctx); }
         RuleLoadResult<Rule> result = load(ctx, context);
         if (result == null) {
             return RuleCommandTree.notReady(ctx);
@@ -83,38 +78,29 @@ final class RuleQueryCommands {
 
     // rule show <id>：输出该规则的原始 JSON（覆盖层文件原文优先）
     private static int show(CommandContext<CommandSourceStack> ctx, RuleCommandContext context, ResourceLocation id) {
-        if (RuleEditServerHandler.isSaving()) { return RuleCommandTree.saveBusy(ctx); }
-        RuleLoadResult<Rule> merged = load(ctx, context);
-        if (merged == null) {
-            return RuleCommandTree.notReady(ctx);
-        }
-        Rule found = find(merged, id);
-        if (found == null) {
-            return notFound(ctx, id);
-        }
-        List<Component> lines = new ArrayList<>();
-        lines.add(RuleCommandText.of("itemdespawntowhat.command.rule.show.header")
-                .kv("id", found.id())
-                .kv("priority", found.priority())
-                .kv("trigger_seconds", found.triggerAfterSeconds())
-                .kv("effects", found.effects().size())
-                .kv("enabled", found.enabled())
-                .build());
-        JsonObject raw = rawJson(ctx, context, merged, id);
-        if (raw != null) {
-            lines.add(RuleCommandText.of("itemdespawntowhat.command.rule.show.json")
-                    .kv("json", raw.toString()).build());
-        } else {
-            lines.add(RuleCommandText.of("itemdespawntowhat.command.rule.show.no_raw_json")
-                    .kv("id", id).build());
-        }
-        return RuleCommandTree.replyAll(ctx, lines);
+        if (context.editingBusy()) { return RuleCommandTree.saveBusy(ctx); }
+        var service = context.editContext().editService();
+        if (service == null || !context.available()) { return RuleCommandTree.notReady(ctx); }
+        service.readRawRule(context.editContext(), ctx.getSource().getServer(), id, result -> {
+            switch (result.status()) {
+                case SUCCESS -> {
+                    Boolean override = RuleEnableState.get(ctx.getSource().getServer().overworld()).overrideFor(id);
+                    RuleCommandTree.reply(ctx, RuleCommandText.of("itemdespawntowhat.command.rule.show.source")
+                            .kv("id", id).kv("origin", result.origin())
+                            .kv("override", override == null ? Component.translatable("itemdespawntowhat.command.rule.show.inherit").getString() : override).build());
+                    RuleCommandTree.reply(ctx, RuleCommandText.of("itemdespawntowhat.command.rule.show.json").kv("json", result.json()).build());
+                }
+                case INVALID_REQUEST -> notFound(ctx, id);
+                default -> RuleCommandTree.replyFailure(ctx, RuleCommandText.of("itemdespawntowhat.command.rule.show.failed").kv("id", id).build());
+            }
+        });
+        return RuleCommandTree.reply(ctx, RuleCommandText.of("itemdespawntowhat.command.rule.show.accepted").kv("id", id).build());
     }
 
     // rule <id> enable|disable：写本服启用状态，随后重建索引并回扫
     private static int setEnabled(CommandContext<CommandSourceStack> ctx, RuleCommandContext context,
                                   ResourceLocation id, boolean enabled) {
-        if (RuleEditServerHandler.isSaving()) { return RuleCommandTree.saveBusy(ctx); }
+        if (context.editingBusy()) { return RuleCommandTree.saveBusy(ctx); }
         MinecraftServer server = ctx.getSource().getServer();
         RuleLoadResult<Rule> merged = load(ctx, context);
         if (merged == null) {
@@ -129,13 +115,13 @@ final class RuleQueryCommands {
                 : "itemdespawntowhat.command.rule.enable.disabled").kv("id", id).build();
         return applyAndReply(ctx, context, server,
                 List.of(new RuleEdit(id, enabled ? RuleEdit.Action.ENABLE : RuleEdit.Action.DISABLE, null)),
-                success, null);
+                success, null, merged);
     }
 
     // rule <id> default：删除本服记录，使该规则重新继承默认启用
     private static int restoreDefault(CommandContext<CommandSourceStack> ctx, RuleCommandContext context,
                                       ResourceLocation id) {
-        if (RuleEditServerHandler.isSaving()) { return RuleCommandTree.saveBusy(ctx); }
+        if (context.editingBusy()) { return RuleCommandTree.saveBusy(ctx); }
         MinecraftServer server = ctx.getSource().getServer();
         RuleLoadResult<Rule> merged = load(ctx, context);
         if (merged == null) {
@@ -147,12 +133,12 @@ final class RuleQueryCommands {
         return applyAndReply(ctx, context, server,
                 List.of(new RuleEdit(id, RuleEdit.Action.RESET, null)),
                 RuleCommandText.of("itemdespawntowhat.command.rule.enable.default").kv("id", id).build(),
-                RuleCommandText.of("itemdespawntowhat.command.rule.enable.default.none").kv("id", id).build());
+                RuleCommandText.of("itemdespawntowhat.command.rule.enable.default.none").kv("id", id).build(), merged);
     }
 
     // rule orphans：列出已没有对应规则的本服启用记录（加载时被忽略）
     private static int orphans(CommandContext<CommandSourceStack> ctx, RuleCommandContext context) {
-        if (RuleEditServerHandler.isSaving()) { return RuleCommandTree.saveBusy(ctx); }
+        if (context.editingBusy()) { return RuleCommandTree.saveBusy(ctx); }
         // 运行时未就绪时规则集合不可信，若照常判定会把全部记录误报成无主
         if (!context.available()) { return RuleCommandTree.notReady(ctx); }
         RuleLoadResult<Rule> merged = load(ctx, context);
@@ -179,7 +165,7 @@ final class RuleQueryCommands {
 
     // rule orphans clear：只清理无主记录，不影响仍存在规则的启停状态
     private static int clearOrphans(CommandContext<CommandSourceStack> ctx, RuleCommandContext context) {
-        if (RuleEditServerHandler.isSaving()) { return RuleCommandTree.saveBusy(ctx); }
+        if (context.editingBusy()) { return RuleCommandTree.saveBusy(ctx); }
         if (!context.available()) { return RuleCommandTree.notReady(ctx); }
         RuleLoadResult<Rule> merged = load(ctx, context);
         if (merged == null) {
@@ -194,9 +180,9 @@ final class RuleQueryCommands {
     // 状态写入与轻量重建共用 RuleEnableApplyService：不重读数据包，索引重建后由运行时发布并排队回扫
     private static int applyAndReply(CommandContext<CommandSourceStack> ctx, RuleCommandContext context,
                                      MinecraftServer server, List<RuleEdit> edits,
-                                     Component success, @Nullable Component noChange) {
+                                     Component success, @Nullable Component noChange, RuleLoadResult<Rule> merged) {
         RuleEnableApplyService.Outcome outcome = RuleEnableApplyService.apply(
-                server, context.editContext(), edits);
+                server, context.editContext(), edits, merged.sourceIndex());
         if (outcome.changed() == 0) {
             return RuleCommandTree.reply(ctx, noChange == null ? success : noChange);
         }
@@ -231,35 +217,6 @@ final class RuleQueryCommands {
             ids.add(entry.id());
         }
         return ids;
-    }
-
-    // 经 RuleSnapshotAssembler 取该规则的原始 JSON（覆盖层原文 / 数据包规则的编码结果）
-    private static JsonObject rawJson(CommandContext<CommandSourceStack> ctx, RuleCommandContext context,
-                                      RuleLoadResult<Rule> merged, ResourceLocation id) {
-        var registries = context.editContext().typeRegistries();
-        if (registries == null) {
-            return null;
-        }
-        RuleSnapshot snapshot = RuleSnapshotAssembler.assemble(
-                merged.rules(),
-                context.editContext().overlayRoot(),
-                context.overlayNamespace(),
-                context.overlayVersion(),
-                registries.effectTypes(),
-                registries.conditionTypes(),
-                RuleCommandText.issueTexts(merged),
-                RuleEnableState.get(ctx.getSource().getServer().overworld()));
-        for (RuleSnapshotEntry entry : snapshot.entries()) {
-            // effective 为"当前生效视图"：覆盖层条目即文件原文，数据包条目为模型编码结果
-            JsonObject rule = entry.effective();
-            if (rule == null) {
-                continue;
-            }
-            if (rule.has("id") && id.toString().equals(rule.get("id").getAsString())) {
-                return rule;
-            }
-        }
-        return null;
     }
 
     // 复用编辑层的合并加载（只读）
