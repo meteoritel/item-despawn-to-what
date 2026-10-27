@@ -9,7 +9,8 @@ import net.minecraft.resources.ResourceLocation;
  * 页面共享的布局常量、界面文案前缀与存在条件类型 id。
  *
  * <p>本类不持有界面状态、不装配控件；业务工具按关注点分在 {@link PresenceLeaves}（存在条件叶）、
- * {@link CatalystQuantities}（催化剂数量联动）与 {@link RuleValueReads}（RuleValue 读取）</p>
+ * {@link CatalystQuantities}（催化剂数量联动）与
+ * {@link com.meteorite.itemdespawntowhat.client.edit.RuleValue}（只读取值）。</p>
  */
 final class RuleEditorPageSupport {
 

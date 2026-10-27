@@ -462,7 +462,7 @@ public final class RuleRecipeView {
                     RulePreviewIcons.action(effect), integer(effect, "amount", 1));
             case BLOCK -> {
                 ObjectPart part;
-                if (RuleValueReads.boolOf(effect, "use_source_block", false)) {
+                if (RuleValue.flag(effect, "use_source_block", false)) {
                     part = new ObjectPart(Component.translatable(UI + "source_block"), firstSourceIcon(rule), integer(effect, "count", 1));
                     String source = firstSource(rule);
                     if (source.startsWith("#")) part.tag = TagPreviewIcons.sourceBlocks(source);
@@ -538,7 +538,7 @@ public final class RuleRecipeView {
         for (RuleValue outcome : array(rule.child("outcomes")).items()) {
             RuleValue candidate = object(outcome);
             appendEffects(result, candidate.child("effects"),
-                    RuleValueReads.boolOf(candidate, RuleFields.FILL_ORIGIN, OutcomeCandidate.DEFAULT_FILL_ORIGIN));
+                    RuleValue.flag(candidate, RuleFields.FILL_ORIGIN, OutcomeCandidate.DEFAULT_FILL_ORIGIN));
         }
         return result;
     }

@@ -93,7 +93,7 @@ final class RuleListDisplayCache {
         RuleValue body = model.displayBody(id);
         this.bodyFetches++;
         boolean error = model.hasError(id);
-        boolean deleteMarked = session != null && session.draft().isDeleted();
+        boolean deleteMarked = session != null && session.isDeleted();
         // 行是否启用看生效状态：本服覆盖与未应用意图都算在内
         boolean active = !deleteMarked && model.effectiveEnabled(id);
         boolean unfinished = isUnfinished(id, session);

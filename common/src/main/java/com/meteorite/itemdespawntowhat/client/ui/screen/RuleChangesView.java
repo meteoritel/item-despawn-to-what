@@ -44,7 +44,7 @@ final class RuleChangesView implements UiWidget, UiFocusTarget {
             Component kind = Component.empty();
             if (contentDirty) {
                 String contentKind = model.isCreated(id) ? "create"
-                        : session != null && session.draft().isDeleted() ? "remove" : "modify";
+                        : session != null && session.isDeleted() ? "remove" : "modify";
                 kind = Component.translatable(UI + "changes." + contentKind);
             }
             RuleEdit.Action intent = model.enableIntent(id);

@@ -162,7 +162,7 @@ final class RuleEditorListActions {
             noSelection();
             return;
         }
-        RuleValue body = session.draft().root().deepCopy();
+        RuleValue body = session.root().deepCopy();
         // 源条目的生效启停状态在复制时一并带走：副本内容可能与源不同，只带意图才不会丢覆盖
         boolean sourceEnabled = model.effectiveEnabled(sourceId);
         String sourceName = ResourceLocation.parse(sourceId).getPath();

@@ -51,7 +51,7 @@ final class CatalystQuantities {
         RuleValue cost = draft.valueAt(RuleFields.CATALYST_COST);
         if (cost == null) cost = RuleValue.mapping().build();
         if (cost.isMapping()) {
-            List<String> references = PresenceLeaves.ruleLevelCatalystItems(draft);
+            List<String> references = PresenceLeaves.ruleLevelCatalystItems(draft.root());
             draft.setAt(RuleFields.CATALYST_COST, RuleValue.mapping(cost)
                     .put(RuleFields.CATALYST_ITEMS, RuleValue.textList(references).build()).build());
             reconcileQuantities(draft, references);

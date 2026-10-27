@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import net.minecraft.client.gui.Font;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDescriptors;
 import com.meteorite.itemdespawntowhat.client.net.RuleEditClientWorkspace;
@@ -11,7 +13,6 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.service.edit.RuleEdit;
 import com.meteorite.itemdespawntowhat.core.service.edit.RuleSourceView;
@@ -31,8 +32,12 @@ import org.jetbrains.annotations.Nullable;
  */
 final class RuleEditorInfoSection {
 
-    // 所属编辑页容器：共享状态与跨页能力都经它访问
-    private final RuleEditorEditSections pages;
+    private final RuleEditorModel model;
+    final EditorSectionContent content;
+    private final EditorShell shell;
+    private final Font font;
+    private final EditorFormFactory forms;
+    private final EditorSectionActions commands;
 
     // 主题：与容器共用宿主默认主题
     private static final UiHostTheme THEME = RuleEditorEditSections.THEME;
@@ -43,8 +48,13 @@ final class RuleEditorInfoSection {
     // 只读文本块的缩放比例（与 ID 行一致，便于各段文字共用行高口径）
     private static final float TEXT_SCALE = 0.8F;
 
-    RuleEditorInfoSection(RuleEditorEditSections pages) {
-        this.pages = pages;
+    RuleEditorInfoSection(EditorShell shell, RuleEditorModel model, Font font, EditorFormFactory forms, EditorSectionActions actions) {
+        this.shell = shell;
+        this.font = font;
+        this.forms = forms;
+        this.commands = actions;
+        this.content = new EditorSectionContent(font);
+        this.model = model;
     }
 
     // 清理本页持有的控件引用（重建/切页时由容器调用）
@@ -80,24 +90,24 @@ final class RuleEditorInfoSection {
         // 自上而下：只读规则 ID、分类、来源摘要、显示名、启用、加高的优先级控件、多行备注；
         // 页头只保留当前实际生效名称，页内不再重复说明文案
         TypeEditorDescriptor descriptor = BuiltinEditorDescriptors.infoDescriptor();
-        infoForm = pages.newForm(session, "", descriptor);
+        infoForm = forms.create(session, "", descriptor);
         infoForm.useCompactSpacing();
         // 滑条与数字输入同高，备注保留三行可见高度。
-        infoForm.setRowHeight(RuleFields.PRIORITY, RuleEditorEditSections.PRIORITY_ROW_HEIGHT);
-        infoForm.setRowHeight(RuleFields.NOTES, 36);
-        infoForm.suppressRowTooltip(RuleFields.ENABLED);
+        infoForm.field(RuleFields.PRIORITY).setHeight(RuleEditorEditSections.PRIORITY_ROW_HEIGHT);
+        infoForm.field(RuleFields.NOTES).setHeight(36);
+        infoForm.field(RuleFields.ENABLED).suppressTooltip();
         // 显示名与备注的提示已作为占位符写在输入框内，悬停不再重复弹出
-        infoForm.suppressRowHintTooltip(RuleFields.DISPLAY_NAME);
-        infoForm.suppressRowHintTooltip(RuleFields.NOTES);
+        infoForm.field(RuleFields.DISPLAY_NAME).suppressHintTooltip();
+        infoForm.field(RuleFields.NOTES).suppressHintTooltip();
         // 默认启用行右侧并排放本服开关与「恢复默认」：它们改的是本服状态，不属于表单内容字段
-        serverToggle = new UiButton(THEME, pages.font, Component.empty(), UiButtonVariant.SECONDARY,
+        serverToggle = new UiButton(THEME, font, Component.empty(), UiButtonVariant.SECONDARY,
                 this::toggleServerEnabled);
-        resetButton = new UiButton(THEME, pages.font, Component.translatable(UI + "button.reset_default"),
+        resetButton = new UiButton(THEME, font, Component.translatable(UI + "button.reset_default"),
                 UiButtonVariant.SECONDARY, this::resetServerEnabled);
-        infoForm.addRowAction(RuleFields.ENABLED, serverToggle);
-        infoForm.addRowAction(RuleFields.ENABLED, resetButton);
-        pages.liveForms.add(infoForm);
-        pages.liveWidgets.add(infoForm);
+        infoForm.field(RuleFields.ENABLED).addAction(serverToggle);
+        infoForm.field(RuleFields.ENABLED).addAction(resetButton);
+        content.forms.add(infoForm);
+        content.widgets.add(infoForm);
     }
 
     /**
@@ -112,14 +122,13 @@ final class RuleEditorInfoSection {
         if (serverToggle == null || resetButton == null) {
             return;
         }
-        EditSession session = pages.shell.editingSession();
+        EditSession session = shell.editingSession();
         if (session == null) {
             serverToggle.setEnabled(false);
             resetButton.setEnabled(false);
             return;
         }
         String id = session.targetId();
-        RuleEditorModel model = pages.model;
         boolean effective = model.effectiveEnabled(id);
         serverToggle.setLabel(Component.translatable(UI + (effective ? "button.server_enabled" : "button.server_disabled")));
         serverToggle.setEnabled(editable);
@@ -128,35 +137,35 @@ final class RuleEditorInfoSection {
 
     // 本服两态开关：切换后重建页面（新建规则改的是内容字段），提示按实际动作给出
     private void toggleServerEnabled() {
-        EditSession session = pages.shell.editingSession();
+        EditSession session = shell.editingSession();
         if (session == null) {
             return;
         }
-        RuleEdit.Action action = pages.model.toggleEnabled(session.targetId());
+        RuleEdit.Action action = model.toggleEnabled(session.targetId());
         if (action == null) {
             return;
         }
-        pages.shell.draftChanged();
-        pages.requestRebuild();
+        shell.draftChanged();
+        commands.requestRebuild();
         // 新建规则切的是内容里的默认启用（内容动作），不套用本服启停的反馈文案
-        if (pages.model.isCreated(session.targetId())) {
+        if (model.isCreated(session.targetId())) {
             return;
         }
         String notice = action == RuleEdit.Action.ENABLE ? "notice.enabled"
                 : action == RuleEdit.Action.DISABLE ? "notice.disabled" : "notice.reset_default";
-        pages.shell.setNotice(Component.translatable(UI + notice),EditorShell.NoticeLevel.SUCCESS);
+        shell.setNotice(Component.translatable(UI + notice),EditorShell.NoticeLevel.SUCCESS);
     }
 
     // 恢复默认：清除本服启用覆盖
     private void resetServerEnabled() {
-        EditSession session = pages.shell.editingSession();
+        EditSession session = shell.editingSession();
         if (session == null) {
             return;
         }
-        pages.model.resetEnabled(session.targetId());
-        pages.shell.draftChanged();
-        pages.requestRebuild();
-        pages.shell.setNotice(Component.translatable(UI + "notice.reset_default"),EditorShell.NoticeLevel.SUCCESS);
+        model.resetEnabled(session.targetId());
+        shell.draftChanged();
+        commands.requestRebuild();
+        shell.setNotice(Component.translatable(UI + "notice.reset_default"),EditorShell.NoticeLevel.SUCCESS);
     }
 
     int layoutInfo(UiRect area) {
@@ -176,23 +185,23 @@ final class RuleEditorInfoSection {
         } else {
             infoSourceRect = new UiRect(x, infoCategoryRect.bottom() + 2, width, scaledHeight(sourceLines.size()));
         }
-        y = pages.layoutForm(infoForm, x,
+        y = EditorSectionContent.layoutForm(infoForm, x,
                 (infoSourceRect == null ? infoCategoryRect : infoSourceRect).bottom() + 4, width);
         int bottom = y + padding;
-        pages.cards.add(new RuleEditorEditSections.PageCard(new UiRect(area.x(), area.y(), area.width(), bottom - area.y()), null));
+        content.cards.add(new EditorSectionContent.PageCard(new UiRect(area.x(), area.y(), area.width(), bottom - area.y()), null));
         return bottom;
     }
 
     List<FormattedCharSequence> idTextLines(int width) {
-        RuleValue view = pages.currentView();
-        String id = view == null ? "" : RuleValueReads.stringOf(view);
-        return pages.font.split(Component.literal(id), Math.max(8, (int) (width / TEXT_SCALE)));
+        RuleValue view = shell.editingValue();
+        String id = view == null ? "" : RuleValue.text(view, RuleFields.ID);
+        return font.split(Component.literal(id), Math.max(8, (int) (width / TEXT_SCALE)));
     }
 
     // 分类行：当前分类与来源（显式 / 自动）只读展示
     List<FormattedCharSequence> categoryTextLines(int width) {
-        RuleValue view = pages.currentView();
-        return pages.font.split(categoryText(view), Math.max(8, (int) (width / TEXT_SCALE)));
+        RuleValue view = shell.editingValue();
+        return font.split(categoryText(view), Math.max(8, (int) (width / TEXT_SCALE)));
     }
 
     // 分类文案：未声明分类时展示当前派生值，来源标记区分作者手写与自动派生
@@ -213,16 +222,16 @@ final class RuleEditorInfoSection {
         if (summary == null || summary.getString().isBlank()) {
             return List.of();
         }
-        return pages.font.split(summary, Math.max(8, (int) (width / TEXT_SCALE)));
+        return font.split(summary, Math.max(8, (int) (width / TEXT_SCALE)));
     }
 
     private @Nullable Component sourceSummary() {
-        EditSession session = pages.shell.editingSession();
+        EditSession session = shell.editingSession();
         if (session == null) {
             return null;
         }
         String id = session.targetId();
-        RuleEditClientWorkspace workspace = pages.workspace;
+        RuleEditClientWorkspace workspace = shell.workspace();
         RuleSourceView view = workspace.sourceView(id).value();
         if (view != null) {
             return describeSource(view);
@@ -266,11 +275,11 @@ final class RuleEditorInfoSection {
 
     // 缩放后的文本块高度
     private int scaledHeight(int lines) {
-        return (int) Math.ceil(lines * (pages.font.lineHeight + 1) * TEXT_SCALE);
+        return (int) Math.ceil(lines * (font.lineHeight + 1) * TEXT_SCALE);
     }
 
     void renderInfo(GuiGraphics graphics) {
-        if (pages.currentView() == null) {
+        if (shell.editingValue() == null) {
             return;
         }
         renderTextBlock(graphics, infoIdRect, idTextLines(infoIdRect == null ? 8 : infoIdRect.width()));
@@ -291,8 +300,8 @@ final class RuleEditorInfoSection {
             graphics.pose().scale(TEXT_SCALE, TEXT_SCALE, 1);
             int lineY = 0;
             for (FormattedCharSequence line : lines) {
-                graphics.drawString(pages.font, line, 0, lineY, THEME.palette().textSecondary(), false);
-                lineY += pages.font.lineHeight + 1;
+                graphics.drawString(font, line, 0, lineY, THEME.palette().textSecondary(), false);
+                lineY += font.lineHeight + 1;
             }
         } finally {
             graphics.pose().popPose();

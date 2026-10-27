@@ -40,6 +40,7 @@ final class RuleEditorPageInput {
 
     // 清空拖动状态（页面重建时调用）
     void resetDrag() {
+        pressedWidget = null;
         dragKind = DragKind.NONE;
         dragFrom = -1;
         dragTo = -1;
@@ -55,11 +56,11 @@ final class RuleEditorPageInput {
         }
         // 行内删除先于列表选中与拖动排序，避免叉号触发双击激活或拖动。
         if (pages.resultsSection.clickRemove(mouseX, mouseY, button)) {
-            pages.flushRebuild();
+            pages.actions.flushRebuild();
             return true;
         }
         boolean handled = false;
-        for (UiWidget widget : pages.liveWidgets) {
+        for (UiWidget widget : pages.content.widgets) {
             if (widget.isVisible() && widget.mouseClicked(mouseX, mouseY, button)) {
                 // 记录按下归属：随后的释放与拖动只发给这个控件
                 pressedWidget = widget;
@@ -71,10 +72,10 @@ final class RuleEditorPageInput {
         if (pages.lastArea != null) {
             pages.ensureLayout(pages.lastArea);
         }
-        if (button == 0 && !pages.rebuildPending()) {
+        if (button == 0 && !pages.actions.rebuildPending()) {
             captureDrag(mouseX, mouseY);
         }
-        pages.flushRebuild();
+        pages.actions.flushRebuild();
         return handled;
     }
 
@@ -90,7 +91,7 @@ final class RuleEditorPageInput {
             dragTo = -1;
             if (active && from >= 0 && to >= 0 && from != to) {
                 pages.resultsSection.moveEffect(from, to);
-                pages.flushRebuild();
+                pages.actions.flushRebuild();
                 return true;
             }
         }
@@ -98,7 +99,7 @@ final class RuleEditorPageInput {
         UiWidget owner = pressedWidget;
         pressedWidget = null;
         boolean handled = owner != null && owner.isVisible() && owner.mouseReleased(mouseX, mouseY, button);
-        pages.flushRebuild();
+        pages.actions.flushRebuild();
         return handled;
     }
 
@@ -120,19 +121,15 @@ final class RuleEditorPageInput {
                 return true;
             }
         }
-        for (UiWidget widget : pages.liveWidgets) {
-            if (widget.isVisible() && widget.mouseDragged(mouseX, mouseY, button, dragX, dragY)) {
-                return true;
-            }
-        }
-        return false;
+        UiWidget owner = pressedWidget;
+        return owner != null && owner.isVisible() && owner.mouseDragged(mouseX, mouseY, button, dragX, dragY);
     }
 
     boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (!pages.pageScroll.contains(mouseX, mouseY)) {
             return false;
         }
-        for (UiWidget widget : pages.liveWidgets) {
+        for (UiWidget widget : pages.content.widgets) {
             if (widget.isVisible() && widget.mouseScrolled(mouseX, mouseY, scrollX, scrollY)) {
                 return true;
             }
@@ -146,27 +143,27 @@ final class RuleEditorPageInput {
     }
 
     boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        for (UiWidget widget : pages.liveWidgets) {
+        for (UiWidget widget : pages.content.widgets) {
             if (widget instanceof UiFocusTarget target && !target.isFocused()) {
                 continue;
             }
             if (widget.isVisible() && widget.keyPressed(keyCode, scanCode, modifiers)) {
-                pages.flushRebuild();
+                pages.actions.flushRebuild();
                 return true;
             }
         }
-        pages.flushRebuild();
+        pages.actions.flushRebuild();
         return false;
     }
 
     boolean charTyped(char codePoint, int modifiers) {
-        for (UiWidget widget : pages.liveWidgets) {
+        for (UiWidget widget : pages.content.widgets) {
             if (widget.isVisible() && widget.charTyped(codePoint, modifiers)) {
-                pages.flushRebuild();
+                pages.actions.flushRebuild();
                 return true;
             }
         }
-        pages.flushRebuild();
+        pages.actions.flushRebuild();
         return false;
     }
 

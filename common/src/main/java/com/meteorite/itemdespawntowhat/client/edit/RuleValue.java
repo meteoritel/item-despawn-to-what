@@ -252,6 +252,44 @@ public final class RuleValue {
         return index < 0 || index >= array.size() ? null : wrap(array.get(index));
     }
 
+    /** 从可空宿主读取文本字段；缺失和类型不符返回给定缺省值。 */
+    public static String text(@Nullable RuleValue owner, String key, String fallback) {
+        return owner == null ? fallback : owner.text(key, fallback);
+    }
+
+    /** 从可空宿主读取文本字段；缺省为空文本。 */
+    public static String text(@Nullable RuleValue owner, String key) {
+        return text(owner, key, "");
+    }
+
+    /** 从可空宿主读取布尔字段，不把其它标量强制转换为布尔。 */
+    public static boolean flag(@Nullable RuleValue owner, String key, boolean fallback) {
+        return owner == null ? fallback : owner.flag(key, fallback);
+    }
+
+    /** 从可空列表读取文本成员，非法元素保持在原始数据中。 */
+    public static List<String> textItems(@Nullable RuleValue value) {
+        return value == null ? List.of() : value.textItems();
+    }
+
+    /** 读取条件或效果的文本类型标识；缺失和类型不符返回 null。 */
+    public static @Nullable String typeOf(@Nullable RuleValue owner) {
+        RuleValue type = owner == null ? null : owner.child(com.meteorite.itemdespawntowhat.core.api.RuleFields.TYPE);
+        return type != null && type.isText() ? type.asText() : null;
+    }
+
+    /** 按草稿路径读取；返回只读句柄，缺席与显式 null 仍可区分。 */
+    public @Nullable RuleValue valueAt(String path) {
+        JsonElement value = DraftPaths.readAt(element, path);
+        return value == null ? null : wrap(value);
+    }
+
+    /** 指定列表路径的长度；缺失或非列表返回零，非法元素仍占位。 */
+    public int listSizeAt(String path) {
+        RuleValue value = valueAt(path);
+        return value != null && value.isList() ? value.size() : 0;
+    }
+
     // ---- 标量读取 ----
 
     // 子字段文本；缺失或非字符串返回兜底

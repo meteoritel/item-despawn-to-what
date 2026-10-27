@@ -1,21 +1,14 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
-import com.meteorite.itemdespawntowhat.client.edit.DraftListInputs;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
-import com.meteorite.itemdespawntowhat.client.net.RuleEditClientWorkspace;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
-import com.meteorite.itemdespawntowhat.client.edit.RuleCategoryAssignment;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
-import com.meteorite.itemdespawntowhat.client.edit.RuleNaming;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
-import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
-import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiAction;
+import com.meteorite.itemdespawntowhat.client.edit.ResultStructure;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiControlRole;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlowLayout;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiPointer;
@@ -23,25 +16,15 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollView;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.ConditionEditingSupport;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
-import com.meteorite.itemdespawntowhat.client.ui.shared.FieldCatalogTypes;
-import com.meteorite.itemdespawntowhat.client.ui.shared.RuleDisplayLabels;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiModalStack;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.model.CombinationMode;
 import com.meteorite.itemdespawntowhat.core.model.ConditionLimits;
-import com.meteorite.itemdespawntowhat.core.model.OutcomeCandidate;
-import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalogType;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.IdentityHashMap;
 import java.util.List;
-import java.util.Objects;
-import java.util.function.Supplier;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -50,7 +33,7 @@ import org.jetbrains.annotations.Nullable;
 /**
  * 规则编辑页签的组合视图。
  *
- * <p>四页共用同一个 {@link EditSession} 草稿，所有写入经 {@link EditSession#apply(String, Runnable)}
+ * <p>四页共用同一个 {@link EditSession} 草稿，所有写入经 {@link EditSession#apply(String, java.util.function.Consumer)}
  * 记为一条撤销记录；自动标题、路径提示、只读高级区与摘要只读展示，不写数据。</p>
  *
  * <p>顶层 effects 以单一隐式候选展示：打开、改别名、改效果都不生成 outcomes。用户新增第二个候选
@@ -106,28 +89,15 @@ final class RuleEditorEditSections {
     final RuleEditorResultsSection resultsSection;
 
     final EditorShell shell;
-    final RuleEditorModel model;
-    final RuleEditClientWorkspace workspace;
-    final UiModalStack modals;
     final UiFocusManager focus;
-    final ConditionEditingSupport conditionEditingSupport;
     final Font font;
-    final List<UiWidget> liveWidgets = new ArrayList<>();
-    final List<FormView> liveForms = new ArrayList<>();
-    final List<UiButton> buttons = new ArrayList<>();
-    final List<UiButton> candidateButtons = new ArrayList<>();
-    final List<UiButton> effectButtons = new ArrayList<>();
-
-    // 名称来源：注册表标签优先，缺失回落 id 文本（由 RuleNaming 兜底）
-    final RuleNaming.NameSource nameSource = RuleDisplayLabels::label;
+    EditorSectionContent content;
+    final EditorSectionActions actions;
 
     final UiScrollView pageScroll = new UiScrollView();
     private final EnumMap<EditSection, Integer> scrollOffsets = new EnumMap<>(EditSection.class);
     private EditSection page = EditSection.INFO;
-    private boolean pendingRebuild;
-    boolean rebuilding;
     @Nullable UiRect lastArea;
-    final List<PageCard> cards = new ArrayList<>();
     // 页面布局缓存：只有页、宽度、行结构与控件高度等真实几何输入变化时才重排，渲染帧与纯滚动帧都不测量
     private boolean layoutDirty = true;
     // 已作用到控件上的滚动偏移：偏移变化时只平移已排好的控件
@@ -135,86 +105,21 @@ final class RuleEditorEditSections {
     // 控件在文档坐标（未滚动）下的矩形：滚动帧据此重算屏幕坐标，复合控件不会因子控件同列平移两次
     private final IdentityHashMap<UiWidget, UiRect> documentBounds = new IdentityHashMap<>();
 
-    /** 卡片头部内容：标题必填，图标可选（图标绘制在标题行内、蓝条右侧）。 */
-    record CardHeader(Component title, @Nullable UiIcon icon) {
-        CardHeader {
-            Objects.requireNonNull(title, "title");
-        }
-    }
-
-    /**
-     * 页面分区的绘制数据，与控件共用滚动坐标。
-     * <p>头部内容既可以是构造时的常量标题，也可以在每帧渲染时求值（见 {@link #dynamic}），
-     * 卡片之间的头部几何统一由 {@link #headerRect()} 派生，绘制统一走
-     * {@link RuleEditorEditSections#drawCardHeader}。</p>
-     */
-    static final class PageCard {
-
-        // 卡片矩形
-        private final UiRect bounds;
-        // 头部内容来源；为空表示该卡片不绘制头部
-        private final @Nullable Supplier<CardHeader> header;
-        // 头部内容距卡片边缘的内缩，决定蓝条、图标、标题与分隔线的位置
-        private final int headerInset;
-
-        /** 静态标题卡片：头部内缩沿用页面默认值，不绘制图标。 */
-        PageCard(UiRect bounds, @Nullable Component title) {
-            this(bounds, constantHeader(title), RuleEditorPageSupport.CARD_PAD);
-        }
-
-        private PageCard(UiRect bounds, @Nullable Supplier<CardHeader> header, int headerInset) {
-            this.bounds = bounds;
-            this.header = header;
-            this.headerInset = headerInset;
-        }
-
-        /** 静态标题卡片：由调用方指定头部内缩，用于同页内需要对齐的卡片。 */
-        static PageCard titled(UiRect bounds, Component title, int headerInset) {
-            return new PageCard(bounds, constantHeader(title), headerInset);
-        }
-
-        /** 动态头部卡片：标题与图标在每帧渲染时求值，可随编辑状态变化。 */
-        static PageCard dynamic(UiRect bounds, Supplier<CardHeader> header, int headerInset) {
-            return new PageCard(bounds, header, headerInset);
-        }
-
-        // 常量标题包装为头部内容来源；标题为空即表示该卡片没有头部
-        private static @Nullable Supplier<CardHeader> constantHeader(@Nullable Component title) {
-            return title == null ? null : () -> new CardHeader(title, null);
-        }
-
-        /** 卡片矩形：卡片高与滚动坐标都相对它计算。 */
-        UiRect bounds() {
-            return bounds;
-        }
-
-        /** 当前头部内容；返回 null 表示该卡片不绘制头部。 */
-        @Nullable CardHeader header() {
-            return header == null ? null : header.get();
-        }
-
-        /** 头部矩形：由卡片矩形按内缩与固定头高派生，蓝条、标题与分隔线都相对它定位。 */
-        UiRect headerRect() {
-            return cardHeaderRect(bounds.x(), bounds.y(), bounds.width(), headerInset);
-        }
-    }
-
     // 输入事件分发与拖动状态
     private final RuleEditorPageInput input;
 
-    RuleEditorEditSections(EditorShell shell, RuleEditorModel model, RuleEditClientWorkspace workspace, Font font,
-            UiModalStack modals, UiFocusManager focus, ConditionEditingSupport conditionEditingSupport) {
+    RuleEditorEditSections(EditorShell shell, RuleEditorModel model, Font font, UiFocusManager focus, ConditionEditingSupport conditionEditingSupport, Runnable finishEditing) {
         this.shell = shell;
-        this.model = model;
-        this.workspace = workspace;
         this.font = font;
-        this.modals = modals;
         this.focus = focus;
-        this.conditionEditingSupport = conditionEditingSupport;
-        this.infoSection = new RuleEditorInfoSection(this);
-        this.inputSection = new RuleEditorInputSection(this);
-        this.triggerSection = new RuleEditorTriggerSection(this);
-        this.resultsSection = new RuleEditorResultsSection(this);
+        this.actions = new EditorSectionActions(shell, finishEditing, this::rebuild, this::restoreSwitches);
+        EditorConditionForms conditions = new EditorConditionForms(shell, font, conditionEditingSupport);
+        EditorFormFactory forms = new EditorFormFactory(shell, font, conditions, this::invalidateLayout);
+        this.infoSection = new RuleEditorInfoSection(shell, model, font, forms, actions);
+        this.inputSection = new RuleEditorInputSection(shell, font, forms, actions);
+        this.triggerSection = new RuleEditorTriggerSection(shell, font, forms, actions);
+        this.resultsSection = new RuleEditorResultsSection(shell, font, forms, actions, pageScroll);
+        this.content = infoSection.content;
         this.input = new RuleEditorPageInput(this);
     }
 
@@ -247,6 +152,12 @@ final class RuleEditorEditSections {
     /** 重建当前页的全部控件（草稿结构或选择变化后调用） */
     public void rebuild() {
         reset();
+        content = switch (page) {
+            case INFO -> infoSection.content;
+            case INPUT -> inputSection.content;
+            case TRIGGER -> triggerSection.content;
+            case RESULTS -> resultsSection.content;
+        };
         EditSession session = shell.editingSession();
         if (session == null) {
             return;
@@ -265,62 +176,13 @@ final class RuleEditorEditSections {
     }
 
     private void reset() {
-        liveWidgets.clear();
-        liveForms.clear();
-        buttons.clear();
-        candidateButtons.clear();
-        effectButtons.clear();
+        content.clear();
         documentBounds.clear();
-        // 页面各自的控件引用由页面清理，容器只维护共享状态
         infoSection.reset();
         inputSection.reset();
         triggerSection.reset();
         resultsSection.reset();
         input.resetDrag();
-    }
-
-    // 表单工厂
-    FormView newForm(EditSession session, String basePath, TypeEditorDescriptor descriptor) {
-        FormView form = new FormView(font, session, basePath);
-        // 表单行几何变化时让页面布局缓存失效，页面滚动帧因此不必重排
-        form.setOnGeometryChanged(this::invalidateLayout);
-        form.useCatalogSelections();
-        form.setConditionEditingSupport(triggerSection.sharedConditionSupport());
-        form.setConditionContextFactory(triggerSection.conditionContextFactory(form));
-        form.setOnChanged(shell::draftChanged);
-        if (page == EditSection.INPUT) form.setOnChanged(() -> {
-            form.applyToDraft();
-            if (form == inputSection.sourceForm) {
-                inputSection.updateBlacklistVisibility();
-                inputSection.refreshQuantityReferences();
-            }
-            if (form == inputSection.catalystForm) {
-                for (RuleEditorInputSection.PresenceRow row : inputSection.presenceRows) {
-                    if (row.leaf.catalyst()) row.form.reload();
-                }
-            }
-            shell.draftChanged();
-        });
-        // 输入超过长度上限时立即提示，格式为「字段名：原因」
-        form.setOnRejectedNotice(message -> shell.setNotice(message,EditorShell.NoticeLevel.DANGER));
-        form.setSelectionCatalogOpener((field, path, tags, selected, onPicked) -> {
-            if (page == EditSection.INPUT && RuleFields.SOURCE.equals(basePath) && RuleFields.SOURCE_EXCLUDE.equals(field.name())) {
-                if (shell.editable()) modals.push(SourceBlacklistPicker.modal(font, shell, session.draft().root(),
-                        shell.screenWidth(), shell.screenHeight(), onPicked));
-                return;
-            }
-            RuleCatalogType type = tags ? RuleCatalogType.TAG : FieldCatalogTypes.catalogTypeOf(field);
-            if (type == null || !shell.editable()) return;
-            boolean multi = field.isMultiCatalog();
-            modals.push(RuleEditorPanelFactory.fieldCatalogModal(font, shell, workspace, type, multi,
-                    Component.translatable(field.labelKey()), shell.screenWidth(), shell.screenHeight(), onPicked,
-                    field, session.draft(), path, selected, form.catalogFilter(field.name())));
-        });
-        form.setDescriptor(descriptor);
-        form.reload();
-        form.useCardSpacing();
-        inputSection.configureQuantityFields(form, session, basePath, descriptor);
-        return form;
     }
 
     // 基本页优先级与其它单行控件使用同一紧凑高度。
@@ -358,7 +220,7 @@ final class RuleEditorEditSections {
 
     // 任一可见表单的测量缓存失效即视为页面几何需要重排
     private boolean formGeometryChanged() {
-        for (FormView form : liveForms) {
+        for (FormView form : content.forms) {
             if (form.isVisible() && form.needsMeasure()) {
                 return true;
             }
@@ -387,13 +249,13 @@ final class RuleEditorEditSections {
     }
 
     // 滚动帧只平移已排好的控件：表单改视口原点，其余控件按文档坐标重算屏幕坐标。
-    // 复合控件的 setBounds 会把子控件一起摆到文档位置，若子控件也在 liveWidgets 里，
+    // 复合控件的 setBounds 会把子控件一起摆到文档位置，若子控件也在 content.widgets 里，
     // 再按增量平移就会叠加两次（方案翻页箭头曾因此与页码错位），因此这里一律用绝对坐标。
     private void applyScroll(int offset) {
         int delta = appliedOffset - offset;
         if (delta != 0) {
             // 不可见控件同样平移：否则它们下次变为可见时 bounds 仍停在文档坐标，命中会错位
-            for (UiWidget widget : liveWidgets) {
+            for (UiWidget widget : content.widgets) {
                 if (widget instanceof FormView form) {
                     form.shiftViewportY(delta);
                     continue;
@@ -413,18 +275,14 @@ final class RuleEditorEditSections {
     // 记录文档坐标：布局收尾、施加滚动偏移之前调用，滚动帧据此重算屏幕坐标
     private void captureDocumentBounds() {
         documentBounds.clear();
-        for (UiWidget widget : liveWidgets) {
+        for (UiWidget widget : content.widgets) {
             documentBounds.put(widget, widget.bounds());
         }
     }
 
     /** 已作用到控件上的滚动偏移：页面自绘文字的命中判定要把指针坐标换算回文档坐标。 */
-    int scrollOffset() {
-        return appliedOffset;
-    }
-
     private int layoutPage(UiRect area) {
-        cards.clear();
+        content.cards.clear();
         return switch (page) {
             case INFO -> infoSection.layoutInfo(area);
             case INPUT -> inputSection.layoutInput(area);
@@ -433,97 +291,16 @@ final class RuleEditorEditSections {
         };
     }
 
-    int layoutForm(@Nullable FormView form, int x, int y, int width) {
-        if (form == null) {
-            return y;
-        }
-        // 一次测量同时得到行几何与内容高度，替代「preferredHeight 再 layout」的两次测量
-        int height = form.layoutNatural(x, y, width);
-        return y + height + RuleEditorPageSupport.PAD;
-    }
-
     // 内容高度决定卡片高度；额外留白用于宽屏结果列表对齐。
-    int finishCard(int x, int top, int width, int contentBottom, String titleKey) {
-        int bottom = contentBottom + RuleEditorPageSupport.CARD_PAD;
-        cards.add(new PageCard(new UiRect(x, top, width, Math.max(RuleEditorPageSupport.CARD_HEADER_H + RuleEditorPageSupport.CARD_PAD * 2, bottom - top)),
-                Component.translatable(RuleEditorPageSupport.UI + titleKey)));
-        return bottom + RuleEditorPageSupport.CARD_GAP;
-    }
 
     // 按钮组横向排布（超宽换行），返回占用高度
-    int layoutButtonGroup(List<UiButton> group, int x, int y, int width) {
-        if (group.isEmpty()) {
-            return 0;
-        }
-        int limit = Math.max(0, width);
-        int[] widths = new int[group.size()];
-        for (int index = 0; index < group.size(); index++) {
-            widths[index] = Math.clamp(group.get(index).preferredWidth(RuleEditorPageSupport.PAD), Math.min(24, limit), limit);
-        }
-        UiFlowLayout.Wrap flow = UiFlowLayout.wrap(widths, limit, RuleEditorPageSupport.BUTTON_GAP, RuleEditorPageSupport.FORM_BUTTON_H);
-        for (int index = 0; index < group.size(); index++) {
-            UiRect offset = flow.bounds(index);
-            group.get(index).setBounds(x + offset.x(), y + offset.y(), offset.width(), offset.height());
-        }
-        return flow.height();
-    }
 
     // ---- 渲染 ----
 
-    // 卡片头部：蓝条宽度、蓝条与标题的间隙、分隔线距头部矩形底边的间隙（像素）
-    private static final int HEADER_BAR_WIDTH = 2;
-    private static final int HEADER_TITLE_GAP = 4;
-    private static final int HEADER_DIVIDER_GAP = 5;
-
-    /** 卡片头部矩形：卡片左上角按内缩偏移、头高固定为 {@link RuleEditorPageSupport#CARD_HEADER_H}，
-     * 是蓝条、图标、标题与分隔线的唯一位置基准。 */
-    static UiRect cardHeaderRect(int x, int y, int width, int inset) {
-        return new UiRect(x + inset, y + inset, Math.max(0, width - inset * 2), RuleEditorPageSupport.CARD_HEADER_H);
-    }
-
-    /**
-     * 绘制卡片头部：左侧蓝条、标题行内的可选图标、标题与底部分隔线。
-     * <p>编辑器内所有卡片头部都经此绘制，卡片之间的蓝条位置、标题基线与分隔线 y 坐标因此完全一致；
-     * 几何全部相对 {@code headerRect} 计算，调用方只需提供头部矩形与内容。</p>
-     * <p>蓝条、图标与标题都以分隔线以上内容带的中线对齐：图标高度接近文字行两倍，按顶边对齐会明显偏低。</p>
-     *
-     * @param font       绘制字体：蓝条高度取 {@code font.lineHeight}，标题按剩余宽度换行
-     * @param headerRect 头部矩形，高取 {@link RuleEditorPageSupport#CARD_HEADER_H}
-     * @param icon       标题行内图标，可为 null；非空时紧接蓝条之后占位，随内容带中线居中
-     * @param title      标题文案，以主要文本色显示
-     */
-    static void drawCardHeader(GuiGraphics graphics, Font font, UiRect headerRect, @Nullable UiIcon icon, Component title) {
-        if (headerRect.width() <= 0) {
-            return;
-        }
-        int dividerY = headerRect.y() + headerRect.height() - HEADER_DIVIDER_GAP;
-        int centerY = headerRect.y() + (dividerY - headerRect.y()) / 2;
-        int textY = centerY - font.lineHeight / 2;
-        graphics.fill(headerRect.x(), textY, headerRect.x() + HEADER_BAR_WIDTH, textY + font.lineHeight,
-                THEME.palette().accent());
-        int titleX = headerRect.x() + HEADER_BAR_WIDTH + HEADER_TITLE_GAP;
-        if (icon != null) {
-            icon.render(graphics, titleX, centerY - icon.height() / 2);
-            titleX += icon.width() + RuleEditorPageSupport.PAD;
-        }
-        var titleLines = font.split(title, Math.max(1, headerRect.right() - titleX));
-        if (!titleLines.isEmpty()) {
-            graphics.drawString(font, titleLines.getFirst(), titleX, textY, THEME.palette().textPrimary(), false);
-        }
-        THEME.drawDivider(graphics, headerRect.x(), dividerY, headerRect.width());
-    }
-
-    /**
-     * 导出当前页控件的排版快照。
-     *
-     * <p>liveWidgets 在 {@link #rebuild()} 里按当前页重建，滚动偏移也由内部 applyScroll 写进了
-     * 各控件的屏幕坐标，因此这里只转发实现 {@link UiLayoutSource} 的控件，不重排也不换算。
-     * 按钮会同时出现在 liveWidgets 与按钮列表里，按实例身份去重，避免探针读到重复矩形。</p>
-     */
     List<UiLayoutNode> layoutNodes() {
         List<UiLayoutNode> nodes = new ArrayList<>();
         IdentityHashMap<UiWidget, Boolean> seen = new IdentityHashMap<>();
-        for (UiWidget widget : liveWidgets) {
+        for (UiWidget widget : content.widgets) {
             if (seen.put(widget, Boolean.TRUE) != null || !(widget instanceof UiLayoutSource source)) {
                 continue;
             }
@@ -544,11 +321,11 @@ final class RuleEditorEditSections {
         graphics.pose().translate(0, -appliedOffset, 0);
         graphics.enableScissor(lastArea.x(), lastArea.y(), lastArea.right(), lastArea.bottom());
         try {
-            for (PageCard card : cards) {
+            for (EditorSectionContent.PageCard card : content.cards) {
                 THEME.drawCard(graphics, card.bounds());
-                CardHeader header = card.header();
+                EditorSectionContent.CardHeader header = card.header();
                 if (header != null) {
-                    drawCardHeader(graphics, font, card.headerRect(), header.icon(), header.title());
+                    EditorSectionContent.drawCardHeader(graphics, font, card.headerRect(), header.icon(), header.title());
                 }
             }
             switch (page) {
@@ -564,7 +341,7 @@ final class RuleEditorEditSections {
         // 控件保持屏幕坐标（滚动时已整体平移），命中、提示与拖拽预览因此无需换算
         graphics.enableScissor(lastArea.x(), lastArea.y(), lastArea.right(), lastArea.bottom());
         try {
-            for (UiWidget widget : liveWidgets) {
+            for (UiWidget widget : content.widgets) {
                 if (widget.isVisible()) {
                     widget.render(graphics, renderFont, mouseX, mouseY);
                 }
@@ -576,14 +353,6 @@ final class RuleEditorEditSections {
         pageScroll.renderScrollbar(graphics, THEME.controlStyle(UiControlRole.SECONDARY));
     }
 
-    void drawText(GuiGraphics graphics, @Nullable UiRect rect, Component text, int color) {
-        if (rect == null) {
-            return;
-        }
-        String trimmed = TextScroll.trimToWidth(font, text.getString(), Math.max(1, rect.width()));
-        graphics.drawString(font, trimmed, rect.x(), rect.y(), color, false);
-    }
-
     // ---- 状态与提交 ----
 
     /** 提交所有可见表单的待写字段；返回是否有改动 */
@@ -593,7 +362,7 @@ final class RuleEditorEditSections {
         }
         // 存在条件的类型改写必须先落盘，才能与关联消耗配置的重指向合并为一次可撤销操作
         boolean changed = inputSection.flushPresenceTypes();
-        for (FormView form : liveForms) {
+        for (FormView form : content.forms) {
             if (form.isVisible() && form.commitPendingInputs()) {
                 changed = true;
             }
@@ -604,7 +373,7 @@ final class RuleEditorEditSections {
     /** 收集所有可见表单的校验问题，再补页面级约束（触发来源、候选与效果上限、组合模式） */
     public List<FormIssue> issues() {
         List<FormIssue> issues = new ArrayList<>();
-        for (FormView form : liveForms) {
+        for (FormView form : content.forms) {
             if (form.isVisible()) {
                 issues.addAll(form.issues());
             }
@@ -664,13 +433,14 @@ final class RuleEditorEditSections {
     }
 
     /**
-     * 结束进行中的数值/滑杆交互：提交有效预览，回退无效预览。
+     * 结束进行中的数值/滑杆交互：回退未释放预览，保留字段输入。
      * <p>{@code FormView#endInteractions} 是包级方法，宿主经公开入口
      * {@link FormView#onFocusScopeChanged()} 触发。</p>
      */
     public void endInteractions() {
         pageScroll.mouseReleased();
-        for (FormView form : liveForms) {
+        input.resetDrag();
+        for (FormView form : content.forms) {
             if (form.isVisible()) {
                 form.onFocusScopeChanged();
             }
@@ -679,14 +449,14 @@ final class RuleEditorEditSections {
 
     /** 宿主关闭屏幕：让表单释放全部捕获与输入状态 */
     public void onHostClosed() {
-        for (FormView form : liveForms) {
+        for (FormView form : content.forms) {
             form.onHostClosed();
         }
     }
 
     /** 宿主离开编辑页（返回管理页）：卸载表单的输入状态 */
     public void unmount() {
-        for (FormView form : liveForms) {
+        for (FormView form : content.forms) {
             form.unmount();
         }
     }
@@ -694,7 +464,7 @@ final class RuleEditorEditSections {
     /** 键盘抬起：把滑杆方向键的按住过程合并为一次提交（屏幕在 EDIT 模式下转发） */
     public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
         boolean handled = false;
-        for (FormView form : liveForms) {
+        for (FormView form : content.forms) {
             if (form.isVisible() && form.keyReleased(keyCode, scanCode, modifiers)) {
                 handled = true;
             }
@@ -712,7 +482,7 @@ final class RuleEditorEditSections {
     /** 聚焦目标（按视觉顺序） */
     public List<UiFocusTarget> focusTargets() {
         List<UiFocusTarget> targets = new ArrayList<>();
-        for (UiWidget widget : liveWidgets) {
+        for (UiWidget widget : content.widgets) {
             if (!widget.isVisible()) continue;
             if (widget instanceof FormView form) {
                 targets.addAll(form.focusTargets());
@@ -732,49 +502,10 @@ final class RuleEditorEditSections {
 
     void applyEnabled() {
         boolean editable = shell.editable();
-        RuleValue view = currentView();
-        if (inputSection.sourceCostButton != null) {
-            inputSection.sourceCostButton.setEnabled(editable);
-        }
-        if (inputSection.catalystToggle != null) {
-            EditSession session = shell.editingSession();
-            boolean hasCost = view != null && view.has(RuleFields.CATALYST_COST);
-            inputSection.catalystToggle.setEnabled(editable && (hasCost || session != null
-                    && PresenceLeaves.selectedCatalystLeaf(session.draft()) != null));
-        }
-        if (inputSection.catalystPresenceToggle != null) {
-            inputSection.catalystPresenceToggle.setEnabled(editable);
-        }
-        if (inputSection.fluidPresenceToggle != null) {
-            inputSection.fluidPresenceToggle.setEnabled(editable);
-        }
-        if (inputSection.fluidConsumeToggle != null) {
-            inputSection.fluidConsumeToggle.setEnabled(editable);
-        }
-        triggerSection.triggerBoxes.forEach(box -> box.setEnabled(editable));
-        if (resultsSection.combinationButton != null) {
-            resultsSection.combinationButton.setEnabled(editable && ResultStructure.hasOutcomes(view));
-        }
-        if (resultsSection.safeSpawnBox != null) {
-            resultsSection.safeSpawnBox.setEnabled(editable);
-        }
-        if (resultsSection.fillOriginBox != null) {
-            resultsSection.fillOriginBox.setEnabled(editable);
-        }
-        for (FormView form : liveForms) {
-            form.setEnabled(editable);
-        }
-        for (UiButton button : buttons) {
-            button.setEnabled(editable);
-        }
-        for (UiButton button : candidateButtons) {
-            button.setEnabled(editable);
-        }
-        for (UiButton button : effectButtons) {
-            button.setEnabled(editable);
-        }
-        resultsSection.updatePlanButtons(editable);
-        // 基本页的本服开关与「恢复默认」按钮有各自的可用条件，上面的统一使能会覆盖它们，最后再同步一次
+        content.setEnabled(editable);
+        inputSection.applyEnabled(editable);
+        triggerSection.applyEnabled(editable);
+        resultsSection.applyEnabled(editable);
         infoSection.applyServerState(editable);
     }
 
@@ -785,10 +516,10 @@ final class RuleEditorEditSections {
 
     public void tick() {
         triggerSection.updateLifespanWindow();
-        for (FormView form : liveForms) {
+        for (FormView form : content.forms) {
             form.tick();
         }
-        flushRebuild();
+        actions.flushRebuild();
     }
 
     /**
@@ -809,7 +540,7 @@ final class RuleEditorEditSections {
         if (!pageScroll.contains(mouseX, mouseY)) {
             return null;
         }
-        for (FormView form : liveForms) {
+        for (FormView form : content.forms) {
             if (!form.isVisible()) {
                 continue;
             }
@@ -829,7 +560,7 @@ final class RuleEditorEditSections {
         if (path == null || path.isBlank()) {
             return null;
         }
-        for (FormView form : liveForms) {
+        for (FormView form : content.forms) {
             if (!form.isVisible()) continue;
             UiFocusTarget target = form.revealPath(path);
             if (target != null) {
@@ -837,7 +568,7 @@ final class RuleEditorEditSections {
                 return target;
             }
         }
-        if (path.startsWith(RuleFields.OUTCOMES) || path.startsWith(RuleFields.EFFECTS)) {
+        if (ResultStructure.isResultPath(path)) {
             page = EditSection.RESULTS;
             resultsSection.resultStage = path.contains("[") ? 2 : 1;
             resultsSection.showAdvancedEffects = path.contains("chance") || path.contains("delay_ticks")
@@ -937,13 +668,15 @@ final class RuleEditorEditSections {
      * {@link EditSession#retainPendingInput(String, List, List)} 留在会话，重建表单后回填，
      * 因此本方法不阻塞后续操作；冻结（只读/会话失效）时不做任何写入。</p>
      */
-    public void flushPendingEdits() {
+    void retainPendingInputs() {
+        for (FormView form : content.forms) form.retainPendingInputs();
+    }
+
+    void finishEditing() {
         if (!shell.editable()) {
             return;
         }
-        for (FormView form : liveForms) {
-            form.retainPendingInputs();
-        }
+        retainPendingInputs();
         endInteractions();
         if (applyToDraft()) {
             shell.draftChanged();
@@ -962,106 +695,15 @@ final class RuleEditorEditSections {
         applyScroll(pageScroll.offset());
     }
 
-    void requestRebuild() {
-        pendingRebuild = true;
-    }
-
-    boolean rebuildPending() {
-        return pendingRebuild;
-    }
-
-    void flushRebuild() {
-        if (pendingRebuild) {
-            pendingRebuild = false;
-            rebuild();
-        }
-    }
-
-    boolean apply(String opKey, Runnable change) {
-        return apply(opKey, change, false);
-    }
-
-    /**
-     * 结构类编辑的统一入口：与产出相关的操作会顺带按「感知默认值」同步规则分类。
-     *
-     * <p>分类写入与产出改动处在同一条撤销记录里，撤销该次产出编辑时分类一并回退。</p>
-     *
-     * @param opKey 操作标签（i18n key）
-     * @param change 只做规则结构写入的操作
-     * @return 是否应用成功
-     */
-    boolean applyStructure(String opKey, Runnable change) {
-        return apply(opKey, change, true);
-    }
-
-    // followCategory 为真时在产出变化后同步分类
-    private boolean apply(String opKey, Runnable change, boolean followCategory) {
-        EditSession session = shell.editingSession();
-        if (session == null || !shell.editable()) {
-            restoreSwitches();
-            return false;
-        }
-        flushPendingEdits();
-        DraftListInputs inputs = DraftListInputs.capture(session.draft());
-        // 感知默认值的比较基准是变化前的派生值，写入后就取不到了
-        String derivedBefore = followCategory ? RuleCategoryAssignment.derive(session.draft().root()) : null;
-        session.apply(opKey, () -> {
-            change.run();
-            inputs.remap(session);
-            if (followCategory) {
-                RuleCategoryAssignment.follow(session.draft(), derivedBefore);
-            }
-        });
-        shell.draftChanged();
-        requestRebuild();
-        return true;
-    }
-
     // 冻结或会话缺失时恢复开关显示，不重建输入控件。
     void restoreSwitches() {
-        RuleValue view = currentView();
-        if (view == null) {
-            return;
-        }
-        if (inputSection.catalystToggle != null) {
-            RuleValue cost = view.child(RuleFields.CATALYST_COST);
-            inputSection.catalystToggle.setChecked(CatalystQuantities.consumesCatalysts(cost));
-        }
-        if (inputSection.catalystPresenceToggle != null) {
-            inputSection.catalystPresenceToggle.setChecked(
-                    PresenceLeaves.hasRuleLevelPresence(view, RuleEditorPageSupport.CATALYST_PRESENT_ID));
-        }
-        if (inputSection.fluidPresenceToggle != null) {
-            inputSection.fluidPresenceToggle.setChecked(
-                    PresenceLeaves.hasRuleLevelPresence(view, RuleEditorPageSupport.FLUID_PRESENT_ID));
-        }
-        if (inputSection.fluidConsumeToggle != null) {
-            inputSection.fluidConsumeToggle.setChecked(view.flag(RuleFields.CONSUME_FLUID, false));
-        }
-        List<String> triggers = RuleTriggers.effective(view);
-        for (int index = 0; index < triggerSection.triggerBoxes.size(); index++) {
-            triggerSection.triggerBoxes.get(index).setChecked(triggers.contains(RuleTriggers.known().get(index)));
-        }
-        resultsSection.updateCombinationLabel(view);
-        RuleValue candidate = ResultStructure.candidateAt(view, resultsSection.candidateIndex);
-        if (resultsSection.safeSpawnBox != null) {
-            resultsSection.safeSpawnBox.setChecked(RuleValueReads.boolOf(candidate, RuleFields.SAFE_SPAWN, OutcomeCandidate.DEFAULT_SAFE_SPAWN));
-        }
-        if (resultsSection.fillOriginBox != null) {
-            resultsSection.fillOriginBox.setChecked(RuleValueReads.boolOf(candidate, RuleFields.FILL_ORIGIN, true));
-        }
-    }
-
-    // 动作类按钮统一为次操作：每屏唯一的主操作是页脚的「应用更改」；页面内的按钮一律走扁平胶囊样式
-    void addEffectButton(UiAction action) {
-        UiButton button = new UiButton(THEME, font, Component.translatable(RuleEditorPageSupport.UI + "button.effect_add"), UiButtonVariant.SECONDARY, action)
-                .setChipStyle(true);
-        effectButtons.add(button);
-        liveWidgets.add(button);
+        inputSection.restoreSwitches();
+        triggerSection.restoreSwitches();
+        resultsSection.restoreSwitches();
     }
 
     @Nullable RuleValue currentView() {
         EditSession session = shell.editingSession();
-        return session == null ? null : session.draft().root();
+        return session == null ? null : session.root();
     }
 }

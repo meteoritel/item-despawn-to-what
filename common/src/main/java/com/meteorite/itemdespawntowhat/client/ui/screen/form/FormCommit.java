@@ -4,9 +4,9 @@ import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDefaults;
 import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
-import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleCategoryAssignment;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
+import com.meteorite.itemdespawntowhat.client.edit.ResultStructure;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.model.CatalystCost;
 
@@ -23,11 +23,11 @@ import org.jetbrains.annotations.Nullable;
  * <p>所有写入仍经 {@link EditSession}（统一撤销门面）；本类只搬运数据，不持有界面几何。
  * 字段级撤销语义（未编辑不回写、无变化不记历史、关联字段同一条记录）在此保持原样。</p>
  */
-final class FormDraftWriter {
+final class FormCommit {
 
     private final FormView view;
 
-    FormDraftWriter(FormView view) {
+    FormCommit(FormView view) {
         this.view = view;
     }
 
@@ -35,10 +35,10 @@ final class FormDraftWriter {
     void reload() {
         retainPendingInputs();
         view.loadedRevision = view.session.revision();
-        RuleDraft draft = view.session.draft();
+        RuleValue draft = view.session.root();
         for (FormRow row : view.rows) {
             RuleValue original = draft.valueAt(row.path);
-            RuleValue container = view.basePath.isEmpty() ? draft.root() : draft.valueAt(view.basePath);
+            RuleValue container = view.basePath.isEmpty() ? draft : draft.valueAt(view.basePath);
             if (row.control instanceof ItemCountsControl counts && isCatalystQuantityField(row.field.name())) {
                 RuleValue owner = container != null && container.isMapping() ? container : RuleValue.mapping().build();
                 boolean source = RuleFields.SOURCE_COST.equals(row.field.name());
@@ -145,9 +145,12 @@ final class FormDraftWriter {
     }
 
     boolean applyToDraft(boolean finish) {
-        if (view.loadedRevision != view.session.revision()) reload();
+        if (view.loadedRevision != view.session.revision()) {
+            reload();
+            return false;
+        }
         retainPendingInputs();
-        RuleDraft draft = view.session.draft();
+        RuleValue draft = view.session.root();
         boolean written = false;
         for (FormRow row : view.rows) {
             if (!row.visible || row.field.isNote() || row.path.isEmpty()) {
@@ -172,39 +175,38 @@ final class FormDraftWriter {
 
     void acceptInput(FormRow row) {
         row.loadedInputs = List.copyOf(row.control.inputText());
-        row.control.rememberLoaded(view.session.draft().valueAt(row.path));
+        row.control.rememberLoaded(view.session.valueAt(row.path));
         row.control.inputAccepted();
         view.session.clearPendingInput(row.path);
     }
 
     // 文本提交、卡片移除和目录添加共用写入入口。
     void writeField(FormRow row, @Nullable RuleValue next) {
-        RuleDraft draft = view.session.draft();
+        RuleValue draft = view.session.root();
         RuleValue current = draft.valueAt(row.path);
         if (Objects.equals(current, next)) return;
         RuleValue before = current == null ? null : current.deepCopy();
-        boolean resultField = row.path.startsWith(RuleFields.EFFECTS + "[")
-                || row.path.startsWith(RuleFields.OUTCOMES + "[");
-        String categoryBefore = resultField ? RuleCategoryAssignment.derive(draft.root()) : null;
+        boolean resultField = ResultStructure.isResultPath(row.path);
+        String categoryBefore = resultField ? RuleCategoryAssignment.derive(draft) : null;
         view.session.clearPendingInput(row.path);
-        view.session.apply(opKeyFor(row), () -> {
-            if (next == null) draft.removeAt(row.path);
-            else draft.setAt(row.path, next.deepCopy());
-            if (RuleFields.FLUIDS.equals(row.field.name())) draft.removeAt(view.childPath(RuleFields.FLUID));
+        view.session.apply(opKeyFor(row), edits -> {
+            if (next == null) edits.removeAt(row.path);
+            else edits.setAt(row.path, next.deepCopy());
+            if (RuleFields.FLUIDS.equals(row.field.name())) edits.removeAt(view.childPath(RuleFields.FLUID));
             if (RuleFields.CATALYST_ITEMS.equals(row.field.name())) {
-                RuleValue amounts = draft.valueAt(view.childPath(RuleFields.ITEM_COUNTS));
+                RuleValue amounts = edits.valueAt(view.childPath(RuleFields.ITEM_COUNTS));
                 if (amounts != null && amounts.isMapping()) {
                     RuleValue.Mapping selected = RuleValue.mapping();
                     for (String id : stringReferences(next)) {
                         RuleValue amount = amounts.has(id) ? amounts.child(id) : null;
                         if (amount != null) selected.put(id, amount.deepCopy());
                     }
-                    draft.setAt(view.childPath(RuleFields.ITEM_COUNTS), selected.build());
+                    edits.setAt(view.childPath(RuleFields.ITEM_COUNTS), selected.build());
                 }
             }
-            view.notifyFieldWritten(row.path, before);
+            view.notifyFieldWritten(edits, row.path, before);
             // 产出参数补齐后才可能解码成功；分类与字段及其关联更新共用一条撤销记录。
-            if (resultField) RuleCategoryAssignment.follow(draft, categoryBefore);
+            if (resultField) RuleCategoryAssignment.follow(edits, categoryBefore);
         });
         view.loadedRevision = view.session.revision();
         if (RuleFields.CATALYST_ITEMS.equals(row.field.name())) {

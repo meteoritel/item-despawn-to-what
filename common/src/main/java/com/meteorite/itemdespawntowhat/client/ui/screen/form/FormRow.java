@@ -18,6 +18,8 @@ import org.jetbrains.annotations.Nullable;
 final class FormRow {
     @Nullable FormRow pairedBelow;
     @Nullable FormRow pairedAbove;
+    boolean attached = true;
+    @Nullable java.util.function.Predicate<String> catalogFilter;
     boolean loaded;
     boolean wasEditing;
     List<String> loadedInputs = List.of();

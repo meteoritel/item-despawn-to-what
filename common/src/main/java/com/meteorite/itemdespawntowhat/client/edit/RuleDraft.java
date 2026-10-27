@@ -187,13 +187,6 @@ public final class RuleDraft {
     // ---- 条件树 ----
 
     /**
-     * 规则级条件树的值视图；缺失返回 null
-     */
-    public @Nullable RuleValue conditionsValue() {
-        return conditionsValueAt("");
-    }
-
-    /**
      * 任意位置条件树的值视图；path 为空表示规则级 conditions
      */
     public @Nullable RuleValue conditionsValueAt(String path) {
@@ -397,18 +390,18 @@ public final class RuleDraft {
     // ---- 候选结果（outcomes） ----
 
     public boolean hasFlatEffects() {
-        return effectCount() > 0;
+        return ResultStructure.hasFlat(root());
     }
 
     public boolean hasOutcomes() {
-        return outcomeCount() > 0;
+        return ResultStructure.hasOutcomes(root());
     }
 
     /**
      * 结构互斥：effects 与 outcomes 是否同时声明（该形状服务端按错误拒绝）
      */
     public boolean hasConflictingStructures() {
-        return hasFlatEffects() && hasOutcomes();
+        return ResultStructure.kind(root()) == ResultStructure.Kind.MIXED;
     }
 
     /**

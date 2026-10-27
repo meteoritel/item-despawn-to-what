@@ -224,9 +224,9 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
         editor.setListener(expression -> {
             var change = editor.lastChange();
             RuleValue next = editor.tree().encode(codec);
-            session.apply(editor.undoOpKey(), () -> {
+            session.apply(editor.undoOpKey(), edits -> {
                 if (change != null) ConditionTreeNodes.remapInputs(session, change, scope);
-                if (next == null) session.draft().removeAt(scope); else session.draft().setAt(scope, next);
+                if (next == null) edits.removeAt(scope); else edits.setAt(scope, next);
             });
             revision = session.revision();
             refreshSource();
@@ -292,7 +292,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
     }
 
     private void reloadExpression() {
-        var result = editor.tree().decode(codec, session.draft().valueAt(scope));
+        var result = editor.tree().decode(codec, session.valueAt(scope));
         decodeError = result.error();
         nextIssueIndex = 0;
         editor.setEnabled(result.succeeded());
@@ -303,7 +303,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
     }
 
     private void refreshEndpoints() {
-        RuleValue rule = session.draft().root();
+        RuleValue rule = session.root();
         RuleValue sourceValue = rule.child(RuleFields.SOURCE);
         RuleValue items = sourceValue != null && sourceValue.isMapping()
                 ? sourceValue.child(RuleFields.SOURCE_ITEMS) : null;
@@ -311,7 +311,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
                 ? RuleNaming.sourceTitle(rule, RuleDisplayLabels::label) : Component.empty();
         String ownerPath = scope.equals(RuleFields.CONDITIONS) ? ""
                 : scope.substring(0, scope.length() - RuleFields.CONDITIONS.length() - 1);
-        RuleValue owner = ownerPath.isEmpty() ? rule : session.draft().valueAt(ownerPath);
+        RuleValue owner = ownerPath.isEmpty() ? rule : session.valueAt(ownerPath);
         Component resultSummary = Component.empty();
         if (owner != null && owner.isMapping()) {
             RuleValue effects = owner.child(RuleFields.EFFECTS);
@@ -327,7 +327,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
     }
 
     private void refreshSource() {
-        RuleValue raw = decodeError == null ? editor.tree().encode(codec) : session.draft().valueAt(scope);
+        RuleValue raw = decodeError == null ? editor.tree().encode(codec) : session.valueAt(scope);
         String text = raw == null || raw.isNull() ? "" : raw.toPrettyJson();
         if (!text.equals(source.text())) {
             source.setSections(text.isEmpty() ? List.of() : List.of(new UiCodeView.Section(null, null, text)));
@@ -342,7 +342,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
         reloadExpression();
         RuleValue.Sequence nodes = RuleValue.list();
         for (var path : editor.selectedSubtrees()) {
-            RuleValue raw = session.draft().valueAt(ConditionTreeNodes.jsonPath(editor.expression().root(), path, scope));
+            RuleValue raw = session.valueAt(ConditionTreeNodes.jsonPath(editor.expression().root(), path, scope));
             if (raw != null) nodes.add(raw.deepCopy());
         }
         if (nodes.size() == 0) {
@@ -437,10 +437,10 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
     // ---- 参数表单与内联框 ----
 
     private void finishParameters() {
-        RuleValue current = parameterPath == null ? null : session.draft().valueAt(parameterPath);
-        RuleValue currentType = current != null && current.isMapping() ? current.child(RuleFields.TYPE) : null;
-        if (parameters != null && currentType != null && currentType.isScalar()
-                && Objects.equals(parameterType, currentType.asText())
+        RuleValue current = parameterPath == null ? null : session.valueAt(parameterPath);
+        String currentType = RuleValue.typeOf(current);
+        if (parameters != null && currentType != null
+                && Objects.equals(parameterType, currentType)
                 && parameters.form().commitPendingInputs()) {
             changed.run();
         }

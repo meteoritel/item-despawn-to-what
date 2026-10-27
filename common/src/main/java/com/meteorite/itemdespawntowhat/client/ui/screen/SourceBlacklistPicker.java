@@ -62,7 +62,7 @@ final class SourceBlacklistPicker {
                 });
         grid.setEntryPolicy(policy);
         RuleValue source = rule == null ? null : rule.child(RuleFields.SOURCE);
-        grid.setSelection(source == null ? List.of() : RuleValueReads.stringList(source.child(RuleFields.SOURCE_EXCLUDE)));
+        grid.setSelection(source == null ? List.of() : RuleValue.textItems(source.child(RuleFields.SOURCE_EXCLUDE)));
         grid.setEntrySource(() -> {
             grid.setEnabled(shell.editable());
             if (pages.filtered.isEmpty()) return List.of();

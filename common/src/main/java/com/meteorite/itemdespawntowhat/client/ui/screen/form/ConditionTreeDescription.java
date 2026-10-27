@@ -98,8 +98,8 @@ public final class ConditionTreeDescription {
 
     // 叶标题用条件类型名：参数已经在详情行展开，标题不再重复摘要
     private static Component leafLabel(RuleValue condition) {
-        RuleValue type = condition.child(RuleFields.TYPE);
-        ResourceLocation id = type == null || !type.isScalar() ? null : ResourceLocation.tryParse(type.asText(""));
+        String type = RuleValue.typeOf(condition);
+        ResourceLocation id = type == null ? null : ResourceLocation.tryParse(type);
         return id == null
                 ? Component.translatable(UI + "summary.unknown_condition")
                 : TypeLabels.conditionLabel(id);

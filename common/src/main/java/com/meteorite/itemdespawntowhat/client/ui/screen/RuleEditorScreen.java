@@ -1,5 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiConditionTreeSummary;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
+import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
 import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDescriptors;
 import com.meteorite.itemdespawntowhat.client.net.RuleEditClientWorkspace;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
@@ -7,7 +10,6 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRenderLayers;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlatText;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
@@ -17,10 +19,8 @@ import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine;
 import com.meteorite.itemdespawntowhat.client.ui.shared.EntityPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostPalette;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiDescriptionTooltip;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiListView;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTypePicker;
 import org.jetbrains.annotations.NotNull;
 
@@ -32,7 +32,6 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
-import org.lwjgl.glfw.GLFW;
 import net.minecraft.client.Minecraft;
 
 /**
@@ -41,8 +40,8 @@ import net.minecraft.client.Minecraft;
  * 都由 {@link EditorShell} 持有，三个顶层页也由外壳组装。屏幕不缓存外壳已拥有的状态，
  * 也不按模式分支——窗口几何与标题带、提示带、页脚带统一排版，页通过 {@link EditorPage} 声明差异并接收派发。
  * <p>列表页与编辑页的字段编辑走描述符驱动的
- * {@link com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView}，条件树走
- * {@link com.meteorite.itemdespawntowhat.client.ui.widget.UiConditionTreeSummary}，界面任何位置都不出现可编辑 JSON 文本框。
+ * {@link FormView}，条件树走
+ * {@link UiConditionTreeSummary}，界面任何位置都不出现可编辑 JSON 文本框。
  * <p>只有工作区处于 ACTIVE 时可编辑；APPLYING 冻结；工作区进入 FREE 时外壳登记关屏请求。
  */
 public final class RuleEditorScreen extends Screen implements UiLayoutSource {
@@ -59,6 +58,7 @@ public final class RuleEditorScreen extends Screen implements UiLayoutSource {
     private static final String UI = TypeLabels.UI_PREFIX;
 
     private final EditorShell shell;
+    private final EditorInputRouter input;
 
     private @Nullable RuleSaveOverlay saveOverlay;
     // 提示的折行判定与命中矩形每帧重算，属于渲染态，不进外壳
@@ -73,6 +73,7 @@ public final class RuleEditorScreen extends Screen implements UiLayoutSource {
         RuleEditorModel model = new RuleEditorModel(workspace);
         // 屏幕构造期 this.font 尚未注入，外壳与页面直接取客户端字体实例
         this.shell = new EditorShell(workspace, model, new RuleListDisplayCache(model), Minecraft.getInstance().font);
+        this.input = new EditorInputRouter(shell, this::saveOverlay, () -> contentArea);
     }
     // 编辑器不做游戏内暂停
     @Override
@@ -235,7 +236,6 @@ public final class RuleEditorScreen extends Screen implements UiLayoutSource {
                 textY, stateColor, false);
     }
 
-
     // 底部状态提示：INFO 为纯文本，WARNING / DANGER 为实心色块（颜色与形状双线索）
     private void drawNotice(GuiGraphics graphics, int y, int w) {
         noticeRect = null;
@@ -264,7 +264,6 @@ public final class RuleEditorScreen extends Screen implements UiLayoutSource {
         noticeRect = chip;
     }
 
-
     private RuleSaveOverlay saveOverlay() {
         if (saveOverlay == null) {
             shell.leaveInteractions();
@@ -277,177 +276,37 @@ public final class RuleEditorScreen extends Screen implements UiLayoutSource {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (shell.saving()) {
-            saveOverlay().mouseClicked(mouseX, mouseY, button);
-            return true;
-        }
-        if (shell.modals().isVisible()) {
-            return shell.modals().mouseClicked(mouseX, mouseY, button);
-        }
-        EditorPage page = shell.activePage();
-        UiTypePicker picker = page.overlay();
-        if (picker != null) {
-            return picker.mouseClicked(mouseX, mouseY, button);
-        }
-        if (button == 0) {
-            focusClicked(mouseX, mouseY);
-        }
-        return page.mouseClicked(mouseX, mouseY, button) || super.mouseClicked(mouseX, mouseY, button);
+        return input.mouseClicked(mouseX, mouseY, button);
     }
 
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        if (shell.saving()) {
-            saveOverlay().mouseReleased(mouseX, mouseY, button);
-            return true;
-        }
-        if (shell.modals().isVisible()) {
-            return shell.modals().mouseReleased(mouseX, mouseY, button);
-        }
-        EditorPage page = shell.activePage();
-        UiTypePicker picker = page.overlay();
-        if (picker != null) {
-            return picker.mouseReleased(mouseX, mouseY, button);
-        }
-        return page.mouseReleased(mouseX, mouseY, button) || super.mouseReleased(mouseX, mouseY, button);
+        return input.mouseReleased(mouseX, mouseY, button);
     }
 
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        if (shell.saving()) {
-            return true;
-        }
-        if (shell.modals().isVisible()) {
-            return shell.modals().mouseDragged(mouseX, mouseY, button, dragX, dragY);
-        }
-        EditorPage page = shell.activePage();
-        UiTypePicker picker = page.overlay();
-        if (picker != null) {
-            return picker.mouseDragged(mouseX, mouseY, button, dragX, dragY);
-        }
-        return page.mouseDragged(mouseX, mouseY, button, dragX, dragY)
-                || super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+        return input.mouseDragged(mouseX, mouseY, button, dragX, dragY);
     }
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        if (shell.saving()) {
-            return true;
-        }
-        if (shell.modals().isVisible()) {
-            return shell.modals().mouseScrolled(mouseX, mouseY, scrollX, scrollY);
-        }
-        EditorPage page = shell.activePage();
-        UiTypePicker picker = page.overlay();
-        if (picker != null) {
-            return picker.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
-        }
-        return page.mouseScrolled(mouseX, mouseY, scrollX, scrollY) || super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+        return input.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
     }
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        // 调试页入口：仅 debug 模式开启、当前在管理页且没有弹层 / 类型选择器时响应 Ctrl+F8。
-        // F8 属于功能键，切换后仍返回 false 放行，避免阻断原版对该键的处理。
-        if (keyCode == GLFW.GLFW_KEY_F8 && (modifiers & GLFW.GLFW_MOD_CONTROL) != 0 && shell.canEnterDebug()) {
-            shell.enterDebug();
-            return false;
-        }
-        // F1–F12 属于原版全局热键（F2 截图、F3 调试、F11 全屏）。原版 KeyboardHandler 在
-        // screen.keyPressed 返回 true 时会直接 return、不再把该键喂给 KeyMapping，因此本模组的
-        // 任何界面都不得消费功能键；这里在最外层统一放行，弹层与页面都覆盖到。
-        if (keyCode >= GLFW.GLFW_KEY_F1 && keyCode <= GLFW.GLFW_KEY_F12) {
-            return false;
-        }
-        if (shell.saving()) {
-            saveOverlay().keyPressed(keyCode, scanCode, modifiers);
-            return true;
-        }
-        if (shell.modals().isVisible()) {
-            return shell.modals().keyPressed(keyCode, scanCode, modifiers);
-        }
-        EditorPage page = shell.activePage();
-        UiTypePicker picker = page.overlay();
-        if (picker != null) {
-            return picker.keyPressed(keyCode, scanCode, modifiers);
-        }
-        if (shell.dispatchHistory(keyCode, scanCode, modifiers, (key, scan, mods) -> {
-            if (page.keyPressed(key, scan, mods)) return true;
-            return shell.focus().keyPressed(key, scan, mods);
-        })) return true;
-        // Esc 先交给正在捕获输入的控件：行内精确输入回退缓冲、拖动中的数值取消预览；
-        // 均未消费时才逐级取消（编辑页返回列表，列表页关闭屏幕）
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
-            if (shell.focus().keyPressed(keyCode, scanCode, modifiers)) {
-                return true;
-            }
-            if (page.keyPressed(keyCode, scanCode, modifiers)) {
-                return true;
-            }
-            shell.escape();
-            return true;
-        }
-        if (keyCode == GLFW.GLFW_KEY_TAB && shell.focus().keyPressed(keyCode, scanCode, modifiers)) {
-            return true;
-        }
-        if (page.keyPressed(keyCode, scanCode, modifiers)) {
-            return true;
-        }
-        return shell.focus().keyPressed(keyCode, scanCode, modifiers) || super.keyPressed(keyCode, scanCode, modifiers);
+        return input.keyPressed(keyCode, scanCode, modifiers);
     }
 
-    // 鼠标和键盘共用唯一焦点，裁剪区域外的控件不能夺取输入。
-    private void focusClicked(double mouseX, double mouseY) {
-        for (UiFocusTarget target : shell.focus().targets()) {
-            if (!target.canFocus() || !target.bounds().contains(mouseX, mouseY)) {
-                continue;
-            }
-            if (target instanceof UiListView<?> list && !list.acceptsFocusAt(mouseX, mouseY)) {
-                continue;
-            }
-            if (shell.activePage().ownsFocusTarget(target) && !contentArea.contains(mouseX, mouseY)) {
-                continue;
-            }
-            shell.focus().focusOn(target);
-            return;
-        }
-        shell.focus().clearFocus();
-    }
-
-    // 键盘抬起：把滑杆方向键的按住过程合并为一次提交
     @Override
     public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
-        if (shell.saving()) {
-            return true;
-        }
-        EditorPage page = shell.activePage();
-        UiTypePicker picker = page.overlay();
-        if (!shell.modals().isVisible() && picker != null) {
-            return picker.keyReleased(keyCode, scanCode, modifiers);
-        }
-        if (page.keyReleased(keyCode, scanCode, modifiers)) {
-            return true;
-        }
-        return super.keyReleased(keyCode, scanCode, modifiers);
+        return input.keyReleased(keyCode, scanCode, modifiers);
     }
 
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
-        if (shell.saving()) {
-            return true;
-        }
-        if (shell.modals().isVisible()) {
-            return shell.modals().charTyped(codePoint, modifiers);
-        }
-        EditorPage page = shell.activePage();
-        UiTypePicker picker = page.overlay();
-        if (picker != null) {
-            return picker.charTyped(codePoint, modifiers);
-        }
-        if (page.charTyped(codePoint, modifiers)) {
-            return true;
-        }
-        return super.charTyped(codePoint, modifiers);
+        return input.charTyped(codePoint, modifiers);
     }
 
     // 外部切屏或断线也会调用 removed：这条路径不走 onClose，未应用的修改必须在这里写盘。

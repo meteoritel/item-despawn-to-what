@@ -54,9 +54,9 @@ final class PresenceLeaves {
             return effectPath == null;
         }
     }
-    static @Nullable PresenceLeaf selectedCatalystLeaf(RuleDraft draft) {
-        for (PresenceLeaf leaf : ruleLevelPresence(draft.root(), RuleEditorPageSupport.CATALYST_PRESENT_ID)) {
-            if (!RuleValueReads.stringList(draft.valueAt(leaf.fieldPath())).isEmpty()) return leaf;
+    static @Nullable PresenceLeaf selectedCatalystLeaf(RuleValue draft) {
+        for (PresenceLeaf leaf : ruleLevelPresence(draft, RuleEditorPageSupport.CATALYST_PRESENT_ID)) {
+            if (!RuleValue.textItems(draft.valueAt(leaf.fieldPath())).isEmpty()) return leaf;
         }
         return null;
     }
@@ -75,7 +75,7 @@ final class PresenceLeaves {
             draft.setAt(RuleFields.CONDITIONS, leaf);
             return;
         }
-        if (current.isMapping() && RuleFields.OP_ALL_OF.equals(RuleValueReads.stringField(current, RuleFields.OP))) {
+        if (current.isMapping() && RuleFields.OP_ALL_OF.equals(RuleValue.text(current, RuleFields.OP))) {
             RuleValue terms = current.child(RuleFields.TERMS);
             RuleValue.Sequence array = terms != null && terms.isList() ? RuleValue.list(terms) : RuleValue.list();
             array.add(leaf);
@@ -132,7 +132,7 @@ final class PresenceLeaves {
     }
 
     static boolean isEmptyGroup(RuleValue node) {
-        String op = RuleValueReads.stringField(node, RuleFields.OP);
+        String op = RuleValue.text(node, RuleFields.OP);
         if (RuleFields.OP_INVERTED.equals(op)) {
             RuleValue term = node.child(RuleFields.TERM);
             return term == null || term.isNull();
@@ -217,12 +217,12 @@ final class PresenceLeaves {
         if (node == null || !node.isMapping()) {
             return;
         }
-        if (RuleFields.OP_LEAF.equals(RuleValueReads.stringField(node, RuleFields.OP))) {
+        if (RuleFields.OP_LEAF.equals(RuleValue.text(node, RuleFields.OP))) {
             RuleValue condition = node.child(RuleFields.CONDITION);
             if (condition == null || !condition.isMapping()) {
                 return;
             }
-            ResourceLocation type = ResourceLocation.tryParse(RuleValueReads.stringField(condition, RuleFields.TYPE));
+            ResourceLocation type = ResourceLocation.tryParse(RuleValue.text(condition, RuleFields.TYPE));
             if (type == null || !isPresenceType(type)) {
                 return;
             }
@@ -260,10 +260,10 @@ final class PresenceLeaves {
         return !ruleLevelPresence(view, type).isEmpty();
     }
 
-    static List<String> ruleLevelCatalystItems(RuleDraft draft) {
+    static List<String> ruleLevelCatalystItems(RuleValue draft) {
         LinkedHashSet<String> result = new LinkedHashSet<>();
-        for (PresenceLeaf leaf : ruleLevelPresence(draft.root(), RuleEditorPageSupport.CATALYST_PRESENT_ID)) {
-            result.addAll(RuleValueReads.stringList(draft.valueAt(leaf.fieldPath())));
+        for (PresenceLeaf leaf : ruleLevelPresence(draft, RuleEditorPageSupport.CATALYST_PRESENT_ID)) {
+            result.addAll(RuleValue.textItems(draft.valueAt(leaf.fieldPath())));
         }
         return List.copyOf(result);
     }
@@ -273,7 +273,7 @@ final class PresenceLeaves {
     }
 
     static boolean flushPresenceType(EditSession session, PresenceLeaf leaf, FormView form) {
-        RuleDraft draft = session.draft();
+        RuleValue draft = session.root();
         // 叶可能已被条件树删除或改类型：路径不再指向同类叶时不写回，避免复活已删除的条件
         RuleValue leafNode = draft.valueAt(leaf.path());
         if (leafNode == null || !leafNode.isMapping()) {
@@ -281,7 +281,7 @@ final class PresenceLeaves {
         }
         RuleValue leafCondition = leafNode.child(RuleFields.CONDITION);
         if (leafCondition == null || !leafCondition.isMapping()
-                || !leaf.type().toString().equals(RuleValueReads.stringField(leafCondition, RuleFields.TYPE))) {
+                || !leaf.type().toString().equals(RuleValue.text(leafCondition, RuleFields.TYPE))) {
             return false;
         }
         return form.applyToDraft();

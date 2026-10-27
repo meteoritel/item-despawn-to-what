@@ -229,11 +229,8 @@ public final class NaturalSummary {
 
     // 读 type 字段
     private static @Nullable ResourceLocation typeOf(RuleValue object) {
-        RuleValue type = object.child(RuleFields.TYPE);
-        if (type == null || !type.isScalar()) {
-            return null;
-        }
-        return ResourceLocation.tryParse(type.asText());
+        String type = RuleValue.typeOf(object);
+        return type == null ? null : ResourceLocation.tryParse(type);
     }
 
     // 概率显示为百分比（JSON 存 0..1）：与字段显示共用同一纯函数，不做 %.1f 舍入

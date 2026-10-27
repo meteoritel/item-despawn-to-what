@@ -159,9 +159,17 @@ public final class EditSession {
         return targetId;
     }
 
-    public RuleDraft draft() {
-        return draft;
-    }
+    /** 当前规则的只读值句柄；长期比较时由调用方显式捕获快照。 */
+    public RuleValue root() { return draft.root(); }
+
+    /** 按统一草稿路径读取值，不开放可变草稿。 */
+    public @Nullable RuleValue valueAt(String path) { return draft.valueAt(path); }
+
+    /** 内容是否偏离保存基线；不包含尚未提交的输入文本。 */
+    public boolean contentDirty() { return draft.isDirty(); }
+
+    /** 当前目标的删除意图。 */
+    public boolean isDeleted() { return draft.isDeleted(); }
 
     // 载入新草稿（切换目标或服务器下发新快照），清空历史
     public void load(RuleDraft next) {
@@ -180,8 +188,8 @@ public final class EditSession {
 
     // ---- 统一编辑入口 ----
 
-    // 所有草稿修改都必须走这里：opKey 为操作标签（i18n key），change 内只做字段写入
-    public void apply(String opKey, Runnable change) {
+    /** 用户内容修改的唯一入口；可变草稿只在同步回调中使用，关联更新共用同一条历史。 */
+    public void apply(String opKey, java.util.function.Consumer<RuleDraft> change) {
         Objects.requireNonNull(change, "change");
         long stampBefore = draft.mutationStamp();
         // 操作前快照是撤销栈的唯一来源，只能在这里一次性取得；是否真的变化改用变更计数判断，
@@ -195,7 +203,7 @@ public final class EditSession {
         transactionInputPaths = changedPaths;
         transactionRemovedScopes = removedScopes;
         transactionAddedScopes = addedScopes;
-        try { change.run(); }
+        try { change.accept(draft); }
         finally { transactionInputPaths = null; transactionRemovedScopes = null; transactionAddedScopes = null; }
         // 删除标记也算改动：只改标记不改 JSON 的操作同样要能撤销
         if (draft.mutationStamp() != stampBefore || deletedBefore != draft.isDeleted()) {

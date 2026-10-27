@@ -22,10 +22,7 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.function.BooleanSupplier;
-import java.util.function.BiConsumer;
 import java.util.function.Consumer;
-import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
@@ -56,16 +53,16 @@ public final class FormView implements UiWidget, UiLayoutSource {
 
     private final Font font;
     final EditSession session;
-    // 草稿装载与回写集中在 FormDraftWriter
-    private final FormDraftWriter draftWriter = new FormDraftWriter(this);
+    // 草稿装载与回写集中在 FormCommit
+    private final FormCommit commit = new FormCommit(this);
     // 输入分发集中在 FormInputRouter
     private final FormInputRouter inputRouter = new FormInputRouter(this);
     String basePath;
     long loadedRevision;
     final List<FormRow> rows = new ArrayList<>();
     private @Nullable SelectionCatalogOpener catalogOpener;
-    // 字段名 → 目录条目可见范围：只影响该字段那一次目录浏览，不改字段值
-    private final Map<String, Predicate<String>> catalogFilters = new HashMap<>();
+    private final Map<String, FormField> fields = new HashMap<>();
+    private final List<FormField> fieldHandles = new ArrayList<>();
 
     /** 字段目录入口由页面提供，表单传递确切字段路径与当前选择，不访问网络。 */
     @FunctionalInterface
@@ -90,35 +87,20 @@ public final class FormView implements UiWidget, UiLayoutSource {
         for (FormRow row : rows) { row.pickers.clear(); addPickers(row); }
     }
 
-    /**
-     * 设置某个字段的目录条目可见范围：目录弹窗只列出过滤器接受的资源引用。
-     * <p>范围只影响浏览，不改变字段值与已有选择；标签条目无法判定成员，由过滤器自行决定是否保留。
-     * @param fieldName 字段名（如实体字段 entity）
-     * @param filter 条目过滤器，null 表示不限
-     */
-    public void setCatalogFilter(String fieldName, @Nullable Predicate<String> filter) {
-        if (filter == null) {
-            catalogFilters.remove(fieldName);
-        } else {
-            catalogFilters.put(fieldName, filter);
-        }
-    }
-
-    /**
-     * 读取某个字段的目录条目可见范围。
-     * @param fieldName 字段名
-     * @return 过滤器，未设置时返回 null
-     */
-    public @Nullable Predicate<String> catalogFilter(String fieldName) {
-        return catalogFilters.get(fieldName);
-    }
     private @Nullable ConditionEditingSupport conditionEditingSupport;
     private @Nullable ConditionEditContextFactory conditionContextFactory;
     private @Nullable Runnable changeListener;
-    @Nullable BiConsumer<String, RuleValue> fieldWritten;
+    @Nullable FieldWritten fieldWritten;
 
-    /** 关联字段在同一次撤销操作内同步；第二个参数为写入前的值。 */
-    public void setOnFieldWritten(BiConsumer<String, RuleValue> listener) {
+    /** 字段与关联更新共享当前编辑回调，不允许异步保留草稿。 */
+    @FunctionalInterface
+    public interface FieldWritten {
+        /** 在同一次历史操作中同步关联字段。 */
+        void written(com.meteorite.itemdespawntowhat.client.edit.RuleDraft draft, String path, @Nullable RuleValue before);
+    }
+
+    /** 关联字段在同一次撤销操作内同步，回调接收当前草稿、路径与写入前值。 */
+    public void setOnFieldWritten(FieldWritten listener) {
         fieldWritten = listener;
     }
     // 输入被上限拒绝时的即时提示出口（页面显示 notice）
@@ -163,15 +145,20 @@ public final class FormView implements UiWidget, UiLayoutSource {
     }
 
     /** 用描述符整体替换字段列表 */
-    public void setDescriptor(TypeEditorDescriptor descriptor) {
+    public List<FormField> setDescriptor(TypeEditorDescriptor descriptor) {
+        unmount();
         rows.clear();
+        fields.clear();
+        fieldHandles.clear();
+        List<FormField> handles = new ArrayList<>();
         for (EditorField field : descriptor.fields()) {
-            addField(field);
+            handles.add(addField(field));
         }
+        return List.copyOf(handles);
     }
 
     /** 追加一个字段 */
-    public void addField(EditorField field) {
+    public FormField addField(EditorField field) {
         var catalogType = FieldCatalogTypes.catalogTypeOf(field);
         boolean iconSelection = catalogSelections && catalogType != null && field.isCatalogReference();
         FormRow row = new FormRow(field, pathFor(field), iconSelection
@@ -185,106 +172,47 @@ public final class FormView implements UiWidget, UiLayoutSource {
                 rejectedNoticeHandler.accept(message);
             }
         });
+        FormField handle = new FormField(this, row);
+        if (fields.containsKey(field.name()) && !field.isDisplayOnly()) {
+            throw new IllegalArgumentException("Duplicate form field: " + field.name());
+        }
+        fields.putIfAbsent(field.name(), handle);
+        fieldHandles.add(handle);
         addPickers(row);
         rows.add(row);
         invalidateMeasure();
+        return handle;
     }
 
-    /** 读取某字段控件当前的未提交值（宿主把缓冲并入自己的编辑步时使用）；字段不存在返回 null */
-    public @Nullable RuleValue pendingValue(String path) {
-        for (FormRow row : rows) {
-            if (row.path.equals(path)) {
-                return row.control.store();
-            }
-        }
-        return null;
-    }
-
-    // 草稿写入通知：第二个参数为写入前的值（null 表示原先没有该字段）
-    void notifyFieldWritten(String path, @Nullable RuleValue before) {
+    // 草稿写入通知：关联更新使用同一次编辑草稿，before 为写入前的值。
+    void notifyFieldWritten(com.meteorite.itemdespawntowhat.client.edit.RuleDraft draft, String path, @Nullable RuleValue before) {
         if (fieldWritten != null) {
-            fieldWritten.accept(path, before);
+            fieldWritten.written(draft, path, before);
         }
     }
 
-    /** 给某个字段行挂行尾操作按钮（例如「恢复自动命名」）；宽度按文本自适应 */
-    public void setRowAction(String path, UiButton button) {
-        for (FormRow row : rows) {
-            if (row.path.equals(path)) {
-                row.actions.clear();
-                row.actions.add(button);
-                row.refreshButtons();
-                invalidateMeasure();
-                break;
-            }
-        }
+    /** 装配时取得必需字段；描述符不匹配时立即报告，而非忽略行配置。 */
+    public FormField field(String name) {
+        FormField field = fields.get(name);
+        if (field == null) throw new IllegalArgumentException("Missing form field: " + name + " in " + basePath);
+        return field;
     }
 
-    /** 追加一个行尾操作按钮：同一行可有多个动作，例如基本页的「本服开关」与「恢复默认」 */
-    public void addRowAction(String path, UiButton button) {
-        for (FormRow row : rows) {
-            if (row.path.equals(path)) {
-                row.actions.add(button);
-                row.refreshButtons();
-                invalidateMeasure();
-                break;
-            }
-        }
+    /** 描述符字段的有序句柄，用于按字段元数据装配。 */
+    public List<FormField> fields() {
+        return List.copyOf(fieldHandles);
     }
 
-    /** 覆盖某字段行的控件高度（{@code <= 0} 恢复默认）；例如基本页加高的优先级控件 */
-    public void setRowHeight(String path, int height) {
-        for (FormRow row : rows) {
-            if (row.path.equals(path)) {
-                row.control.setHeightOverride(height);
-                invalidateMeasure();
-            }
+    void setRowVisible(FormRow row, boolean visible) {
+        if (row.visible == visible) return;
+        row.visible = visible;
+        if (!visible) {
+            row.control.endInteractions(UiInputCapture.EndReason.HIDDEN);
+            List<UiFocusTarget> targets = new ArrayList<>();
+            row.control.addFocusTargets(targets);
+            targets.forEach(target -> target.setFocused(false));
         }
-    }
-
-    /** 卡片标题已表达字段含义时省去重复标签。 */
-    public void hideRowLabel(String path) {
-        for (FormRow row : rows) if (row.path.equals(path)) {
-            row.labelVisible = false;
-            invalidateMeasure();
-        }
-    }
-
-    /** 隐藏行退出键盘导航与命中，但保存原有字段内容。 */
-    public void setRowVisible(String path, boolean visible) {
-        for (FormRow row : rows) if (row.path.equals(path)) {
-            if (row.visible == visible) return;
-            row.visible = visible;
-            if (!visible) {
-                row.control.endInteractions(UiInputCapture.EndReason.HIDDEN);
-                List<UiFocusTarget> targets = new ArrayList<>();
-                row.control.addFocusTargets(targets);
-                targets.forEach(target -> target.setFocused(false));
-            }
-            invalidateMeasure();
-        }
-    }
-
-    /**
-     * 将两个物品数量字段按物品逐项交错排布，上行门槛、下行实际消耗；字段写入与撤销仍各自独立。
-     * @param upperPath 上行数量字段路径
-     * @param lowerPath 下行数量字段路径
-     */
-    public void pairItemCountRows(String upperPath, String lowerPath) {
-        FormRow upper = rows.stream().filter(row -> row.path.equals(upperPath)).findFirst().orElse(null);
-        FormRow lower = rows.stream().filter(row -> row.path.equals(lowerPath)).findFirst().orElse(null);
-        if (upper != null && lower != null && upper.control instanceof ItemCountsControl
-                && lower.control instanceof ItemCountsControl) {
-            upper.pairedBelow = lower;
-            lower.pairedAbove = upper;
-            invalidateMeasure();
-        }
-    }
-
-    /** 模式相关字段随当前输入和历史回填显示；隐藏行保留原有值与文本缓冲。 */
-    public void setRowVisibility(String path, BooleanSupplier visibility) {
-        for (FormRow row : rows) if (row.path.equals(path)) row.visibility = visibility;
-        refreshRowVisibility();
+        invalidateMeasure();
     }
 
     void refreshRowVisibility() {
@@ -292,7 +220,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
         for (FormRow row : rows) if (row.visibility != null) {
             boolean next = row.visibility.getAsBoolean();
             if (row.visible != next) {
-                setRowVisible(row.path, next);
+                setRowVisible(row, next);
                 row.wasEditing = false;
                 changed = true;
             }
@@ -300,46 +228,6 @@ public final class FormView implements UiWidget, UiLayoutSource {
         if (changed) {
             invalidateMeasure();
             layout(viewportX, viewportY, viewportWidth, viewportHeight);
-        }
-    }
-
-    /** 启用开关等含义直观的行不弹出提示。 */
-    public void suppressRowTooltip(String path) {
-        for (FormRow row : rows) if (row.path.equals(path)) row.tooltipEnabled = false;
-    }
-
-    /**
-     * 关闭该行的 hint 兜底提示，保留校验问题、控件提示与文本/标签被裁剪时的提示。
-     *
-     * <p>用于提示文案已经作为占位符写在文本框内的字段，避免悬停时重复弹出同一段文字。</p>
-     */
-    public void suppressRowHintTooltip(String path) {
-        for (FormRow row : rows) if (row.path.equals(path)) row.hintTooltipEnabled = false;
-    }
-
-    /** 动态默认值只用于回填，未编辑时仍保留原字段的省略状态。 */
-    public void setRowDefaultValue(String path, Supplier<RuleValue> value) {
-        for (FormRow row : rows) if (row.path.equals(path)) row.defaultValue = value;
-        reload();
-    }
-
-    /**
-     * 设置数值字段的常用滑条窗口，不修改合法域、草稿值或正在输入的缓冲。
-     * @param path 绝对字段路径
-     * @param min 窗口下限
-     * @param max 窗口上限
-     */
-    public void setRowSliderWindow(String path, double min, double max) {
-        for (FormRow row : rows) if (row.path.equals(path) && row.control instanceof NumberControl number) {
-            number.setWindow(min, max);
-        }
-    }
-
-    /** 数量对象按引用身份展示；对象键无需进入草稿的点分路径语法。 */
-    public void setItemCountReferences(String path, List<String> references) {
-        for (FormRow row : rows) if (row.path.equals(path) && row.control instanceof ItemCountsControl counts) {
-            counts.setReferences(references);
-            invalidateMeasure();
         }
     }
 
@@ -384,13 +272,13 @@ public final class FormView implements UiWidget, UiLayoutSource {
     }
 
     private void pick(FormRow row, boolean tags) {
-        if (!enabled || catalogOpener == null) return;
+        if (!enabled || !row.attached || catalogOpener == null) return;
         commitPendingInputs();
-        RuleValue existing = session.draft().valueAt(row.path);
+        RuleValue existing = session.valueAt(row.path);
         List<String> selected = existing == null ? List.of()
                 : existing.isList() ? existing.textItems() : existing.isText() ? List.of(existing.asText()) : List.of();
         catalogOpener.open(row.field, row.path, tags, selected, ids -> {
-            if (!enabled) return;
+            if (!enabled || !row.attached || loadedRevision != session.revision()) return;
             RuleValue value;
             if (row.field.isMultiCatalog()) {
                 // 文本引用由完整选择替换；未知元素保留，避免目录编辑破坏扩展数据。
@@ -420,9 +308,9 @@ public final class FormView implements UiWidget, UiLayoutSource {
 
     void changeChildStructure(String relative, Runnable change, Supplier<RuleValue> value) {
         commitPendingInputs();
-        session.apply(EditSession.OP_SET_FIELD, () -> {
+        session.apply(EditSession.OP_SET_FIELD, edits -> {
             change.run();
-            session.draft().setAt(childPath(relative), value.get());
+            edits.setAt(childPath(relative), value.get());
         });
         loadedRevision = session.revision();
         for (FormRow row : rows) if (row.field.name().equals(relative)) acceptInput(row);
@@ -442,11 +330,6 @@ public final class FormView implements UiWidget, UiLayoutSource {
     // 拼接子路径
     String childPath(String relative) {
         return DraftPaths.child(basePath, relative);
-    }
-
-    /** 条件树返回相对路径，宿主编辑叶参数时需定位到本表单所在的规则或效果。 */
-    public String draftPath(String relative) {
-        return childPath(relative);
     }
 
     /**
@@ -491,24 +374,23 @@ public final class FormView implements UiWidget, UiLayoutSource {
     void notifyChanged() {
         invalidateMeasure();
         refreshRowVisibility();
-        retainPendingInputs();
         applyToDraft();
         if (changeListener != null) {
             changeListener.run();
         }
     }
 
-    // ---- 草稿写入薄封装：实现集中在 FormDraftWriter ----
+    // ---- 草稿写入薄封装：实现集中在 FormCommit ----
 
     public void reload() {
-        draftWriter.reload();
+        commit.reload();
         invalidateMeasure();
         refreshRowVisibility();
         retainPendingInputs();
     }
 
     public void reloadWith(RuleValue object) {
-        draftWriter.reloadWith(object);
+        commit.reloadWith(object);
         invalidateMeasure();
         refreshRowVisibility();
         retainPendingInputs();
@@ -516,26 +398,26 @@ public final class FormView implements UiWidget, UiLayoutSource {
 
     /** 保存会话内输入，不改变规则 JSON 或配置历史。 */
     public void retainPendingInputs() {
-        draftWriter.retainPendingInputs();
+        commit.retainPendingInputs();
     }
 
     /** 完成当前字段输入；只写合法值，非法文本留在会话缓冲。 */
     public boolean commitPendingInputs() {
-        return draftWriter.applyToDraft(true);
+        return commit.applyToDraft(true);
     }
 
     /** 把控件值写回草稿；逐字段比较，只有真正变化才记入撤销历史 */
     public boolean applyToDraft() {
-        return draftWriter.applyToDraft(false);
+        return commit.applyToDraft(false);
     }
 
     // 输入分发桥接：字段提交与最近输入接受
     void acceptInput(FormRow row) {
-        draftWriter.acceptInput(row);
+        commit.acceptInput(row);
     }
 
     void writeField(FormRow row, @Nullable RuleValue next) {
-        draftWriter.writeField(row, next);
+        commit.writeField(row, next);
     }
 
     // 布局/滚动薄封装：状态在本类，几何计算集中在 FormRowLayout
@@ -815,7 +697,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
                     acceptInput(row);
                 } else {
                     // 收尾可能规范化文本缓冲：只对本次确实结束编辑的行定点重存，避免再扫全表
-                    draftWriter.retainRowInput(row);
+                    commit.retainRowInput(row);
                 }
                 // 收尾可能改变控件高度（列表/条件树的折叠展开等），让下一次布局重新测量
                 invalidateMeasure();
@@ -934,12 +816,14 @@ public final class FormView implements UiWidget, UiLayoutSource {
     public void unmount() {
         retainPendingInputs();
         endInteractions(UiInputCapture.EndReason.UNMOUNTED);
+        for (FormRow row : rows) row.attached = false;
     }
 
     /** 宿主屏幕关闭 */
     public void onHostClosed() {
         retainPendingInputs();
         endInteractions(UiInputCapture.EndReason.HOST_CLOSED);
+        for (FormRow row : rows) row.attached = false;
     }
 
     // 统一结束入口：把「未提交的预览」按原因回退或提交，交由各控件实现

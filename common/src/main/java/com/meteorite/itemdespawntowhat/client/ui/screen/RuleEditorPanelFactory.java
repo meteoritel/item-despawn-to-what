@@ -52,7 +52,7 @@ import org.jetbrains.annotations.Nullable;
  * 编辑页的面板装配工厂：目录选择页、昼夜/高度区间条与叶子面板装配。
  * （面板实现见 {@link LeafPanel}）。
  * <p>本类只做「把 kit 控件与目录链路接到规则草稿上」的装配，不复制数据层逻辑：
- * 写入一律经调用方给定的 {@code applyChange}（内部走 {@link EditSession#apply(String, Runnable)}，
+ * 写入一律经调用方给定的 {@code applyChange}（内部走 {@link EditSession#apply(String, java.util.function.Consumer)}，
  * 一次完整操作 = 一条撤销记录）。
  * <p>目录条目、图标与文本由宿主解析：{@link #catalogLabel(String)} 判定翻译键，
  * 图标分发见 {@link com.meteorite.itemdespawntowhat.client.ui.shared.CatalogPreviewIcons#iconFor(RuleCatalogType, String)}，
@@ -184,7 +184,7 @@ public final class RuleEditorPanelFactory {
     // 字段路径来自实际发起选择的表单行，子表单和条件叶都以同一入口解析互斥范围。
     static UiModal fieldCatalogModal(Font font, EditorShell shell, RuleEditClientWorkspace workspace, RuleCatalogType type,
                                      boolean multiSelect, Component title, int screenWidth, int screenHeight,
-                                     Consumer<List<String>> onPicked, EditorField field, RuleDraft draft,
+                                     Consumer<List<String>> onPicked, EditorField field, RuleValue draft,
                                      String path, List<String> selected) {
         return fieldCatalogModal(font, shell, workspace, type, multiSelect, title, screenWidth, screenHeight,
                 onPicked, field, draft, path, selected, null);
@@ -196,7 +196,7 @@ public final class RuleEditorPanelFactory {
      */
     static UiModal fieldCatalogModal(Font font, EditorShell shell, RuleEditClientWorkspace workspace, RuleCatalogType type,
                                      boolean multiSelect, Component title, int screenWidth, int screenHeight,
-                                     Consumer<List<String>> onPicked, EditorField field, RuleDraft draft,
+                                     Consumer<List<String>> onPicked, EditorField field, RuleValue draft,
                                      String path, List<String> selected, @Nullable Predicate<String> entryFilter) {
         return catalogModal(font, shell, workspace, type, multiSelect, title, screenWidth, screenHeight,
                 onPicked, field, selected, SourceCatalystSelectionPolicy.forField(draft, path), entryFilter);
@@ -488,9 +488,9 @@ public final class RuleEditorPanelFactory {
     }
 
     private static boolean isClimateCondition(RuleValue body) {
-        RuleValue type = body.child(RuleFields.TYPE);
+        String type = RuleValue.typeOf(body);
         RuleValue mode = body.child("mode");
-        return type != null && type.isText() && type.asText().endsWith("biome")
+        return type != null && type.endsWith("biome")
                 && mode != null && mode.isText() && "climate".equals(mode.asText());
     }
 
@@ -525,48 +525,47 @@ public final class RuleEditorPanelFactory {
      * @param pushModal  推入目录弹窗
      */
     static LeafPanel leafPanel(Font font, FormView form, EditSession session, List<EditorField> fields,
-                               String basePath, Consumer<Runnable> applyChange, Runnable onChange,
+                               String basePath, Consumer<Consumer<RuleDraft>> applyChange, Runnable onChange,
                                Consumer<UiModal> pushModal, EditorShell shell, RuleEditClientWorkspace workspace, int screenWidth,
                                int screenHeight) {
         List<UiWidget> extras = new ArrayList<>();
         List<UiButton> buttons = new ArrayList<>();
         List<Runnable> reloadValues = new ArrayList<>();
-        RuleDraft draft = session.draft();
         // 参数框按卡片密度排：数量行因此让出标签列，滑条与其它字段的控件同列
         form.useCardSpacing();
         // 自带文字的行内控件不显示行标签：同一文案只出现一次，省下的宽度交给控件自身
-        for (EditorField field : fields) {
-            if (field.hidesRowLabel()) {
-                form.hideRowLabel(join(basePath, field.name()));
+        for (var handle : form.fields()) {
+            if (handle.descriptor().hidesRowLabel()) {
+                handle.hideLabel();
             }
         }
         EditorField from = field(fields, "from");
         EditorField to = field(fields, "to");
         if (from != null && to != null && from.isIntegerLike() && to.isIntegerLike()
                 && from.intMin(0) == TIME_MIN && from.intMax(TIME_MAX) == TIME_MAX) {
-            UiCyclicTimeBar bar = timeBar(font, draft, from, to, basePath, applyChange, onChange);
+            UiCyclicTimeBar bar = timeBar(font, session, from, to, basePath, applyChange, onChange);
             extras.add(bar);
-            reloadValues.add(() -> bar.setRange(intAt(draft, join(basePath, from.name()), TIME_MIN),
-                    intAt(draft, join(basePath, to.name()), DEFAULT_TIME_RANGE_END)));
+            reloadValues.add(() -> bar.setRange(intAt(session, join(basePath, from.name()), TIME_MIN),
+                    intAt(session, join(basePath, to.name()), DEFAULT_TIME_RANGE_END)));
         }
         EditorField min = field(fields, RANGE_MIN_FIELD);
         EditorField max = field(fields, RANGE_MAX_FIELD);
-        RuleValue condition = draft.valueAt(basePath);
+        RuleValue condition = session.valueAt(basePath);
         boolean heightCondition = condition != null && Y_LEVEL_ID.toString()
                 .equals(condition.text(RuleFields.TYPE, ""));
         if (min != null && max != null && min.isIntegerLike() && max.isIntegerLike()) {
-            UiRangeBar bar = intRangeBar(font, draft, min, max, basePath, applyChange, onChange);
+            UiRangeBar bar = intRangeBar(font, session, min, max, basePath, applyChange, onChange);
             if (heightCondition) {
-                form.setRowVisible(join(basePath, min.name()), false);
-                form.setRowVisible(join(basePath, max.name()), false);
+                form.field(min.name()).setVisible(false);
+                form.field(max.name()).setVisible(false);
                 bar.setLabel(TypeLabels.conditionLabel(Y_LEVEL_ID));
             }
             extras.add(bar);
-            reloadValues.add(() -> bar.core().setValue(integerRange(draft, min, max, basePath)));
+            reloadValues.add(() -> bar.core().setValue(integerRange(session, min, max, basePath)));
         }
         form.setSelectionCatalogOpener((field, path, tags, selected, picked) -> pushModal.accept(fieldCatalogModal(font, shell, workspace,
                 tags ? RuleCatalogType.TAG : FieldCatalogTypes.catalogTypeOf(field), field.isListShaped(),
-                Component.translatable(field.labelKey()), screenWidth, screenHeight, picked, field, draft, path, selected)));
+                Component.translatable(field.labelKey()), screenWidth, screenHeight, picked, field, session.root(), path, selected)));
         LeafPanel panel = new LeafPanel(font, form, extras, buttons, reloadValues);
         int extraIndex = 0;
         if (from != null && to != null && from.isIntegerLike() && to.isIntegerLike()
@@ -646,16 +645,16 @@ public final class RuleEditorPanelFactory {
     }
 
     // 高度/光照区间：两个可省略的整数端点
-    private static UiRangeBar intRangeBar(Font font, RuleDraft draft, EditorField minField, EditorField maxField,
-                                          String basePath, Consumer<Runnable> applyChange, Runnable onChange) {
+    private static UiRangeBar intRangeBar(Font font, EditSession session, EditorField minField, EditorField maxField,
+                                          String basePath, Consumer<Consumer<RuleDraft>> applyChange, Runnable onChange) {
         String lowPath = join(basePath, minField.name());
         String highPath = join(basePath, maxField.name());
         UiRangeBar bar = new UiRangeBar(THEME, font,
                 UiNumberPolicy.integer(minField.intMin(FALLBACK_RANGE_MIN), maxField.intMax(FALLBACK_RANGE_MAX), 1, 1),
-                integerRange(draft, minField, maxField, basePath), rangeTexts(), value -> {
-                    applyChange.accept(() -> {
-                        writeNumber(draft, lowPath, value.lowPresent() ? value.low() : null);
-                        writeNumber(draft, highPath, value.highPresent() ? value.high() : null);
+                integerRange(session, minField, maxField, basePath), rangeTexts(), value -> {
+                    applyChange.accept( edits -> {
+                        writeNumber(edits, lowPath, value.lowPresent() ? value.low() : null);
+                        writeNumber(edits, highPath, value.highPresent() ? value.high() : null);
                     });
                     onChange.run();
                 });
@@ -666,34 +665,34 @@ public final class RuleEditorPanelFactory {
     }
 
     // 昼夜时间条：0..23999 刻，from>to 跨零点，同刻单点
-    private static UiCyclicTimeBar timeBar(Font font, RuleDraft draft, EditorField from, EditorField to,
-                                           String basePath, Consumer<Runnable> applyChange, Runnable onChange) {
+    private static UiCyclicTimeBar timeBar(Font font, EditSession session, EditorField from, EditorField to,
+                                           String basePath, Consumer<Consumer<RuleDraft>> applyChange, Runnable onChange) {
         String fromPath = join(basePath, from.name());
         String toPath = join(basePath, to.name());
         UiCyclicTimeBar bar = dailyBar(font, (fromTick, toTick) -> {
-            applyChange.accept(() -> {
-                draft.setAt(fromPath, RuleValue.integer((int) Math.round(fromTick)));
-                draft.setAt(toPath, RuleValue.integer((int) Math.round(toTick)));
+            applyChange.accept( edits -> {
+                edits.setAt(fromPath, RuleValue.integer((int) Math.round(fromTick)));
+                edits.setAt(toPath, RuleValue.integer((int) Math.round(toTick)));
             });
             onChange.run();
         });
-        bar.setRange(intAt(draft, fromPath, TIME_MIN), intAt(draft, toPath, DEFAULT_TIME_RANGE_END));
+        bar.setRange(intAt(session, fromPath, TIME_MIN), intAt(session, toPath, DEFAULT_TIME_RANGE_END));
         bar.setLabel(Component.translatable(from.labelKey()));
         return bar;
     }
 
-    private static int intAt(RuleDraft draft, String path, int fallback) {
-        RuleValue value = draft.valueAt(path);
+    private static int intAt(EditSession session, String path, int fallback) {
+        RuleValue value = session.valueAt(path);
         return value != null && value.isNumber() ? value.asInteger(fallback) : fallback;
     }
 
     // 缺失端以滑条窗口边界显示，草稿仍保留缺失状态；首次拖动后才写入区间。
-    private static UiRangeValue integerRange(RuleDraft draft, EditorField min, EditorField max, String basePath) {
-        double low = intAt(draft, join(basePath, min.name()), (int) min.sliderMin(min.intMin(FALLBACK_RANGE_MIN)));
-        double high = intAt(draft, join(basePath, max.name()), (int) max.sliderMax(max.intMax(FALLBACK_RANGE_MAX)));
+    private static UiRangeValue integerRange(EditSession session, EditorField min, EditorField max, String basePath) {
+        double low = intAt(session, join(basePath, min.name()), (int) min.sliderMin(min.intMin(FALLBACK_RANGE_MIN)));
+        double high = intAt(session, join(basePath, max.name()), (int) max.sliderMax(max.intMax(FALLBACK_RANGE_MAX)));
         // 单端合法值可能超出常用窗口；缺失端的预览须包含它，不改变草稿中的无限端。
-        if (draft.valueAt(join(basePath, min.name())) == null) low = Math.min(low, high);
-        if (draft.valueAt(join(basePath, max.name())) == null) high = Math.max(low, high);
+        if (session.valueAt(join(basePath, min.name())) == null) low = Math.min(low, high);
+        if (session.valueAt(join(basePath, max.name())) == null) high = Math.max(low, high);
         // 倒置值由精确输入校验，不能让预览区间的构造异常阻断整个面板。
         return low <= high ? UiRangeValue.of(low, high)
                 : UiRangeValue.of(min.intMin(FALLBACK_RANGE_MIN), max.intMax(FALLBACK_RANGE_MAX));

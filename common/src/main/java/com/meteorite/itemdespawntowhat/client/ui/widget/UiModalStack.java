@@ -294,6 +294,13 @@ public final class UiModalStack implements UiWidget, UiLayoutSource {
         }
     }
 
+    /** 顶层模态独占按键释放，底页不接收该事件。 */
+    @Override
+    public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
+        UiModal modal = top();
+        return modal != null && modal.keyReleased(keyCode, scanCode, modifiers);
+    }
+
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
         UiModal modal = top();

@@ -1,8 +1,7 @@
-package com.meteorite.itemdespawntowhat.client.ui.screen;
+package com.meteorite.itemdespawntowhat.client.edit;
 
-import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
-import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
+import com.meteorite.itemdespawntowhat.core.model.CombinationMode;
 import java.util.List;
 import org.jetbrains.annotations.Nullable;
 
@@ -110,6 +109,55 @@ public final class ResultStructure {
             return total;
         }
         return effectCount(rule, 0);
+    }
+
+    /** 原始候选数组长度；缺失或非列表返回零。 */
+    public static int outcomeCount(@Nullable RuleValue rule) {
+        RuleValue outcomes = arrayOf(rule, RuleFields.OUTCOMES);
+        return outcomes == null ? 0 : outcomes.size();
+    }
+
+    /** 结果区本身及其后代路径；按草稿路径段匹配，避免相似字段名前缀误命中。 */
+    public static boolean isResultPath(@Nullable String path) {
+        List<DraftPaths.Segment> segments = DraftPaths.parse(path);
+        if (segments.isEmpty()) return false;
+        String root = segments.getFirst().name();
+        return RuleFields.EFFECTS.equals(root) || RuleFields.OUTCOMES.equals(root);
+    }
+
+    /** 组合方式缺省为轮询，未知文本原样交给校验。 */
+    public static String combinationOf(@Nullable RuleValue rule) {
+        return RuleValue.text(rule, RuleFields.COMBINATION, CombinationMode.ROUND_ROBIN.key());
+    }
+
+    /** 条件编辑宿主的结构身份：只记录候选身份与效果类型，不受参数变化影响。 */
+    public static RuleValue conditionOwnerShape(@Nullable RuleValue rule) {
+        RuleValue.Mapping shape = RuleValue.mapping()
+                .put(RuleFields.EFFECTS, effectTypeSequence(rule == null ? null : rule.child(RuleFields.EFFECTS)));
+        RuleValue.Sequence candidates = RuleValue.list();
+        RuleValue outcomes = rule == null ? null : rule.child(RuleFields.OUTCOMES);
+        if (outcomes != null && outcomes.isList()) {
+            for (RuleValue raw : outcomes.items()) {
+                RuleValue.Mapping candidate = RuleValue.mapping();
+                if (raw != null && raw.isMapping()) {
+                    candidate.put(RuleFields.CANDIDATE_ID, raw.childOr(RuleFields.CANDIDATE_ID, RuleValue.nil()));
+                    candidate.put(RuleFields.EFFECTS, effectTypeSequence(raw.child(RuleFields.EFFECTS)));
+                }
+                candidates.add(candidate.build());
+            }
+        }
+        return shape.put(RuleFields.OUTCOMES, candidates.build()).build();
+    }
+
+    private static RuleValue effectTypeSequence(@Nullable RuleValue raw) {
+        RuleValue.Sequence types = RuleValue.list();
+        if (raw != null && raw.isList()) {
+            for (RuleValue effect : raw.items()) {
+                types.add(effect != null && effect.isMapping()
+                        ? effect.childOr(RuleFields.TYPE, RuleValue.nil()) : RuleValue.nil());
+            }
+        }
+        return types.build();
     }
 
     private static @Nullable RuleValue arrayOf(@Nullable RuleValue owner, String name) {

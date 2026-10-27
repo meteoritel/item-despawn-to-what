@@ -552,6 +552,12 @@ public final class UiModal implements UiWidget {
         return false;
     }
 
+    /** 按键释放只交给本层内容，完成方向键数值交互。 */
+    @Override
+    public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
+        return visible && contentWidget != null && contentWidget.keyReleased(keyCode, scanCode, modifiers);
+    }
+
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
         return visible && contentWidget != null && contentWidget.charTyped(codePoint, modifiers);

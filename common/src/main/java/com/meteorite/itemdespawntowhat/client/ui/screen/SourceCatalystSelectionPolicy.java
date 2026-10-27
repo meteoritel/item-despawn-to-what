@@ -1,7 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
-import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
@@ -29,11 +28,11 @@ final class SourceCatalystSelectionPolicy implements Function<String, @Nullable 
     private final Set<String> occupied;
     private final Component reason;
 
-    private SourceCatalystSelectionPolicy(RuleDraft draft, boolean selectingSource) {
+    private SourceCatalystSelectionPolicy(RuleValue draft, boolean selectingSource) {
         excluded = expand(references(draft.valueAt(SOURCE_EXCLUDE_PATH)));
         if (selectingSource) {
             Set<String> catalysts = new HashSet<>();
-            collectCatalysts(draft.root(), catalysts);
+            collectCatalysts(draft, catalysts);
             occupied = expand(List.copyOf(catalysts));
         } else {
             occupied = expand(references(draft.valueAt(SOURCE_ITEMS_PATH)));
@@ -43,7 +42,7 @@ final class SourceCatalystSelectionPolicy implements Function<String, @Nullable 
                 + (selectingSource ? "pick.catalyst_conflict" : "pick.source_conflict"));
     }
 
-    static Function<String, @Nullable Component> forField(RuleDraft draft, String path) {
+    static Function<String, @Nullable Component> forField(RuleValue draft, String path) {
         boolean source = SOURCE_ITEMS_PATH.equals(path);
         int separator = path.lastIndexOf('.');
         if (!source && (separator < 0 || !RuleFields.CATALYST_ITEMS.equals(path.substring(separator + 1))))
@@ -63,7 +62,7 @@ final class SourceCatalystSelectionPolicy implements Function<String, @Nullable 
 
     private static boolean isCatalystOwner(@Nullable RuleValue owner, String path) {
         if (owner == null || !owner.isMapping()) return false;
-        String type = RuleValueReads.stringField(owner, RuleFields.TYPE);
+        String type = RuleValue.text(owner, RuleFields.TYPE);
         return RuleFields.CATALYST_COST.equals(path)
                 || RuleEditorPageSupport.CATALYST_PRESENT_ID.toString().equals(type);
     }

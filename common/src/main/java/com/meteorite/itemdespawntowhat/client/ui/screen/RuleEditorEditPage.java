@@ -76,6 +76,10 @@ final class RuleEditorEditPage implements EditorPage {
     // ---- 页签与底排 ----
     private EditSection tab = EditSection.INFO;
     private @Nullable RuleEditorEditSections pages;
+    private @Nullable EditSession boundSession;
+
+    /** 页面收尾只区分保留、完成编辑和两种真实释放方式。 */
+    enum Finish { RETAIN, EDIT, UNMOUNT, CLOSE }
     private @Nullable UiSegmentedControl tabControl;
     private final List<UiButton> footerButtons = new ArrayList<>();
     private final RuleEditorScreenButtonBar footerBar = new RuleEditorScreenButtonBar(22, 4, true);
@@ -172,7 +176,7 @@ final class RuleEditorEditPage implements EditorPage {
             return;
         }
         if (pages != null) {
-            pages.flushPendingEdits();
+            finish(Finish.EDIT);
             pages.setPage(target);
         }
         tab = target;
@@ -335,14 +339,16 @@ final class RuleEditorEditPage implements EditorPage {
     // ---- 页面装配与生命周期 ----
 
     void rebuildEdit() {
+        finish(Finish.EDIT);
         EditSession session = shell.editingSession();
         if (!shell.isEditing() || session == null) {
-            pages = null;
+            finish(Finish.UNMOUNT);
             return;
         }
         if (pages == null) {
-            pages = new RuleEditorEditSections(shell, model, workspace, font, modals, focus, buildConditionEditingSupport());
+            pages = new RuleEditorEditSections(shell, model, font, focus, buildConditionEditingSupport(), () -> finish(Finish.EDIT));
         }
+        boundSession = session;
         pages.setPage(tab);
         pages.rebuild();
         if (lastEditArea.width() > 0) {
@@ -353,24 +359,29 @@ final class RuleEditorEditPage implements EditorPage {
         syncEditableState();
     }
 
-    // 提交当前页所有可见表单的待写字段（切页 / 返回 / 应用 / 关屏前调用）
-    void applyAllForms() {
-        if (pages != null) {
-            pages.applyToDraft();
+    /** 按当前会话身份收尾；旧页面只释放，不向重绑后的会话回写。 */
+    void finish(Finish reason) {
+        if (pages == null) return;
+        if (reason == Finish.RETAIN) {
+            pages.retainPendingInputs();
+            return;
         }
-    }
-
-    // 结算当前页编辑状态；页面不存在时无事可做
-    void flushPendingEdits() {
-        if (pages != null) {
-            pages.flushPendingEdits();
+        if (boundSession == shell.editingSession() && shell.editable()) {
+            pages.finishEditing();
+        } else {
+            pages.endInteractions();
+        }
+        if (reason == Finish.UNMOUNT || reason == Finish.CLOSE) {
+            if (reason == Finish.CLOSE) pages.onHostClosed(); else pages.unmount();
+            pages = null;
+            boundSession = null;
         }
     }
 
     // 进入新规则的编辑页：页签回到基本信息并丢弃上一份页面状态（候选与效果选择归零）
     void openNew() {
+        finish(Finish.UNMOUNT);
         tab = EditSection.INFO;
-        pages = null;
         if (tabControl != null) {
             tabControl.setSelected(tab.value());
         }
@@ -382,25 +393,6 @@ final class RuleEditorEditPage implements EditorPage {
         if (tabControl != null) {
             tabControl.setSelected(tab.value());
         }
-    }
-
-    // 返回管理页前结算编辑状态并卸载页面
-    void unmount() {
-        if (pages != null) {
-            pages.flushPendingEdits();
-            pages.unmount();
-        }
-        pages = null;
-    }
-
-    // 关屏 / 会话失效：结束页面交互并让表单释放捕获与输入状态
-    void close() {
-        if (pages == null) {
-            return;
-        }
-        pages.endInteractions();
-        pages.onHostClosed();
-        pages = null;
     }
 
     void endInteractions() {
@@ -514,7 +506,7 @@ final class RuleEditorEditPage implements EditorPage {
 
     void save() {
         // F-I：先把当前草稿落盘（写盘本身有 2 秒节流），保证崩溃窗口内的最近编辑不丢
-        flushPendingEdits();
+        finish(Finish.EDIT);
         model.persistNow();
         List<FormIssue> issues = validation.collectIssues();
         // 只有「本地可证非法」才阻塞保存；未注册第三方类型等提醒项不阻塞（服务端才是权威校验方）
@@ -571,7 +563,7 @@ final class RuleEditorEditPage implements EditorPage {
         if (!shell.editable()) {
             return;
         }
-        flushPendingEdits();
+        finish(Finish.EDIT);
         EditSession session = shell.editingSession();
         if (session != null && session.canUndo()) {
             session.undo();
@@ -584,7 +576,7 @@ final class RuleEditorEditPage implements EditorPage {
         if (!shell.editable()) {
             return;
         }
-        flushPendingEdits();
+        finish(Finish.EDIT);
         EditSession session = shell.editingSession();
         if (session != null && session.canRedo()) {
             session.redo();
@@ -599,8 +591,7 @@ final class RuleEditorEditPage implements EditorPage {
         if (pages == null || issue == null) {
             return;
         }
-        pages.endInteractions();
-        applyAllForms();
+        finish(Finish.EDIT);
         UiFocusTarget target = pages.reveal(issue.path());
         tab = pages.page();
         if (tabControl != null) {
@@ -683,7 +674,7 @@ final class RuleEditorEditPage implements EditorPage {
         if (sequence != seenResultSeq) {
             seenResultSeq = sequence;
             RuleSaveStatus status = workspace.saving().outcome().status();
-            model.refresh();
+            shell.refreshSnapshot();
             if (status == RuleSaveStatus.SUCCESS || status == RuleSaveStatus.NO_CHANGES) {
                 model.acceptSaved();
                 shell.setNotice(Component.translatable(com.meteorite.itemdespawntowhat.core.network.transport.RuleEditMessages.key(status)),EditorShell.NoticeLevel.SUCCESS);

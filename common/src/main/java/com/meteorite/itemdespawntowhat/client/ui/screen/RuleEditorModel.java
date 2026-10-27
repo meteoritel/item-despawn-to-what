@@ -84,6 +84,10 @@ public final class RuleEditorModel {
     }
 
     // 消费新快照；返回 true 表示确实有新数据
+    boolean snapshotPending() {
+        return workspace.session().snapshot() != null && workspace.session().snapshot() != seenSnapshot;
+    }
+
     public boolean refresh() {
         RuleSnapshot snapshot = this.workspace.session().snapshot();
         if (snapshot == null || snapshot == this.seenSnapshot) {
@@ -198,7 +202,7 @@ public final class RuleEditorModel {
     public boolean defaultEnabled(String id) {
         EditSession session = this.sessions.get(id);
         if (session != null && !isReadOnly(id)) {
-            return session.draft().root().flag(RuleFields.ENABLED, true);
+            return session.root().flag(RuleFields.ENABLED, true);
         }
         RuleSnapshotEntry entry = this.entries.get(id);
         return entry == null || entry.defaultEnabled();
@@ -268,9 +272,8 @@ public final class RuleEditorModel {
             if (session == null) {
                 return null;
             }
-            boolean enabled = !session.draft().root().flag(RuleFields.ENABLED, true);
-            session.apply(EditSession.OP_SET_FIELD,
-                    () -> session.draft().setAt(RuleFields.ENABLED, RuleValue.flag(enabled)));
+            boolean enabled = !session.root().flag(RuleFields.ENABLED, true);
+            session.apply(EditSession.OP_SET_FIELD, edits -> edits.setAt(RuleFields.ENABLED, RuleValue.flag(enabled)));
             return enabled ? RuleEdit.Action.ENABLE : RuleEdit.Action.DISABLE;
         }
         // 列表页直接点启停时还没有会话：先按服务端内容打开，草稿才会带上内容与基线
@@ -431,7 +434,7 @@ public final class RuleEditorModel {
     // 显示和筛选优先读取草稿，不为浏览列表额外创建会话。
     public @Nullable RuleValue displayBody(String id) {
         EditSession session = sessions.get(id);
-        return session == null ? entryBody(id) : session.draft().root();
+        return session == null ? entryBody(id) : session.root();
     }
 
     /**
@@ -491,7 +494,7 @@ public final class RuleEditorModel {
         // 撤销新建后仍是带 id 的合法骨架，而不是空对象
         RuleDraft draft = RuleDraft.of(BuiltinEditorDefaults.ruleBody(id));
         EditSession session = new EditSession(id, draft);
-        session.apply(EditSession.OP_CREATE_RULE, () -> draft.replaceWith(body));
+        session.apply(EditSession.OP_CREATE_RULE, edits -> edits.replaceWith(body));
         this.sessions.put(id, session);
         this.createdIds.add(id);
         // 新建规则在服务端还没有内容，基线为「不存在」
@@ -518,7 +521,7 @@ public final class RuleEditorModel {
         }
         EditSession session = this.sessions.get(id);
         if (session != null) {
-            session.apply(EditSession.OP_DELETE_RULE, () -> session.draft().setDeleted(deleted));
+            session.apply(EditSession.OP_DELETE_RULE, edits -> edits.setDeleted(deleted));
         }
     }
 
@@ -608,7 +611,7 @@ public final class RuleEditorModel {
      */
     public boolean isDeleteMarked(String id) {
         EditSession session = this.sessions.get(id);
-        return session != null && session.draft().isDeleted();
+        return session != null && session.isDeleted();
     }
 
     // 存在改动的规则 id（保持服务端顺序）：内容改动与启停意图都算；沙盒内容不算
@@ -654,15 +657,14 @@ public final class RuleEditorModel {
             EditSession session = this.sessions.get(id);
             // 沙盒内容不进变更集：只读条目只提交启停意图
             if (session != null && hasContentDirty(id)) {
-                RuleDraft draft = session.draft();
                 RuleSnapshotEntry entry = this.entries.get(id);
                 // 任何含覆盖副本（mixed）或仅覆盖的条目都能通过删除覆盖层表达删除；
                 // 数据包基底本身不落覆盖层，不能写成带 delete 的完整规则体。
                 boolean overlayOwned = entry != null && !RuleSnapshotEntry.ORIGIN_DATAPACK.equals(entry.origin());
-                if (draft.isDeleted() && !this.createdIds.contains(id) && overlayOwned) {
+                if (session.isDeleted() && !this.createdIds.contains(id) && overlayOwned) {
                     changeSet.delete(id);
                 } else {
-                    changeSet.upsert(draft);
+                    changeSet.upsert(id, session.snapshot());
                 }
             }
             // 启停动作与内容动作同批提交：服务端先写内容再落状态
@@ -686,11 +688,11 @@ public final class RuleEditorModel {
                 this.journal.drop(id);
                 continue;
             }
-            session.load(RuleDraft.of(session.draft().root()));
+            session.load(RuleDraft.of(session.root()));
             session.clearHistory();
             this.createdIds.remove(id);
             // 服务端已接受的内容成为新的草稿基线，并删掉落盘草稿
-            this.journal.captureBaseline(id, session.draft().toJson());
+            this.journal.captureBaseline(id, session.snapshot());
             this.conflicts.remove(id);
             this.journal.drop(id);
         }
@@ -766,7 +768,7 @@ public final class RuleEditorModel {
 
     // 只传递业务状态；快照构造、保留策略与保存基线均由 Journal 负责。
     private DraftState draftState(String id, @Nullable EditSession session) {
-        return new DraftState(id, session == null ? null : session.draft(), this.createdIds.contains(id),
+        return new DraftState(id, session, this.createdIds.contains(id),
                 isReadOnly(id), this.conflicts.containsKey(id), this.enableIntents.get(id));
     }
 

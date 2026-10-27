@@ -85,16 +85,16 @@ public final class DraftJournal {
     }
 
     private @Nullable PersistedDraft snapshotOf(DraftState state) {
-        RuleDraft content = state.content();
+        com.meteorite.itemdespawntowhat.client.edit.EditSession content = state.content();
         boolean writableContent = !state.readOnly() && content != null;
-        boolean keepContent = writableContent && (content.isDirty() || state.created() || state.unresolvedConflict());
+        boolean keepContent = writableContent && (content.contentDirty() || state.created() || state.unresolvedConflict());
         boolean keepIntent = state.enableIntent() != null && (writableContent || state.readOnly());
         if (!keepContent && !keepIntent) {
             return null;
         }
         return new PersistedDraft(state.targetId(), writableContent && state.created(),
                 writableContent && content.isDeleted(), state.enableIntent(), this.baselines.get(state.targetId()),
-                writableContent ? content.toJson() : new JsonObject(), System.currentTimeMillis());
+                writableContent ? content.snapshot() : new JsonObject(), System.currentTimeMillis());
     }
 
     /**

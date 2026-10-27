@@ -56,8 +56,8 @@ final class RuleEditorValidation {
         issueRuleId = shell.editingId();
         List<FormIssue> issues = new ArrayList<>();
         EditSession session = shell.editingSession();
-        if (session != null && !session.draft().isDeleted()) {
-            issues.addAll(localIssues(session.draft()));
+        if (session != null && !session.isDeleted()) {
+            issues.addAll(localIssues(session.root()));
             issues.addAll(session.pendingInputIssues());
         }
         for (String id : model.dirtyRuleIds()) {
@@ -65,8 +65,8 @@ final class RuleEditorValidation {
                 continue;
             }
             EditSession other = model.session(id);
-            if (other != null && !other.draft().isDeleted()) {
-                List<FormIssue> otherIssues = new ArrayList<>(localIssues(other.draft()));
+            if (other != null && !other.isDeleted()) {
+                List<FormIssue> otherIssues = new ArrayList<>(localIssues(other.root()));
                 otherIssues.addAll(other.pendingInputIssues());
                 if (issues.stream().noneMatch(FormIssue::blocking) && otherIssues.stream().anyMatch(FormIssue::blocking)) {
                     issueRuleId = id;
@@ -82,17 +82,17 @@ final class RuleEditorValidation {
     }
 
     // 本地保存前拦截
-    private List<FormIssue> localIssues(RuleDraft draft) {
+    private List<FormIssue> localIssues(RuleValue draft) {
         List<FormIssue> issues = new ArrayList<>();
         for (var missing : RuleRequirements.find(draft))
             issues.add(FormIssue.required(missing.path(), Component.translatable(missing.labelKey())));
         // 全部脏规则都需检查，避免切换规则或返回管理页后绕过触发方式校验。
-        if (RuleTriggers.isExplicitlyEmpty(draft.root())) {
+        if (RuleTriggers.isExplicitlyEmpty(draft)) {
             issues.add(FormIssue.error(RuleFields.TRIGGERS, Component.translatable(UI + "rule.triggers"),
                     Component.translatable(UI + "issue.trigger_empty")));
         }
-        RuleValue effects = listOf(draft.root().child(RuleFields.EFFECTS));
-        RuleValue outcomes = listOf(draft.root().child(RuleFields.OUTCOMES));
+        RuleValue effects = listOf(draft.child(RuleFields.EFFECTS));
+        RuleValue outcomes = listOf(draft.child(RuleFields.OUTCOMES));
         if (effects.isEmpty() && outcomes.isEmpty()) {
             issues.add(issue(RuleFields.EFFECTS, UI + "issue.effects_empty"));
         } else if (effects.size() > MAX_EFFECTS) {
@@ -123,28 +123,28 @@ final class RuleEditorValidation {
                 issues.add(issue(DraftPaths.child(candidatePath, RuleFields.CANDIDATE_EFFECTS), UI + "issue.candidate_effects_empty"));
             }
         }
-        RuleValue name = draft.root().child(RuleFields.DISPLAY_NAME);
+        RuleValue name = draft.child(RuleFields.DISPLAY_NAME);
         if (name != null && name.isScalar()
                 && name.asText().codePointCount(0, name.asText().length()) > MAX_DISPLAY_NAME_CODE_POINTS) {
             issues.add(issue(RuleFields.DISPLAY_NAME, UI + "issue.display_name_too_long"));
         }
-        RuleValue notes = draft.root().child(RuleFields.NOTES);
+        RuleValue notes = draft.child(RuleFields.NOTES);
         if (notes != null && notes.isScalar()
                 && notes.asText().codePointCount(0, notes.asText().length()) > MAX_NOTES_CODE_POINTS) {
             issues.add(issue(RuleFields.NOTES, UI + "issue.notes_too_long"));
         }
-        RuleValue seconds = draft.root().child(RuleFields.TRIGGER_AFTER_SECONDS);
+        RuleValue seconds = draft.child(RuleFields.TRIGGER_AFTER_SECONDS);
         if (seconds != null && seconds.isNumber() && seconds.asInteger(0) < 0) {
             issues.add(issue(RuleFields.TRIGGER_AFTER_SECONDS, UI + "issue.trigger_negative"));
         }
         // 固定成本按引用分别校验；数量必须为正整数，引用必须来自已选物品。
-        RuleValue sourceCost = draft.root().child(RuleFields.SOURCE_COST);
+        RuleValue sourceCost = draft.child(RuleFields.SOURCE_COST);
         RuleValue sourceItems = listOf(draft.valueAt(DraftPaths.child(RuleFields.SOURCE, RuleFields.SOURCE_ITEMS)));
         if (sourceCost != null && invalidItemCounts(sourceCost, sourceItems, Integer.MAX_VALUE)) {
             issues.add(issue(RuleFields.SOURCE_COST, UI + "issue.source_cost_not_positive"));
         }
         // 规则催化剂配置：门槛和实际消耗分别校验，全部引用共享一个整数半径。
-        RuleValue catalystCost = draft.root().child(RuleFields.CATALYST_COST);
+        RuleValue catalystCost = draft.child(RuleFields.CATALYST_COST);
         boolean hasCatalystCost = catalystCost != null && !catalystCost.isNull();
         if (hasCatalystCost) {
             if (!catalystCost.isMapping()) {
@@ -178,7 +178,7 @@ final class RuleEditorValidation {
             }
         }
         // 结构版本：当前只支持 RuleCodecs.DEFAULT_SCHEMA_VERSION
-        RuleValue schemaVersion = draft.root().child(RuleFields.SCHEMA_VERSION);
+        RuleValue schemaVersion = draft.child(RuleFields.SCHEMA_VERSION);
         if (isInteger(schemaVersion) && schemaVersion.asInteger(0) != RuleCodecs.DEFAULT_SCHEMA_VERSION) {
             issues.add(issue(RuleFields.SCHEMA_VERSION, UI + "issue.schema_version_unsupported"));
         }
@@ -219,8 +219,8 @@ final class RuleEditorValidation {
     }
 
     // 校验规则级条件树，问题路径指向 conditions 字段
-    private void validateConditionTree(RuleDraft draft, List<FormIssue> issues) {
-        RuleValue raw = draft.conditionsValue();
+    private void validateConditionTree(RuleValue draft, List<FormIssue> issues) {
+        RuleValue raw = draft.child(RuleFields.CONDITIONS);
         if (raw == null) {
             return;
         }

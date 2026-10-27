@@ -4,6 +4,7 @@ import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.net.RuleEditClientWorkspace;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
+import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.net.RuleEditClientState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
@@ -35,7 +36,6 @@ import org.jetbrains.annotations.Nullable;
  * 绘制与输入派发，并从这里读取状态。</p>
  */
 final class EditorShell {
-
 
     /**
      * 底部提示的级别：只表达信息性质，形态、用色与停留由渲染层决定。
@@ -114,7 +114,6 @@ final class EditorShell {
 
     // ---- 查询 ----
 
-
     // 当前活动页：屏幕只按这个接口派发渲染与输入，不再按模式分支
     EditorPage activePage() {
         return page;
@@ -130,6 +129,12 @@ final class EditorShell {
 
     @Nullable EditSession editingSession() {
         return editingId == null ? null : model.session(editingId);
+    }
+
+    /** 当前会话的只读实时值，分区不缓存目标身份。 */
+    @Nullable RuleValue editingValue() {
+        EditSession session = editingSession();
+        return session == null ? null : session.root();
     }
 
     /** 当前内容是否可写：只有工作区处于 ACTIVE 时可编辑。 */
@@ -214,6 +219,7 @@ final class EditorShell {
     void leaveInteractions() {
         listPage.onScopeChanged();
         editPage.endInteractions();
+        debugPage.onScopeChanged();
         focus.clearFocus();
     }
 
@@ -240,7 +246,7 @@ final class EditorShell {
             setNotice(Component.translatable(UI + "notice.rule_unavailable"), NoticeLevel.WARNING);
             return;
         }
-        editPage.flushPendingEdits();
+        editPage.finish(RuleEditorEditPage.Finish.EDIT);
         // 切换编辑目标即丢弃上一个只读条目的沙盒内容；当前目标的会话保留（启停意图不受影响）
         model.dropSandboxSessions(id);
         // 编辑页打开规则时按需取回来源视图；失败或超时只影响来源对照
@@ -259,7 +265,7 @@ final class EditorShell {
         if (saving()) {
             return;
         }
-        editPage.unmount();
+        editPage.finish(RuleEditorEditPage.Finish.UNMOUNT);
         // 离开编辑页：只读条目的沙盒内容全部丢弃，未应用的启停意图保留
         model.dropSandboxSessions(null);
         page = listPage;
@@ -360,7 +366,7 @@ final class EditorShell {
         // 快照是打开屏幕之后才到的（打开时只发出了请求），每帧消费一次；
         // refresh() 内部按快照实例去重，重复调用无副作用
         long applyStarted = DevelopmentDiagnostics.start();
-        boolean applied = model.refresh();
+        boolean applied = refreshSnapshot();
         if (applied) {
             logSnapshotApplied(DevelopmentDiagnostics.micros(applyStarted));
             listPage.refreshList();
@@ -428,8 +434,14 @@ final class EditorShell {
 
     // ---- 关闭与落盘 ----
 
+    boolean refreshSnapshot() {
+        if (!model.snapshotPending()) return false;
+        editPage.finish(RuleEditorEditPage.Finish.RETAIN);
+        return model.refresh();
+    }
+
     void refreshFromWorkspace() {
-        model.refresh();
+        refreshSnapshot();
         listPage.refreshList();
         editPage.rebuildEdit();
         rebuildFocus();
@@ -440,7 +452,7 @@ final class EditorShell {
         if (saving()) {
             return;
         }
-        editPage.flushPendingEdits();
+        editPage.finish(RuleEditorEditPage.Finish.EDIT);
         if (!model.hasDirty()) {
             closeEditor();
             return;
@@ -451,15 +463,13 @@ final class EditorShell {
         modal.addButton(new UiButton(THEME, font, Component.translatable(UI + "button.save_local"),
                 UiButtonVariant.PRIMARY, () -> {
             modals.close(modal);
-            // 先把当前表单输入并入草稿，再立即写盘；关闭流程本身也会再冲刷一次
-            editPage.applyAllForms();
-            model.persistNow();
             closeEditor();
         }));
         modal.addButton(new UiButton(THEME, font, Component.translatable(UI + "button.discard"),
                 UiButtonVariant.DANGER, () -> {
             modals.close(modal);
             // 玩家确认放弃：连落盘草稿一起删掉，避免下次打开又「恢复」回来
+            editPage.finish(RuleEditorEditPage.Finish.CLOSE);
             model.discardAllDrafts();
             closeEditor();
         }));
@@ -482,8 +492,7 @@ final class EditorShell {
             return;
         }
         released = true;
-        editPage.applyAllForms();
-        editPage.close();
+        editPage.finish(RuleEditorEditPage.Finish.CLOSE);
         // 关屏前丢弃沙盒内容：它们不进变更集，也没有必要留在内存里
         model.dropSandboxSessions(null);
         model.persistNow();

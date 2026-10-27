@@ -282,12 +282,8 @@ public final class ConditionDescription {
     }
 
     private static @Nullable ResourceLocation typeOf(RuleValue condition) {
-        RuleValue type = condition.child(RuleFields.TYPE);
-        if (type == null || !type.isScalar()) {
-            return null;
-        }
-        String text = type.asText("");
-        return text.isBlank() ? null : ResourceLocation.tryParse(text);
+        String type = RuleValue.typeOf(condition);
+        return type == null ? null : ResourceLocation.tryParse(type);
     }
 
     private static @Nullable RuleValue childOf(@Nullable RuleValue parent, String key) {
