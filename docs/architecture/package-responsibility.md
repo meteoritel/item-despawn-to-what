@@ -29,7 +29,7 @@ authority:
 | `common/core` | 服务端逻辑与两端共用契约：规则模型、类型系统、加载、运行时、编辑面、命令与调试 | 除 client 侧以外的全部模块 |
 | `common/platform` | 平台能力接口与服务定位，两端适配只实现这里的契约 | [platform](../modules/platform.md) |
 | `common/client` | 客户端工作区、编辑器界面与 UI kit | [client-editor](../modules/client-editor.md)、[ui-kit](../modules/ui-kit.md)、[client-ui](../modules/client-ui.md) |
-| 根包 `Constants` | 模组标识与持久化实体标记（模组 id、检查锁标记、已转化标记） | [platform](../modules/platform.md) |
+| 根包 `Constants` | 模组标识与日志入口 | [platform](../modules/platform.md) |
 | `fabric/`、`neoforge/` | 平台源集：`runtime`（事件与生命周期）、`platform`（能力实现）、`network`（载荷注册）、`client`（客户端入口）、`mixin`；NeoForge 侧另有 `debug` 包 | [platform](../modules/platform.md) |
 
 ## core 的分层
@@ -97,7 +97,7 @@ flowchart TB
   - 禁止：依赖 `core/command`、`core/debug`、`core/network`、客户端包。命令与调试是运行时的使用方。
 - **`core/runtime/scheduler`** — 调度器实现：单实例、每 tick 推进一次、时间软预算与工作量上限、维度级队列与统计。
   - 允许：`core/api/scheduler`。禁止：依赖规则模型与加载。调度器不认识规则，只认识任务。
-- **`core/state`** — 挂在实体上的运行期状态：临时保护、临时冷却、永久保护、永久禁转与伤害分类。
+- **`core/state`** — 挂在实体上的运行期状态：临时保护、临时冷却、永久保护、永久禁转、死亡排除、转化提交与伤害分类。
   - 允许：`core/model`（消失方式分类）、`platform/services`（实体状态读写）。
   - 禁止：依赖 `core/runtime`、`core/service`、客户端包。状态存储不含转化决策。
 
@@ -116,12 +116,12 @@ flowchart TB
   - 允许：`core/network/protocol` 的只读目录条目与类别类型。
   - 禁止：依赖 `core/network/catalog`、`core/service`。
 - **`core/command`** — `/idtw` 命令树、子分支与文本输出。
-  - 允许：`core/api`、`core/config`、`core/load`、`core/model`、`core/network/protocol`、`core/network/transport`、`core/runtime`、`core/service`。
+  - 允许：`core/api`、`core/config`、`core/load`、`core/model`、`core/network/protocol`、`core/network/transport`、`core/service`。
   - 禁止：依赖客户端包与界面层。
 - **`core/debug`（`common/src/dev`）** — 调试档案、开发场景、管线与运行时观测实现；由 NeoForge 开发源集编译，发布产物只取 main。
-  - 允许：`core/api`（含 scheduler）、`core/command`、`core/config`、`core/load`、`core/model`、`core/runtime`、`core/service`、`core/state`、`platform/Services`。
+  - 允许：`core/api`（含 scheduler）、`core/command`、`core/host` 的诊断视图、`core/config`、`core/load`、`core/model`、`core/runtime`、`core/service`、`core/state`、`platform/Services`。
   - 禁止：依赖客户端包；观测实现只通过 `RuntimeObserver` 契约进入运行时。
-- **`core/host`** — 一次存档生命周期的装配点：启动、数据包重载、停服、维度事件、编辑上下文与网络入口。
+- **`core/host`** — 一次存档生命周期的装配点：启动、数据包重载、停服、维度事件、编辑上下文、正式命令与开发诊断能力视图、网络入口。
   - 允许：`core` 的其余包与 `platform/Services`。
   - 禁止：依赖客户端包与平台 loader 专有 API；两端差异经 `PlatformAdapter` 注入。
 

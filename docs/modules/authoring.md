@@ -41,6 +41,7 @@ authority: common/core/catalog、common/core/network、common/core/service、com
 - 服务端服务：`RuleEditService` 只产出不可变的下发载荷列表，网络层负责发送；`EditSessionManager` 持有会话；`RuleOverlayStore` 承载后台文件调用与磁盘修订指纹。
 - 目录入口：`RuleCatalogService` 的分页查询与失效，数据来自 `RuleCatalogSources`。
 - 落盘入口：`RuleOverlayWriter.apply(...)`，由 `RuleSaveTask` 编排调用；启用状态入口：`RuleEnableApplyService`，保存与命令共用。
+- 正式命令通过 `RuleCommandContext` 读取就绪状态、配置与编辑能力；开发入口通过宿主的 `RuleRuntimeDiagnosticsContext` 取得诊断所需运行时。
 - 调试入口：`RuleDebugCommands`，背后是 `DebugScenarioManager`、`DebugPipelineManager` 与场景、流水线各自的声明目录。
 
 ### 依赖方向
@@ -83,7 +84,7 @@ flowchart LR
 | `RuleEditChunkAccumulator` / `RuleEditLimits` | 分片与限额 | 按玩家保留在途批次（每玩家上限、超出淘汰最早）、收齐后复核总量、空闲过期与清理 | `RuleEditService` |
 | `RuleCatalogSources` / `RuleCatalogService` | 候选目录 | 数据源给出全量与修订号；服务做大小写不敏感过滤、分页与按“类别 + 修订号”缓存 | `RuleCatalogType`、客户端列表、保存后失效 |
 | `RuleCommandTree`（含 config / rule 命令组） | 命令面 | 组装根树、把权限下放到子分支、统一本地化反馈出口 | `RuleEditServerHandler`、`RuleSnapshotAssembler` |
-| `RuleDebugCommands` / `DebugScenarioManager` / `DebugPipelineManager` | 调试 | 开发环境场景与流水线的启动、推进、收尾；声明目录是唯一注册来源；复用正式编解码与真实运行时 | `RuleRuntimeHost` 观测钩子 |
+| `RuleDebugCommands` / `DebugScenarioManager` / `DebugPipelineManager` | 调试 | 开发环境场景与流水线的启动、推进、收尾；声明目录是唯一注册来源；复用正式编解码与真实运行时 | `RuleRuntimeDiagnosticsContext`、`RuntimeObserver` |
 
 ## 4. 关键流程
 

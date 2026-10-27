@@ -85,7 +85,7 @@ flowchart LR
 | 例外 | 位置 | 性质 |
 |---|---|---|
 | 效果执行读取区块存在性 | `core/type/effect/exec` → `core/runtime/LoadedChunks` | 只读判定：目标区块是否加载，决定生成还是顺延 |
-| 返还物生成读写实体状态 | `core/type/effect/exec/ReturnItemSpawner` → `core/state/DropStateStore` | 返还物需要打上临时保护，避免立即被再次转化 |
+| 返还物生成读写实体状态 | `core/type/effect/exec/ReturnItemSpawner` → `core/state/DropStateStore` | 返还物授予永久保护与永久禁转，状态由公共门面写入 |
 | 保存续接发布预建索引 | `core/service/RuleSaveTask` → `core/runtime/RuleIndex` | 后台解码后按公共 tick 预算发布索引 |
 | 运行时消费内置类型注册表 | `core/runtime` → `core/service/BuiltinTypeRegistries` | 装配记录，运行时只读 |
 | 客户端装配本地类型表 | `client/edit/ClientTypeRegistries` → `core/service/BuiltinTypeRegistries` | 复用内置与 SPI 注册顺序，客户端惰性缓存冻结后的类型表与条件 Codec |

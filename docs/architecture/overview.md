@@ -74,7 +74,7 @@ flowchart LR
 | 平台生命周期事件 | fabric 与 neoforge 的 `runtime/RuleRuntimeEvents` | 服务端启停、数据包重载、实体入世界与离开、维度加载与卸载、服务器 tick 结束 |
 | 平台实体事件与 Mixin | `mixin` 包、`PlatformAdapter` | 自然消失前延后判定、环境致死请求、实体层状态读取与写入、死亡掉落排除标记 |
 
-实体层状态（临时保护、临时冷却、永久保护、永久禁转）挂在实体上而非 `ItemStack` 上，时间字段是绝对服务端游戏刻，卸载不暂停、重启后继续；字段含义见 `core/state` 的 [DropState](../../common/src/main/java/com/meteorite/itemdespawntowhat/core/state/DropState.java)。
+实体层状态（保护、冷却、死亡掉落排除与转化提交）挂在实体上而非 `ItemStack` 上，时间字段是绝对服务端游戏刻，卸载不暂停、重启后继续；字段含义见 `core/state` 的 [DropState](../../common/src/main/java/com/meteorite/itemdespawntowhat/core/state/DropState.java)。
 
 ## 运行约束
 
@@ -98,7 +98,7 @@ flowchart LR
 
 - 覆盖层写入有唯一所有者：文件工作跑在保留的单写入者线程上，作业登记按存档实例隔离；服务端线程只读取结果，不扫描目录。见 [RuleOverlayWriter](../../common/src/main/java/com/meteorite/itemdespawntowhat/core/service/RuleOverlayWriter.java) 与 `RuleOverlayStore`。
 - 一次保存先整批预备、备份与暂存，再提交；任一步失败都回滚本轮写入的文件、备份与临时文件，目录回到保存前状态。准备阶段用文件元数据指纹发现外部修改。
-- 结算只有一个状态出口：库存所有权用显式标记表达，账目字段变更只能经受控写入句柄落账（字段变更、双索引维护与标脏在同一次调用内完成），见 [ADR-0038](../adr/0038-settlement-single-commit-point.md)。
+- 结算账目是剩余源库存的唯一来源，受控写入句柄配套更新守恒项、双索引与标脏；聚合根以执行终态统一关闭回执和库存交付权，见 [ADR-0051](../adr/0051-settlement-stock-and-lifecycle-ownership.md)。
 
 ### 幂等与去重
 

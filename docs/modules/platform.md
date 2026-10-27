@@ -21,7 +21,7 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat/platform、core/
 模块承担的面：
 
 - **公共宿主** `RuleRuntimeHostCore`：引导、数据包重载、停服、维度回扫，以及掉落物进入/离开、环境致死、自然消失判定、tick 的转发入口；持有一次存档生命周期的当前服务端、模组级配置、内置类型注册表、覆盖层目录、运行时与保存重载上下文。
-- **窄接口适配**：以 `RuleEditServerContext` 与 `RuleCommandContext` 向网络层与命令层暴露运行时能力，调用方拿不到宿主对象本身。
+- **窄接口适配**：以 `RuleEditServerContext` 与 `RuleCommandContext` 向网络层与正式命令暴露所需能力；开发诊断单独取得宿主的 `RuleRuntimeDiagnosticsContext`。
 - **平台能力注入**：`IPlatformHelper` 由 `ServiceLoader` 发现唯一实现，具体能力面见接口本身；实体状态的读写也在这里，两端使用各自的持久化容器。
 - **模组级配置读取**：`ServerConfig.loadOrCreate` 负责 `server.json` 的读取、缺失即落盘与坏文件降级，两端共用同一实现与同一份文件。
 - **两端加载器接入**：入口类、事件订阅、Mixin、网络载荷注册、命令注册、客户端初始化。
@@ -176,7 +176,7 @@ flowchart TD
 
 - 只给平台事件覆盖不到的路径加注入，注入点选最小语义点（方法头部短路、指定调用点、常量表达式替换），不整体替换方法体。
 - 已有原生事件的路径不再用 Mixin 重复实现：自然消失、环境伤害保护、死亡掉落标记在两端各走一条路径，Mixin 只补事件覆盖不到的分支（Fabric 端的环境伤害保护注入 `Entity#isInvulnerableTo`、`onDestroyed` 分支与合并兼容）。
-- 合并兼容的语义集中在公共状态门面 `DropStateStore`：永久标志不一致时拒绝合并；合并完成时临时状态取并集，死亡掉落的检查锁标记随存活载体保留。两端 `ItemEntityMixin` 只调用同一入口，不各写一份判定。
+- 合并兼容的语义集中在公共状态门面 `DropStateStore`：永久标志不一致时拒绝合并；合并完成时临时到期刻取较晚者，死亡排除与转化提交位取并集；源堆完全合入后清理其状态，部分合入后仍存活的源堆保留状态。两端 `ItemEntityMixin` 只调用同一入口，不各写一份判定。
 - Mixin 配置声明 `injectors.defaultRequire`，目标方法消失时启动即失败；新增注入必须同步 `itemdespawntowhat.mixins.json`。
 - Mixin 目标只取原版与世界逻辑类，不注入客户端类，保证专用服务端不加载客户端代码。
 
