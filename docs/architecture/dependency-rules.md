@@ -66,6 +66,8 @@ flowchart LR
 8. `client/edit` 的 UI 依赖限定为 `client/ui/kit`，控件和表单工厂归 `client/ui`。
 9. `client/net` 禁止依赖 `client/edit` 与 `client/ui`。screen 根包不调用 `EditorField` 工厂声明业务字段；form 内从既有字段派生单项控件的适配保留。
 
+10. 四个编辑分区不持有组合容器；screen 不调用活草稿 getter，`EditSession` 不公开 `RuleDraft` getter，`FormView` 不公开按路径或字段名配置行的旧入口。
+
 编辑通道的 id 唯一、处理器齐备、同方向 direct/chunk 配对由 `RuleEditChannels` 初始化校验，平台注册器共同遍历该声明。
 
 开发实现位于 `common/src/dev` 与 `neoforge/src/probe`，生产观测只经 `core/api/RuntimeObserver`、`DevelopmentDiagnostics`；发布 jar 隔离由[后端探针工作流](../guides/backend-probes.md)的打包任务校验。

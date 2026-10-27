@@ -28,7 +28,7 @@ authority: common/client/ui/theme、common/client/ui/widget、common/client/ui/s
 | `client/ui/screen` | 编辑器外壳、三个编辑器页面、编辑分区组合、保存遮罩与页内输入分发 |
 | `client/ui/screen/form` | 描述符驱动的表单视图、字段控件基类与注册表 |
 
-三个编辑器页面（管理页、编辑页、调试页）共用 `EditorPage` 契约，由编辑器外壳持有并决定谁是活动页。页面在渲染和按钮刷新时查询外壳的可编辑状态，同步自身控件使能；外壳不向页面推送使能状态。编辑页内的编辑分区由 `RuleEditorEditSections.EditSection` 定义：INFO（基本信息）、INPUT（输入与消耗）、TRIGGER（触发条件）、RESULTS（效果与产物），`EditSection#of` 把键名解析成分区、未知键回落到 INFO。分区之间共用同一份 `EditSession` 草稿。
+三个编辑器页面（管理页、编辑页、调试页）共用 `EditorPage` 契约，由编辑器外壳持有并决定谁是活动页。页面在渲染和按钮刷新时查询外壳的可编辑状态，同步自身控件使能；外壳不向页面推送使能状态。编辑页内的编辑分区由 `RuleEditorEditSections.EditSection` 定义：INFO（基本信息）、INPUT（输入与消耗）、TRIGGER（触发条件）、RESULTS（效果与产物），`EditSection#of` 把键名解析成分区、未知键回落到 INFO。分区之间共用同一份 `EditSession` 草稿。四个分区各自持有 `EditorSectionContent`，拥有表单、控件、按钮与卡片；组合视图只消费活动分区的产物，维护布局缓存、文档坐标与滚动记忆。分区直接接收外壳、字体、表单工厂与编辑动作，不持有组合容器或其他分区。
 
 规则启用状态分两层，界面各有一处落点：默认启用是规则内容，落在基本信息分区的表单字段里；本服启用状态是独立的一层，落在基本信息分区行尾的本服开关与「恢复默认」，以及列表页的启停按钮。两者的语义见 [规则 JSON](../api/rule-json.md)，客户端侧的意图与草稿记录见 [client-editor](client-editor.md)。
 
@@ -38,7 +38,7 @@ authority: common/client/ui/theme、common/client/ui/widget、common/client/ui/s
 
 - **编辑器入口**：`RuleEditorOpener` 注册到 `EditorScreenHooks`，服务端授权成功后由 `client/net` 调用，把 `RuleEditorScreen` 切到前台或关闭；会话的发起与结束由 `client/net` 承担，它只负责切屏与会话就绪后的刷新。链路见 [authoring](authoring.md) 与 [client-editor](client-editor.md)。
 - **主题注入**：屏幕从 `UiHostThemes` 取 `UiHostTheme` 后注入自己装配的控件；控件统一经注入取色与取度量。
-- **表单装配**：`FormView` + `FormControl` + `FormControlRegistry`，把类型描述符的字段列表渲染成可滚动的一列控件；`FormView#addRowAction` 向同一行追加行尾动作按钮，基本信息分区的本服开关与「恢复默认」由此挂到「默认启用」行。
+- **表单装配**：`FormView` + `FormControl` + `FormControlRegistry`，把类型描述符的字段列表渲染成可滚动的一列控件；`FormField#addAction` 向同一行追加行尾动作按钮，基本信息分区的本服开关与「恢复默认」由此挂到「默认启用」行。
 - **条件树界面**：`ConditionTreeOverlay`（画布页外壳）、`UiConditionGraphEditor`（画布编辑）、`UiConditionTreeSummary`（只读摘要兼入口）、`ConditionTreeContract`（宿主注入契约与选中路径同步）。
 - **控件与弹窗契约**：`UiWidget` 统一渲染与输入转发；`UiModalStack` 负责弹窗层次、遮罩、焦点与输入独占。
 - **排版快照**：`RuleEditorScreen` 与承载控件的 widget、页面、按钮条实现 kit 的 `UiLayoutSource`，把已排版的控件矩形、文案与文本带宽导出为只读快照，供 GUI 探针断言布局不变量与真实文案；快照不参与绘制与命中，也不触发重排。
@@ -104,18 +104,21 @@ flowchart TD
 | `RuleEditorOpener` | 界面入口 | 提供 `bootstrap`/`shutdown`/`lastRequest` 静态入口，在客户端线程把编辑器切到前台或刷新 | `client/net` 的 hooks 与打开请求 |
 | `EditorShell` | 编辑器外壳 | 持有当前编辑目标、编辑会话选取、提示级别、可编辑判定与跨页命令，并持有三个编辑器页面；屏幕经它取活动页与状态 | 三个编辑器页面、`RuleEditorModel`、`UiModalStack`、`UiFocusManager` |
 | `EditorPage` | 编辑器页面契约 | 三个顶层页共用的派发面：头部度量与绘制、标题与状态标签、内容与页脚排版、鼠标键盘输入、按钮状态刷新，以及可选的覆盖层与悬停说明 | `RuleEditorScreen`、编辑器外壳 |
-| `RuleEditorScreen` | 屏幕聚合根 | 屏幕生命周期、窗口排版、绘制与输入派发：活动页从哪里取、提示带与页脚带怎么排都由屏幕决定，页内事件只按 `EditorPage` 派发；工作区进入可编辑态才允许编辑，应用期间冻结，工作区释放时自行关屏 | 编辑器外壳、`EditorPage`、弹窗栈、提示条 |
+| `EditorInputRouter` | 屏幕输入作用域 | 选择保存遮罩、顶层 modal、页覆盖层或活动页；独占作用域终止向底页派发，释放归原按下作用域；普通页排列历史、Esc 与 Tab 的优先级 | `EditorShell`、`EditorPage`、弹窗栈 |
+| `RuleEditorScreen` | 屏幕聚合根 | 屏幕生命周期、窗口排版、绘制与输入派发：活动页从哪里取、提示带与页脚带怎么排都由屏幕决定，输入经 `EditorInputRouter` 选择作用域后派发；工作区进入可编辑态才允许编辑，应用期间冻结，工作区释放时自行关屏 | 编辑器外壳、`EditorPage`、弹窗栈、提示条 |
 | `RuleEditorListPage` | 管理页 | 搜索、状态/来源轮询筛选、分类树、规则导出与配方预览，列表底排按钮状态同步；只持有管理页控件与视图状态 | 规则会话、目录图标、`RulePackExporter`、`RuleEditorListActions` |
 | `RulePackExporter` | 规则导出口 | 把列表可导出的已保存规则写成一个数据包 zip：跳过未保存草稿与有问题条目，清单格式取当前游戏的数据包版本，规则文件按 `data/<ns>/idtw/rules/<path>.json` 落位，id 强制写回 | 列表页导出弹窗、`RulePaths`、`RuleFields` |
 | `RuleListDisplayCache` / `RuleListDisplaySnapshot` | 列表行展示 | 把快照条目、草稿会话与启停意图合成一行的展示快照：生效启用、待应用标记、本服标记、只读标记；缓存按内容版本、会话修订号与意图修订号失效 | `RuleEditorModel`、列表页 |
-| `RuleEditorEditSections` | 编辑分区组合 | 把四个编辑分区与共享草稿绑定：所有内容写入经 `EditSession#apply` 提交为一条撤销记录；顶层效果按单一隐式候选展示；按外壳可编辑状态同步基本信息分区的本服控件 | 分区实现、`FormView`、`RuleEditorValidation` |
-| `RuleEditorEditPage` | 编辑页与保存入口 | 编辑分区切换、类型选择、代码视图、保存与校验入口；底排保存按钮按脏标记与页面可写状态合成可用性 | `RuleEditorEditSections`、`UiModalStack` |
+| `RuleEditorEditSections` | 编辑分区组合 | 组合四个分区的装配产物，汇总布局、滚动、焦点与输入；分区各自拥有控件和使能策略，`EditorSectionActions` 完成编辑收尾、历史路径迁移与分类跟随 | 分区实现、`FormView`、`RuleEditorValidation` |
+| `RuleEditorEditPage` | 编辑页与保存入口 | 编辑分区切换、类型选择、代码视图、保存与校验入口；`finish(reason)` 统一保留输入、结束交互、提交与释放 | `RuleEditorEditSections`、`UiModalStack` |
 | `RuleEditorInfoSection` | 基本信息分区 | 规则 ID、分类与来源摘要的只读展示，显示名、默认启用、优先级与备注的表单编辑，以及行尾的本服两态开关与「恢复默认」 | `FormView`、`RuleEditorModel` |
 | `RuleChangesView` | 变更清单 | 列出待应用的规则，每条同时给出内容动作与启停动作 | `RuleEditorModel`、`EditSession` |
 | `RuleEditorDebugPage` | 调试页 | 按输入数量填充测试规则、一次性删除测试规则；只写草稿，落盘仍由管理页的“应用全部”决定 | `DebugTestRules` |
 | `RuleEditorPageInput` | 页内输入分发 | 把按下、释放、拖动、滚动与键盘输入派发给当前页控件，并维护结果分区动作列表的拖动排序；按下归属决定释放只发给谁 | 编辑页控件、`FormView` |
 | `RuleEditorPanelFactory` | 面板装配 | 把 kit 控件与目录链路接到规则草稿上；写入一律经调用方给定的 `applyChange` | 叶子面板、`shared` 图标、数值控件 |
-| `FormView` | 表单聚合根 | 按 `TypeEditorDescriptor` 渲染可滚动控件列；写入统一经 `EditSession`；支持定位高亮、内联选择与行尾动作 | `FormDraftWriter`、`FormInputRouter`、`FormControl` |
+| `FormView` | 表单聚合根 | 按 `TypeEditorDescriptor` 渲染可滚动控件列；写入统一经 `EditSession`；支持定位高亮、内联选择与行尾动作 | `FormCommit`、`FormInputRouter`、`FormControl` |
+| `FormField` | 行身份与装配入口 | 绑定实际行，配置显隐、默认值、数值窗口、目录过滤、行尾动作与数量配对；路径随 rebase 更新，换描述符或卸载后失效 | `FormView`、字段声明 |
+| `FormCommit` | 表单提交协议 | 装载与保留文本，按修订守卫提交合法输入；字段及关联更新共用会话回调，非法文本留在会话 | `FormView`、`EditSession` |
 | `FormControl` / `FormControlRegistry` | 字段控件扩展点 | 一个字段一行，负责 JSON 值与控件值的双向搬运与本地校验；无 default 的枚举 switch 将每种字段显式映射到控件工厂 | 描述符引擎、`EditSession` |
 | `UiHostTheme` / `UiHostThemes` / `AbstractHostTheme` | 主题注入入口 | 调色板、度量、文本色、控件样式、滑块皮肤、结构绘制与图标行号；两套主题逐项相同的宿主度量与外壳原语收在 `AbstractHostTheme`，默认入口给出像素外观，扁平外观由调用方显式取用 | 全部控件与屏幕 |
 | `UiWidget` / `UiModalStack` | 控件与弹窗契约 | 控件统一渲染与输入契约，坐标为 GUI 逻辑坐标；弹窗栈只把输入投给最上层，并管理焦点与历史快捷键 | 屏幕、`UiFocusManager` |
@@ -146,12 +149,13 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-    A["指针或键盘"] --> B["页内输入分发 / 表单输入分发"]
+    A["指针或键盘"] --> S["EditorInputRouter：选择独占作用域"]
+    S --> B["页内输入分发 / 表单输入分发"]
     B --> C["控件（UiWidget）"]
     C --> D["kit 输入路由与捕获"]
     D --> E["控件预览值"]
     E --> F{"操作结束"}
-    F -->|提交| G["FormView 写入"]
+    F -->|提交| G["FormCommit 写入"]
     F -->|取消| H["回退预览，不写草稿"]
     G --> I["EditSession#apply：一条撤销记录"]
     I --> J["规则草稿"]
@@ -159,6 +163,16 @@ flowchart LR
 ```
 
 页内输入分发先记录“按下归属”，释放与拖动只发给同一个目标；表单输入分发按“选择框 → 行尾按钮 → 字段控件 → 表单滚动”的顺序派发，事件只消费一次。基本信息分区的「默认启用」是这条链路里的普通内容字段；行尾的本服开关与「恢复默认」是动作按钮，不进撤销栈。
+
+### 表单装配与页面收尾
+
+`EditorFormFactory` 装配目录、条件上下文、数量默认值与几何失效通知。输入分区的刷新联动留在输入分区；`EditorConditionForms` 装配条件画布与局部参数表；`EditorQuantityBindings` 提供共享数量及存在条件写回。结果结构与严格值读取由编辑数据层的 `ResultStructure`、`RuleValue` 提供。
+
+`addField` 返回 `FormField`，`setDescriptor` 返回有序句柄集合；固定描述符在装配时用 `field(name)` 取得必需行，动态闭包保留句柄。JSON 路径继续承担数据读写、历史迁移、问题定位与高亮。
+
+保存、分区和目标切换、返回、刷新及关闭进入 `RuleEditorEditPage.finish(reason)`。完成编辑先保留当前修订输入，再取消未释放预览、提交合法值并通知模型，最后卸载或重建；非法文本保留在会话并参与阻塞校验。快照身份变化前只保留输入；重绑后旧修订控件重新装载并退出该次提交。放弃草稿先释放旧页面再清除记录，关闭与 removed 共用外壳的一次释放标记。
+
+屏幕输入优先级为保存遮罩 → 顶层 modal → 页面覆盖层 → 活动页；modal 按键释放只交给本层内容。F1–F12 保持放行，Ctrl+F8 沿用调试入口条件。控件内捕获与焦点遵循 kit 契约，作用域变化结束原页面交互。
 
 ### 只读条目的编辑页
 
@@ -197,15 +211,15 @@ flowchart LR
 - **新增事件图标**：事件图集是 `textures/gui/editor/events.png`，由 `tools/image_generator/generate-event-icons.py` 生成，每格 32×32 彩色成品、按 16 像素槽位缩放绘制，不做主题染色；在 `theme` 的 `UiEventIcons.Event` 登记行号，动作到事件的判定收在 `shared/EventPreviewIcons`，新增天象类动作在那里补一支分支。
 - **新增目录类型或预览图标**：在 `shared` 的 `FieldCatalogTypes` 增加字段名兜底、在 `CatalogPreviewIcons` 增加分发分支；新增可预览注册表时按现有预览图标类的形态加宿主缓存类，并只在 `CatalogPreviewIcons` 接线。
 - **新增条件类型**：数据与校验在 `client/edit` 的条件模型上落点（见 [client-editor](client-editor.md)），界面侧在 `ConditionTreeContract` 的类型选项与叶子工厂登记；画布与缩进摘要共用同一份数据与校验。
-- **新增编辑分区或结果分区动作**：在 `RuleEditorEditSections.EditSection` 增加常量并实现对应分区；面板装配放 `RuleEditorPanelFactory`。页面共享的布局常量（页内留白、行高、表单与对话框的按钮高度）、`UI` 文案前缀、3 个页描述符 id 与 2 个存在条件叶类型 id 收在 `RuleEditorPageSupport`，它不持有界面状态、不装配控件；同一层的业务助手按关注点分开：`PresenceLeaves` 管存在条件叶的构造、扫描与增删，`CatalystQuantities` 管催化剂数量表对账，`RuleValueReads` 管 `RuleValue` 的只读取值与缺省回落。
-- **新增行尾动作**：`UiButton` 配 `FormView#addRowAction` 挂到某个字段行；动作按钮不进入表单字段，读写模型而非草稿 JSON，需要参与保存时在变更集组装处接线。
+- **新增编辑分区或结果分区动作**：在 `RuleEditorEditSections.EditSection` 增加常量并实现对应分区；面板装配放 `RuleEditorPanelFactory`。页面共享的布局常量（页内留白、行高、表单与对话框的按钮高度）、`UI` 文案前缀、3 个页描述符 id 与 2 个存在条件叶类型 id 收在 `RuleEditorPageSupport`，它不持有界面状态、不装配控件；同一层的业务助手按关注点分开：`PresenceLeaves` 管存在条件叶的构造、扫描与增删，`CatalystQuantities` 管催化剂数量表对账，`EditorQuantityBindings` 管共享数量与存在条件写回；规则结构与严格值读取由 `client/edit` 的 `ResultStructure`、`RuleValue` 提供。
+- **新增行尾动作**：`UiButton` 配 `FormField#addAction` 挂到某个字段行；动作按钮不进入表单字段，读写模型而非草稿 JSON，需要参与保存时在变更集组装处接线。
 - **新增主题**：实现 `UiHostTheme`（它本身就是 kit `UiStyleSource` 的宿主侧入口），在 `UiHostThemes` 暴露取用入口；控件经注入取色，新增皮肤只改主题实现。
 - **新增宿主控件**：实现 `UiWidget`，由屏幕统一转发输入；需要模态行为时放进 `UiModalStack`，需要焦点顺序时登记到 `UiFocusManager`。
 - **新增调试能力**：测试规则的身份前缀、分类归属与规则体在 `DebugTestRules` 统一约定，调试页只负责批量填充与按前缀删除。
 
 ### 约束
 
-- 内容单写入口：所有内容写入经 `EditSession#apply`，一次完整操作一条撤销记录；面板工厂与控件只装配、只搬运值。只读条目的内容也走这条链路，只读约束落在草稿持久化与变更集组装两处。
+- 内容单写入口：外部只读 `EditSession.root/valueAt`，活草稿仅在 `apply(opKey, edits -> ...)` 回调中提供；所有内容写入经 `EditSession#apply`，一次完整操作一条撤销记录；面板工厂与控件只装配、只搬运值。只读条目的内容也走这条链路，只读约束落在草稿持久化与变更集组装两处。
 - 启停是独立控制面：开关与「恢复默认」只改本服意图与脏标记，不写表单字段、不进撤销栈；提交时以变更集的启停动作上行。
 - 界面按描述符装配；JSON 的解析与构造收敛在 `client/edit`，界面消费模型或转换结果。
 - 主题只表达视觉，控件只表达交互语义；控件通过注入取色，不静态读取主题类。

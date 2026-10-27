@@ -21,7 +21,7 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat/client/net、cli
 - **协议工作区** `RuleEditClientWorkspace`：持有连接、快照、参考寿命与跨状态编排。`SessionLease` 独占会话身份、阶段与心跳，`SaveTicket` 独占保存关联、递增进度、取消标记与终态；`SourceViewRequests` 管理来源 LRU，`CatalogDirectory` 管理目录分页，两者共用 `PendingRequest` 的身份与期限机制。
 - **分片接收** `RuleChunkBuffer`：快照与来源视图共用同一套重组逻辑，同一时刻只保留最近一批分片。
 - **草稿** `RuleDraft` 与 `DraftPaths`：以 JSON 为唯一事实来源的规则草稿，支持路径级读写、条件树编解码，以及 flat effects 与 candidate outcomes 之间的原子转换；删除意图不写进工作副本，组装变更集时转成 `delete` 动作。
-- **撤销与重做** `EditSession`：把每次编辑压成一条历史记录，恢复快照的同时恢复未完成的文本输入。会话本身不区分只读：只读条目的内容同样可改，改动只存在于当前界面生命周期。
+- **撤销与重做** `EditSession`：`root/valueAt` 提供只读实时值，`snapshot` 提供独立快照；活草稿仅在 `apply(opKey, edits -> ...)` 回调中提供，每次编辑压成一条历史记录，恢复快照的同时恢复未完成的文本输入。会话本身不区分只读：只读条目的内容同样可改，改动只存在于当前界面生命周期。
 - **变更集** `EditorChangeSet`：按 id 收集内容动作与启停动作，两类分开去重，序列化成一份载荷提交；只读条目的内容动作不进来，启停动作照常进来。
 - **类型编辑器** `TypeEditorRegistry` 与条件/效果的注册表：类型 id 到编辑描述符的映射，未注册类型获得只读回退描述。
 - **草稿持久化** `DraftJournal`：接收 `DraftState`，决定保留或删除，捕获独立快照并维护保存基线，恢复时输出 `RestoredDraft`；`DraftConflicts` 负责纯冲突分类。包内 `DraftStore`、`DraftWriter`、`PersistedDraft` 负责文件、串行写入和磁盘格式，界面不装配它们。
@@ -37,7 +37,7 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat/client/net、cli
 - **界面入口**：直接使用 `RuleEditClientWorkspace`。`session()` 返回 `EditorSessionView`，`saving()` 返回 `EditorSaveView` 与 `EditorSaveOutcome`，`directory(type)` / `sourceView(id)` 返回 `ResourceView<T>`；读取不发包、不推进结果序号，数据未变化时复用读模型。请求、刷新、重试、保存与关闭是显式动作。
 - **界面注册**：`EditorScreenHooks.setOpener(EditorScreenOpener)`；工作区在会话建立时 `open(EditorOpenRequest)`，会话失效时 `close()`，opener 未注册只记日志。
 - **平台接线**：`RuleEditClientWorkspace.instance()` 的 `installSender(PacketSender)` 由两端客户端初始化调用；`bindConnection` / `unbindConnection` 随连接事件绑定与解绑唯一接收对象。
-- **编辑数据**：`RuleDraft`、`EditSession`、`EditorChangeSet`、`DraftPaths`、`DraftJournal`，供界面模块组装草稿与变更集。
+- **编辑数据**：`RuleDraft`、`EditSession`、`RuleValue`、`ResultStructure`、`EditorChangeSet`、`DraftPaths`、`DraftJournal`，供界面模块组装草稿与变更集。
 - **类型编辑器扩展**：`EditorRegistries.CONDITIONS.register`、`EditorRegistries.EFFECTS.register`，参数是 `TypeEditorDescriptor`。
 
 ### 依赖方向
@@ -73,6 +73,7 @@ flowchart LR
 | `EditSession`（client/edit） | 撤销聚合根 | 每次编辑压入快照历史，维护撤销与重做栈、脏标记与未完成输入；不区分只读条目 | `RuleDraft`、界面表单 |
 | `RuleDraft`（client/edit） | 草稿聚合根 | 保存服务器基线、工作副本与删除标记；路径级读写与条件树、候选结构处理 | `DraftPaths`、条件编解码、界面表单 |
 | `EditorChangeSet`（client/edit） | 变更集组装 | 按 id 收集内容动作与启停动作，分别去重后序列化成一份提交载荷 | `RuleEdit`、`RuleEditorModel` |
+| `RuleValue` / `ResultStructure`（client/edit） | 只读值与结构语义 | 严格读取文本、布尔与文本列表；共用结果形状、路径判定、候选效果定位及条件宿主结构快照 | 会话、表单与摘要 |
 | `DraftPaths`（client/edit） | 路径工具 | 草稿 JSON 的字段与数组路径解析、读写、删除；必要时创建中间容器 | `RuleDraft` |
 | `TypeEditorRegistry` / `EditorRegistries`（client/edit） | 扩展点 | 类型 id 到编辑描述符的注册表；未注册类型返回只读回退描述 | 界面表单、内置类型表 |
 | `ParamProjection`（client/edit） | 参数投影 | 把 core 的类型参数声明投影成 `EditorField` 列表：顺序等于声明顺序，标签 key 由类型 id 与字段名派生，窗口、单位、精度与枚举分组取自声明，不显示的参数跳过 | `BuiltinEditorDescriptors`、`TypeEditorDescriptor` |
@@ -180,10 +181,10 @@ flowchart TD
 ```
 
 - 撤销的粒度是“一条编辑操作”：操作压栈前先取工作副本快照，只有 JSON 或删除标记确实变化才入栈，超过历史上限丢弃最旧记录，新操作清空重做栈。
-- 未完成的文本输入单独缓存，撤销与重做在恢复快照的同时恢复对应的输入位置。
+- 未完成的文本输入单独缓存，撤销与重做在恢复快照的同时恢复对应的输入位置。`RuleValue` 是只读实时句柄，跨修订比较时取独立副本；字段、关联更新与分类跟随共用一次 `apply`，保留 mutationStamp 与输入 identity 语义。
 - 冲突判定在整条规则粒度：目标是否仍在服务端、按新建保存时服务端是否已有同名目标、服务端内容是否仍等于草稿记录的基线；原因由 `DraftConflict.Reason` 表达，新增原因需同步 `messageSuffix` 与文案 key。
 - 未决冲突保留磁盘记录的原始保存基线，恢复会话与重新暂存都沿用该基线；玩家选择保留草稿或成功应用后才推进。采用服务端版本删除对应草稿和关联启停意图。
-- `DraftState` 只携带主线程业务状态，Journal 只对需要保留的内容调用快照复制；基线捕获一次后复用。后台写入者只序列化独立快照，连续编辑按 2 秒节流，关闭时最多等待 1.5 秒。失败由显式动作重试，丢弃操作覆盖排队与失败记录。
+- `DraftState` 携带主线程会话与意图状态；Journal 只读查询内容脏标记、删除标记与独立快照，只对需要保留的内容调用快照复制；基线捕获一次后复用。后台写入者只序列化独立快照，连续编辑按 2 秒节流，关闭时最多等待 1.5 秒。失败由显式动作重试，丢弃操作覆盖排队与失败记录。
 - 关闭界面时若有未保存改动，弹窗提供「暂存到本地」「放弃」「取消」：暂存先合并当前表单输入并立即写盘，再结束会话并关屏；放弃删除本次载入的全部草稿文件；取消留在编辑页。
 
 ### 只读条目的沙盒会话
@@ -223,7 +224,7 @@ flowchart TD
 
 ### 新增撤销操作
 
-- 所有字段与树操作都经 `EditSession.apply(opKey, mutation)` 提交，`opKey` 使用 `EditSession` 的操作常量（`gui.itemdespawntowhat.edit.undo.*`）；新增操作补常量并同步 `en_us` 与 `zh_cn` 语言文件。
+- 所有字段与树操作都经 `EditSession.apply(opKey, edits -> ...)` 提交，`opKey` 使用 `EditSession` 的操作常量（`gui.itemdespawntowhat.edit.undo.*`）；新增操作补常量并同步 `en_us` 与 `zh_cn` 语言文件。
 - 启停开关改的是意图表与脏标记，不写表单字段、不进撤销栈。
 - `load(next)` 会清空历史；历史上限由 `HISTORY_LIMIT` 定义。
 
