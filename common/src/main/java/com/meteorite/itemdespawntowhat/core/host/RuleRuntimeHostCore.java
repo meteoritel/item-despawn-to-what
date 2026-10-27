@@ -12,15 +12,16 @@ import com.meteorite.itemdespawntowhat.core.config.ServerConfig;
 import com.meteorite.itemdespawntowhat.core.load.DatapackRuleReader;
 import com.meteorite.itemdespawntowhat.core.load.PackLayerResolver;
 import com.meteorite.itemdespawntowhat.core.load.RuleLoadResult;
+import com.meteorite.itemdespawntowhat.core.load.RuleSourceIndex;
 import com.meteorite.itemdespawntowhat.core.load.RuleReloadOutcome;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerContext;
-import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler;
 import com.meteorite.itemdespawntowhat.core.runtime.ConversionRuntime;
 import com.meteorite.itemdespawntowhat.core.runtime.LifespanProvider;
 import com.meteorite.itemdespawntowhat.core.runtime.RuleIndex;
 import com.meteorite.itemdespawntowhat.core.service.BuiltinTypeRegistries;
-import com.meteorite.itemdespawntowhat.core.service.EditSessionManager;
+import com.meteorite.itemdespawntowhat.core.service.RuleOverlayStore;
+import com.meteorite.itemdespawntowhat.core.service.RuleEditService;
 import com.meteorite.itemdespawntowhat.core.service.RuleLoadContext;
 import com.meteorite.itemdespawntowhat.core.service.RuleLoadingService;
 import com.meteorite.itemdespawntowhat.core.service.RuleSaveReloadContext;
@@ -68,6 +69,8 @@ public final class RuleRuntimeHostCore {
     // 新链路运行时；未引导或已停止时为 null
     private volatile ConversionRuntime runtime;
     private RuleSaveReloadContext saveReloadContext;
+    private AuthoringHost authoring;
+    private RuleSourceIndex publishedSources = RuleSourceIndex.build(List.of());
 
     // 网络编辑层入口：以窄接口暴露运行时的覆盖层路径与重建能力
     private final RuleEditServerContext editContext = new EditContext();
@@ -151,7 +154,7 @@ public final class RuleRuntimeHostCore {
             // 同一进程内可能先后启动多个服务端（单人世界切换存档）：先释放上一轮状态
             shutdown();
             // 上一生命周期的文件工作未退出时不建立新的覆盖层所有者，避免同一目录出现双写入者
-            EditSessionManager.requireFileWorkIdle();
+            RuleOverlayStore.requireIdle();
 
             IssueCollector configIssues = new IssueCollector();
             ServerConfig config = loadServerConfig(configIssues);
@@ -159,6 +162,7 @@ public final class RuleRuntimeHostCore {
 
             BuiltinTypeRegistries registries = BuiltinTypeRegistries.create();
             Path overlay = Services.PLATFORM.getConfigDir().resolve(config.overlayDirectory());
+            authoring = new AuthoringHost(server, overlay);
             ConversionRuntime newRuntime = new ConversionRuntime(config, registries, platform.lifespan(config));
 
             RuleSaveReloadContext saveContext = captureSaveContext(
@@ -167,6 +171,7 @@ public final class RuleRuntimeHostCore {
             RuleLoadResult<Rule> result = RuleLoadingService.loadAndValidate(saveContext.loadContext(), saveContext.baseRules());
             saveContext.baseIssues().forEach(result.issues()::add);
             newRuntime.replaceRules(result.rules(), result.issues());
+            publishedSources = result.sourceIndex();
             logLoadResult("服务端启动", result);
 
             platform.sampleReferenceLifespan(server);
@@ -226,7 +231,7 @@ public final class RuleRuntimeHostCore {
      */
     public RuleReloadOutcome<Rule> reloadWithOutcome(MinecraftServer server, ResourceManager resourceManager) {
         if (server == null) { return null; }
-        if (RuleEditServerHandler.deferReload(() -> {
+        if (authoring != null && authoring.service().deferReload(() -> {
             // 延后到保存收尾执行时重新取当前服务端，避免重载到已停止的实例
             MinecraftServer running = currentServer;
             if (running != null) { reload(running, running.getResourceManager()); }
@@ -250,11 +255,12 @@ public final class RuleRuntimeHostCore {
             RuntimeObserver.current().reloadApplying(server);
             // 换入：索引与候选摘要一次替换，各维度旧追踪随之失效，随后由回扫重建
             current.publish(server, prepared);
+            publishedSources = result.sourceIndex();
             // 换入之后的收尾不再适用「保留旧索引」语义：索引已经生效，收尾异常只记录、不改变成功回执
             try {
                 saveReloadContext = saveContext;
                 logLoadResult("数据包重载", result);
-                Objects.requireNonNull(RuleEditServerHandler.sessionManager(editContext)).bumpVersion();
+                authoring.reloadApplied();
                 LOGGER.info("数据包重载完成：规则索引已重建，回扫已排队");
             } catch (RuntimeException e) {
                 LOGGER.error("数据包重载已应用，但换入后的收尾未完成；回扫与编辑会话版本将在下次重载或维度加载时补齐", e);
@@ -271,15 +277,16 @@ public final class RuleRuntimeHostCore {
 
     /** 服务端停止：释放全部维度的追踪状态与到期任务，并清空运行时状态。 */
     public void shutdown() {
+        AuthoringHost editing = authoring;
+        authoring = null;
+        if (editing != null) { editing.close(); }
         ConversionRuntime current = runtime;
-        if (current != null) {
-            current.shutdown();
-        }
-        RuleEditServerHandler.reset();
+        if (current != null) { current.shutdown(); }
         platform.clearReferenceLifespan();
         // 停服后复位实体状态时长，避免同一进程内下一个服务端实例沿用上一轮配置
         DropStateStore.configure(0, 0);
         runtime = null;
+        publishedSources = RuleSourceIndex.build(List.of());
         saveReloadContext = null;
         typeRegistries = null;
         overlayRoot = null;
@@ -350,7 +357,7 @@ public final class RuleRuntimeHostCore {
     private RuleLoadResult<Rule> emptyResult() {
         IssueCollector issues = new IssueCollector();
         issues.warn("新链路运行时尚未就绪，本次按空规则集处理", null, null);
-        return new RuleLoadResult<>(List.of(), issues);
+        return new RuleLoadResult<>(List.of(), issues, RuleSourceIndex.build(List.of()));
     }
 
     // 读取模组级配置；缺失即由 ServerConfig.loadOrCreate 落盘默认值（职责在 core，平台层不重复处理）
@@ -418,15 +425,12 @@ public final class RuleRuntimeHostCore {
 
     // 运行时能力适配器：状态都在宿主实例上，调用时实时读取
     private final class EditContext implements RuleEditServerContext {
+        @Override public com.meteorite.itemdespawntowhat.core.network.transport.RuleEditTransport transport() { return authoring == null ? null : authoring.transport(); }
+        @Override public RuleEditService editService() { return authoring == null ? null : authoring.service(); }
 
         @Override
         public Path overlayRoot() {
             return overlayRoot;
-        }
-
-        @Override
-        public String overlayNamespace() {
-            return RULE_NAMESPACE;
         }
 
         @Override
@@ -462,6 +466,8 @@ public final class RuleRuntimeHostCore {
                     server, runtimeLimits()));
         }
 
+        @Override public RuleSourceIndex publishedSources() { return publishedSources; }
+
         @Override
         public RuleSaveReloadContext saveReloadContext() { return saveReloadContext; }
 
@@ -471,8 +477,10 @@ public final class RuleRuntimeHostCore {
         }
 
         @Override
-        public ServerTask publishIndex(MinecraftServer server, RuleIndex index) {
-            return Objects.requireNonNull(runtime).publishDecoded(server, index);
+        public ServerTask publishIndex(MinecraftServer server, RuleIndex index, RuleSourceIndex sources) {
+            ServerTask publication = Objects.requireNonNull(runtime).publishDecoded(server, index);
+            publishedSources = sources;
+            return publication;
         }
     }
 
@@ -500,14 +508,8 @@ public final class RuleRuntimeHostCore {
         }
 
         @Override
-        public String overlayNamespace() {
-            return RULE_NAMESPACE;
-        }
-
-        @Override
         public int overlayVersion() {
-            EditSessionManager sessions = RuleEditServerHandler.sessionManager(editContext);
-            return sessions == null ? -1 : sessions.version();
+            return authoring == null ? -1 : authoring.version();
         }
 
         @Override

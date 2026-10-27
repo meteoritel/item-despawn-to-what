@@ -4,10 +4,8 @@ import com.meteorite.itemdespawntowhat.core.api.Issue;
 import com.meteorite.itemdespawntowhat.core.load.RuleLoadResult;
 import com.meteorite.itemdespawntowhat.core.load.RuleReloadOutcome;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveStatus;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleSaveStatus;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerContext;
-import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler;
-import com.meteorite.itemdespawntowhat.core.network.transport.RuleSaveResultPayload;
 import com.meteorite.itemdespawntowhat.core.service.EditSessionManager;
 import com.meteorite.itemdespawntowhat.core.service.RuleEditPermissions;
 import com.meteorite.itemdespawntowhat.core.service.RuleEditService;
@@ -57,7 +55,7 @@ final class RuleConfigCommands {
 
     // config reload：重建规则索引并回扫全部维度，回显条数与问题数；失败时回执写明未应用
     private static int reload(CommandContext<CommandSourceStack> ctx, RuleCommandContext context) {
-        if (RuleEditServerHandler.isSaving()) { return RuleCommandTree.saveBusy(ctx); }
+        if (context.editingBusy()) { return RuleCommandTree.saveBusy(ctx); }
         MinecraftServer server = ctx.getSource().getServer();
         RuleReloadOutcome<Rule> outcome = context.reloadRules(server);
         if (outcome == null) {
@@ -70,7 +68,7 @@ final class RuleConfigCommands {
                     .kv("message", failure == null ? "" : failure.message())
                     .build());
         }
-        RuleLoadResult<Rule> result = outcome.result();
+        RuleLoadResult<Rule> result = java.util.Objects.requireNonNull(outcome.result());
         List<Component> lines = new ArrayList<>();
         lines.add(RuleCommandText.summary("reload", result));
         lines.addAll(RuleCommandText.issues(result));
@@ -84,14 +82,14 @@ final class RuleConfigCommands {
                     RuleCommandText.of("itemdespawntowhat.command.config.edit.player_only").build());
         }
         RuleEditServerContext editContext = context.editContext();
-        if (!RuleEditServerHandler.isReady(editContext)) {
+        RuleEditService service = editContext.editService();
+        var transport = editContext.transport();
+        if (!context.available() || service == null || transport == null) {
             return RuleCommandTree.notReady(ctx);
         }
         // 唯一入口：先取锁，成功才发打开载荷；失败同样要下发 LOCK_BUSY 载荷让客户端提示持有者
-        RuleEditService.OpenOutcome outcome = RuleEditServerHandler.openEditor(player, editContext);
-        if (outcome == null) {
-            return RuleCommandTree.notReady(ctx);
-        }
+        RuleEditService.OpenOutcome outcome = service.openEditor(player, ctx.getSource().getServer().getTickCount(), editContext.maxPlaceBlockRadius());
+        transport.send(editContext, player, outcome.payload());
         if (!outcome.acquired()) {
             return RuleCommandTree.replyFailure(ctx,
                     RuleCommandText.of("itemdespawntowhat.command.config.edit.lock_busy")
@@ -104,7 +102,8 @@ final class RuleConfigCommands {
 
     // config edit-lock status：查看编辑锁状态的统一出口
     private static int editLockStatus(CommandContext<CommandSourceStack> ctx, RuleCommandContext context) {
-        EditSessionManager sessions = RuleEditServerHandler.sessionManager(context.editContext());
+        var service = context.editContext().editService();
+        EditSessionManager sessions = service == null ? null : service.sessions();
         if (sessions == null) {
             return RuleCommandTree.notReady(ctx);
         }
@@ -138,12 +137,12 @@ final class RuleConfigCommands {
     // config edit-lock release：权限 ≥2 强制释放，并通知原持有者其会话已失效
     private static int editLockRelease(CommandContext<CommandSourceStack> ctx, RuleCommandContext context) {
         RuleEditServerContext editContext = context.editContext();
-        EditSessionManager sessions = RuleEditServerHandler.sessionManager(editContext);
+        var service = editContext.editService();
+        EditSessionManager sessions = service == null ? null : service.sessions();
         if (sessions == null) {
             return RuleCommandTree.notReady(ctx);
         }
-        var service = RuleEditServerHandler.service(editContext);
-        EditSessionManager.SessionInfo released = service == null ? sessions.release() : service.forceRelease();
+        EditSessionManager.SessionInfo released = service.forceRelease();
         if (released == null) {
             return RuleCommandTree.reply(ctx,
                     RuleCommandText.of("itemdespawntowhat.command.config.edit_lock.release.idle").build());
@@ -159,9 +158,8 @@ final class RuleConfigCommands {
         if (released.ownerUuid() != null) {
             ServerPlayer owner = server.getPlayerList().getPlayer(released.ownerUuid());
             if (owner != null) {
-                editContext.sendTo(owner, RuleSaveResultPayload.of(released.sessionId(), "",
-                        RuleSaveStatus.SESSION_EXPIRED, RuleSaveStatus.SESSION_EXPIRED.messageKey(),
-                        List.of(), sessions.version(), false, false, List.of()));
+                java.util.Objects.requireNonNull(editContext.transport()).send(editContext, owner,
+                        new com.meteorite.itemdespawntowhat.core.service.edit.RuleEditReply.SessionEvent(released.sessionId(), RuleSaveStatus.SESSION_EXPIRED));
             }
         }
         return RuleCommandTree.reply(ctx,
@@ -171,7 +169,7 @@ final class RuleConfigCommands {
 
     // config validate：离线体检全部来源，输出问题清单（含来源与字段路径）与统计
     private static int validate(CommandContext<CommandSourceStack> ctx, RuleCommandContext context) {
-        if (RuleEditServerHandler.isSaving()) { return RuleCommandTree.saveBusy(ctx); }
+        if (context.editingBusy()) { return RuleCommandTree.saveBusy(ctx); }
         RuleLoadResult<Rule> result = load(ctx, context);
         if (result == null) {
             return RuleCommandTree.notReady(ctx);
@@ -184,7 +182,7 @@ final class RuleConfigCommands {
 
     // config list：逐条列出生效规则（id / 来源层 / 优先级 / 触发秒数 / 效果数 / 是否启用）
     private static int list(CommandContext<CommandSourceStack> ctx, RuleCommandContext context) {
-        if (RuleEditServerHandler.isSaving()) { return RuleCommandTree.saveBusy(ctx); }
+        if (context.editingBusy()) { return RuleCommandTree.saveBusy(ctx); }
         RuleLoadResult<Rule> result = load(ctx, context);
         if (result == null) {
             return RuleCommandTree.notReady(ctx);
