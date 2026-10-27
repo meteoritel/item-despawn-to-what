@@ -36,9 +36,9 @@ authority: common/core/catalog、common/core/network、common/core/service、com
 
 ### 对外入口
 
-- 网络入口：`RuleEditPayloadRouter` 按载荷类型路由到 `RuleEditServerHandler`；后者按覆盖层根目录缓存，只做就绪判定与转发，会话号、持有者与权限由 `EditAdmission` 统一判定，并在每 tick 投递 `pollSaveProgress`、`pollSave`、`pollSnapshot`，由 `expireIdle` 回收超时会话。
+- 网络入口：两端从 `RuleEditChannels` 取得 C2S 处理器并调用 `RuleEditServerHandler`；后者无状态地完成就绪判定与请求转换，会话号、持有者与权限由 `EditAdmission` 统一判定，每次服务端的 `RuleEditTransport` 在 tick 交付业务完成事件和列表分片，并按活动刻回收会话与传输。
 - 命令入口：`RuleCommandTree.register()` 注册 `idtw` 根节点，`config` 与 `rule` 子树常驻，`debug` 子树在开发环境挂载。
-- 服务端服务：`RuleEditService` 只产出不可变的下发载荷列表，网络层负责发送；`EditSessionManager` 持有会话；`RuleOverlayStore` 承载后台文件调用与磁盘修订指纹。
+- 服务端服务：`AuthoringHost` 随服务端生命周期创建和关闭编辑组件；`RuleEditService` 接收业务请求、产出语义应答；`EditSessionManager` 持有会话；`RuleOverlayStore` 唯一持有修订与文件工作，`RuleEditTransport` 负责载荷映射与发送。
 - 目录入口：`RuleCatalogService` 的分页查询与失效，数据来自 `RuleCatalogSources`。
 - 落盘入口：`RuleOverlayWriter.apply(...)`，由 `RuleSaveTask` 编排调用；启用状态入口：`RuleEnableApplyService`，保存与命令共用。
 - 正式命令通过 `RuleCommandContext` 读取就绪状态、配置与编辑能力；开发入口通过宿主的 `RuleRuntimeDiagnosticsContext` 取得诊断所需运行时。
@@ -48,20 +48,20 @@ authority: common/core/catalog、common/core/network、common/core/service、com
 
 ```mermaid
 flowchart LR
-    MODEL["core/model：Codec、语义校验、Rule"] --> SVC["core/service：会话、保存、快照、落盘"]
-    LOAD["core/load：覆盖层读取、合并、来源索引"] --> SVC
-    API["core/api：Issue、调度契约"] --> SVC
-    SVC --> NET["core/network：协议载荷、分片、路由与服务端处理"]
-    SVC --> CMD["core/command：命令树与反馈"]
+    SVC["core/service：会话、保存、快照、落盘"] --> MODEL["core/model：Codec、语义校验、Rule"]
+    SVC --> LOAD["core/load：覆盖层读取、合并、来源索引"]
+    SVC --> API["core/api：Issue、调度契约"]
+    NET["core/network：协议载荷、分片、路由与服务端处理"] --> SVC
+    CMD["core/command：命令树与反馈"] --> SVC
     DBG["开发源集 core/debug：场景与流水线"] --> CMD
-    NET --> CLI["client/net、client/edit 客户端工作区"]
+    CLI["client/net、client/edit 客户端工作区"] --> NET
     SVC --> RT["运行时：保存后换索引"]
     HOST["core/host：配置与生命周期"] --> SVC
 ```
 
 ### 被谁依赖
 
-- 客户端编辑器：经 `core/network/protocol` 的载荷与服务端交互，客户端工作区见 [client-editor](client-editor.md)。
+- 客户端编辑器：经 `core/network/transport` 的载荷与服务端交互，客户端工作区见 [client-editor](client-editor.md)。
 - 平台层：注册网络与命令、把 tick 事件转给本模块的轮询入口、在玩家断开时清理会话与分片。
 - 加载与装配层：保存成功后调用运行时换索引入口，新索引对后续加载与查询立即生效。
 
@@ -71,19 +71,21 @@ flowchart LR
 
 | 类型（`core/catalog`、`core/network`、`core/service`、`core/command`、`core/debug` 下） | 角色 | 职责 | 协作对象 |
 |---|---|---|---|
-| `RuleEditServerHandler` | 入口门面 | 按覆盖层根目录缓存会话管理器与服务；逐包转发；就绪判定；在唯一构造点注入 `canEdit` 权限谓词；每 tick 轮询与超时回收 | `RuleEditService`、`EditSessionManager`、`RuleEditServerContext` |
+| `AuthoringHost`（core/host） | 生命周期组合根 | 装配本次服务端的会话、store、目录、服务与传输；先退役逻辑交付，再关闭文件所有者 | `RuleRuntimeHostCore`、`RuleOverlayStore` |
+| `RuleEditServerHandler` | 无状态入口 | 就绪与协议版本判定，把帧转成业务请求；从当前 Context 取得传输实例 | `RuleEditServerContext`、`RuleEditTransport` |
+| `RuleEditTransport` / `RuleEditChannels` | 传输与通道声明 | 实例持有分片与交付节拍；统一声明类型、codec、方向、处理器与文本 family | 两端 registrar、`RuleEditService`、客户端 receiver |
 | `EditAdmission` | 准入判定 | 玩家请求基于单份会话快照，按会话号 → 持有者 → 确认 → 权限顺序判定，返回拒绝原因与状态码；内部续接检查会话匹配，回执文案由状态码派生 | `EditSessionManager`、`RuleEditService` |
-| `RuleEditService` | 应用服务 | 按准入结论校验会话归属、幂等回放、分片收齐判定、构造保存任务、组装回执（含准入拒绝回执）、按需安排新快照；只产出待下发载荷 | `EditSessionManager`、`RuleSaveTask`、`RuleSnapshotTask`、`RuleCatalogService` |
-| `EditSessionManager` / `RuleEditSessionLimits` | 目标锁 | 单目标全局唯一会话的状态机；租约、心跳与申请窗口以服务端活动 tick 计时；版本戳读写委托覆盖层存储 | `RuleOverlayStore`、`RuleEditService` |
+| `RuleEditService` | 应用服务 | 按准入结论校验会话归属、幂等回放、构造保存任务、产出语义回执、按需安排新快照与来源读取；业务模型位于 `core/service/edit` | `EditSessionManager`、`RuleSaveTask`、`RuleSnapshotTask`、`RuleCatalogService` |
+| `EditSessionManager` / `RuleEditSessionLimits` | 目标锁 | 单目标全局唯一会话的状态机；租约、心跳与申请窗口以服务端活动 tick 计时；状态仅描述会话归属与迁移 | `EditAdmission`、`RuleEditService` |
 | `RuleOverlayStore` | 文件侧并发边界 | 后台文件调用队列、磁盘修订指纹、覆盖层根目录就绪与停滞检测 | `RuleOverlayWriter`、`RuleSaveTask`、`RuleSnapshotTask` |
 | `RuleOverlayWriter` | 原子落盘 | 加载原始字节、按规则 id 建位置索引、临时文件写入、元数据与内容两段复核、`.bak` 备份、原子替换与唯一提交确认点、失败逆序回滚 | `RuleSaveTask`、`RuleOverlayStore` |
-| `RuleSaveTask` | 保存编排 | 续接任务：请求、校验、写入、提交启用状态、重读、解码、建索引、发布；纯启停批次走校验后直达索引重建的轻量路径；每步受预算与会话有效性约束，取消与失效给出确定终态 | `RuleSubmissionValidator`、`RuleOverlayWriter`、`RuleEnableApplyService`、`RuleIndex`、运行时发布 |
-| `RuleEnableApplyService` | 启用状态应用 | 提交同批启停动作、按已捕捉的基底重建索引并交给运行时发布；内容与状态都不变时回答无变化 | `RuleEnableState`、`RuleLoadingService`、`RuleIndex`、运行时发布 |
-| `RuleSnapshotTask` / `RuleSnapshotAssembler` | 快照 | 后台读盘与合并、逐条解码与编码、装配生效视图与来源分层索引、按字节阈值直发或分片 | `RuleEditService`、`RuleSourceIndex` |
-| `RuleTextChunker` / `RuleChunkPayload` / `RuleChunkAssembly` | 分片公共层 | 按通道的字节档位决定直发或分片、单片校验、批次身份与收齐判定；服务端装配器与客户端缓冲共用 | `RuleEditService`、`RuleSnapshotTask`、客户端 `RuleChunkBuffer` |
-| `RuleEditChunkAccumulator` / `RuleEditLimits` | 分片与限额 | 按玩家保留在途批次（每玩家上限、超出淘汰最早）、收齐后复核总量、空闲过期与清理 | `RuleEditService` |
+| `RuleSaveTask` | 保存编排 | 续接任务：请求、校验、写入、提交启用状态、重读、解码、建索引、发布；纯启停批次后台读取稳定来源后重建索引；每步受预算与会话有效性约束，取消与失效给出确定终态 | `RuleSubmissionValidator`、`RuleOverlayWriter`、`RuleEnableApplyService`、`RuleIndex`、运行时发布 |
+| `RuleEnableApplyService` | 启用状态应用 | 提交同批启停动作、按调用方本次读取的来源重建索引并交给运行时发布；内容与状态都不变时回答无变化 | `RuleEnableState`、`RuleLoadingService`、`RuleIndex`、运行时发布 |
+| `RuleSnapshotTask` / `RuleSnapshotAssembler` | 快照 | 后台读盘与合并、逐条解码与编码、产出列表 JSON 与同批来源索引，传输实例随后切分 | `RuleEditService`、`RuleSourceIndex` |
+| `RuleTextChunker` / `RuleChunkPayload` / `RuleChunkAssembly` | 分片公共层 | 按通道的字节档位决定直发或分片、单片校验、批次身份与收齐判定；服务端装配器与客户端缓冲共用 | `RuleEditTransport`、客户端 `RuleChunkBuffer` |
+| `RuleEditChunkAccumulator` / `RuleEditLimits` | 分片与限额 | 按玩家保留在途批次（每玩家上限、超出淘汰最早）、收齐后复核总量、空闲过期与清理 | `RuleEditTransport` |
 | `RuleCatalogSources` / `RuleCatalogService` | 候选目录 | 数据源给出全量与修订号；服务做大小写不敏感过滤、分页与按“类别 + 修订号”缓存 | `RuleCatalogType`、客户端列表、保存后失效 |
-| `RuleCommandTree`（含 config / rule 命令组） | 命令面 | 组装根树、把权限下放到子分支、统一本地化反馈出口 | `RuleEditServerHandler`、`RuleSnapshotAssembler` |
+| `RuleCommandTree`（含 config / rule 命令组） | 命令面 | 组装根树、把权限下放到子分支、统一本地化反馈出口 | `RuleEditService`、`RuleEnableApplyService` |
 | `RuleDebugCommands` / `DebugScenarioManager` / `DebugPipelineManager` | 调试 | 开发环境场景与流水线的启动、推进、收尾；声明目录是唯一注册来源；复用正式编解码与真实运行时 | `RuleRuntimeDiagnosticsContext`、`RuntimeObserver` |
 
 ## 4. 关键流程
@@ -95,7 +97,7 @@ flowchart LR
 - 修订号必须与条目顺序无关：内容不变则值不变，内容变化必须变；条目顺序调整不改变修订号。
 - 条目的展示信息由 `RuleCatalogEntry` 承载；图标仅对物品与方块有值，其余走客户端缺省渲染。
 - 缓存归属当前服务端实例，换服整体清空；`invalidate` 只在保存真正写出后调用。
-- 过滤是大小写不敏感的子串匹配，命中标识、展示名或副标题任一即可；页码越界夹到最后一页，页大小越界按协议上限截断。
+- 过滤是大小写不敏感的子串匹配，命中标识、展示名或副标题任一即可；页码越界夹到最后一页，页大小越界按目录服务上限截断。
 
 ### 4.2 编辑会话与目标锁
 
@@ -119,7 +121,7 @@ stateDiagram-v2
 
 ### 4.3 快照、变更集与版本戳
 
-快照装配分线程：服务端线程按步解码与编码，后台线程读盘与合并、装配 JSON 与切分，交付时每 tick 只发固定包数；请求只保留最新一个，保存期间暂缓下发，空包按快照失败处理。快照随载荷附带来源分层索引，来源视图直接读它，避免为单条规则再读一次磁盘。
+快照装配分线程：服务端线程按步解码与编码，后台线程读盘与合并、装配 JSON 与切分，交付时每 tick 只发固定包数；请求只保留最新一个，保存期间暂缓下发，空包按快照失败处理。来源分层索引作为内部结果与快照同批交接；来源查询按修订与数据包上下文复用它，缺少可复用视图时也可独立安排稳定读取。来源修订变化时刷新列表，原来源请求按版本冲突终结。
 
 变更集是“期望版本 + 编辑列表”的协议对象：版本戳是客户端视图对应服务端版本；编辑列表按规则标识给出内容动作（`upsert` / `delete`）或启停动作（`enable` / `disable` / `reset`），动作形态见 [docs/api/edit-protocol.md](../api/edit-protocol.md)。同一 id 可以同时带两类动作，两类改动在同一次提交里生效。提交路径有两条：完整文本直发，或按字节切分后由 `RuleEditChunkAccumulator` 重组；收齐后走同一条提交入口。
 
@@ -197,9 +199,9 @@ flowchart TB
 ### 扩展点
 
 - **新增候选类别**：在 `RuleCatalogType` 加常量 → 在 `RuleCatalogSources` 增加对应数据源（实现 `type()`、`revision()`、`all()`）→ 客户端列表按类别渲染，图标缺省走客户端占位。修订号必须满足“内容不变则值不变、与顺序无关”。
-- **新增协议载荷**：在 `core/network/protocol` 定义载荷 → 在 `RuleEditPayloadRouter` 注册路由 → 在 `RuleEditService` 加服务端处理并复用会话校验与回执组装 → 客户端工作区对接。载荷是可能超出包上限的整段文本时不要另写切分：给 `RuleTextChunker.Family` 加一档并实现其 `direct(...)`，分片下发与两端重组沿同一条链路完成。
+- **新增协议载荷**：在 `core/network/transport` 定义帧 → 在 `RuleEditChannels` 声明方向、codec 与处理器 → 按需增加业务 Request/Reply 和传输映射 → 客户端 receiver 对接；两端注册器自动遍历声明。载荷是可能超出包上限的整段文本时不要另写切分：在通道声明附上文本 family 的总量、direct 工厂与 chunk 类型，分片下发与两端重组沿同一条链路完成。
 - **新增保存前校验**：写进 `RuleSubmissionValidator`，逐条产出带字段路径的 Issue；结构档、类型参数档与运行期上限档三档校验仍由 `core/model` 提供。
-- **新增限额**：网络与后台任务限额加到 `RuleEditLimits`，会话时钟与权限加到 `RuleEditSessionLimits`；两者分别是“字节与条数”和“tick 与权限”的单一落点。
+- **新增限额**：帧与展示限额归 `RuleEditLimits`，变更条数与任务预算归 `RuleAuthoringLimits`，会话时钟与权限归 `RuleEditSessionLimits`。
 - **新增调试场景或流水线**：只在声明目录里加清单与步骤文件，不改命令树；需要新动作类型时同步动作枚举与推进逻辑。新增故障类型时同步故障枚举与注入点，注入点只能落在运行时观测接缝（判定、排期与取消回调、效果准备、重载应用阶段），生产实现保持空操作。
 - **保存后的运行时衔接**：换索引的入口由装配层提供，本模块只负责在重载成功且会话仍有效时调用。
 
@@ -212,7 +214,7 @@ flowchart TB
 - 启用状态按存档保存，与规则内容分离：启停不写规则文件，也不推进内容修订号。
 - 落盘只经 `RuleOverlayWriter`，提交确认点唯一，失败逆序回滚并以 `.bak` 兜底；回滚失败要显式标记需要恢复。
 - 路径安全：目标必须在覆盖层根目录下，非法路径段与符号链接祖先直接拒绝。
-- 后台文件调用统一走覆盖层存储的队列，服务端主线程只做按步推进与载荷组装。
+- 后台文件调用统一走覆盖层存储的队列，服务端主线程负责业务推进与世界访问，网络实例负责出站映射。
 - 命令层不直接写文件，全部经既有服务能力；反馈统一本地化出口，不在命令里拼接裸字符串。
 - 调试入口只在开发环境挂载，场景与流水线复用正式编解码与真实运行时。
 

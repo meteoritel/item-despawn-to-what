@@ -55,7 +55,7 @@ authority:
 | type-system | `SimpleTypeRegistry`、`RuleTypeProvider`、`BuiltinConditionTypes`、`BuiltinEffectTypes` | rule-loading（注册表装配）、conversion-runtime（求值与执行）、authoring（引用校验） |
 | rule-loading | `RuleLoader`、`RuleLoadingService`、`RuleSourceLayer`、`RuleMerger` | conversion-runtime、authoring、platform |
 | conversion-runtime | `ConversionRuntime`、`RuleIndex`、`ServerScheduler`、`SettlementLedger` | authoring（只读索引）、core/host、command、debug |
-| authoring | `RuleEditServerHandler`、`RuleEditService`、`EditAdmission`、`EditSessionManager`、`RuleCommandTree`、`RuleCatalogService` | client-editor 与 client-ui（协议与限额）、platform（编辑上下文） |
+| authoring | `AuthoringHost`、`RuleEditChannels`、`RuleEditTransport`、`RuleEditService`、`EditAdmission`、`EditSessionManager`、`RuleCommandTree`、`RuleCatalogService` | client-editor 与 client-ui（协议与限额）、platform（编辑上下文） |
 | client-editor | `RuleEditClientWorkspace`、`TypeEditorRegistry`、`EditorWorkspaceView` | client-ui |
 | ui-kit | `UiDocument`、`UiControl`、`UiTreeEditor`、`UiInputRouter`、`UiSliderSkin` | client-ui、client-editor（树编辑契约） |
 | client-ui | `RuleEditorScreen`、`EditorScreenHooks` 的实现、`UiHostThemes` | platform 客户端入口（挂载界面） |
@@ -151,7 +151,7 @@ flowchart TB
 ## 跨模块归属规则
 
 - **`core/service` 按职责拆成两段**：规则加载装配（三层来源读取、解码、语义校验、内置类型注册表装配）归 [rule-loading](../modules/rule-loading.md)；编辑会话、覆盖层落盘、保存续接任务与快照装配归 [authoring](../modules/authoring.md)。逐类归属见 [包职责](package-responsibility.md)。
-- **协议类型是客户端与编辑链路的共享面**：`core/network/protocol` 的只读 DTO 与 `core/network/transport` 的载荷归 [authoring](../modules/authoring.md)，客户端只消费只读 DTO 与发起上行请求，界面层不直接构造上行载荷。
+- **协议类型是客户端与编辑链路的共享面**：`core/service/edit` 与 `core/catalog` 的只读模型、`core/network/transport` 的载荷归 [authoring](../modules/authoring.md)，客户端只消费只读 DTO 与发起上行请求，界面层不直接构造上行载荷。
 - **契约优先**：多个模块都要用的能力先落在 [core-contract](../modules/core-contract.md)，实现侧按观察者、解码器、执行器注入，不在模块之间直接互引实现类。
 - **新增代码的落点判定**：先看它是否描述规则数据（rule-model）、是否是可注册的类型（type-system）、是否属于三层读取与合并（rule-loading）、是否改变运行期追踪与结算（conversion-runtime）、是否属于编辑与命令面（authoring）、是客户端工作区还是界面（client-editor / client-ui）；两端差异只加到 `PlatformAdapter` 或 `Services`。
 

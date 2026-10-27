@@ -10,7 +10,7 @@ This page lists every player-facing command, the permission each one needs, and 
 | `/idtw config reload` | Reads every source again and applies it at once | Permission required | Yes |
 | `/idtw config list` | Lists the active rules one by one with priority, trigger seconds, and effect count | Permission required | No |
 | `/idtw rule list` | Prints a compact list of the active rules | Permission required | No |
-| `/idtw rule show <id>` | Prints the JSON of a rule as it is active now | Permission required | No |
+| `/idtw rule show <id>` | Prints the winning source JSON and local enable override | Permission required | No |
 | `/idtw rule <id> enable` | Switches the rule on in this save; rule files stay untouched | Permission required | Yes |
 | `/idtw rule <id> disable` | Switches the rule off in this save; rule files stay untouched | Permission required | Yes |
 | `/idtw rule <id> default` | Drops the save's setting for the rule so it follows the default enable state | Permission required | Yes |
@@ -101,17 +101,12 @@ myrules:chicken_to_rotten_flesh | layer=overlay | enabled=true | origin=config è
 
 Syntax: `/idtw rule show <id>`, where `<id>` uses the same `namespace:path` form as the `id` field in JSON, for example `itemdespawntowhat:builtin_item_to_item`. It must be a valid lowercase resource location, so it accepts letters, digits, `_`, `-`, `.`, and `/`.
 
-The command prints two lines: a summary of the rule, then the JSON of its currently active content on one line.
+The command first acknowledges the request. After a background read, it prints the source, the enable override for this save, and the winning source's raw JSON. The overlay wins; otherwise the datapack base wins.
 
-```text
-Rule myrules:chicken_to_rotten_flesh: priority=0, trigger=10s, effects=1, enabled=true
-Raw JSON: {"id":"myrules:chicken_to_rotten_flesh", ... }
-```
-
-- The summary carries the same fields as `config list`, arranged as one sentence.
-- The JSON on the second line depends on the source: for an overlay rule it is the file text, so it matches what is on disk; for a builtin or world datapack rule it is the model re-encoded, so field order and non-default values may differ from the file layout. It is the best source when you want to know exactly what the game read.
-- When no printable content is available, the second line becomes a notice that no raw JSON is available for that ID, because the rule is model-encoded or not editable.
-- When the ID is wrong or missing, the command reports that the rule was not found and returns a failure.
+- An inherited enable state follows `enabled` in the JSON. An explicit local override appears separately.
+- The JSON preserves original fields, unknown fields, and declared values. It is serialized again, so whitespace and layout may differ from the file.
+- An entry with a recognizable ID remains available for inspection even when its content fails semantic validation.
+- A missing ID produces a final not-found reply. A read failure asks you to retry. The command return value acknowledges acceptance; the final chat reply carries the result.
 
 ## /idtw rule <id> enable|disable|default
 
@@ -174,7 +169,7 @@ Syntax: `/idtw config edit-lock release`, which needs permission level 2 or high
 ## Common Ways to Use the Commands
 
 - **After editing files**: run `/idtw config validate` to look for errors, then `/idtw config reload` to apply the changes.
-- **To confirm how a rule is active**: find its ID with `/idtw rule list`, then read its current content with `/idtw rule show <id>`.
+- **To inspect a rule source**: find its ID with `/idtw rule list`, then read its raw source and local enable override with `/idtw rule show <id>`.
 - **When an error is hard to read**: look at the severity and the `origin#field_path` in the issue line. An `error` means the rule is not active, so fix the JSON at that field path first.
 - **When the edit lock is stuck on a multiplayer server**: check the holder with `/idtw config edit-lock status`, then force it open with `/idtw config edit-lock release` if needed.
 

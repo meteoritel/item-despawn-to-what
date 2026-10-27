@@ -1,6 +1,6 @@
 # ADR-0019：全局独占编辑会话与目标级编辑锁
 
-- 状态：已实施；实现见 `core/service/EditSessionManager.java`、`core/network/protocol/`、`core/network/transport/` 与[编辑协议](../api/edit-protocol.md)。
+- 状态：已实施；实现见 `core/service/EditSessionManager.java`、`core/service/edit/`、`core/network/transport/` 与[编辑协议](../api/edit-protocol.md)。
 - 依据：独占编辑锁与时序、协议版本升级的设计确认。
 - 替代范围：取代此前「per-player 会话 + 仅靠版本戳」的并发模型，采用版本化编辑协议。
 
@@ -13,7 +13,7 @@
 1. **单一编辑目标**：`RuleEditSessionLimits.TARGET_ID = "itemdespawntowhat:rules"`；同一时刻至多 1 个 `OPENING`/`ACTIVE`/`APPLYING` 会话，不再按玩家分锁。
 2. **状态机**：`FREE --(指令取锁成功)--> OPENING --(客户端确认)--> ACTIVE --(提交变更集)--> APPLYING --(应用结束)--> ACTIVE`；OPENING/ACTIVE 可释放回到 FREE；APPLYING 期间保留独占锁，关闭或强制释放在保存及回滚收尾后回到 FREE，应用期间不因租约超时开放目标。
 3. **时钟与常量**：`OPEN_CONFIRM_WINDOW_SECONDS=15`、`HEARTBEAT_INTERVAL_SECONDS=10`、`LEASE_SECONDS=60`、`REQUIRED_PERMISSION_LEVEL=2`；时间一律用服务端活动时钟 `MinecraftServer.getTickCount()`，**禁止** `System.currentTimeMillis()`，单人世界暂停时租约不流逝。会话持有 `ownerUuid`、不可预测的 `sessionId`（`UUID.randomUUID()`，不得由玩家名/时间戳推导）、`state`、`lastHeartbeatTick`、`openedTick`；服务端每 20 tick 检查超时。
-4. **协议版本化**：`RuleEditProtocol.VERSION = 6`，握手阶段版本不匹配即拒绝；`RuleEditLimits` 中快照、变更集与来源视图上限均为 `4 * 1024 * 1024` 字节，单包直发与分片上限分别为 `32_000` / `30_000` 字节。
+4. **协议版本化**：`RuleEditProtocol.VERSION`（当前值见[编辑协议](../api/edit-protocol.md)），握手阶段版本不匹配即拒绝；`RuleEditLimits` 中快照、变更集与来源视图上限均为 `4 * 1024 * 1024` 字节，单包直发与分片上限分别为 `32_000` / `30_000` 字节。
 5. **回执状态码化**：`RuleSaveStatus{SUCCESS, NO_CHANGES, CANCELLED, NO_PERMISSION, LOCK_NOT_OWNED, LOCK_BUSY, SESSION_EXPIRED, VERSION_CONFLICT, VALIDATION_FAILED, WRITE_FAILED, SAVED_NOT_RELOADED, INVALID_REQUEST, UNAVAILABLE}`；客户端**只认状态码**，禁止解析中文文案。
 6. **结构化问题**：`RuleIssue(severity, ruleId, origin, fieldPath, messageCode, messageArgs, fallbackMessage)`；`messageCode` 是全限定翻译 key（例如 `itemdespawntowhat.edit.error.leaf_limit`），必须同时存在于 `en_us.json` 与 `zh_cn.json`。
 7. **幂等与分片**：`operationId` 由客户端生成，服务端对同一会话保留最近 16 个已处理 id，重复提交直接返回上次回执、不重复写盘；大变更集用 `transferId` + `index`/`count` 分片，同一玩家最多 2 个在途传输，60 秒无进展丢弃。

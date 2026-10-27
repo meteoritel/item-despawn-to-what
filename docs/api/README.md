@@ -2,7 +2,7 @@
 title: 对外契约索引
 layer: 5
 audience: 编写规则文件、接入编辑协议或排查报错的开发者
-authority: common/src/main/java/com/meteorite/itemdespawntowhat/core/api、core/network/protocol、core/load
+authority: common/src/main/java/com/meteorite/itemdespawntowhat/core/api、core/network/protocol、core/network/transport、core/service/edit、core/catalog、core/load
 ---
 
 # 对外契约索引
@@ -23,7 +23,7 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat/core/api、core/
 |---|---|---|
 | [规则 JSON](rule-json.md) | 一条规则长什么样、规则文件如何组织、来源层如何合并、字段与类型怎么扩展 | `core/api/RuleFields.java`、`core/model/RuleCodecs.java`、`core/model/RuleValidation.java`、`core/load/RuleFileParser.java` |
 | [编辑协议](edit-protocol.md) | 独占会话如何建立与续租、快照与变更集如何传输、幂等键与版本戳如何推进、分片与限额在哪里定义 | `core/network/protocol`、`core/network/transport`、`core/service/RuleEditService.java` |
-| [错误与状态码](errors.md) | Issue 与 RuleSaveStatus 的语义、拒载粒度、文案 key 如何推导与扩展 | `core/api/Issue.java`、`core/api/IssueCollector.java`、`core/network/protocol/RuleSaveStatus.java`、`core/network/protocol/RuleIssue.java` |
+| [错误与状态码](errors.md) | Issue 与 RuleSaveStatus 的语义、拒载粒度、文案 key 如何推导与扩展 | `core/api/Issue.java`、`core/api/IssueCollector.java`、`core/service/edit/RuleSaveStatus.java`、`core/service/edit/RuleIssue.java`、`core/network/transport/RuleEditMessages.java` |
 
 ```mermaid
 flowchart LR

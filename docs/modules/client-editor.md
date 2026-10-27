@@ -36,7 +36,7 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat/client/net、cli
 
 - **界面读取面**：`EditorWorkspaceView`，只暴露方法而不暴露任何网络载荷类型；实机实现是 `LiveEditorWorkspace`，单例包装协议工作区。
 - **界面注册**：`EditorScreenHooks.setOpener(EditorScreenOpener)`；工作区在会话建立时 `open(EditorOpenRequest)`，会话失效时 `close()`，opener 未注册只记日志。
-- **平台接线**：`RuleEditClientWorkspace.instance()` 的 `installSinks()` 与 `installSender(PacketSender)`，由两端客户端初始化调用。
+- **平台接线**：`RuleEditClientWorkspace.instance()` 的 `installSender(PacketSender)` 由两端客户端初始化调用；`bindConnection` / `unbindConnection` 随连接事件绑定与解绑唯一接收对象。
 - **编辑数据**：`RuleDraft`、`EditSession`、`EditorChangeSet`、`DraftPaths`、`DraftJournal`，供界面模块组装草稿与变更集。
 - **类型编辑器扩展**：`EditorRegistries.CONDITIONS.register`、`EditorRegistries.EFFECTS.register`，参数是 `TypeEditorDescriptor`。
 
@@ -58,7 +58,7 @@ flowchart LR
 
 - 工作区的方法都在客户端主线程调用，内部用 `synchronized` 保护共享缓存；`tick()` 由平台客户端 tick 事件驱动。
 - 只有 `ACTIVE` 状态可以发起目录、来源视图、快照与保存请求；`APPLYING` 期间只接收进度与回执。
-- 网络载荷类型与协议版本来自 `core/network`，客户端只消费，不定义协议。
+- 网络帧与版本来自 `core/network`；只读编辑模型来自 `core/service/edit`，候选目录模型来自 `core/catalog`。网络回调捕捉连接 Binding，执行时核对连接仍有效且未被替换。
 
 ## 3. 关键类地图
 
@@ -102,7 +102,7 @@ stateDiagram-v2
 ```
 
 - 打开失败（取锁失败、协议版本不一致、打开状态码非成功）不进入会话，只记录失败原因供界面提示。
-- 保存回执分为“当前操作的回执”和“迟到的重复回执”：迟到回执直接忽略，会话级失效状态则立即结束会话并关闭界面。
+- 保存回执分为“当前操作的回执”和“迟到的重复回执”：迟到回执直接忽略；会话事件独立按会话号处理，保存仍在途时先请求取消并等待其真实终态，再结束会话。
 - 成功或“无变化”的回执不携带快照，客户端主动请求刷新；版本冲突与“已写盘未重载”随回执推送最新快照。
 - 新增状态时改 `RuleEditClientState`，并同步界面判断“是否可编辑”的分支。
 
@@ -128,6 +128,8 @@ sequenceDiagram
         B->>B: 判定失效并清空
     end
 ```
+
+查询失败按种类、会话号与原请求号配对，只清理对应快照、目录、来源或寿命请求；其他在途请求继续保留。
 
 来源视图走同一套缓冲：请求带 `requestId`，响应按该 id 与在途请求配对，超时未回则标记失败并允许重试。快照修订号变化时清空来源视图与在途分片缓存，因为来源内容可能已被保存或数据包重载改写。来源视图按需拉取的取舍见 [ADR-0040](../adr/0040-on-demand-snapshot-source-views.md)。
 
@@ -225,7 +227,7 @@ flowchart TD
 ### 变更会话协议字段
 
 - 载荷结构在 `core/network` 的载荷类型里定义，版本戳取 `RuleEditProtocol.VERSION`，客户端只消费；版本不匹配时打开流程直接失败，因此改动协议必须同时升版本。
-- 新增 payload 需要同时补两端注册与 `RuleEditPayloadRouter` 的分发与 sink 注入，见 [平台接入层](platform.md)。
+- 新增 payload 在 `RuleEditChannels` 补齐声明，并对接 `RuleEditClientReceiver` 与工作区；两端注册器从声明取处理器，见 [平台接入层](platform.md)。
 
 ### 草稿格式演进
 

@@ -14,7 +14,7 @@ authority:
 ## TL;DR
 
 - 方向只朝下：契约 `core/api` 被引用、不引用别人；加载层不认识模型；运行时不被命令、调试与网络反向依赖。
-- 平台隔离与端隔离由 `tools/check-isolation.py` 校验，UI kit 引用白名单由 `tools/check-ui-kit-boundaries.ps1` 校验；其余方向由编译期 import 直接体现。
+- 平台、端与编辑业务隔离由 `tools/check-isolation.py` 校验，UI kit 引用白名单由 `tools/check-ui-kit-boundaries.ps1` 校验；其余方向由编译期 import 直接体现。
 - 现存跨包只读例外集中在本页表格，新增同类引用先在表内登记。
 
 ## 适用对象
@@ -37,6 +37,7 @@ authority:
 | D10 | 平台隔离 | `net.fabricmc.*`、`net.neoforged.*` 只出现在 `fabric/`、`neoforge/` | `tools/check-isolation.py` |
 | D11 | 跨加载器隔离 | `fabric/` 引用 `net.fabricmc.*`，`neoforge/` 引用 `net.neoforged.*`，两者互不引用对方加载器 API | `tools/check-isolation.py` |
 | D12 | 端隔离 | 客户端类（`net.minecraft.client.*`、`com.meteorite.itemdespawntowhat.client.*`）只出现在路径含 `/client/` 的源码 | `tools/check-isolation.py` |
+| D13 | 编辑业务面独立于线上格式 | `core/service`、`core/catalog` 只向 transport 提供语义模型；载荷、codec 与文案映射归 `core/network` | `tools/check-isolation.py` |
 
 ```mermaid
 flowchart LR
@@ -59,6 +60,10 @@ flowchart LR
 2. 平台源集之间禁止互引对方的加载器 API；
 3. 客户端类前缀只允许出现在客户端路径与开发客户端源集，其它路径出现即违规。
 4. `src/main` 只依赖生产契约，禁止 import `core/debug` 和探针实现包。
+5. `core/service` 与 `core/catalog` 禁止 import `core/network`、`CustomPacketPayload` 与网络 codec。
+6. Fabric 公共/客户端与 NeoForge 注册入口须遍历统一通道声明，消费其中的 type、codec 与 handler；逐载荷类型常量回流到 adapter 会被拒绝。
+
+编辑通道的 id 唯一、处理器齐备、同方向 direct/chunk 配对由 `RuleEditChannels` 初始化校验，平台注册器共同遍历该声明。
 
 开发实现位于 `common/src/dev` 与 `neoforge/src/probe`，生产观测只经 `core/api/RuntimeObserver`、`DevelopmentDiagnostics`；发布 jar 隔离由[后端探针工作流](../guides/backend-probes.md)的打包任务校验。
 
@@ -90,9 +95,6 @@ flowchart LR
 | 运行时消费内置类型注册表 | `core/runtime` → `core/service/BuiltinTypeRegistries` | 装配记录，运行时只读 |
 | 客户端装配本地类型表 | `client/edit/ClientTypeRegistries` → `core/service/BuiltinTypeRegistries` | 复用内置与 SPI 注册顺序，客户端惰性缓存冻结后的类型表与条件 Codec |
 | 传输层取得会话上下文与服务 | `core/network/transport` → `core/runtime/RuleIndex`、`core/service` | 编辑会话需要当前索引与保存服务，权限谓词在构造点注入 |
-| 编辑服务取目录服务 | `core/service/RuleEditService` → `core/network/catalog/RuleCatalogService` | 目录分页在服务端完成，编辑服务只调用 |
-| 编辑服务组装下行载荷与准入拒绝回执 | `core/service/RuleEditService` → `core/network/protocol`、`core/network/transport` | 保存进度、取消与关闭回执按协议载荷下发，准入拒绝的状态码由 `EditAdmission` 给出并由服务层组装；编辑服务只组装载荷，不持有连接 |
-| 目录来源以协议 DTO 为载体 | `core/catalog` → `core/network/protocol` | 只读条目类型，协议包不回指目录包 |
 | 实体状态与平台能力互引类型 | `core/state/DropStateStore` ↔ `platform/Services`、`platform/services/IPlatformHelper` | 平台能力接口以 `DropState` 为参数；状态由运行时单向持有 |
 | 编辑数据用 kit 的树编辑契约 | `client/edit` → `client/ui/kit` | 复用 `UiTreeEditor`、`UiTreePath`、`UiTreeCodec`，不引用宿主与主题 |
 | 界面与协议读编辑常量 | `client/net`、`client/ui` → `core/service/RuleEditSessionLimits` | 双端共用限额常量与档案类型，避免协议两侧各存一份 |

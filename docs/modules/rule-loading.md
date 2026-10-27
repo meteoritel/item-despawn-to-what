@@ -28,7 +28,7 @@ authority: common/core/load、common/core/service 的加载装配类（RuleLoadi
 
 | 方向 | 内容 |
 |---|---|
-| 对外入口 | `RuleLoader`（`load` / `loadRaw` / `decodeEntry`）、`RuleLoadingService`（`load` / `loadAndValidate` / `applyEnableState` / `sourceIndex` / `countByLayer` / `describeRules` / `summarize`）、`RuleLoadContext` 与 `RuleLoadRequest` / `RuleLoadResult`、`RuleSourceIndex.build`、`RuleIndex.build` |
+| 对外入口 | `RuleLoader`（`load` / `decodeEntry`）、`RuleLoadingService`（`load` / `loadAndValidate` / `applyEnableState` / `countByLayer` / `describeRules` / `summarize`）、`RuleLoadContext` 与 `RuleLoadRequest` / `RuleLoadResult`、`RuleSourceIndex.build`、`RuleIndex.build` |
 | 依赖 | `core/api` 的 `IssueCollector` / `RuleDecoder` / 字段常量与解码预算、DFU Codec；`PackLayerResolver` 由平台注入，`RuleDecoder` 由模型层注入，类型注册表来自[类型系统](type-system.md) |
 | 被依赖 | 宿主启动与数据包重载、保存后的重载、调试场景装配、命令与日志回显 |
 | 边界之外 | 快照装配与落盘见 [编辑与落盘](authoring.md)；索引发布、缓存失效与结算见 [转化运行时](conversion-runtime.md) |
@@ -47,7 +47,7 @@ authority: common/core/load、common/core/service 的加载装配类（RuleLoadi
 | `core/load/OverlayRuleReader` | 覆盖层读取 | 扫描 `config/<覆盖层目录>/rules`，按绝对路径排序并推导缺省 id | `RulePaths` |
 | `core/load/RuleMerger` | 合并聚合根 | 按 id 合并，后出现的条目整条胜出 | `RawRuleEntry`、`IssueCollector` |
 | `core/load/RuleSourceLayer`、`RuleOrigin` | 来源模型 | 三层与优先级、可写性；来源可读标识进入 `Issue.origin` | 全部读写与诊断路径 |
-| `core/load/RuleSourceIndex` | 旁路聚合 | 把合并前原始条目归并为 base / overlay 两视图 | 快照装配、编辑判定 |
+| `core/load/RuleSourceRead` / `RuleSourceIndex` | 共同来源产出 | 同次读取产出合并条目、问题与 base / overlay 索引；索引按 id 查找与排序遍历共享条目 | 加载、快照、来源查询、命令详情与启停重建 |
 | `core/load/PackLayerResolver` | 注入的判定点 | 包 id → 来源层；按本次加载包的来源元数据建快照 | 平台引导层 |
 | `core/service/RuleLoadingService` | 装配点 | 构造注册表感知解码器，串起加载、两档校验与启用状态注入 | `RuleLoadContext`、`RuleReferenceValidator` |
 | `core/state/RuleEnableState` | 本服启用状态 | 按存档保存每个 id 的布尔覆盖，缺席表示继承默认 | `RuleLoadContext` 的启用解析器、保存与命令链路 |
@@ -67,11 +67,11 @@ flowchart TD
     D --> C["RuleDecoder<br/>注册表感知的 RuleCodecs.decoder"]
     C --> V1["第一档：RuleValidation<br/>结构、字段取值、类型专属参数"]
     V1 --> V2["第二档：RuleReferenceValidator<br/>动态引用"]
-    V2 --> R["RuleLoadResult<br/>可运行规则 + 问题收集器"]
+    V2 --> R["RuleLoadResult<br/>可运行规则 + 同批来源索引 + 问题收集器"]
     R --> E["RuleLoadingService.applyEnableState<br/>本服覆盖 ?? 默认启用"]
     E --> I["RuleIndex.build<br/>剔除不可运行 → 门槛投影 → 排序 → 建索引"]
-    P -.->|"旁路：合并前原始条目"| SI["RuleSourceIndex.build<br/>base / overlay 视图"]
-    SI -.->|"快照装配与编辑判定"| SN["编辑与落盘模块"]
+    P -.->|"共同读取：合并前原始条目"| SI["RuleSourceIndex.build<br/>base / overlay 视图"]
+    SI -.->|"同批来源交接与按需查询"| SN["编辑与落盘模块"]
 ```
 
 流程要点：
@@ -133,9 +133,9 @@ flowchart TD
 - 失败保留旧索引：读取、加载、构建与应用期注入的失败都发生在换入之前，旧索引、追踪与任务队列保持有效；宿主记日志并返回带结构化问题的重载回执，命令回执写明「本次未应用任何规则变更」，平台事件不因失败中断（入口见 [平台模块](platform.md)）。
 - 换入之后的收尾：发布入口逐个已加载维度排队回扫，单维排队异常的其余维度仍继续，失败维度按有界重试补排；此时索引已生效，日志按「已应用但收尾未完成」记录，不再声称保留了旧索引。
 
-### 来源索引（旁路）
+### 同批来源与来源索引
 
-`RuleSourceIndex.build` 不参与主流水线：它按 id 把合并前的原始条目归并成 base（数据包层胜出条目）与 overlay（覆盖层胜出条目）两视图。
+`RuleSourceRead` 在同次读取中产出合并条目、问题与 `RuleSourceIndex`。`RuleLoadResult` 随校验与启用状态注入继续携带同批索引，宿主与保存发布时交接它；失败保留上一份发布结果。索引按 id 把合并前条目归并成 base（数据包层胜出条目）与 overlay（覆盖层胜出条目）两视图，保留可识别 id 的非法条目用于编辑诊断。
 
 - 输入顺序由 `build` 内部按合并器口径归一化，调用方不必预先按层排序；同层内仍是输入顺序的后者胜。
 - 用途是快照装配判定来源与状态、分别下发 base / overlay 视图，以及编辑时的落点判定。

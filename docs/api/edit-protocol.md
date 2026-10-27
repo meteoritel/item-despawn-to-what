@@ -2,7 +2,7 @@
 title: 编辑协议契约
 layer: 5
 audience: 实现或排查规则编辑器链路的开发者
-authority: common/src/main/java/com/meteorite/itemdespawntowhat/core/network/protocol、core/network/transport、core/service/RuleEditService.java、core/service/EditSessionManager.java、core/service/RuleSaveTask.java、core/service/RuleEnableApplyService.java、core/state/RuleEnableState.java
+authority: common/src/main/java/com/meteorite/itemdespawntowhat/core/network/protocol、core/network/transport、core/service/edit、core/catalog、core/service/RuleEditService.java、core/service/EditSessionManager.java、core/service/RuleSaveTask.java、core/service/RuleEnableApplyService.java、core/state/RuleEnableState.java
 ---
 
 # 编辑协议契约
@@ -19,7 +19,7 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat/core/network/pro
 
 ## 会话与目标锁
 
-编辑目标由 `RuleEditSessionLimits.TARGET_ID` 标识，全局只有一个。会话状态机与版本戳由 `EditSessionManager` 持有，准入顺序与拒绝状态码由 `core/service/EditAdmission` 唯一决定；网络入口 `RuleEditServerHandler` 只做就绪判定与转发。
+编辑目标由 `RuleEditSessionLimits.TARGET_ID` 标识，全局只有一个。会话状态机由 `EditSessionManager` 持有，修订与文件工作由 `RuleOverlayStore` 持有；它们随本次 `AuthoringHost` 一同创建与退役，准入顺序与拒绝状态码由 `core/service/EditAdmission` 唯一决定；网络入口 `RuleEditServerHandler` 只做就绪判定与转发。
 
 ```mermaid
 stateDiagram-v2
@@ -44,7 +44,7 @@ stateDiagram-v2
 
 ## 握手与协议版本
 
-`RuleEditProtocol.VERSION` 是协议版本，当前取值为 9：快照条目的启用三值、变更集的启停动作与这一版字段形态绑定，字段或动作集合变化时递增。打开载荷携带服务端版本与目标标识，客户端在收到打开载荷时比对版本与状态码；确认载荷再把客户端版本回传，服务端在确认入口再次比对。版本不一致按请求非法处理，并带上专门的文案 key，提示双方版本不同，避免用错位的字段解释载荷。
+`RuleEditProtocol.VERSION` 是协议版本，当前取值为 10：保存终态、查询失败与会话事件分别使用自己的关联载荷，字段或动作集合变化时递增。打开载荷携带服务端版本与目标标识，客户端在收到打开载荷时比对版本与状态码；确认载荷再把客户端版本回传，服务端在确认入口再次比对。客户端发现版本不一致时以协议不匹配文案结束打开流程；确认入口发现版本不一致时发送 `INVALID_REQUEST` 会话事件；未完成确认的申请按确认窗口回收。
 
 ## 载荷家族
 
@@ -59,7 +59,9 @@ stateDiagram-v2
 | C2S | 目录请求 | 按类型与分页取候选目录 |
 | S2C | 目录载荷 | 分页结果与是否末页 |
 | C2S | 变更集与分片 | 提交整包或分片形式的保存请求 |
-| S2C | 保存回执与进度 | 终态回执与阶段计数 |
+| S2C | 保存回执与进度 | 按 `sessionId + operationId` 关联的终态回执与阶段计数 |
+| S2C | 查询失败 | `RuleQueryResultPayload` 携带 `kind + sessionId + requestId + statusCode`，只终结对应查询 |
+| S2C | 会话事件 | `RuleSessionEventPayload` 携带 `sessionId + statusCode`，表达确认失败与会话失效 |
 | C2S | 取消保存 | 请求取消在途保存 |
 | C2S/S2C | 参考寿命请求与应答 | 查询服务端缓存的参考寿命，供编辑器展示 |
 
@@ -72,8 +74,8 @@ stateDiagram-v2
 `editable` 只描述内容可写：含覆盖内容的 overlay / mixed 为真，内置数据包与世界数据包为假。条目能否停用由本服启用状态决定，与 `editable` 无关；能否删除覆盖条目同样只看 `source`。
 
 - 整包放得下就直接下发；否则按 UTF-8 字节切分，每 tick 限量投递，客户端按 `transferId` 与下标重组。
-- 快照装配失败或内容为空时回环境不可用状态码，并带上快照失败的文案 key。
-- 来源视图直接取最近一次快照装配出的分层索引，不重新读盘；索引尚未就绪时回环境不可用，规则 id 非法或条目不存在时回请求非法。
+- 快照装配失败回带原请求标识的查询失败；传输总量超限回请求非法。客户端按状态映射提示，保留上一份可用快照。
+- 来源视图按 id 查询共同来源索引；缓存与当前修订、数据包上下文匹配时直接读取，否则通过唯一文件队列独立读取，首次查询也可使用。读取前后比对指纹，回主线程后核对上下文与保存状态；修订变化时刷新快照，并以版本冲突终结旧来源请求。规则 id 非法或条目不存在时回请求非法。
 - 分片共用一条记录 `RuleChunkPayload`：`sessionId`、`correlationId`、`transferId`、下标、总数与文本；通道由类上的类型常量区分（快照 / 来源视图 / 变更集）。`correlationId` 在两条下行通道是 `requestId`，在上行变更集是 `operationId`。
 - 切分、校验与重组各只有一处实现：`RuleTextChunker.split(Family, …)` 按通道的字节档位决定直发还是分片，`RuleChunkAssembly` 校验单片并判定批次身份与是否收齐，服务端装配器 `RuleEditChunkAccumulator` 与客户端缓冲 `RuleChunkBuffer` 都复用它们。客户端重组缓冲在会话切换、批次身份变化或超时无进展时重置。
 
@@ -109,7 +111,7 @@ stateDiagram-v2
 每次保存由客户端生成 `operationId`。服务端保留最近的操作回执，同一个 `operationId` 重发时直接回放上次结论，不重复写盘；会话切换时回执表清空。
 
 - 已有在途保存时，同一 `operationId` 的重复提交不再触发新保存，由在途操作的终态统一作答；不同 `operationId` 按请求非法拒绝，并提示正在应用。
-- 在途保存按阶段推进：准备、校验、预备文件、写盘、回滚、读盘、解码、索引、应用、取消，阶段与计数通过进度载荷节流下发，客户端只用于展示。纯启停批次在校验后直接进入应用：索引在应用入口内重建，不经过写盘、读盘、解码与索引阶段。
+- 在途保存按阶段推进：准备、校验、预备文件、写盘、回滚、读盘、解码、索引、应用、取消，阶段与计数通过进度载荷节流下发，客户端只用于展示。纯启停批次在校验后通过文件队列读取稳定来源，再提交本服状态并在应用入口重建索引；跳过内容写入阶段。命令存在性检查与重建消费同次合并加载的来源索引。
 - 取锁失败、确认超时、心跳失效、失去权限属于会话类失败，回执会把会话置为失效；取消请求只发出信号，回滚结束前独占锁仍保持。
 - 权限拒绝 `NO_PERMISSION` 与会话类失败（`SESSION_EXPIRED`、`LOCK_NOT_OWNED`、`LOCK_BUSY`）在客户端同属会话失效分支，仅文案不同。
 - 玩家断开时清理分片传输；在途保存请求延后释放，其余会话按租约回收。
@@ -121,14 +123,14 @@ stateDiagram-v2
 
 ## 分片与限额
 
-限额常量集中在 `RuleEditLimits`，网络层、服务端重组器与客户端缓冲读同一份定义：
+帧限额集中在 `RuleEditLimits`，网络层、服务端重组器与客户端缓冲读同一份定义；业务条数与任务推进预算集中在 `RuleAuthoringLimits`：
 
 | 限额 | 常量 | 作用 |
 |---|---|---|
 | 直接包上限 | `MAX_DIRECT_PACKET_BYTES` | 整包下发的字节上限，超出改走分片 |
 | 单片上限 | `MAX_CHUNK_BYTES` | 单个分片的 UTF-8 字节上限 |
 | 变更集总量 | `MAX_CHANGE_SET_BYTES` | 分片收齐后的总量上限，超出按请求非法拒绝 |
-| 变更集条数 | `MAX_EDITS_PER_CHANGE_SET` | 单次最多 2048 条编辑；解析时提前拒绝超限，写入入口复核 |
+| 变更集条数 | `RuleAuthoringLimits.MAX_EDITS_PER_CHANGE_SET` | 单次最多 2048 条编辑；解析时提前拒绝超限，写入入口复核 |
 | 分片数上限 | `MAX_CHUNK_COUNT` | 由总量上限与单片上限推导，客户端重组时同样校验 |
 | 在途传输数 | `MAX_TRANSFERS_PER_PLAYER` | 每名玩家同时保留的分片传输数，超出按插入序淘汰最早一个 |
 | 传输超时 | `TRANSFER_TIMEOUT_MILLIS` | 分片超过该时长无进展即丢弃 |
@@ -137,9 +139,17 @@ stateDiagram-v2
 
 超限请求按请求非法回执：网络层给整包留了少量余量，让越界的提交仍能收到结构化结论。
 
-服务端出站的结构化问题按字段字符上限、问题条数与消息参数上限裁剪，截断位置保留完整 Unicode 代理对；入站读取仍按协议上限严格校验。
+服务与任务保留完整语义结果；出站 codec 统一裁剪展示文本、问题条数与消息参数，截断位置保留完整 Unicode 代理对。会话、请求、操作与规则标识按字段上限完整编码，业务 JSON 按总字节限额整体接受或拒绝；入站读取按帧上限严格校验，可解码并可关联的非法请求返回结构化失败。
+
+## 通道与连接
+
+`RuleEditChannels` 是 type、codec、方向、处理器与文本分片元数据的唯一声明。Fabric 公共类型注册、客户端接收注册与 NeoForge 双向注册都遍历它；声明初始化校验 id 唯一、接收器齐备与同方向 direct/chunk 成对。
+
+客户端每次连接绑定一个 `RuleEditClientReceiver`。平台回调调度前捕捉连接 Binding，执行时核对仍是当前连接；断线解绑并重置工作区。服务端延后回调同样捕捉编辑服务实例，防止上一生命周期的帧进入新的宿主。
 
 ## 回执
+
+查询失败先按种类与请求标识匹配，再清理对应的快照、目录、来源或寿命请求；迟到且不匹配的回执直接丢弃。首份与服务端主动刷新的快照使用空请求号。会话事件按会话号处理，若保存仍在途，客户端先等待该操作的真实终态再结束会话。
 
 保存回执携带状态码、文案 key、文案参数、结果版本号、是否已写盘、是否已重载与问题清单。客户端只按状态码分支，不解析文案；状态码语义与新增步骤见[错误与状态码](errors.md)。
 

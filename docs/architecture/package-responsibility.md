@@ -104,17 +104,14 @@ flowchart TB
 ### 编辑、命令与调试
 
 - **`core/service`** — 跨模块包，见下节。
-- **`core/network/protocol`** — 双端共享的协议 DTO：目录、快照、来源视图、变更集、保存进度与状态。
-  - 允许：`core/api`。禁止：依赖 `core/service`、`core/runtime` 与客户端包；DTO 只承载数据。
-- **`core/network/transport`** — 载荷定义、分片与累加、协议版本常量、服务端转发入口。
-  - 允许：`core/api`（含 scheduler）、`core/load`、`core/model`、`core/network/protocol`、`core/runtime` 的只读索引类型、`core/service`。
-  - 禁止：依赖界面层与客户端包；界面通过注册槽注入。
-- **`core/network/catalog`** — 目录分页与过滤的服务端实现。
-  - 允许：`core/catalog`、`core/network/protocol`、`core/network/transport`。
-  - 禁止：依赖 `core/runtime` 的内部状态。
-- **`core/catalog`** — 候选目录来源：注册表、标签与规则来源，统一为只读目录视图。
-  - 允许：`core/network/protocol` 的只读目录条目与类别类型。
-  - 禁止：依赖 `core/network/catalog`、`core/service`。
+- **`core/network/protocol`** — 编辑 wire 协议版本。
+  - 允许：JDK；业务模型分别由编辑业务与目录包持有。
+- **`core/network/transport`** — 载荷定义、统一通道声明、分片与累加、实例交付、服务端无状态转发与客户端连接绑定。
+  - 允许：`core/api`（含 scheduler）、`core/load`、`core/model`、`core/network/protocol`、`core/catalog`、`core/runtime` 的只读索引类型、`core/service`。
+  - 禁止：依赖界面层与客户端包；下行通过连接绑定的中立 receiver 交付。
+- **`core/catalog`** — 候选目录模型、注册表与标签来源、实例分页与过滤缓存。
+  - 允许：`core/api` 与原版注册表只读能力；模型、来源与分页同属本包。
+  - 禁止：依赖 `core/network`、`core/service`。
 - **`core/command`** — `/idtw` 命令树、子分支与文本输出。
   - 允许：`core/api`、`core/config`、`core/load`、`core/model`、`core/network/protocol`、`core/network/transport`、`core/service`。
   - 禁止：依赖客户端包与界面层。
@@ -127,7 +124,7 @@ flowchart TB
 
 ## `core/service` 的双重归属
 
-同一包内按链路拆成两段，文档归属不同模块；两段通过装配入参（`RuleLoadContext`、`RuleSaveReloadContext`、`RuleEditServerContext`）协作，不互相持有全局状态，因此不产生新的模块依赖。
+同一包内按链路拆成两段，文档归属不同模块；两段通过装配入参（`RuleLoadContext`、`RuleSaveReloadContext`、`RuleAuthoringContext`）协作，不互相持有全局状态，因此不产生新的模块依赖。
 
 按链路归组，非类清单；两段的责任边界由链路决定，新类按所属链路归组。
 
@@ -135,8 +132,8 @@ flowchart TB
 |---|---|---|
 | 加载装配 | [rule-loading](../modules/rule-loading.md) | 加载链路装配点（自身不做缓存、不做单例、不管生命周期）、加载依赖容器、动态引用校验、内置类型注册表装配 |
 | 提交校验与基底快照 | [authoring](../modules/authoring.md) | 写入前的提交校验（网络保存与配置迁移共用）、保存期间的数据包基底只读快照与身份判定 |
-| 会话与落盘 | [authoring](../modules/authoring.md) | 全局单会话状态机与覆盖层版本戳、准入判定（`EditAdmission`：会话号 → 持有者 → 确认 → 权限的唯一顺序与拒绝状态码）、编辑编排（校验 → 写盘 → 重载 → 回执）、覆盖层文件工作唯一所有者、逐 id 写入与回滚、保存续接任务 |
-| 快照与限额 | [authoring](../modules/authoring.md) | 快照续接与装配、会话窗口/权限等级/协议限额常量 |
+| 会话与落盘 | [authoring](../modules/authoring.md) | 独占会话状态机、由覆盖层存储持有的内容修订、准入判定（`EditAdmission`：会话号 → 持有者 → 确认 → 权限的唯一顺序与拒绝状态码）、编辑编排（校验 → 写盘 → 重载 → 回执）、覆盖层文件工作唯一所有者、逐 id 写入与回滚、保存续接任务 |
+| 快照与限额 | [authoring](../modules/authoring.md) | 快照续接与装配、会话窗口/权限等级/任务预算常量；`core/service/edit` 持有 Request/Reply 与双端只读编辑模型 |
 
 > 判断新类归属：只服务「读取与合并、解码、类型注册表装配」放进 rule-loading 段；涉及会话、写盘、快照、回执的放进 authoring 段。
 
@@ -156,10 +153,10 @@ flowchart TB
 客户端侧的分层是单向的：`client/net` 面向协议，`client/edit` 组织编辑数据，`client/ui` 负责呈现与交互。
 
 - **`client/net`** — 编辑会话的客户端镜像：打开请求、会话状态、分片缓冲、界面注册槽。
-  - 允许：`core/api`、`core/model`、`core/network/protocol`、`core/service` 的限额常量、原版客户端类型。
+  - 允许：`core/api`、`core/model`、`core/network/transport`、`core/network/protocol`、`core/catalog`、`core/service/edit`、`core/service` 的限额常量、原版客户端类型。
   - 禁止：依赖 `client/edit` 与 `client/ui`。界面经 `EditorScreenHooks` 注册槽注入，由客户端入口接线。
 - **`client/edit`** — 客户端工作区与编辑数据：草稿、撤销栈、类型参数投影与字段描述符、类型编辑器注册表、条件树编解码与摘要。
-  - 允许：`core/api`、`core/model`、`core/network/protocol`、`core/service/BuiltinTypeRegistries` 的装配记录、`client/net`、`client/ui/kit` 的树编辑契约、`client/edit/draft`、原版客户端类型。
+  - 允许：`core/api`、`core/model`、`core/catalog`、`core/service/edit`、`core/service/BuiltinTypeRegistries` 的装配记录、`client/net`、`client/ui/kit` 的树编辑契约、`client/edit/draft`、原版客户端类型。
   - 禁止：依赖 `client/ui` 的宿主子包（`theme`、`widget`、`shared`、`screen`、`screen/form`）；不发起网络请求、不打开界面。
 - **`client/edit/draft`** — 未应用的编辑草稿落盘、重启与断线恢复、冲突判定。
   - 允许：`core` 的公开类型与原版客户端类型。
@@ -174,7 +171,7 @@ flowchart TB
   - 允许：`client/ui/kit`、`client/ui/theme`、`client/ui/shared`、`client/edit`。
   - 禁止：静态读取主题；主题由屏幕注入。
 - **`client/ui/shared`** — 界面中立子包：目录图标、展示名称、字段到目录类型的映射、条件摘要格式化。
-  - 允许：`client/edit`、`client/ui/kit`、`client/ui/theme`、`core/api`、`core/model`、`core/network/protocol`、原版客户端类型与 JDK。
+  - 允许：`client/edit`、`client/ui/kit`、`client/ui/theme`、`core/api`、`core/model`、`core/catalog`、`core/service/edit`、原版客户端类型与 JDK。
   - 禁止：依赖 `client/ui/screen`、`client/ui/screen/form`、`client/ui/widget`，保证屏幕与表单都只向下依赖。
 - **`client/ui/screen`** — 编辑器主屏与外壳：编辑器外壳、管理页/编辑页/调试页三个编辑器页面、编辑分区组合、保存遮罩与提示状态。
   - 允许：`client/edit`（含 `draft`）、`client/net`、`client/ui/kit`、`client/ui/theme`、`client/ui/widget`、`client/ui/shared`、`client/ui/screen/form`、`core` 的只读投影与限额常量。

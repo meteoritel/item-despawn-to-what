@@ -21,7 +21,7 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat/platform、core/
 模块承担的面：
 
 - **公共宿主** `RuleRuntimeHostCore`：引导、数据包重载、停服、维度回扫，以及掉落物进入/离开、环境致死、自然消失判定、tick 的转发入口；持有一次存档生命周期的当前服务端、模组级配置、内置类型注册表、覆盖层目录、运行时与保存重载上下文。
-- **窄接口适配**：以 `RuleEditServerContext` 与 `RuleCommandContext` 向网络层与正式命令暴露所需能力；开发诊断单独取得宿主的 `RuleRuntimeDiagnosticsContext`。
+- **窄接口适配**：以 `RuleAuthoringContext` 提供业务能力，`RuleEditServerContext` 在其上组合传输与发包，`RuleCommandContext` 提供命令能力；开发诊断单独取得宿主的 `RuleRuntimeDiagnosticsContext`。
 - **平台能力注入**：`IPlatformHelper` 由 `ServiceLoader` 发现唯一实现，具体能力面见接口本身；实体状态的读写也在这里，两端使用各自的持久化容器。
 - **模组级配置读取**：`ServerConfig.loadOrCreate` 负责 `server.json` 的读取、缺失即落盘与坏文件降级，两端共用同一实现与同一份文件。
 - **两端加载器接入**：入口类、事件订阅、Mixin、网络载荷注册、命令注册、客户端初始化。
@@ -79,7 +79,7 @@ flowchart LR
 
 ### 注册面：网络与命令
 
-- **网络**：载荷命名空间取 `RuleEditLimits.NAMESPACE`，协议版本取 `RuleEditProtocol.VERSION`；两端都在公共初始化路径注册 C2S 与 S2C 两类类型，保证连接协商双向可编码。服务端接收器先切回服务端线程，再交 `RuleEditServerHandler`；S2C 处理器一律经 `RuleEditPayloadRouter` 分发，不引用客户端类。客户端接收器在客户端初始化注册，回调切到客户端主线程。
+- **网络**：载荷命名空间取 `RuleEditLimits.NAMESPACE`，协议版本取 `RuleEditProtocol.VERSION`；两端都在公共初始化路径注册 C2S 与 S2C 两类类型，保证连接协商双向可编码。类型、codec、方向与处理器统一取自 `RuleEditChannels`。C2S 回调在调度前捕捉本次编辑服务，切回服务端线程后核对仍是当前实例，再交 `RuleEditServerHandler`。S2C 回调捕捉当前连接 Binding，在客户端主线程核对连接身份后调用中立 receiver；Fabric 客户端接收注册与公共类型注册分别遍历同一声明。
 - **命令**：正式平台注册器把 dispatcher 与 `RuleRuntimeHost.commandContext()` 交给 `RuleCommandTree`；开发命令由 NeoForge `src/probe` 的 `ProbeMod` 另行合并注册。
 - **开发观测**：`ProbeMod` 装配空接缝的实现、推进开发场景并在停服时释放；运行和发布隔离见[后端探针](../guides/backend-probes.md)。
 - **载荷字段、分片与回执语义**：[编辑协议](../api/edit-protocol.md)。
@@ -90,7 +90,7 @@ flowchart LR
 
 | 类或包 | 角色 | 职责 | 协作对象 |
 |---|---|---|---|
-| `RuleRuntimeHostCore`（core/host） | 聚合根·生命周期 | 持有一次存档生命周期的配置、注册表、覆盖层、运行时与保存重载上下文；启动失败就地降级为未启动并释放本轮状态，重载失败保留上一版索引 | `PlatformAdapter`、`ConversionRuntime`、`RuleLoadingService`、`RuleEditServerHandler` |
+| `RuleRuntimeHostCore`（core/host） | 聚合根·生命周期 | 持有一次存档生命周期的配置、注册表、覆盖层、运行时与保存重载上下文；启动失败就地降级为未启动并释放本轮状态，重载失败保留上一版索引 | `PlatformAdapter`、`ConversionRuntime`、`RuleLoadingService`、`AuthoringHost` |
 | `RuleRuntimeHostCore.PlatformAdapter`（core/host） | 扩展点 | 两端唯一需要实现的差异面：寿命提供者、包层判定、参考寿命采样与复位 | 两端 `RuleRuntimeHost` |
 | `Services` / `IPlatformHelper`（common/platform） | 注入入口 | `ServiceLoader` 发现唯一实现；平台名、模组判断、开发环境、配置目录、发包与实体状态读写都以接口方法声明，默认实现给出安全兜底 | 全部调用方 |
 | `FabricPlatformHelper` / `NeoForgePlatformHelper`（两端 platform 包） | 平台能力实现 | 按各自加载器 API 覆盖能力方法 | `Services.PLATFORM` |
@@ -99,7 +99,7 @@ flowchart LR
 | `ItemEntityMixin`、`EntityMixin`、`PlayerMixin`、`ItemLifespanReferenceMixin`（各端 mixin 包） | 最小注入 | 补齐平台事件覆盖不到的路径：自然到期、环境伤害、死亡掉落标记、掉落物合并兼容、参考寿命采样 | `DropStateStore`、死亡掉落标记、`RuleRuntimeHost` |
 | `RuleEditPayloadRegistrar`（两端 network/registrar） | 注册面 | 载荷类型、协议版本、服务端接收器与断线清理；S2C 只经路由器分发 | `RuleEditServerHandler`、`RuleEditPayloadRouter` |
 | `FabricRuleCommandRegistrar` / `NeoForgeRuleCommandRegistrar` | 注册面 | 把命令树挂到平台命令事件 | `RuleCommandTree` |
-| `ClientSetup` / `ItemDespawnToWhatClient`（两端 client 包） | 客户端接线 | 注入 sink 与发送器、注册 S2C 接收器、客户端 tick 与界面 opener bootstrap | `RuleEditClientWorkspace`、`EditorScreenHooks` |
+| `ClientSetup` / `ItemDespawnToWhatClient`（两端 client 包） | 客户端接线 | 安装发送器、注册 S2C 接收器与连接绑定/解绑、客户端 tick 与界面 opener bootstrap | `RuleEditClientWorkspace`、`EditorScreenHooks` |
 | `ServerConfig`（core/config） | 配置聚合 | 模组级参数与派生换算；缺失即落盘默认值，解析失败记 Issue 并回落默认值 | `RuleRuntimeHostCore`、`ConversionRuntime` |
 
 ## 4. 关键流程
@@ -115,9 +115,10 @@ sequenceDiagram
     P->>H: 服务端启动
     H->>C: start(server)
     C->>C: shutdown() 释放上一轮
-    C->>C: EditSessionManager.requireFileWorkIdle()
+    C->>C: RuleOverlayStore.requireIdle()
     C->>C: loadOrCreate(server.json)
     C->>C: BuiltinTypeRegistries.create()
+    C->>C: new AuthoringHost(server, overlayRoot)
     C->>R: new ConversionRuntime(config, registries, lifespan)
     C->>C: 读基底规则并 loadAndValidate
     C->>R: replaceRules(...)
@@ -150,10 +151,10 @@ flowchart TD
 
 ### 客户端接入顺序
 
-两端都把“注入 sink → 注入发送器 → 界面 opener bootstrap”放在同一次客户端初始化里完成，差别只在事件载体：
+两端在客户端初始化安装发送器和界面 opener；接收对象随连接建立而绑定，断线时只解绑对应连接并重置工作区：
 
-- Fabric：`ClientModInitializer#onInitializeClient` 内依次注册客户端 tick、S2C 接收器，再注入 sink 与发送器，最后 bootstrap 界面 opener。
-- NeoForge：`FMLClientSetupEvent` 是并行分发事件，接线统一 `enqueueWork` 到客户端主线程；S2C 处理器由公共载荷注册的 `playToClient` 分支直接分发，客户端 tick 由 `ClientTickEvent.Post` 驱动。
+- Fabric：`ClientModInitializer#onInitializeClient` 内依次注册客户端 tick、S2C 接收器，再安装发送器，最后 bootstrap 界面 opener；JOIN/DISCONNECT 绑定与解绑接收对象。
+- NeoForge：`FMLClientSetupEvent` 是并行分发事件，接线统一 `enqueueWork` 到客户端主线程；S2C 处理器由公共载荷注册的 `playToClient` 分支直接分发，客户端 tick 由 `ClientTickEvent.Post` 驱动；LoggingIn/LoggingOut 绑定与解绑接收对象。
 
 工作区在会话建立时调用 `EditorScreenHooks.open`，在会话失效时调用 `close`；opener 未注册只记日志，不阻断协议流程。
 
@@ -182,7 +183,7 @@ flowchart TD
 
 ### 注册面扩展
 
-- 新增载荷：类型、协议版本与两端注册同时补齐；C2S 与 S2C 都必须在公共注册路径声明，否则连接协商会判定通道缺失；S2C 处理器只经 `RuleEditPayloadRouter`。
+- 新增载荷：在 `RuleEditChannels` 补齐方向、类型、codec 与处理器；两端注册器遍历声明，S2C 处理面使用 `RuleEditClientReceiver`。字段变化按编辑协议同步版本。
 - 新增命令：加进 `RuleCommandTree`，平台注册器保持不动。
 
 ### 改动后的验证

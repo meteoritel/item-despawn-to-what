@@ -190,9 +190,9 @@ These three commands answer that question, and each one requires a singleplayer 
 
 - `/idtw config list` lists the active rules one by one (`id`, source layer, priority, trigger seconds, effect count, enabled state, origin), and its first line is a **summary line** (the total count, the count per source layer, and the number of errors and warnings).
 - `/idtw rule list` prints a shorter list (`id`, source layer, enabled state, origin). Use it to scan many rules quickly.
-- `/idtw rule show <id>` prints one rule (priority, trigger seconds, effect count, enabled state) plus its raw JSON. For an overlay rule you see your own file text, and for a datapack rule you see an equivalent JSON text you can copy and edit.
+- `/idtw rule show <id>` acknowledges the request, then reads the winning source in the background and prints its origin, local enable override, and raw JSON. The overlay wins over the datapack base; unknown fields and original declarations are preserved.
 
-The enabled state in all three commands is the **effective value for this save** (the local setting, or `enabled` from the rule content when the save holds none). Change it with `/idtw rule <id> enable|disable|default`; the full syntax is in [Command Reference](en-08-commands).
+The enabled state in the list commands is the **effective value for this save** (the local setting, or `enabled` from the rule content when the save holds none). Change it with `/idtw rule <id> enable|disable|default`; the full syntax is in [Command Reference](en-08-commands).
 
 One line of `/idtw config list` looks like this:
 

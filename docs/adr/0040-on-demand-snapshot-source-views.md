@@ -1,7 +1,7 @@
 # ADR-0040：快照按需下发来源视图
 
 - 状态：已实施。
-- 相关决策：部分修订 [ADR-0020](0020-source-catalog-and-overlay-merge.md) 第 1 条中「快照条目承载三视图」的约束；来源目录仍保留基底与覆盖两份原始内容。协议版本化与回执状态码沿用 [ADR-0019](0019-exclusive-edit-session-and-target-lock.md)。
+- 相关决策：部分修订 [ADR-0020](0020-source-catalog-and-overlay-merge.md) 第 1 条中「快照条目承载三视图」的约束；来源目录仍保留基底与覆盖两份原始内容，读取与生命周期所有权见 [ADR-0052](0052-authoring-ownership-and-semantic-boundary.md)。协议版本化与回执状态码沿用 [ADR-0019](0019-exclusive-edit-session-and-target-lock.md)。
 
 ## 背景
 

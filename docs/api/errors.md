@@ -2,7 +2,7 @@
 title: 错误与状态码
 layer: 5
 audience: 处理规则加载报错、保存回执与问题清单的开发者
-authority: common/src/main/java/com/meteorite/itemdespawntowhat/core/api/Issue.java、core/api/IssueCollector.java、core/api/IssueSeverity.java、core/network/protocol/RuleSaveStatus.java、core/network/protocol/RuleIssue.java、core/network/protocol/RuleSaveProgress.java
+authority: common/src/main/java/com/meteorite/itemdespawntowhat/core/api/Issue.java、core/api/IssueCollector.java、core/api/IssueSeverity.java、core/service/edit/RuleSaveStatus.java、core/service/edit/RuleIssue.java、core/service/edit/RuleSaveProgress.java、core/network/transport/RuleEditMessages.java、core/network/transport/RuleEditPayloadCodec.java
 ---
 
 # 错误与状态码
@@ -50,11 +50,11 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat/core/api/Issue.j
 
 下发给客户端的问题记录由 `RuleIssue` 表达，字段为严重级、规则 id、来源、字段路径、文案 key、文案参数与兜底文案。严重级常量为 `error` / `warning` / `info`，来源常量为覆盖层、数据包、运行时与网络（见 `RuleIssue` 的 `ORIGIN_*` 常量）；JSON 键名在 record 内以 `KEY_*` 常量维护。
 
-回执中的问题清单有条数与参数长度上限，超出部分被截断，但服务端的拒载判定始终基于未截断的完整结果。
+服务端保留完整问题；出站 codec 统一限制展示字段、问题条数与参数长度，裁剪保留完整 Unicode 代理对。通用 `Issue.origin` 只作为兜底文本中的来源信息，未识别出规则身份时 `RuleIssue.ruleId` 为空。
 
 ## 状态码
 
-`RuleSaveStatus` 是保存与请求回执的状态码枚举，`id()` 返回枚举名，`messageKey()` 按 `itemdespawntowhat.edit.status.` 加枚举名小写推导，`fromId` 对未知取值返回空值。客户端据此分支，不解析文案。
+`RuleSaveStatus` 是保存与请求回执的状态码枚举，`id()` 返回枚举名，传输侧 `RuleEditMessages.key` 按 `itemdespawntowhat.edit.status.` 加枚举名小写推导，`fromId` 对未知取值返回空值。客户端据此分支，不解析文案。
 
 | 分组 | 代表取值 | 客户端处置 |
 |---|---|---|
@@ -69,6 +69,8 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat/core/api/Issue.j
 
 完整取值集合以枚举为准。新增状态码的步骤是：加枚举常量、在服务端的返回分支里使用它、在两端语言文件补齐 `itemdespawntowhat.edit.status.<小写名>`、在客户端加分支。仅加枚举而不补文案，会退化为兜底文案展示。
 
+查询失败按 `kind + sessionId + requestId` 关联，保存终态按 `sessionId + operationId` 关联，会话事件单独携带会话号；客户端只终结匹配的在途请求。关联字段与处置顺序见[编辑协议](edit-protocol.md)。
+
 ## 保存进度
 
 `RuleSaveProgress` 描述在途保存的阶段、已完成数、总数、当前条目与是否可取消，阶段取值由内部枚举定义，覆盖准备、校验、预备文件、写盘、回滚、读盘、解码、索引、应用与取消。服务端按固定间隔且样本变化时才下发，客户端据此展示进度与决定取消按钮是否可用。
@@ -77,7 +79,7 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat/core/api/Issue.j
 
 面向玩家的文案一律走本地化 key，语言文件位于模组资源的 `lang/` 目录，中文与英文两份同步维护。回执同时携带文案 key 与兜底文案：翻译缺失时展示兜底文案，避免出现裸 key。
 
-专门用途的 key 与状态码一起维护：协议版本不一致、快照下发失败、快照超限、问题清单的通用项与解码失败项，各自有固定 key，不要用状态码通用 key 顶替。
+客户端在打开阶段使用协议不匹配提示；查询失败按状态码显示，问题清单的通用项与解码失败项保留各自的 key。状态和进度阶段的文案映射集中在 `RuleEditMessages`，业务枚举只表达状态。
 
 ## 相关文档
 

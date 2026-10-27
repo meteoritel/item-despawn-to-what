@@ -10,7 +10,7 @@
 | `/idtw config reload` | 重新读取全部来源并立即生效 | 需要权限 | 是 |
 | `/idtw config list` | 逐条列出生效规则，含优先级、触发秒数、效果数 | 需要权限 | 否 |
 | `/idtw rule list` | 生效规则的紧凑清单 | 需要权限 | 否 |
-| `/idtw rule show <id>` | 输出某条规则当前生效内容的 JSON | 需要权限 | 否 |
+| `/idtw rule show <id>` | 输出胜出来源的原始 JSON 与本服启用覆盖 | 需要权限 | 否 |
 | `/idtw rule <id> enable` | 在本存档启用这条规则，规则文件不动 | 需要权限 | 是 |
 | `/idtw rule <id> disable` | 在本存档停用这条规则，规则文件不动 | 需要权限 | 是 |
 | `/idtw rule <id> default` | 删掉本存档对这条规则的启停设置，回退到规则里的默认启用 | 需要权限 | 是 |
@@ -101,17 +101,12 @@ myrules:chicken_to_rotten_flesh | 来源层=overlay | 启用=true | 出处=confi
 
 语法：`/idtw rule show <id>`，其中 `<id>` 写成与 JSON 里 `id` 字段相同的 `命名空间:路径`，例如 `itemdespawntowhat:builtin_item_to_item`。它必须是小写的合法资源位置（可用字母、数字、`_`、`-`、`.`、`/`）。
 
-输出两行：先是这条规则的摘要，再是它当前生效内容的 JSON（一整行）。
+命令先提示请求已受理，后台读取完成后给出来源、本服启用覆盖与胜出来源的原始 JSON：覆盖层优先，没有覆盖时使用数据包基底。
 
-```text
-规则 myrules:chicken_to_rotten_flesh：优先级=0，触发=10 秒，效果=1，启用=true
-原始 JSON：{"id":"myrules:chicken_to_rotten_flesh", ... }
-```
-
-- 摘要的字段与 `config list` 一致，只是排成一句话。
-- 第二行的 JSON 按来源给出：覆盖层来源的规则就是文件原文，读到的内容与磁盘一致；内置数据包与世界数据包来源的规则是按模型重新编码的结果，字段顺序和非默认值可能与文件排版不同。想核对「游戏到底读到了什么」，看它最准。
-- 拿不到可输出的内容时，第二行会换成提示「<id> 没有可输出的原始 JSON（由模型编码或不可编辑）。」。
-- id 写错或不存在时提示「未找到规则 <id>」，本次命令按失败返回。
+- 本服覆盖为「继承默认」时，生效启用跟随 JSON 的 `enabled`；显式覆盖单独显示。
+- JSON 保留原始字段、未知字段和声明值，输出会重新序列化，排版与空白可与文件不同。
+- 文件语义校验未通过但仍能识别 id 的条目，也能查看原始内容，便于修复。
+- id 不存在时最终反馈「未找到规则」；读取失败提示稍后重试。命令返回值表示请求已受理，最终结果以聊天反馈为准。
 
 ## /idtw rule <id> enable|disable|default
 
@@ -174,7 +169,7 @@ myrules:chicken_to_rotten_flesh | 来源层=overlay | 启用=true | 出处=confi
 ## 几种常见用法
 
 - **改完文件后**：先 `/idtw config validate` 看有没有报错，再 `/idtw config reload` 让改动生效。
-- **确认某条规则生效成什么样**：`/idtw rule list` 找到 id，再用 `/idtw rule show <id>` 看它当前的内容。
+- **核对某条规则的来源内容**：`/idtw rule list` 找到 id，再用 `/idtw rule show <id>` 看它的原始来源与本服启用覆盖。
 - **报错看不懂**：看问题行的级别与 `来源#字段路径`，`error` 说明这条不生效，先按字段路径回去改对应的 JSON。
 - **多人服务器上编辑锁被占住**：`/idtw config edit-lock status` 看持有人，必要时 `/idtw config edit-lock release` 强制释放。
 
