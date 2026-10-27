@@ -13,8 +13,8 @@ import net.minecraft.world.item.ItemStack;
  * 记录可持久化：无法加入世界的返还留在 pendingDelivery 里，交给恢复任务（SettlementRecovery）逐步交付。
  * 催化剂按单独账目计数（catalystCostPerGroup / catalystGroupsPaid / catalystsConsumed），不进源物品守恒式。
  * 账目字段不可从外部直接变更：全部变更方法私有，只能经受控写入句柄 {@link Writer} 调用，
- * 句柄保证「改字段 + 维护账本双索引 + 标脏」在同一次调用内完成，业务判断（是否对齐待交付量、
- * 记中断还是失败、截断到几组）仍留在各调用方。
+ * 句柄保证「改字段 + 维护账本双索引 + 标脏」在同一次调用内完成，业务判断（记中断还是失败、
+ * 截断到几组）仍留在各调用方。
  */
 public final class SettlementRecord {
 
@@ -36,8 +36,7 @@ public final class SettlementRecord {
     private int groupCount;
     private int groupsStarted;
     private int consumedSources;
-    // 待返还量：结算任务持有库存期间由任务出口对齐到实际结算库存；
-    // 中止/交付完成后所有权移交恢复任务，改由其按交付进度递减
+    // 唯一的剩余源库存：消费、退回与实际交付均在同一次语义变更中维护守恒。
     private int pendingDelivery;
     private int deliveredReturns;
     // 经验总量可能超过 int；完成量与待完成量在内存和存档中均保留 long 精度。
@@ -97,19 +96,23 @@ public final class SettlementRecord {
     }
 
     private void consumeSources(int count) {
+        requireMovement("consume", count, pendingDelivery);
         consumedSources += count;
         pendingDelivery -= count;
     }
 
-    // 失败组退回源成本：与 consumeSources 严格相反，占用回退且回到待返还量；
-    // 占用夹到已有上限，绝不出现负值
+    // 失败组退回源成本：与消费严格相反，不覆盖其他组或恢复任务的进度。
     private void returnSources(int count) {
-        int returned = Math.clamp(count, 0, Math.max(0, consumedSources));
-        if (returned <= 0) {
-            return;
+        requireMovement("return", count, consumedSources);
+        consumedSources -= count;
+        pendingDelivery += count;
+    }
+
+    private void requireMovement(String operation, int count, int available) {
+        if (count < 0 || count > available) {
+            throw new IllegalStateException("结算库存变更越界：id=" + id + " operation=" + operation
+                    + " count=" + count + " available=" + available);
         }
-        consumedSources -= returned;
-        pendingDelivery += returned;
     }
 
     // 计划期登记每组的催化剂成本（0 表示该规则未声明 catalyst_cost）
@@ -151,24 +154,18 @@ public final class SettlementRecord {
         failedEffects++;
     }
 
-    // 返还交付：交付出去后才从待交付里减去
+    // 世界交付成功后等额扣账，剩余库存与累计返还同时变更。
     private void delivered(int count) {
-        // 上界先归零：pendingDelivery 正常恒非负，但存档读回的字段可能为负，夹取不得因此抛 IllegalArgumentException
-        int moved = Math.clamp(count, 0, Math.max(0, pendingDelivery));
-        pendingDelivery -= moved;
-        deliveredReturns += moved;
+        requireMovement("deliver", count, pendingDelivery);
+        pendingDelivery -= count;
+        deliveredReturns += count;
     }
 
-    // 用结算库存的实际数量对齐待交付数：由持有库存的一方（结算任务的统一出口）在落账前调用，
-    // 保证内存账目与落盘值一致；所有权移交后不再调用，避免覆盖恢复任务推进的交付进度
-    private void syncPendingDelivery(int remaining) {
-        pendingDelivery = Math.max(0, remaining);
-    }
-
-    // 全部返还交付完毕
     private void complete(long gameTime) {
+        if (pendingDelivery != 0) {
+            throw new IllegalStateException("结算仍有待返还库存：id=" + id + " pending=" + pendingDelivery);
+        }
         status = Status.COMPLETED;
-        pendingDelivery = 0;
         finishedTick = gameTime;
     }
 
@@ -190,15 +187,12 @@ public final class SettlementRecord {
     }
 
     String id() { return id; }
-    String ruleId() { return ruleId; }
     String dimension() { return dimension; }
     String candidateId() { return candidateId; }
     ItemStack source() { return source; }
     int initialCount() { return initialCount; }
     int sourceCostPerGroup() { return sourceCostPerGroup; }
     int catalystCostPerGroup() { return catalystCostPerGroup; }
-    int catalystGroupsPaid() { return catalystGroupsPaid; }
-    int catalystsConsumed() { return catalystsConsumed; }
     boolean hasPosition() { return hasPosition; }
     double positionX() { return positionX; }
     double positionY() { return positionY; }
@@ -213,11 +207,7 @@ public final class SettlementRecord {
     int deliveredReturns() { return deliveredReturns; }
     long appliedUnits() { return appliedUnits; }
     long pendingUnits() { return pendingUnits; }
-    int skippedEffects() { return skippedEffects; }
-    int failedEffects() { return failedEffects; }
     Status status() { return status; }
-    String interruptReason() { return interruptReason; }
-    long startedTick() { return startedTick; }
     long finishedTick() { return finishedTick; }
 
     // 写盘：账目字段全部落盘，源物品快照用于返还模板
@@ -417,7 +407,7 @@ public final class SettlementRecord {
             changed();
         }
 
-        // 开始一组并落账：调用方已从结算库存扣掉该组固定成本
+        // 开始一组只计次数，源成本由实际效果进度占用。
         void groupStarted() {
             record.groupStarted();
             changed();
@@ -425,12 +415,14 @@ public final class SettlementRecord {
 
         // 放置成功后占用源成本，同时更新恢复库存，保存时两个数量始终守恒。
         void consumeSources(int count) {
+            if (count == 0) { return; }
             record.consumeSources(count);
             changed();
         }
 
         // 失败组退回源成本：占用回退、待返还量增加，与 consumeSources 相反
         void returnSources(int count) {
+            if (count == 0) { return; }
             record.returnSources(count);
             changed();
         }
@@ -474,13 +466,8 @@ public final class SettlementRecord {
 
         // 返还交付：交付成功后递减待交付并落账，账目始终等于「还没交付出去的库存」
         void delivered(int count) {
+            if (count == 0) { return; }
             record.delivered(count);
-            changed();
-        }
-
-        // 用结算库存实际数量对齐待交付量：只由仍持有库存所有权的一方调用，移交后不得再调用
-        void syncPendingDelivery(int remaining) {
-            record.syncPendingDelivery(remaining);
             changed();
         }
 

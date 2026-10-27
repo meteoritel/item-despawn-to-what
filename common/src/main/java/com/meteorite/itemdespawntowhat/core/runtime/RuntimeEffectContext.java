@@ -1,7 +1,6 @@
 package com.meteorite.itemdespawntowhat.core.runtime;
 
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerScheduler;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
@@ -24,7 +23,7 @@ public final class RuntimeEffectContext implements EffectContext {
     private final Vec3 sourceVelocity;
     private final Vec3 position;
     private final ResourceLocation ruleId;
-    private final ServerScheduler scheduler;
+    private final int positionSearchChecksPerTick;
     private final int rounds;
     private final int coveredSourceItems;
     private final String outcomeId;
@@ -35,30 +34,30 @@ public final class RuntimeEffectContext implements EffectContext {
     private final boolean safeSpawn;
     private final boolean fillOrigin;
 
-    // 便捷构造：源物品快照取实体当前堆叠，未注入进度回执，候选级开关取默认值
+    /** 便捷构造：源物品快照取实体当前堆叠，未注入进度回执，候选级开关取默认值。 */
     public RuntimeEffectContext(ServerLevel level, ItemEntity source, Vec3 position,
-                               ResourceLocation ruleId, ServerScheduler scheduler,
+                               ResourceLocation ruleId, int positionSearchChecksPerTick,
                                int rounds, int coveredSourceItems, String outcomeId, int groupIndex,
                                int groupCount, int groupSourceCost) {
-        this(level, source, position, ruleId, scheduler, source.getItem().copy(), source.getDeltaMovement(),
+        this(level, source, position, ruleId, positionSearchChecksPerTick, source.getItem().copy(), source.getDeltaMovement(),
                 rounds, coveredSourceItems, outcomeId, groupIndex, groupCount, groupSourceCost, null,
                 // 未显式给出候选级开关时沿用默认：安全生成关闭、起点填充开启
                 false, true);
     }
 
-    // 便捷构造：在上一构造基础上注入进度回执通道，候选级开关仍取默认值
+    /** 便捷构造：在上一构造基础上注入进度回执通道，候选级开关仍取默认值。 */
     public RuntimeEffectContext(ServerLevel level, ItemEntity source, Vec3 position,
-                               ResourceLocation ruleId, ServerScheduler scheduler,
+                               ResourceLocation ruleId, int positionSearchChecksPerTick,
                                int rounds, int coveredSourceItems, String outcomeId, int groupIndex,
                                int groupCount, int groupSourceCost, IntConsumer progressSink) {
-        this(level, source, position, ruleId, scheduler, source.getItem().copy(), source.getDeltaMovement(),
+        this(level, source, position, ruleId, positionSearchChecksPerTick, source.getItem().copy(), source.getDeltaMovement(),
                 rounds, coveredSourceItems, outcomeId, groupIndex, groupCount, groupSourceCost, progressSink,
                 false, true);
     }
 
-    // 完整构造：显式给出源物品快照（结算任务在计划期就把整堆移出实体，快照必须单独传入）
+    /** 完整构造：显式给出源物品快照（结算任务在计划期就把整堆移出实体，快照必须单独传入）。 */
     public RuntimeEffectContext(ServerLevel level, ItemEntity source, Vec3 position,
-                               ResourceLocation ruleId, ServerScheduler scheduler,
+                               ResourceLocation ruleId, int positionSearchChecksPerTick,
                                ItemStack sourceSnapshot, Vec3 sourceVelocity, int rounds, int coveredSourceItems,
                                String outcomeId, int groupIndex, int groupCount, int groupSourceCost,
                                IntConsumer progressSink, boolean safeSpawn, boolean fillOrigin) {
@@ -68,7 +67,7 @@ public final class RuntimeEffectContext implements EffectContext {
         this.sourceVelocity = sourceVelocity == null ? Vec3.ZERO : sourceVelocity;
         this.position = position;
         this.ruleId = ruleId;
-        this.scheduler = scheduler;
+        this.positionSearchChecksPerTick = positionSearchChecksPerTick;
         this.rounds = Math.max(1, rounds);
         this.coveredSourceItems = Math.max(0, coveredSourceItems);
         this.outcomeId = outcomeId == null ? "default" : outcomeId;
@@ -92,7 +91,7 @@ public final class RuntimeEffectContext implements EffectContext {
 
     @Override
     public int positionSearchChecksPerTick() {
-        return scheduler.config().positionSearchChecksPerTick();
+        return positionSearchChecksPerTick;
     }
 
     @Override

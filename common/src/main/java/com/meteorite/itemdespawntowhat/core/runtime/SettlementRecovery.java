@@ -2,12 +2,11 @@ package com.meteorite.itemdespawntowhat.core.runtime;
 
 import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.CancelReason;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerScheduler;
+import com.meteorite.itemdespawntowhat.core.runtime.scheduler.SchedulerConfig;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTask;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.StepResult;
-import com.meteorite.itemdespawntowhat.core.type.effect.exec.ReturnItemSpawner;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
@@ -25,32 +24,29 @@ import org.jetbrains.annotations.Nullable;
 final class SettlementRecovery implements ServerTask {
 
     private static final Logger LOGGER = LogManager.getLogger();
-    // 交付失败后的退避起点与上限：20 tick 起，最多 1200 tick（1 分钟），避免区块长期不可用时反复重试
-    private static final int BASE_RETRY_DELAY_TICKS = 20;
-    private static final int MAX_RETRY_DELAY_TICKS = 1200;
     private static final String FAILURE_REASON = "TASK_FAILED";
 
     private final SettlementRecoveryQueue queue;
-    private final ServerScheduler scheduler;
+    private final SchedulerConfig config;
     private final ServerLevel level;
     private final SettlementRecord record;
     // 受控写入句柄：交付递减与终态标记都经它配套落账（双索引 + 标脏）
     private final SettlementRecord.Writer writer;
     // 位置载体：记录创建后源实体可能已经不存在，只借它提供搜索起点，不加入世界
-    private final ItemEntity anchor;
-    private ReturnItemSpawner.PositionSearch search;
+    private final RebateDelivery delivery;
     private int failures;
     // 终态清理幂等：失败与取消共用，避免重复记账。
     private boolean closed;
 
-    SettlementRecovery(SettlementRecoveryQueue queue, ServerScheduler scheduler, ServerLevel level,
+    SettlementRecovery(SettlementRecoveryQueue queue, SchedulerConfig config, ServerLevel level,
                        SettlementRecord.Writer writer, Vec3 position) {
         this.queue = queue;
-        this.scheduler = scheduler;
+        this.config = config;
         this.level = level;
         this.writer = writer;
         this.record = writer.record();
-        this.anchor = new ItemEntity(level, position.x, position.y, position.z, ItemStack.EMPTY);
+        ItemEntity anchor = new ItemEntity(level, position.x, position.y, position.z, ItemStack.EMPTY);
+        this.delivery = new RebateDelivery(level, anchor, writer, config.positionSearchChecksPerTick());
     }
 
     @Override
@@ -73,44 +69,26 @@ final class SettlementRecovery implements ServerTask {
             finish();
             return StepResult.done(1);
         }
-        if (search == null) {
-            search = new ReturnItemSpawner.PositionSearch(level, anchor);
+        RebateDelivery.Result result = delivery.advance(budget, Math.max(1, config.dispatchBatchSize()));
+        if (result.deliveredStacks() > 0) {
+            failures = 0;
         }
-        int maxStacks = Math.max(1, scheduler.config().dispatchBatchSize());
-        int delivered = 0;
-        while (delivered < maxStacks && !budget.exhausted()) {
-            int pending = record.pendingDelivery();
-            if (pending <= 0) {
-                break;
-            }
-            ItemStack stack = record.source().copy();
-            stack.setCount(Math.min(pending, stack.getMaxStackSize()));
-            ReturnItemSpawner.Outcome outcome = ReturnItemSpawner.deliver(stack, search, budget,
-                    scheduler.config().positionSearchChecksPerTick());
-            if (outcome == ReturnItemSpawner.Outcome.ADDED) {
-                // 交付成功后才扣减待交付量并落账：账目始终等于「还没交付出去的库存」
-                writer.delivered(stack.getCount());
-                budget.charge(SettlementPayment.DELIVERY_WORK_UNITS);
-                delivered++;
-                failures = 0;
-                continue;
-            }
-            budget.charge(1);
-            failures++;
-            if (outcome == ReturnItemSpawner.Outcome.CHUNK_UNLOADED) {
-                LOGGER.debug("返还交付延后（区块不可用）：记录={} 维度={} 待返还={} 连续失败={}",
-                        record.id(), record.dimension(), record.pendingDelivery(), failures);
-                return StepResult.retry(1, retryDelayTicks());
-            }
-            // 本刻位置搜索预算用尽：保留搜索断点，下刻继续
-            return StepResult.yield(1, 1);
-        }
-        if (record.pendingDelivery() <= 0) {
+        if (result.stop() == RebateDelivery.Stop.DONE) {
             finish();
             return StepResult.done(1);
         }
+        if (result.stop() == RebateDelivery.Stop.CHUNK_UNLOADED
+                || result.stop() == RebateDelivery.Stop.SEARCH_PENDING) {
+            budget.charge(1);
+            failures++;
+            if (result.stop() == RebateDelivery.Stop.CHUNK_UNLOADED) {
+                LOGGER.debug("返还交付延后（区块不可用）：记录={} 维度={} 待返还={} 连续失败={}",
+                        record.id(), record.dimension(), record.pendingDelivery(), failures);
+                return StepResult.retry(1, RecoveryBackoff.delayTicks(failures));
+            }
+        }
         LOGGER.debug("返还交付部分完成：记录={} 本刻交付={} 剩余待返还={}",
-                record.id(), delivered, record.pendingDelivery());
+                record.id(), result.deliveredStacks(), record.pendingDelivery());
         return StepResult.yield(1, 1);
     }
 
@@ -154,18 +132,9 @@ final class SettlementRecovery implements ServerTask {
     // 交付结束：记录标记完成并落账，释放幂等位
     private void finish() {
         writer.complete(level.getGameTime());
+        closed = true;
         queue.onFinished(level.getServer(), record.id());
         LOGGER.debug("返还交付完成：记录={} 已交付={}", record.id(), record.deliveredReturns());
     }
 
-    // 运行期恢复队列的退避：按已尝试次数指数退避，20/40/80…最高 1200 tick
-    static int queueRetryDelayTicks(int attempts) {
-        int shift = Math.clamp(attempts - 1, 0, 6);
-        return Math.min(MAX_RETRY_DELAY_TICKS, BASE_RETRY_DELAY_TICKS << shift);
-    }
-
-    // 交付失败的退避：同一套指数退避口径
-    private int retryDelayTicks() {
-        return queueRetryDelayTicks(failures);
-    }
 }

@@ -753,7 +753,7 @@ public final class ConversionRuntime {
                 int estimated = costPerGroup > 0 ? Math.max(1, available / costPerGroup) : 1;
                 RuntimeObserver.current().converted(item, rule.id().toString(), estimated);
             }
-            ConversionSettlement settlement = new ConversionSettlement(this, scheduler, level, item, rule, held, writer,
+            ConversionSettlement settlement = new ConversionSettlement(this, scheduler, scheduler.config(), level, item, rule, held, writer,
                     triggerPosition, triggerVelocity, preparations, leadGroups);
             scheduler.scheduleAt(level.dimension(), settlement, level.getGameTime());
             transferred = true;

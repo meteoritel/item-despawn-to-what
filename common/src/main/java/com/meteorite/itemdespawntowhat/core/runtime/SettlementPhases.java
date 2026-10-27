@@ -8,12 +8,26 @@ package com.meteorite.itemdespawntowhat.core.runtime;
 final class SettlementPhases {
 
     // 结算阶段：一次性效果的领先准备已覆盖全部组时会跳过准备阶段，直接进入派发
-    enum Phase { PLANNING, PREPARING, DISPATCHING, DELIVERING, DONE }
+    enum Phase { PLANNING, PREPARING, DISPATCHING, DELIVERING, DONE, ABORTED }
 
     private Phase phase = Phase.PLANNING;
 
     Phase current() {
         return phase;
+    }
+
+    // 活动阶段持有库存交付权；终态拒绝所有迟到效果与退款。
+    boolean active() {
+        return phase != Phase.DONE && phase != Phase.ABORTED;
+    }
+
+    // 在取消子任务之前关闭接收，取消回调因此不能再写入库存。
+    boolean abort() {
+        if (!active()) {
+            return false;
+        }
+        phase = Phase.ABORTED;
+        return true;
     }
 
     // 计划定稿：还有未固定的组就进入准备阶段，否则直接派发

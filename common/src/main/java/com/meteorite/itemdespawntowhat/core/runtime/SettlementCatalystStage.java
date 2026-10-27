@@ -8,7 +8,6 @@ import com.meteorite.itemdespawntowhat.core.type.effect.exec.EffectTargets;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
@@ -34,7 +33,7 @@ final class SettlementCatalystStage {
     private final ItemEntity source;
     private final Vec3 triggerPosition;
     private final Rule rule;
-    private final ItemStack held;
+    private final SettlementRecord record;
     // 每组源成本：决定源库存能支撑的组数上界（与记录的固定成本同源）
     private final int sourceCostPerGroup;
     private final String recordId;
@@ -59,13 +58,13 @@ final class SettlementCatalystStage {
             });
 
     SettlementCatalystStage(ConversionRuntime runtime, ServerLevel level, ItemEntity source, Vec3 triggerPosition,
-                            Rule rule, ItemStack held, int sourceCostPerGroup, String recordId) {
+                            Rule rule, SettlementRecord record, int sourceCostPerGroup, String recordId) {
         this.runtime = runtime;
         this.level = level;
         this.source = source;
         this.triggerPosition = triggerPosition;
         this.rule = rule;
-        this.held = held;
+        this.record = record;
         this.sourceCostPerGroup = sourceCostPerGroup;
         this.recordId = recordId;
     }
@@ -117,7 +116,7 @@ final class SettlementCatalystStage {
             return Integer.MAX_VALUE;
         }
         if (allocation == null) {
-            int sourceGroups = sourceCostPerGroup > 0 ? held.getCount() / sourceCostPerGroup : 1;
+            int sourceGroups = sourceCostPerGroup > 0 ? record.pendingDelivery() / sourceCostPerGroup : 1;
             allocation = new CatalystAllocation(catalyst, picks, available, sourceGroups);
         }
         return allocation.advance(budget) ? allocation.groups() : PENDING;

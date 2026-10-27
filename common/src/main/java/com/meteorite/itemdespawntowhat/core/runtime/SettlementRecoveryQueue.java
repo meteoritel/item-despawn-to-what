@@ -127,7 +127,7 @@ final class SettlementRecoveryQueue {
         Vec3 position = record.hasPosition()
                 ? new Vec3(record.positionX(), record.positionY(), record.positionZ())
                 : Vec3.atBottomCenterOf(level.getSharedSpawnPos());
-        SettlementRecovery recovery = new SettlementRecovery(this, scheduler, level,
+        SettlementRecovery recovery = new SettlementRecovery(this, scheduler.config(), level,
                 SettlementRecord.Writer.of(ledger, record), position);
         activeRecoveries.add(record.id());
         scheduler.scheduleAt(level.dimension(), recovery, level.getGameTime());
@@ -176,7 +176,7 @@ final class SettlementRecoveryQueue {
             }
             return;
         }
-        int delay = SettlementRecovery.queueRetryDelayTicks(tried);
+        int delay = RecoveryBackoff.delayTicks(tried);
         maxRetryDelayTicks = Math.max(maxRetryDelayTicks, delay);
         pendingRecoveries.put(id, new PendingRecovery(id, tried, scheduler.currentTick() + delay, reason, 0));
         LOGGER.warn("结算恢复失败：记录={} 原因={} 已尝试={} 次，{} tick 后重试", id, reason, tried, delay);
