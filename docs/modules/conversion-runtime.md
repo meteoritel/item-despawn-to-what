@@ -34,12 +34,12 @@ authority: common/core/runtime、common/core/state
 
 ### 对外入口
 
-- 追踪生命周期：`ConversionRuntime.onItemAdded`、`rescan(level)`、`rebuild(level)`、`prepareRules(...)`、`publish(server, prepared)`、`publishDecoded(server, index)`、`replaceRules(...)`、`clear(level)`、`shutdown()`。
+- 追踪生命周期：`ConversionRuntime.onItemAdded`、`rebuild(level)`、`prepareRules(...)`、`publish(server, prepared)`、`publishDecoded(server, index)`、`replaceRules(...)`、`clear(level)`、`shutdown()`；逐维回扫不是对外入口，只由模块内部的 `RulePublication` 经 `WorldRescan` 入队。
 - tick 驱动：`onServerTick`，由宿主在服务器 tick 事件中调用。
 - 环境触发：`requestEnvironmentalConversion(level, item, source)`；伤害是否属于可触发类型由 `DamageClassification.classify` 判定。
 - 实体状态：`DropStateStore` 的读取、写入、清除与 `blocksEnvironmentalDamage` 判定；授予入口在效果执行侧的 `ReturnItemSpawner`。
 - 调度：`ServerScheduler` 实现 `TaskQueue`，向运行时暴露维度注册、取消、摘除与全局释放。
-- 观测：`trackedCount`、`debugInfo`、`candidatesFor`、`pendingTasks`、`queueStats`、`schedulerStats`、`budgetSnapshot`、`activeRecoveryCount`、`recoverySkippedDimensions`、`rescanPending`、`rescanSteps`。
+- 观测：`trackedCount`、`debugInfo`、`pendingTasks`、`queueStats`、`schedulerStats`、`budgetSnapshot`、`activeRecoveryCount`、`recoverySkippedDimensions`、`settlementRecoveryStats`、`rescanPending`、`rescanSteps`。
 
 ### 依赖方向
 
@@ -69,7 +69,11 @@ flowchart LR
 
 | 类型（`core/runtime`、`core/runtime/scheduler`、`core/state` 下） | 角色 | 职责 | 协作对象 |
 |---|---|---|---|
-| `ConversionRuntime` | 聚合根 | 按维度持有追踪表、物品 id 有序表与标签/气候缓存；负责追踪建立、排期、门禁、选规、发起结算与观测 | `ServerScheduler`、`RuleIndex`、`SettlementLedger`、`DropStateStore` |
+| `ConversionRuntime` | 门面与执行器 | 按维度持有追踪表与标签/气候缓存；负责追踪建立、排期、门禁裁决的执行端（转化提交、重排、释放）与观测；四个状态簇各由独立包内类持有 | `ConversionGate`、`RulePublication`、`WorldRescan`、`SettlementRecoveryQueue`、`ServerScheduler`、`SettlementLedger` |
+| `ConversionGate` | 无状态裁决 | 一次到期判定的全部短路条件与单趟选规：区块 ticking、锁定、永久禁转、冷却、候选、年龄门槛与退避档在同一遍里得出；产出 `Convert` / `Wait` / `Release` / `Idle` 四值结论，不持有也不回写状态 | `ConversionRuntime`（注入候选与条件上下文查询）、`DropStateStore` |
+| `RulePublication` | 规则发布 | 生效索引、发布代次、候选结构摘要与发布后的逐维回扫入队；换入时清空各维度追踪与条件缓存，并由宿主摘除维度 realm | `ConversionRuntime.reloadLevels`、`WorldRescan`、`CandidateStructureVersions` |
+| `WorldRescan` | 逐维回扫 | 每维已加载掉落物有序索引、轮次 token、分步游标与世界扫描快照；以维护任务分片推进，失败只重排一份续接 | `ConversionRuntime.onItemAdded`、`ServerScheduler`、`SettlementRecoveryQueue` |
+| `SettlementRecoveryQueue` | 恢复队列 | 本轮会话内的待恢复记录、重试档位、退避排期、放弃与告警计数；泵任务每 tick 至多启动一条恢复 | `SettlementRecovery`、`SettlementLedger`、`ServerScheduler` |
 | `ConversionSettlement` | 事务敏感任务 | `EFFECT` 任务的聚合根：只推进阶段（计划/准备/派发/交付）与守住提交边界；取消与异常统一走 `abort` | `SettlementPhases`、`SettlementGroupPlan`、`SettlementCatalystStage`、`SettlementPayment`、`SettlementReceipts`、`SettlementSourceCharge`、`SettlementItemOutputs`、`SettlementBlockOutputs`、`EffectTask` |
 | `SettlementPhases` | 阶段状态机 | 只维护当前阶段与合法跃迁，不读账目也不写世界 | `ConversionSettlement` |
 | `SettlementGroupPlan` / `SettlementCapacityProbe` | 计划与容量 | 候选选择与组数上界（唯一实现）、逐候选容量探测与产出预算（预算耗尽跨刻续算、已完成候选结果复用） | `ConversionSettlement`、`EffectType.capacityDemand`、`NearbyProductLimits`、`RoundRobinCursors` |
@@ -81,7 +85,7 @@ flowchart LR
 | `EffectTask` | 并发敏感 | 单个效果的执行包装：一次求值、推进执行、回执入账；终态先摘引用再回执 | `ConversionRuntime.startEffect`、`EffectResult` |
 | `ServerScheduler` / `ServerTickBudget` | 共享预算 | 每服务器一份预算，按维度 realm 与任务种类 lane 公平轮转，按真实世界操作量计费 | 全部任务类型 |
 | `RealmCleanupTask` | 续接清理任务 | 摘除 realm 后把收集到的句柄逐槽取消：每步按 `cancels_per_step` 与单 tick 额度取用，取消回调异常隔离；停服时就地排空 | `ServerScheduler`、`ScheduledTask` |
-| `RuleIndex` / `RoundRobinCursors` / `CandidateStructureVersions` | 索引与游标 | 候选按优先级与条件复杂度排序；跨结算共享轮转游标；候选结构版本用于判定失效 | `ConversionRuntime`、`ConversionSettlement` |
+| `RuleIndex` / `RoundRobinCursors` / `CandidateStructureVersions` | 索引与游标 | 候选按优先级与条件复杂度排序；跨结算共享轮转游标；候选结构版本用于判定失效 | `RulePublication`、`ConversionSettlement` |
 | `CatalystReservations` | 并发敏感 | 运行期催化剂预留表，按结算 id 预留、支付和释放；不落盘，停服清空 | `ConversionSettlement` |
 | `DropStateStore` / `DropState` | 实体状态 | 保护与冷却、永久禁转的实体层存取；平台差异经 `IPlatformHelper` 承载 | 效果执行侧授予、平台伤害处理、门禁读取 |
 | `DamageClassification` | 触发分类 | 判定伤害是否属于可触发环境转化的类型 | `requestEnvironmentalConversion` |
@@ -107,14 +111,14 @@ flowchart TB
     J --> K["追踪结束，结算任务接手"]
 ```
 
-追踪的建立是幂等的：已 tracked 且句柄仍有效的实体再次进入 `onItemAdded` 直接返回；`items` 有序表按实体 id 索引，供重载后的回扫游标使用。`converted` 标签标记“已提交转化”的实体，回扫与重复回调都会因此跳过。
+追踪的建立是幂等的：已 tracked 且句柄仍有效的实体再次进入 `onItemAdded` 直接返回；每维的已掉落物有序索引（`WorldRescan.State`）按实体 id 索引，供重载后的回扫游标使用。`converted` 标签标记“已提交转化”的实体，回扫与重复回调都会因此跳过。
 
 回扫是分步续接任务，入口只清表并入队，不在服务端线程同步遍历整维实体：
 
 | 入口 | 模式 | 依据 |
 |---|---|---|
 | 启动 `rebuild(level)`、维度加载 `rebuild(level)` | 世界扫描 | 这些实体的 join 事件早于运行时装配，`items` 表不完整；入口收集一次已加载掉落物的引用快照，分步按快照登记 |
-| 规则重载 `rescan(level)` | 有序 id 游标；上一轮世界扫描快照尚未消化完时仍按世界扫描续接 | `items` 表由 join/leave 事件持续维护，按 `higherEntry` 游标逐条重建追踪；快照未消化完时沿用快照并在登记完后追加同一套游标，避免漏登记 |
+| 规则发布后的逐维排队（`RulePublication` → `WorldRescan`） | 有序 id 游标；上一轮世界扫描快照尚未消化完时仍按世界扫描续接 | `items` 表由 join/leave 事件持续维护，按 `higherEntry` 游标逐条重建追踪；快照未消化完时沿用快照并在登记完后追加同一套游标，避免漏登记 |
 
 两种模式单步都只把 `rescan_entities_per_step` 个实体交给 `onItemAdded`，且每步检查共享预算；世界扫描模式在入口收集一次已加载掉落物的引用快照（不改追踪状态），步骤按快照切片登记，既不跨 tick 持有世界迭代器，也不必每步重扫整维；有序游标模式沿 `items` 的 `higherEntry` 前进。还有剩余工作就 `yield`，下一 tick 继续。世界扫描完成前若再次重载，重载会沿用同一份快照补齐，不会因取消任务漏掉尚未登记的实体；快照登记完成后同一任务继续沿 `items` 的 `higherEntry` 游标全量补一遍（快照创建之后 join 的实体只在这里出现）——重载会清空追踪表，这些实体不在快照里，不补这一步它们就再也不会有追踪，重复登记由 `onItemAdded` 幂等兜底，两类来源都不会漏。完成标记按维度保存轮次 token，只有当前一轮的收尾路径（完成、取消、失败终态）能清除，旧一轮的迟到回调不会破坏新一轮状态；同一轮回扫失败只重排一份续接任务，避免多份任务同时推进同一游标。回扫让出期间，自然到期入口对尚未重建追踪的实体直接补一次 `onItemAdded`，临近消失的物品不会因等待回扫而漏转化。
 
@@ -126,17 +130,19 @@ flowchart TB
 
 ### 4.2 预检查门禁与规则选择
 
-`attempt` 按固定顺序逐项短路，任一项不通过都在本步返回：
+`ConversionGate.decide` 按固定顺序逐项短路，结论收敛成 `Convert` / `Wait` / `Release` / `Idle` 四值，由 `ConversionRuntime.applyDecision` 执行；判定本身不写任何状态，写追踪表与调度器的只有执行端：
 
-1. 追踪已不存在则返回；实体失效或命中排除条件则先取消句柄再移除追踪。
-2. `level.isPositionEntityTicking` 为假说明所在区块未 ticking，按配置的检查间隔重排。
-3. 实体被结算锁住（`locked`）时按 1 tick 重排，等结算回写。
-4. `DropState` 的永久禁转标记为真则移除追踪。
-5. 转化冷却未到期时按剩余冷却刻重排。
-6. 候选为空则移除追踪。
-7. `select` 依次跳过早先排序的候选，要求规则声明了当前 `TriggerKind`、源数量够一组、条件树求值为真；年龄门槛只在自然触发且非到期补算时强制。
+1. 追踪已不存在则直接返回；实体失效或命中排除条件则由宿主先取消句柄再移除追踪（与 4.6 的失败恢复同口径）。
+2. `level.isPositionEntityTicking` 为假说明所在区块未 ticking，按配置的检查间隔重排（`Wait`，不计失败档）。
+3. 实体被结算锁住（`locked`）时按 1 tick 重排（`Wait`，不计失败档），等结算回写。
+4. `DropState` 的永久禁转标记为真则移除追踪（`Release`）。
+5. 转化冷却未到期时按剩余冷却刻重排（`Wait`，不计失败档）。
+6. 候选为空则移除追踪（`Release`）。
+7. 单趟遍历候选（已按优先级排序），跳过未声明当前 `TriggerKind` 的规则；同一遍里同时产出命中结论与退避档，年龄门槛只在自然触发且非到期补算时强制。命中即 `Convert`，到期补算的命中额外带「执行后丢弃实体」。
 
-未命中时只把“本次触发方式参与且源数量足够一组”的候选计入退避资格：只有这些规则在本刻已到年龄门槛（自然触发）或可直接判定（环境触发、到期补算）而条件不成立时，`failureCount` 才递增；纯环境规则与源量不足一组的规则本刻不可能命中，不参与计数，也不会把等待拉向与本次判定无关的档位。退避时长取 `config.backoffTicks` 与“相关候选中最近一个年龄达标刻还差几刻”的较小值；相关候选都没有年龄达标时不计数，只把等待压到最近达标刻。自然检查若本触发方式完全没有规则（例如只剩纯环境规则），继续检查不会产生转化，运行时释放追踪而非反复排期；若规则存在但源量暂时不足一组，则保留追踪、按检查间隔等待数量变化，且不累加失败计数；环境触发入口没有对应规则时不改动既有自然排期。这是纯延迟策略，改动后退避参数见第 6 节。
+未命中时只把“本次触发方式参与且源数量足够一组”的候选计入退避资格：只有这些规则在本刻已到年龄门槛（自然触发）或可直接判定（环境触发、到期补算）而条件不成立时，结论才带 `countsAsFailure`，由宿主先自增失败计数再重排；纯环境规则与源量不足一组的规则本刻不可能命中，不参与计数，也不会把等待拉向与本次判定无关的档位。退避时长取 `config.backoffTicks` 与“相关候选中最近一个年龄达标刻还差几刻”的较小值；相关候选都没有年龄达标时不计数，只把等待压到最近达标刻。自然检查若本触发方式完全没有规则（例如只剩纯环境规则），继续检查不会产生转化，结论是 `Release` 而非反复排期；若规则存在但源量暂时不足一组，则保留追踪、按检查间隔等待数量变化，且不累加失败计数；环境触发入口没有对应规则时结论是 `Idle`，既有自然排期完全不动。这是纯延迟策略，改动后退避参数见第 6 节。
+
+门禁的判定输入只有三字段只读快照（`locked` / `failureCount` / `expiryPending`），候选规则与条件上下文由宿主以查询注入，因此同一 `(dropped item, kind, 失败档, 是否到期补算)` 的结论与调用来源无关：自然到期检查与环境伤害请求走同一份判定。
 
 环境触发走同一条 `attempt`：入口位于伤害处理的调用栈，条件与选规在本步同步完成，`TriggerKind` 记为环境触发，选中的效果一律经调度器排队执行。伤害类型由 `DamageClassification` 按 `DamageType` 常量逐项比对，顺序固定为岩浆 → 火 → 仙人掌：`DamageTypeTags.IS_FIRE` 会把岩浆伤害一并覆盖，用标签判定无法区分两者。返还物与临时保护的伤害拦截在平台侧先查 `DropStateStore.blocksEnvironmentalDamage`。
 
@@ -234,7 +240,7 @@ flowchart TB
 
 ### 扩展点
 
-- **新增触发方式**：在 `TriggerKind` 加常量 → 在 `select` 的分派与 `requestConversion` 的入口各接一条 → 同步 `core/model` 的编解码与 `docs/api/rule-json.md` 的取值说明。年龄门槛只对自然触发强制，新触发方式默认走环境口径。
+- **新增触发方式**：在 `TriggerKind` 加常量 → 在 `ConversionGate.chooseOrWait` 的单趟遍历里接一条（kind 过滤、退避资格、命中判定与「本触发方式是否被规则覆盖」都只在这一处判）→ 同步 `core/model` 的编解码与 `docs/api/rule-json.md` 的取值说明。年龄门槛只对自然触发强制（`decide` 传入的 `Tracked` 与 `ageGated`），新触发方式默认走环境口径。
 - **新增组合语义**：在 `CombinationMode` 加常量 → 在 `SettlementGroupPlan.select` 与 `RoundRobinCursors` 中给出候选推进规则 → 确认游标在“被跳过”与“已定稿”两种情况下行为不同。
 - **新增效果类型**：落在类型系统与效果执行器，本模块只需 `startEffect` 能拿到可入账的 `EffectResult`；一次性效果由 `attemptedOneShots` 去重，同一源只有一次尝试机会。参与产物邻近容量约束时在类型定义上覆盖 `capacityDemand`，声明每轮一组最小产出需求（产物类型未知的按保守下界声明，战利品表用 `CapacityDemand.unspecified(1)`）；不覆盖即视为不占容量。
 - **调整返还与恢复策略**：改 `SettlementRecovery` 的交付循环，落账仍只走 `SettlementRecord.Writer`；新增账目字段时同步 `SettlementRecord` 的 Codec 与 `SettlementLedger` 的索引维护。
@@ -251,7 +257,7 @@ flowchart TB
 - 同一掉落物只执行优先级最高的一条命中规则；排序规则集中在 `RuleIndex.RULE_ORDER`。
 - 台账不裁剪未结清记录，完成记录在保留窗口与条数上限内可裁。
 - 实体状态挂实体层且用绝对游戏刻；跨存档与区块卸载都按真实时间推进。
-- 长循环与逐实体遍历必须接入调度器（`ServerTaskKind` 选 lane），在 tick 回调里直接全量遍历会越过共享预算；整维回扫只能经 `rescan`/`rebuild` 入队分步推进。
+- 长循环与逐实体遍历必须接入调度器（`ServerTaskKind` 选 lane），在 tick 回调里直接全量遍历会越过共享预算；整维回扫只能经 `WorldRescan` 的 `rebuild` 或规则发布后的入队分步推进。
 
 ### 改动后的验证
 

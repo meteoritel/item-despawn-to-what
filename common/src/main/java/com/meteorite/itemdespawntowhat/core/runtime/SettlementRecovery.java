@@ -30,7 +30,7 @@ final class SettlementRecovery implements ServerTask {
     private static final int MAX_RETRY_DELAY_TICKS = 1200;
     private static final String FAILURE_REASON = "TASK_FAILED";
 
-    private final ConversionRuntime runtime;
+    private final SettlementRecoveryQueue queue;
     private final ServerScheduler scheduler;
     private final ServerLevel level;
     private final SettlementRecord record;
@@ -43,9 +43,9 @@ final class SettlementRecovery implements ServerTask {
     // 终态清理幂等：失败与取消共用，避免重复记账。
     private boolean closed;
 
-    SettlementRecovery(ConversionRuntime runtime, ServerScheduler scheduler, ServerLevel level,
+    SettlementRecovery(SettlementRecoveryQueue queue, ServerScheduler scheduler, ServerLevel level,
                        SettlementRecord.Writer writer, Vec3 position) {
-        this.runtime = runtime;
+        this.queue = queue;
         this.scheduler = scheduler;
         this.level = level;
         this.writer = writer;
@@ -134,7 +134,7 @@ final class SettlementRecovery implements ServerTask {
         closed = true;
         try {
             // 失败与取消均不补做世界写入，只保留剩余库存并释放未支付预留。
-            runtime.catalystReservations().releaseOwner(record.id());
+            queue.reservations().releaseOwner(record.id());
             try {
                 // 恢复失败/取消只记中断并落账，不补做世界写入
                 writer.interrupt(reason, level.getGameTime());
@@ -144,9 +144,9 @@ final class SettlementRecovery implements ServerTask {
         } finally {
             // 即使收尾写盘或预留释放失败，也必须允许后续扫描或运行期重试重新排期。
             if (failed) {
-                runtime.onRecoveryFailed(record.id(), reason);
+                queue.onFailed(record.id(), reason);
             } else {
-                runtime.onRecoveryFinished(level.getServer(), record.id());
+                queue.onFinished(level.getServer(), record.id());
             }
         }
     }
@@ -154,7 +154,7 @@ final class SettlementRecovery implements ServerTask {
     // 交付结束：记录标记完成并落账，释放幂等位
     private void finish() {
         writer.complete(level.getGameTime());
-        runtime.onRecoveryFinished(level.getServer(), record.id());
+        queue.onFinished(level.getServer(), record.id());
         LOGGER.debug("返还交付完成：记录={} 已交付={}", record.id(), record.deliveredReturns());
     }
 
