@@ -1,6 +1,5 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
-import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogPreviewIcons;
@@ -51,7 +50,7 @@ final class SourceBlacklistPicker {
         return List.copyOf(tags);
     }
 
-    static UiModal modal(Font font, EditorShell shell, EditorWorkspaceView workspace, @Nullable RuleValue rule, int width, int height,
+    static UiModal modal(Font font, EditorShell shell, @Nullable RuleValue rule, int width, int height,
                          Consumer<List<String>> onPicked) {
         CatalogEntryPolicy policy = CatalogEntryPolicy.fixed(RuleCatalogType.ITEM);
         Pages pages = new Pages(sourceTags(rule), policy);

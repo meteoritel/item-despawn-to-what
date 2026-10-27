@@ -2,7 +2,7 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
-import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
+import com.meteorite.itemdespawntowhat.client.net.RuleEditClientWorkspace;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.net.RuleEditClientState;
@@ -58,7 +58,7 @@ final class EditorShell {
     private static final int CHANGES_MODAL_MAX_HEIGHT = 220;
     private static final int CHANGES_MODAL_SCREEN_MARGIN = 90;
 
-    private final EditorWorkspaceView workspace;
+    private final RuleEditClientWorkspace workspace;
     private final RuleEditorModel model;
     private final RuleListDisplayCache display;
     private final Font font;
@@ -87,14 +87,14 @@ final class EditorShell {
     private boolean released;
     private boolean closeRequested;
 
-    EditorShell(EditorWorkspaceView workspace, RuleEditorModel model, RuleListDisplayCache display, Font font) {
+    EditorShell(RuleEditClientWorkspace workspace, RuleEditorModel model, RuleListDisplayCache display, Font font) {
         this.workspace = workspace;
         this.model = model;
         this.display = display;
         this.font = font;
-        this.listPage = new RuleEditorListPage(this, model, display, font, modals, workspace);
+        this.listPage = new RuleEditorListPage(this, model, display, font, modals);
         this.editPage = new RuleEditorEditPage(this, model, workspace, font, modals, focus);
-        this.debugPage = new RuleEditorDebugPage(this, model, workspace, font, modals);
+        this.debugPage = new RuleEditorDebugPage(this, model, font, modals);
         this.page = listPage;
         modals.setHistoryTarget(editPage::restoreHistory);
         modals.setOnScopeChanged(() -> {
@@ -134,11 +134,11 @@ final class EditorShell {
 
     /** 当前内容是否可写：只有工作区处于 ACTIVE 时可编辑。 */
     boolean editable() {
-        return workspace.active();
+        return workspace.session().editable();
     }
 
     boolean saving() {
-        return workspace.state() == RuleEditClientState.APPLYING;
+        return workspace.session().state() == RuleEditClientState.APPLYING;
     }
 
     @Nullable Component notice() {
@@ -169,7 +169,7 @@ final class EditorShell {
         return modals;
     }
 
-    EditorWorkspaceView workspace() {
+    RuleEditClientWorkspace workspace() {
         return workspace;
     }
 
@@ -383,7 +383,7 @@ final class EditorShell {
             setNotice(Component.translatable(UI + "notice.draft_save_failed"), NoticeLevel.WARNING);
         }
         // 快照解析失败时首载会一直停在「加载中」：用常驻警告让玩家知道当前内容不可用
-        if (workspace.snapshotFailure() == null) {
+        if (workspace.session().snapshotFailure() == null) {
             snapshotFailureNotified = false;
         } else if (!snapshotFailureNotified) {
             snapshotFailureNotified = true;

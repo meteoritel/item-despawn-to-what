@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
-import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
+import com.meteorite.itemdespawntowhat.client.net.RuleEditClientWorkspace;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
@@ -27,7 +27,7 @@ final class RuleSaveOverlay {
     private static final int ROW_GAP = 5;
     private final Font font;
     private final UiHostTheme theme;
-    private final EditorWorkspaceView workspace;
+    private final RuleEditClientWorkspace workspace;
     private final UiProgressBar bar;
     private final UiFocusManager focus = new UiFocusManager();
     private final UiButton advancedButton;
@@ -36,7 +36,7 @@ final class RuleSaveOverlay {
     private RuleSaveProgress.Stage lastStage;
     private boolean advanced;
 
-    RuleSaveOverlay(Font font, UiHostTheme theme, EditorWorkspaceView workspace) {
+    RuleSaveOverlay(Font font, UiHostTheme theme, RuleEditClientWorkspace workspace) {
         this.font = font;
         this.theme = theme;
         this.workspace = workspace;
@@ -65,9 +65,9 @@ final class RuleSaveOverlay {
     }
 
     void render(GuiGraphics graphics, int screenWidth, int screenHeight, int mouseX, int mouseY, long milliseconds) {
-        RuleSaveProgress progress = workspace.saveProgress();
+        RuleSaveProgress progress = workspace.saving().progress();
         if (progress == null) { progress = new RuleSaveProgress(RuleSaveProgress.Stage.PREPARING, 0, 0, "", false); }
-        boolean cancelling = workspace.cancelRequested() || progress.stage() == RuleSaveProgress.Stage.CANCELLING
+        boolean cancelling = workspace.saving().cancelRequested() || progress.stage() == RuleSaveProgress.Stage.CANCELLING
                 || progress.stage() == RuleSaveProgress.Stage.ROLLING_BACK;
         cancelButton.setEnabled(progress.cancellable() && !cancelling);
         cancelButton.setLabel(Component.translatable(UI + (cancelling ? "cancelling" : "cancel")));

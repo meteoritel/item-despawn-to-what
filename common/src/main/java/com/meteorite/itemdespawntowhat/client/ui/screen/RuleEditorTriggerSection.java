@@ -70,6 +70,7 @@ final class RuleEditorTriggerSection {
     @Nullable FormView conditionsForm;
 
     void buildTrigger(EditSession session) {
+        pages.workspace.requestReferenceLifespan();
         RuleValue rule = session.draft().root();
         List<String> effective = RuleTriggers.effective(rule);
         for (String value : RuleTriggers.known()) {
@@ -79,13 +80,11 @@ final class RuleEditorTriggerSection {
             pages.liveWidgets.add(box);
         }
         if (RuleTriggers.allowsDelay(rule)) {
-            delayForm = pages.newForm(session, "", TypeEditorDescriptor.of(RuleEditorPageSupport.DELAY_PAGE, Component.translatable(RuleEditorPageSupport.UI + "rule.trigger_after_seconds"), List.of(
-                    EditorField.integerSlider(RuleFields.TRIGGER_AFTER_SECONDS, RuleEditorPageSupport.UI + "rule.trigger_after_seconds", 0, Integer.MAX_VALUE, 0, BuiltinEditorDescriptors.DEFAULT_TRIGGER_WINDOW_SECONDS).optional())));
+            delayForm = pages.newForm(session, "", BuiltinEditorDescriptors.delayDescriptor());
             pages.liveForms.add(delayForm);
             pages.liveWidgets.add(delayForm);
         }
-        TypeEditorDescriptor conditions = TypeEditorDescriptor.of(RuleEditorPageSupport.CONDITIONS_PAGE, Component.translatable(RuleEditorPageSupport.UI + "tab.trigger"), List.of(
-                EditorField.conditionTree(RuleFields.CONDITIONS, RuleEditorPageSupport.UI + "rule.conditions")));
+        TypeEditorDescriptor conditions = BuiltinEditorDescriptors.conditionsDescriptor();
         conditionsForm = pages.newForm(session, "", conditions);
         conditionsForm.setLabelWidth(90);
         pages.liveForms.add(conditionsForm);
@@ -95,7 +94,7 @@ final class RuleEditorTriggerSection {
     void updateLifespanWindow() {
         EditSession session = pages.shell.editingSession();
         if (delayForm == null || session == null) return;
-        int ticks = pages.workspace.referenceLifespanTicks();
+        int ticks = pages.workspace.session().referenceLifespanTicks();
         // 整数秒向上取整保证不足一秒的寿命也可拖动；常用窗口不钳制既有触发值。
         int seconds = ticks <= 0 ? BuiltinEditorDescriptors.DEFAULT_TRIGGER_WINDOW_SECONDS
                 : (int) Math.ceil((double) ticks / RuleEditSessionLimits.TICKS_PER_SECOND);

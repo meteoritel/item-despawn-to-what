@@ -5,7 +5,7 @@ import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDefaults;
 import com.meteorite.itemdespawntowhat.client.edit.DebugTestRules;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorChangeSet;
-import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
+import com.meteorite.itemdespawntowhat.client.net.RuleEditClientWorkspace;
 import com.meteorite.itemdespawntowhat.client.edit.RuleCategoryAssignment;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
@@ -36,8 +36,8 @@ import java.util.Set;
  */
 public final class RuleEditorModel {
 
-    // 工作区只读视图
-    private final EditorWorkspaceView workspace;
+    // 编辑工作区
+    private final RuleEditClientWorkspace workspace;
     // 快照条目（按 id，保持服务端顺序）
     private final LinkedHashMap<String, RuleSnapshotEntry> entries = new LinkedHashMap<>();
     // 草稿会话（按 id）
@@ -71,21 +71,21 @@ public final class RuleEditorModel {
     private boolean draftsDiscarded;
 
     // 构造：读回磁盘草稿；真正绑定要等服务端快照，放在 refresh() 里
-    public RuleEditorModel(EditorWorkspaceView workspace) {
+    public RuleEditorModel(RuleEditClientWorkspace workspace) {
         this.workspace = workspace;
         for (RestoredDraft draft : this.journal.restore()) {
             this.restored.put(draft.targetId(), draft);
         }
     }
 
-    // 工作区只读视图
-    public EditorWorkspaceView workspace() {
+    // 编辑工作区
+    public RuleEditClientWorkspace workspace() {
         return this.workspace;
     }
 
     // 消费新快照；返回 true 表示确实有新数据
     public boolean refresh() {
-        RuleSnapshot snapshot = this.workspace.snapshot();
+        RuleSnapshot snapshot = this.workspace.session().snapshot();
         if (snapshot == null || snapshot == this.seenSnapshot) {
             return false;
         }
@@ -649,7 +649,7 @@ public final class RuleEditorModel {
 
     // 装配变更集 JSON；无改动返回 null
     public @Nullable String buildChangeSetJson() {
-        EditorChangeSet changeSet = new EditorChangeSet(this.workspace.contextRevision());
+        EditorChangeSet changeSet = new EditorChangeSet(this.workspace.session().contextRevision());
         for (String id : dirtyRuleIds()) {
             EditSession session = this.sessions.get(id);
             // 沙盒内容不进变更集：只读条目只提交启停意图

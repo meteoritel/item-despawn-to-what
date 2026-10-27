@@ -3,7 +3,7 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
-import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
+import com.meteorite.itemdespawntowhat.client.net.RuleEditClientWorkspace;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
@@ -182,7 +182,7 @@ public final class RuleEditorPanelFactory {
 
     // 目录面板弹窗：数据与请求全部走既有工作区链路，翻页/搜索只发意图
     // 字段路径来自实际发起选择的表单行，子表单和条件叶都以同一入口解析互斥范围。
-    static UiModal fieldCatalogModal(Font font, EditorShell shell, EditorWorkspaceView workspace, RuleCatalogType type,
+    static UiModal fieldCatalogModal(Font font, EditorShell shell, RuleEditClientWorkspace workspace, RuleCatalogType type,
                                      boolean multiSelect, Component title, int screenWidth, int screenHeight,
                                      Consumer<List<String>> onPicked, EditorField field, RuleDraft draft,
                                      String path, List<String> selected) {
@@ -194,7 +194,7 @@ public final class RuleEditorPanelFactory {
      * 打开字段目录，并只列出条目过滤器接受的资源引用。
      * @param entryFilter 条目过滤器，null 表示不限；只作用于资源条目，标签条目不受限制
      */
-    static UiModal fieldCatalogModal(Font font, EditorShell shell, EditorWorkspaceView workspace, RuleCatalogType type,
+    static UiModal fieldCatalogModal(Font font, EditorShell shell, RuleEditClientWorkspace workspace, RuleCatalogType type,
                                      boolean multiSelect, Component title, int screenWidth, int screenHeight,
                                      Consumer<List<String>> onPicked, EditorField field, RuleDraft draft,
                                      String path, List<String> selected, @Nullable Predicate<String> entryFilter) {
@@ -202,7 +202,7 @@ public final class RuleEditorPanelFactory {
                 onPicked, field, selected, SourceCatalystSelectionPolicy.forField(draft, path), entryFilter);
     }
 
-    private static UiModal catalogModal(Font font, EditorShell shell, EditorWorkspaceView workspace, RuleCatalogType type,
+    private static UiModal catalogModal(Font font, EditorShell shell, RuleEditClientWorkspace workspace, RuleCatalogType type,
                                         boolean multiSelect, Component title, int screenWidth, int screenHeight,
                                         Consumer<List<String>> onPicked, @Nullable EditorField field,
                                         List<String> selected, Function<String, @Nullable Component> unavailableReason,
@@ -267,8 +267,8 @@ public final class RuleEditorPanelFactory {
             }
             grid.setLoading(mapper.cached == null || !mapper.cached.lastPage()
                     || includeTags && (mapper.cachedTags == null || !mapper.cachedTags.lastPage()));
-            String errorState = workspace.directoryFailed(type)
-                    || includeTags && workspace.directoryFailed(RuleCatalogType.TAG) ? "retry" : active ? "" : "frozen";
+            String errorState = workspace.directory(type).failed()
+                    || includeTags && workspace.directory(RuleCatalogType.TAG).failed() ? "retry" : active ? "" : "frozen";
             if (!errorState.equals(mapper.errorState)) {
                 mapper.errorState = errorState;
                 grid.setError(switch (errorState) {
@@ -376,15 +376,17 @@ public final class RuleEditorPanelFactory {
         private final Map<String, TagPreviewIcons.Tag> tagPreviews = new HashMap<>();
 
         @Nullable
-        List<UiCatalogGrid.Entry> map(EditorWorkspaceView workspace, RuleCatalogType type) {
+        List<UiCatalogGrid.Entry> map(RuleEditClientWorkspace workspace, RuleCatalogType type) {
             Object nextResources = EntityPreviewIcons.generation();
             Object nextLanguage = Language.getInstance();
             if (resources != null && (resources != nextResources || language != nextLanguage)) {
                 workspace.invalidateDirectories(); cached = null;
+                workspace.requestDirectory(type);
+                if (includeTags) workspace.requestDirectory(RuleCatalogType.TAG);
             }
             resources = nextResources; language = nextLanguage;
-            RuleCatalog catalog = workspace.directory(type);
-            RuleCatalog tags = includeTags ? workspace.directory(RuleCatalogType.TAG) : null;
+            RuleCatalog catalog = workspace.directory(type).value();
+            RuleCatalog tags = includeTags ? workspace.directory(RuleCatalogType.TAG).value() : null;
             boolean changed = catalog != cached || tags != cachedTags;
             // 范围变化同样要让映射结果失效，否则工具栏的范围按钮不会生效
             UiCatalogGrid.Scope scope = policy == null ? UiCatalogGrid.Scope.BOTH : policy.scope();
@@ -524,7 +526,7 @@ public final class RuleEditorPanelFactory {
      */
     static LeafPanel leafPanel(Font font, FormView form, EditSession session, List<EditorField> fields,
                                String basePath, Consumer<Runnable> applyChange, Runnable onChange,
-                               Consumer<UiModal> pushModal, EditorShell shell, EditorWorkspaceView workspace, int screenWidth,
+                               Consumer<UiModal> pushModal, EditorShell shell, RuleEditClientWorkspace workspace, int screenWidth,
                                int screenHeight) {
         List<UiWidget> extras = new ArrayList<>();
         List<UiButton> buttons = new ArrayList<>();

@@ -2,7 +2,7 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.edit.DraftListInputs;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
-import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
+import com.meteorite.itemdespawntowhat.client.net.RuleEditClientWorkspace;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleCategoryAssignment;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
@@ -107,7 +107,7 @@ final class RuleEditorEditSections {
 
     final EditorShell shell;
     final RuleEditorModel model;
-    final EditorWorkspaceView workspace;
+    final RuleEditClientWorkspace workspace;
     final UiModalStack modals;
     final UiFocusManager focus;
     final ConditionEditingSupport conditionEditingSupport;
@@ -202,7 +202,7 @@ final class RuleEditorEditSections {
     // 输入事件分发与拖动状态
     private final RuleEditorPageInput input;
 
-    RuleEditorEditSections(EditorShell shell, RuleEditorModel model, EditorWorkspaceView workspace, Font font,
+    RuleEditorEditSections(EditorShell shell, RuleEditorModel model, RuleEditClientWorkspace workspace, Font font,
             UiModalStack modals, UiFocusManager focus, ConditionEditingSupport conditionEditingSupport) {
         this.shell = shell;
         this.model = model;
@@ -305,7 +305,7 @@ final class RuleEditorEditSections {
         form.setOnRejectedNotice(message -> shell.setNotice(message,EditorShell.NoticeLevel.DANGER));
         form.setSelectionCatalogOpener((field, path, tags, selected, onPicked) -> {
             if (page == EditSection.INPUT && RuleFields.SOURCE.equals(basePath) && RuleFields.SOURCE_EXCLUDE.equals(field.name())) {
-                if (shell.editable()) modals.push(SourceBlacklistPicker.modal(font, shell, workspace, session.draft().root(),
+                if (shell.editable()) modals.push(SourceBlacklistPicker.modal(font, shell, session.draft().root(),
                         shell.screenWidth(), shell.screenHeight(), onPicked));
                 return;
             }

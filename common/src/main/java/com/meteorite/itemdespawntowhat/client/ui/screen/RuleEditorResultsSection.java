@@ -484,7 +484,7 @@ final class RuleEditorResultsSection {
      * @return radius 滑条的取值窗口上限
      */
     private int serverMaxPlaceBlockRadius() {
-        EditorOpenRequest request = pages.workspace.openRequest();
+        EditorOpenRequest request = pages.workspace.session().openRequest();
         return request == null ? ServerConfig.DEFAULT.maxPlaceBlockRadius() : request.maxPlaceBlockRadius();
     }
 
@@ -545,7 +545,7 @@ final class RuleEditorResultsSection {
             return;
         }
         RuleDraft draft = session.draft();
-        pages.apply(EditSession.OP_SET_FIELD, () -> draft.setString(RuleFields.COMBINATION, value));
+        pages.apply(EditSession.OP_SET_FIELD, () -> draft.setAt(RuleFields.COMBINATION, RuleValue.text(value)));
     }
 
     void addCandidate() {

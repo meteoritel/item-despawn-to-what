@@ -5,10 +5,8 @@ import com.mojang.serialization.DataResult;
 import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.api.DevelopmentDiagnostics;
 import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalog;
-import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalogEntry;
 import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalogType;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEditProtocol;
-import com.meteorite.itemdespawntowhat.core.service.edit.RuleSaveProgress;
 import com.meteorite.itemdespawntowhat.core.service.edit.RuleSaveStatus;
 import com.meteorite.itemdespawntowhat.core.service.edit.RuleSnapshot;
 import com.meteorite.itemdespawntowhat.core.service.edit.RuleSourceView;
@@ -31,7 +29,6 @@ import com.meteorite.itemdespawntowhat.core.network.transport.RuleSaveResultPayl
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSourceViewPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleTextChunker;
-import com.meteorite.itemdespawntowhat.core.service.RuleEditSessionLimits;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.Connection;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditClientReceiver;
@@ -45,10 +42,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.EnumMap;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -57,7 +51,7 @@ import java.util.UUID;
  * 接收并缓存快照/目录、组装分片、在会话失效时关闭界面。
  * 约束：本包不 import 任何 client/ui 或 client/edit 类；
  * 界面实现由 {@link EditorScreenHooks} 注册，未注册时只记日志。
- * 线程：所有方法都在客户端主线程调用（平台接收器已切到客户端线程），内部按单线程加锁。
+ * 线程：平台接收器切到客户端主线程；同步边界保留在聚合入口，内部状态所有者不另加锁。
  */
 public final class RuleEditClientWorkspace {
 
@@ -70,108 +64,28 @@ public final class RuleEditClientWorkspace {
         void send(CustomPacketPayload payload);
     }
 
-    // 单条规则的来源视图加载状态：
-    // requestId 非空表示请求在途，view 非空表示已就绪，failed 表示请求失败或超时。
-    private static final class SourceViewLoad {
-        private String requestId = "";
-        private boolean failed;
-        private long deadline;
-        private @Nullable RuleSourceView view;
-
-        // 请求在途：有请求 id 且尚未失败或超时
-        private boolean loading() {
-            return !requestId.isEmpty() && !failed;
-        }
-    }
-
-    // 保存合并条目和正在等待的页，失败不丢弃已到达的部分。
-    private static final class DirectoryLoad {
-        final LinkedHashMap<String, RuleCatalogEntry> entries = new LinkedHashMap<>();
-        int page;
-        int revision = -1;
-        boolean waiting;
-        boolean failed;
-        boolean complete;
-        boolean validating;
-        long deadline;
-        RuleCatalog snapshot;
-    }
-
     // ---- 日志与单例 ----
     private static final Logger LOGGER = LogManager.getLogger(Constants.MOD_ID + "-client-net");
 
     // 单例：客户端只存在一个编辑会话
     private static final RuleEditClientWorkspace INSTANCE = new RuleEditClientWorkspace();
 
-    // ---- 来源视图参数 ----
-    // 来源视图缓存上限：只保留最近 8 条，命中不重复请求
-    private static final int SOURCE_VIEW_CACHE_LIMIT = 8;
-    // 来源视图请求超时：超时即降级为「来源对照不可用」，规则编辑与保存不受影响
-    private static final long SOURCE_VIEW_TIMEOUT_MILLIS = 5_000L;
-
-    // ---- 上行通道 ----
-    // 上行发送器；未注入时所有上行报文丢弃并记日志
     private @Nullable PacketSender sender;
-
     private @Nullable Connection receiverConnection;
+    private final SessionLease lease = new SessionLease();
+    private final SaveTicket ticket = new SaveTicket();
+    private final SourceViewRequests sources = new SourceViewRequests();
+    private final CatalogDirectory directories = new CatalogDirectory();
+    private final RuleChunkBuffer chunkBuffer = new RuleChunkBuffer();
     private String snapshotRequestId = "";
     private boolean snapshotPending;
-    private boolean sessionInvalidated;
-
-    // ---- 会话状态 ----
-    private RuleEditClientState state = RuleEditClientState.FREE;
-
-    private String sessionId = "";
-
-    private int contextRevision;
-
-    // 最近一次成功打开的请求（供界面层读取会话参数）
-    private @Nullable EditorOpenRequest openRequest;
-
     private @Nullable RuleSnapshot snapshot;
-
-    // 最近一次快照解析失败的原因；受理新快照或结束会话后清空，
-    // 供界面区分「还在加载」与「加载失败」
     private @Nullable String snapshotFailure;
-
-    private @Nullable RuleSaveResultPayload lastResult;
-    private String savingOperationId = "";
-    private @Nullable RuleSaveProgress saveProgress;
-    private long progressSequence;
-    private boolean cancelRequested;
-    private long lastHeartbeatTick;
-    // 会话收尾重入保护：界面 close 回调里若再次调用本工作区的 close/reset，直接忽略
     private boolean endingSession;
-
-    // ---- 下行分片重组 ----
-    // 快照分片重组缓冲
-    private final RuleChunkBuffer chunkBuffer = new RuleChunkBuffer();
-    // 来源视图分片重组缓冲
-    private final RuleChunkBuffer sourceViewChunks = new RuleChunkBuffer();
-
-    // ---- 目录与来源视图缓存 ----
-    // 来源视图按需缓存（访问顺序 LRU，最多 8 条）；会话结束整体清空
-    private final Map<String, SourceViewLoad> sourceViews = new LinkedHashMap<>(16, 0.75F, true) {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<String, SourceViewLoad> eldest) {
-            return size() > SOURCE_VIEW_CACHE_LIMIT;
-        }
-    };
-    // 最近一次收到的目录页，按类型缓存
-    private final Map<RuleCatalogType, RuleCatalog> catalogs = new EnumMap<>(RuleCatalogType.class);
-    // 每种目录最近一次请求的 requestId：用于丢弃过时响应
-    private final Map<RuleCatalogType, String> catalogRequestIds = new EnumMap<>(RuleCatalogType.class);
-    // 全目录按类型懒加载，单个类型一次只发送一个 200 条请求。
-    private final Map<RuleCatalogType, DirectoryLoad> directories = new EnumMap<>(RuleCatalogType.class);
-
-    // ---- 首载分段观测 ----
-    // 确认发出时刻与分片接收进度；关闭开关时不取时间也不计数
     private long firstLoadStartedNanos;
     private long snapshotRecvStartedNanos;
     private String snapshotRecvTransferId = "";
     private int snapshotRecvChunks;
-
-    // ---- 参考寿命采样缓存 ----
     private String lifespanRequestId = "";
     private int queriedLifespanTicks;
     private @Nullable ClientPacketListener lifespanConnection;
@@ -179,26 +93,29 @@ public final class RuleEditClientWorkspace {
     private RuleEditClientWorkspace() {
     }
 
-    /** 工作区单例；客户端只存在一个编辑会话。 */
+    /** 客户端只存在一个编辑工作区，由平台连接与 tick 事件驱动。 */
     public static RuleEditClientWorkspace instance() {
         return INSTANCE;
     }
 
-    // 注入/清除上行发送器（客户端初始化时调用）
+    /** 当前会话只读快照；状态未变化时复用同一实例。 */
+    public synchronized EditorSessionView session() { return lease.view(snapshot, snapshotFailure, queriedLifespanTicks); }
+
+    /** 当前保存只读快照；读取不推进结果序号。 */
+    public synchronized EditorSaveView saving() { return ticket.view(); }
+
+    /** 安装两端各自的上行 adapter；连接重置保留发送能力。 */
     public static void installSender(@Nullable PacketSender sender) {
         INSTANCE.setSender(sender);
     }
 
-    // 生成新的操作 id（服务端据此做幂等）
+    /** 创建保存幂等关联标识。 */
     public static String newOperationId() {
         return UUID.randomUUID().toString();
     }
 
-    /**
-     * 获取当前连接的统一参考寿命；首次请求后等待应答，切换规则或源物品均复用缓存。
-     * @return 参考寿命 tick；尚未采样时为零
-     */
-    public synchronized int referenceLifespanTicks() {
+    /** 显式请求当前连接的统一参考寿命；已有结果或在途请求时复用。 */
+    public synchronized void requestReferenceLifespan() {
         ClientPacketListener connection = Minecraft.getInstance().getConnection();
         // 连接身份隔离缓存，即使断线时编辑器已关闭，也不会把参考值带到下一台服务器。
         if (connection != lifespanConnection) {
@@ -206,232 +123,86 @@ public final class RuleEditClientWorkspace {
             lifespanRequestId = "";
             lifespanConnection = connection;
         }
-        if (state != RuleEditClientState.ACTIVE || connection == null) return 0;
-        if (queriedLifespanTicks > 0) return queriedLifespanTicks;
+        if (!lease.canQuery(connection != null)) return;
+        if (queriedLifespanTicks > 0) return;
         if (lifespanRequestId.isEmpty()) {
             lifespanRequestId = UUID.randomUUID().toString();
-            if (!send(new RequestRuleLifespanPayload(sessionId, lifespanRequestId))) lifespanRequestId = "";
+            if (!send(new RequestRuleLifespanPayload(lease.id(), lifespanRequestId))) lifespanRequestId = "";
         }
-        return queriedLifespanTicks;
     }
 
-    /** @return 当前保存进度；无在途保存时为 null */
-    public synchronized @Nullable RuleSaveProgress saveProgress() { return saveProgress; }
-
-    /** @return 是否已请求取消并等待服务端确认 */
-    public synchronized boolean cancelRequested() { return cancelRequested; }
-
-    /**
-     * 请求取消当前保存，不提前结束 APPLYING 或释放会话。
-     * @return 取消信号是否已发出
-     */
+    /** 请求取消当前可取消工单，最终状态仍以服务端回执为准。 */
     public synchronized boolean cancelSave() {
-        if (state != RuleEditClientState.APPLYING || saveProgress == null || !saveProgress.cancellable()
-                || cancelRequested || !connected()) { return false; }
+        if (lease.state() != RuleEditClientState.APPLYING || !ticket.canCancel() || !connected()) return false;
         try {
-            if (!send(new CancelRuleSavePayload(sessionId, savingOperationId))) { return false; }
+            if (!send(new CancelRuleSavePayload(lease.id(), ticket.operationId()))) return false;
         } catch (RuntimeException failure) {
             LOGGER.warn("发送保存取消请求失败，保持保存状态并等待服务端终态", failure);
             return false;
         }
-        cancelRequested = true;
+        ticket.requestCancel();
         return true;
     }
 
-    public synchronized RuleEditClientState state() {
-        return state;
+    /** 读取目录加载状态与已到达的部分数据，不发送请求。 */
+    public synchronized ResourceView<RuleCatalog> directory(RuleCatalogType type) {
+        return directories.view(type);
     }
 
-    // 当前是否持有可编辑会话（ACTIVE 或 APPLYING）
-    public synchronized boolean active() {
-        return state == RuleEditClientState.ACTIVE || state == RuleEditClientState.APPLYING;
+    /** 显式启动或继续尚未完成的目录加载。 */
+    public synchronized void requestDirectory(RuleCatalogType type) {
+        if (lease.canQuery(connected())) directories.request(type, this::sendCatalog);
     }
 
-    // 当前会话 id；无会话时为空串
-    public synchronized String sessionId() {
-        return sessionId;
-    }
-
-    // 服务端给出的上下文中枢修订号
-    public synchronized int contextRevision() {
-        return contextRevision;
-    }
-
-    // 最近一次成功打开的请求参数；无会话时为 null
-    public synchronized @Nullable EditorOpenRequest openRequest() {
-        return openRequest;
-    }
-
-    // 最近一次收到的快照；尚未收到时为 null
-    public synchronized @Nullable RuleSnapshot snapshot() {
-        return snapshot;
-    }
-
-    // 最近一次快照解析失败的原因；没有失败时为 null
-    public synchronized @Nullable String snapshotFailure() {
-        return snapshotFailure;
-    }
-
-    // 最近一次保存回执；尚未提交过时为 null
-    public synchronized @Nullable RuleSaveResultPayload lastResult() {
-        return lastResult;
-    }
-
-    // 最近一次收到的指定类型目录页；未请求过时为 null
-    public synchronized @Nullable RuleCatalog catalog(RuleCatalogType type) {
-        return type == null ? null : catalogs.get(type);
-    }
-
-    public synchronized @Nullable RuleCatalog directory(RuleCatalogType type) {
-        if (type == null || sessionId.isEmpty()) return null;
-        DirectoryLoad load = directories.computeIfAbsent(type, ignored -> new DirectoryLoad());
-        if (load.waiting && System.currentTimeMillis() > load.deadline) { load.failed = true; load.waiting = false; }
-        if (!load.waiting && !load.failed && !load.complete && state == RuleEditClientState.ACTIVE) requestDirectory(type, load);
-        return load.snapshot;
-    }
-
-    // 重新打开目录时只探测第一页修订号；未变化则继续复用完整缓存。
+    /** 重新打开目录时验证首屏修订，未变化继续复用完整缓存。 */
     public synchronized void refreshDirectory(RuleCatalogType type) {
-        DirectoryLoad load = directories.get(type);
-        if (load == null || !load.complete || load.waiting) { directory(type); return; }
-        load.validating = true; load.page = 0;
-        requestDirectory(type, load);
+        if (type != null && lease.canQuery(connected())) directories.refresh(type, this::sendCatalog);
     }
 
-    public synchronized boolean directoryFailed(RuleCatalogType type) {
-        DirectoryLoad load = directories.get(type);
-        return load != null && load.failed;
-    }
-
+    /** 显式重试失败目录，保留已接收的部分数据。 */
     public synchronized void retryDirectory(RuleCatalogType type) {
-        DirectoryLoad load = directories.get(type);
-        if (load != null) { load.failed = false; load.waiting = false; requestDirectory(type, load); }
-        else directory(type);
+        if (type != null && lease.canQuery(connected())) directories.retry(type, this::sendCatalog);
     }
 
+    /** 资源或语言变化后使目录缓存失效。 */
     public synchronized void invalidateDirectories() { directories.clear(); }
 
-    /** 请求最新快照：仅在持有可编辑会话且连接正常时发出。 */
+    /** ACTIVE 会话显式请求快照，旧请求与分片同时失效。 */
     public synchronized void requestSnapshot() {
-        if (sessionId.isEmpty() || !connected()) {
-            return;
-        }
+        if (!lease.canQuery(connected())) return;
         snapshotPending = true;
         snapshotRequestId = UUID.randomUUID().toString();
         snapshotFailure = null;
         chunkBuffer.clear();
-        if (!send(new RequestRuleSnapshotPayload(sessionId, snapshotRequestId))) { snapshotRequestId = ""; }
+        if (!send(new RequestRuleSnapshotPayload(lease.id(), snapshotRequestId))) {
+            snapshotRequestId = "";
+            snapshotPending = false;
+            snapshotFailure = "snapshot_send_failed";
+        }
     }
 
-    // ---- 来源视图（按需加载） ----
-
-    /**
-     * 请求某条规则的来源视图：编辑页打开规则时调用；已就绪或在途时不重复请求，
-     * 失败条目在新一次打开时重新请求，界面也可显式调用 {@link #retrySourceView(String)}。
-     *
-     * @param ruleId 规则 id；空值或会话不可用时忽略
-     */
+    /** 按需请求规则来源，已就绪或在途时不重复发送。 */
     public synchronized void requestSourceView(@Nullable String ruleId) {
-        if (ruleId == null || ruleId.isEmpty() || state != RuleEditClientState.ACTIVE
-                || sessionId.isEmpty() || !connected()) {
-            return;
-        }
-        SourceViewLoad existing = sourceViews.get(ruleId);
-        if (existing != null && (existing.view != null || existing.loading())) {
-            return;
-        }
-        SourceViewLoad load = new SourceViewLoad();
-        sourceViews.put(ruleId, load);
-        sendSourceViewRequest(ruleId, load);
+        if (ruleId == null || ruleId.isEmpty() || !lease.canQuery(connected())) return;
+        sources.request(ruleId, (id, request) -> send(new RequestRuleSourceViewPayload(lease.id(), request, id)));
     }
 
-    /**
-     * 读取已取回的来源视图。
-     *
-     * @param ruleId 规则 id
-     * @return 来源视图；尚未取回、失败或超时时为 null
-     */
-    public synchronized @Nullable RuleSourceView sourceView(@Nullable String ruleId) {
-        SourceViewLoad load = ruleId == null ? null : sourceViews.get(ruleId);
-        if (load == null) {
-            return null;
-        }
-        expireSourceView(load);
-        return load.view;
-    }
+    /** 读取来源加载状态；超时由客户端 tick 推进。 */
+    public synchronized ResourceView<RuleSourceView> sourceView(String ruleId) { return sources.view(ruleId); }
 
-    /**
-     * @param ruleId 规则 id
-     * @return 是否正在等待来源视图应答
-     */
-    public synchronized boolean sourceViewLoading(@Nullable String ruleId) {
-        SourceViewLoad load = ruleId == null ? null : sourceViews.get(ruleId);
-        if (load == null) {
-            return false;
-        }
-        expireSourceView(load);
-        return load.loading();
-    }
+    /** 显式重试失败来源请求。 */
+    public synchronized void retrySourceView(@Nullable String ruleId) { requestSourceView(ruleId); }
 
-    /**
-     * @param ruleId 规则 id
-     * @return 来源视图是否请求失败或超时（来源对照不可用）
-     */
-    public synchronized boolean sourceViewFailed(@Nullable String ruleId) {
-        SourceViewLoad load = ruleId == null ? null : sourceViews.get(ruleId);
-        if (load == null) {
-            return false;
-        }
-        expireSourceView(load);
-        return load.failed;
-    }
-
-    /**
-     * 重试失败的来源视图请求；成功取回前来源对照继续保持不可用。
-     *
-     * @param ruleId 规则 id；空值或会话不可用时忽略
-     */
-    public synchronized void retrySourceView(@Nullable String ruleId) {
-        if (ruleId == null || ruleId.isEmpty() || state != RuleEditClientState.ACTIVE
-                || sessionId.isEmpty() || !connected()) {
-            return;
-        }
-        SourceViewLoad load = sourceViews.get(ruleId);
-        if (load == null) {
-            requestSourceView(ruleId);
-            return;
-        }
-        if (load.view != null || load.loading()) {
-            return;
-        }
-        load.failed = false;
-        sendSourceViewRequest(ruleId, load);
-    }
-
-    // 请求目录页：仅在持有会话时有效
-    public synchronized boolean requestCatalog(RuleCatalogType type, @Nullable String filter, int page, int pageSize) {
-        if (sessionId.isEmpty() || type == null || !connected()) {
-            return false;
-        }
-        String requestId = UUID.randomUUID().toString();
-        if (!send(new RequestRuleCatalogPayload(sessionId, requestId, type.id(), filter == null ? "" : filter, page,
-                pageSize))) {
-            return false;
-        }
-        catalogRequestIds.put(type, requestId);
-        return true;
-    }
-
-    // 提交变更集：超过直发上限时自动分片；返回是否已发出
+    /** 提交变更集并按上限分片；部分发送失败保留工单等待取消或断线。 */
     public synchronized boolean save(@Nullable String operationId, @Nullable String changeSetJson) {
-        if (state != RuleEditClientState.ACTIVE || sessionId.isEmpty() || !connected()) {
-            LOGGER.warn("无可用会话，忽略变更集提交: state={}", state);
+        if (!lease.canQuery(connected())) {
+            LOGGER.warn("无可用会话，忽略变更集提交: state={}", lease.state());
             return false;
         }
         if (operationId == null || operationId.isEmpty() || changeSetJson == null || changeSetJson.isEmpty()) {
             return false;
         }
-        List<CustomPacketPayload> packets = RuleTextChunker.split(RuleTextChunker.Family.CHANGE_SET, sessionId,
+        List<CustomPacketPayload> packets = RuleTextChunker.split(RuleTextChunker.Family.CHANGE_SET, lease.id(),
                 operationId, changeSetJson);
         if (packets.isEmpty()) {
             LOGGER.warn("变更集为空或超过上限，未提交: bytes={}",
@@ -439,12 +210,8 @@ public final class RuleEditClientWorkspace {
             return false;
         }
         if (sender == null) { return false; }
-        savingOperationId = operationId;
-        progressSequence = 0;
-        cancelRequested = false;
-        saveProgress = new RuleSaveProgress(RuleSaveProgress.Stage.PREPARING, 0, 0, "", true);
-        lastResult = null;
-        state = RuleEditClientState.APPLYING;
+        ticket.start(operationId);
+        lease.beginSave();
         try { return sendAll(packets); }
         catch (RuntimeException failure) {
             LOGGER.warn("发送保存请求失败，等待连接状态或服务端取消确认", failure);
@@ -454,46 +221,42 @@ public final class RuleEditClientWorkspace {
         }
     }
 
-    // 关闭会话：界面关闭或玩家主动退出时调用
+    /** 关闭非保存中的会话；保存工单由终态负责释放。 */
     public synchronized void close(@Nullable String reasonCode) {
-        if (state == RuleEditClientState.APPLYING) { return; }
-        if (!sessionId.isEmpty() && connected()) {
-            send(new CloseRuleEditorPayload(sessionId, reasonCode == null ? "" : reasonCode));
-        }
+        if (lease.state() == RuleEditClientState.APPLYING) return;
+        if (lease.held() && connected()) send(new CloseRuleEditorPayload(lease.id(), reasonCode == null ? "" : reasonCode));
         endSession();
     }
 
-    // 清空工作区：断线/退出世界时调用（不清除已注入的发送器与消费者）
+    /** 连接断开或替换时清理会话、结果与连接级寿命缓存。 */
     public synchronized void reset() {
         endSession();
         queriedLifespanTicks = 0;
+        lifespanRequestId = "";
         lifespanConnection = null;
-        lastResult = null;
-        openRequest = null;
+        ticket.reset();
     }
 
-    // 客户端 tick 钩子：按心跳间隔上行心跳
+    /** 推进请求期限、目录续页与心跳；由客户端主线程调用。 */
     public synchronized void tick() {
-        if (state == RuleEditClientState.FREE || sessionId.isEmpty()) {
-            return;
-        }
+        if (!lease.held()) return;
         if (!connected()) {
             LOGGER.info("客户端已断开服务器连接，重置编辑会话工作区");
             unbindConnection(receiverConnection);
             return;
         }
-        long tick = currentTick();
-        if (tick - lastHeartbeatTick >= RuleEditSessionLimits.HEARTBEAT_INTERVAL_TICKS) {
-            lastHeartbeatTick = tick;
-            send(new HeartbeatRuleEditorPayload(sessionId));
-        }
+        long now = System.currentTimeMillis();
+        sources.tick(now);
+        directories.tick(now);
+        if (lease.canQuery(connected())) directories.advance(this::sendCatalog);
+        if (lease.heartbeatDue(currentTick())) send(new HeartbeatRuleEditorPayload(lease.id()));
     }
 
     private synchronized void setSender(@Nullable PacketSender sender) {
         this.sender = sender;
     }
 
-    /** 连接建立时创建本连接的接收对象，并清理上一个连接的编辑状态。 */
+    /** 绑定本连接接收器，旧连接的延后帧由 Binding 隔离。 */
     public synchronized void bindConnection(Connection connection) {
         if (receiverConnection == connection) { return; }
         if (receiverConnection != null) { RuleEditPayloadRouter.unbind(receiverConnection); }
@@ -512,7 +275,7 @@ public final class RuleEditClientWorkspace {
         });
     }
 
-    /** 断开时只解除原连接；延后的旧断开事件不会清理新工作区。 */
+    /** 只解绑当前连接，旧断开事件不清理新连接。 */
     public synchronized void unbindConnection(@Nullable Connection connection) {
         if (connection != null && receiverConnection != connection) { return; }
         RuleEditPayloadRouter.unbind(receiverConnection);
@@ -537,154 +300,48 @@ public final class RuleEditClientWorkspace {
         }
     }
 
-    private void requestDirectory(RuleCatalogType type, DirectoryLoad load) {
-        load.waiting = requestCatalog(type, "", load.page, 200);
-        load.failed = !load.waiting;
-        load.deadline = System.currentTimeMillis() + 15000;
-    }
-
-    private void acceptDirectory(RuleCatalogType type, RuleCatalog catalog) {
-        DirectoryLoad load = directories.get(type);
-        if (load == null || !load.waiting) return;
-        load.waiting = false;
-        if (load.validating && load.revision == catalog.revision()) { load.validating = false; return; }
-        load.validating = false;
-        if (load.revision >= 0 && load.revision != catalog.revision()) {
-            load.entries.clear(); load.page = 0; load.revision = -1; load.snapshot = null; load.complete = false;
-            requestDirectory(type, load); return;
-        }
-        load.revision = catalog.revision();
-        catalog.entries().forEach(entry -> load.entries.putIfAbsent(entry.id(), entry));
-        load.complete = catalog.lastPage();
-        load.snapshot = new RuleCatalog(type, load.revision, List.copyOf(load.entries.values()), load.complete);
-        load.page++;
-        if (!load.complete && state == RuleEditClientState.ACTIVE) requestDirectory(type, load);
-    }
-
-    // 发送来源视图请求；发送失败直接标记失败，避免界面停留在「加载中」
-    private void sendSourceViewRequest(String ruleId, SourceViewLoad load) {
-        String requestId = UUID.randomUUID().toString();
-        load.view = null;
-        load.failed = false;
-        load.deadline = 0L;
-        if (!send(new RequestRuleSourceViewPayload(sessionId, requestId, ruleId))) {
-            load.requestId = "";
-            load.failed = true;
-            return;
-        }
-        load.requestId = requestId;
-        load.deadline = System.currentTimeMillis() + SOURCE_VIEW_TIMEOUT_MILLIS;
-    }
-
-    // 超时丢弃：在途请求超过期限即降级为失败，由界面提示来源对照不可用
-    private static void expireSourceView(SourceViewLoad load) {
-        if (load.loading() && System.currentTimeMillis() > load.deadline) {
-            load.requestId = "";
-            load.failed = true;
-            load.deadline = 0L;
-        }
-    }
-
     // 收到整包来源视图：按 requestId 配到在途请求上，失败状态或解析失败都标记降级
     private synchronized void onSourceView(@Nullable RuleSourceViewPayload payload) {
-        if (payload == null || !payload.sessionId().equals(sessionId)) {
-            return;
-        }
-        SourceViewLoad load = pendingSourceView(payload.requestId());
-        if (load == null) {
-            LOGGER.debug("忽略过时的来源视图应答: requestId={}", payload.requestId());
-            return;
-        }
-        load.requestId = "";
-        load.deadline = 0L;
+        if (payload == null || !lease.matches(payload.sessionId()) || !sources.pending(payload.requestId())) return;
         RuleSourceView view = RuleSaveStatus.fromId(payload.statusCode()) == RuleSaveStatus.SUCCESS
-                ? RuleSourceView.parse(payload.sourceViewJson()).result().orElse(null)
-                : null;
-        load.view = view;
-        load.failed = view == null;
-        if (view == null) {
-            LOGGER.warn("来源视图取回失败: status={} bytes={}", payload.statusCode(),
-                    payload.sourceViewJson().length());
-        }
+                ? RuleSourceView.parse(payload.sourceViewJson()).result().orElse(null) : null;
+        sources.accept(payload.requestId(), view);
+        if (view == null) LOGGER.warn("来源视图取回失败: status={} bytes={}", payload.statusCode(), payload.sourceViewJson().length());
     }
 
     // 收到来源视图分片：收齐后按整包处理
     private synchronized void onSourceViewChunk(@Nullable RuleChunkPayload payload) {
-        if (payload == null || !payload.sessionId().equals(sessionId)) {
-            return;
-        }
-        if (pendingSourceView(payload.correlationId()) == null) { return; }
-        String json = sourceViewChunks.accept(payload, currentTick());
-        if (json != null) {
-            onSourceView(new RuleSourceViewPayload(payload.sessionId(), payload.correlationId(),
-                    RuleSaveStatus.SUCCESS.id(), json));
-        }
-    }
-
-    // 按请求 id 找在途的来源视图缓存项；找不到即视为过时应答
-    private @Nullable SourceViewLoad pendingSourceView(@Nullable String requestId) {
-        if (requestId == null || requestId.isEmpty()) {
-            return null;
-        }
-        for (SourceViewLoad load : sourceViews.values()) {
-            if (requestId.equals(load.requestId)) {
-                return load;
-            }
-        }
-        return null;
+        if (payload == null || !lease.matches(payload.sessionId())) return;
+        String json = sources.chunk(payload, currentTick());
+        if (json != null) onSourceView(new RuleSourceViewPayload(payload.sessionId(), payload.correlationId(), RuleSaveStatus.SUCCESS.id(), json));
     }
 
     private synchronized void onLifespan(RuleLifespanPayload payload) {
-        if (!sessionId.isEmpty() && sessionId.equals(payload.sessionId()) && lifespanRequestId.equals(payload.requestId())) {
+        if (lease.matches(payload.sessionId()) && lifespanRequestId.equals(payload.requestId())) {
             queriedLifespanTicks = Math.max(0, payload.lifespanTicks());
         }
     }
 
     // 首份快照由确认应答提供，不再额外请求，避免替换在途请求后重复准备。
     private synchronized void onOpen(@Nullable OpenRuleEditorPayload payload) {
-        if (payload == null) {
-            return;
-        }
-        if (payload.sessionId().isEmpty()) {
-            // 取锁失败（LOCK_BUSY/UNAVAILABLE 等，服务端不带会话号）：只记录日志
+        if (payload == null) return;
+        if (payload.sessionId().isEmpty() || RuleSaveStatus.fromId(payload.statusCode()) != RuleSaveStatus.SUCCESS) {
             LOGGER.info("服务端未授权编辑: status={} holderArgs={}", payload.statusCode(), payload.messageArgs());
             return;
         }
         if (payload.protocolVersion() != RuleEditProtocol.VERSION) {
-            LOGGER.warn("编辑协议版本不匹配，拒绝打开编辑器: server={} client={}",
-                    payload.protocolVersion(), RuleEditProtocol.VERSION);
+            LOGGER.warn("编辑协议版本不匹配，拒绝打开编辑器: server={} client={}", payload.protocolVersion(), RuleEditProtocol.VERSION);
             return;
         }
-        if (RuleSaveStatus.fromId(payload.statusCode()) != RuleSaveStatus.SUCCESS) {
-            LOGGER.info("服务端未授权编辑: status={} holderArgs={}", payload.statusCode(), payload.messageArgs());
-            return;
-        }
-        EditorOpenRequest request = new EditorOpenRequest(payload.sessionId(), payload.targetId(),
-                payload.contextRevision(), payload.protocolVersion(), payload.maxPlaceBlockRadius(), payload.statusCode(),
-                payload.messageArgs(), payload.fallbackMessage());
-        sessionId = payload.sessionId();
-        contextRevision = payload.contextRevision();
-        openRequest = request;
-        snapshot = null;
-        snapshotFailure = null;
-        snapshotRequestId = "";
+        EditorOpenRequest request = new EditorOpenRequest(payload.sessionId(), payload.targetId(), payload.contextRevision(),
+                payload.protocolVersion(), payload.maxPlaceBlockRadius(), payload.statusCode(), payload.messageArgs(), payload.fallbackMessage());
+        clearSessionData();
+        ticket.reset();
+        lease.enter(request, currentTick());
         snapshotPending = true;
-        sessionInvalidated = false;
-        snapshotRecvStartedNanos = 0L;
-        snapshotRecvTransferId = "";
-        snapshotRecvChunks = 0;
-        catalogs.clear();
-        directories.clear();
-        catalogRequestIds.clear();
-        sourceViews.clear();
-        sourceViewChunks.clear();
-        lastResult = null;
-        lastHeartbeatTick = currentTick();
-        state = RuleEditClientState.OPENING;
-        // 首载起点取确认发出时刻：客户端此后只在等快照，端到端耗时可与同一行日志对读
         firstLoadStartedNanos = DevelopmentDiagnostics.start();
-        send(new ConfirmRuleEditorPayload(sessionId, RuleEditProtocol.VERSION));
-        state = RuleEditClientState.ACTIVE;
+        send(new ConfirmRuleEditorPayload(lease.id(), RuleEditProtocol.VERSION));
+        lease.activate();
         EditorScreenHooks.open(request);
     }
 
@@ -692,7 +349,7 @@ public final class RuleEditClientWorkspace {
         if (payload == null) {
             return;
         }
-        if (!payload.sessionId().equals(sessionId)) {
+        if (!lease.matches(payload.sessionId())) {
             LOGGER.debug("忽略非当前会话的快照: session={}", payload.sessionId());
             return;
         }
@@ -717,11 +374,10 @@ public final class RuleEditClientWorkspace {
         snapshotFailure = null;
         // 修订变化意味着来源内容可能已被保存或数据包重载改写：来源视图缓存整体失效，按需重新取回
         if (snapshot == null || snapshot.version() != parsed.version()) {
-            sourceViews.clear();
-            sourceViewChunks.clear();
+            sources.clear();
         }
         snapshot = parsed;
-        contextRevision = parsed.contextRevision();
+        lease.revision(parsed.contextRevision());
         if (DevelopmentDiagnostics.enabled()) {
             logSnapshotReceived(json, parsed, chunked, parseMicros);
         }
@@ -748,7 +404,7 @@ public final class RuleEditClientWorkspace {
 
     // 收到快照分片：收齐后按整包处理
     private synchronized void onSnapshotChunk(@Nullable RuleChunkPayload payload) {
-        if (payload == null || !payload.sessionId().equals(sessionId)) {
+        if (payload == null || !lease.matches(payload.sessionId())) {
             return;
         }
         if (!payload.correlationId().isEmpty() && !payload.correlationId().equals(snapshotRequestId)) { return; }
@@ -770,47 +426,39 @@ public final class RuleEditClientWorkspace {
     }
 
     private synchronized void onQueryResult(RuleQueryResultPayload payload) {
-        if (sessionId.isEmpty() || !sessionId.equals(payload.sessionId())) { return; }
+        if (!lease.matches(payload.sessionId())) return;
         RuleEditRequest.Kind kind;
         try { kind = RuleEditRequest.Kind.valueOf(payload.kind()); }
         catch (IllegalArgumentException unknown) { return; }
-        boolean matched = false;
-        switch (kind) {
+        boolean matched = switch (kind) {
             case SNAPSHOT -> {
-                if (snapshotPending && snapshotRequestId.equals(payload.requestId())) {
-                    matched = true; snapshotPending = false; snapshotRequestId = ""; chunkBuffer.clear();
+                boolean pending = snapshotPending && snapshotRequestId.equals(payload.requestId());
+                if (pending) {
+                    snapshotPending = false;
+                    snapshotRequestId = "";
+                    chunkBuffer.clear();
                     snapshotFailure = payload.statusCode();
                 }
+                yield pending;
             }
-            case SOURCE_VIEW -> {
-                SourceViewLoad load = pendingSourceView(payload.requestId());
-                if (load != null) { matched = true; load.requestId = ""; load.deadline = 0; load.failed = true; }
-            }
-            case CATALOG -> {
-                for (var entry : catalogRequestIds.entrySet()) {
-                    if (!entry.getValue().equals(payload.requestId())) { continue; }
-                    matched = true;
-                    DirectoryLoad load = directories.get(entry.getKey());
-                    if (load != null) { load.waiting = false; load.failed = true; load.validating = false; }
-                    catalogRequestIds.remove(entry.getKey());
-                    break;
-                }
-            }
+            case SOURCE_VIEW -> sources.fail(payload.requestId());
+            case CATALOG -> directories.fail(payload.requestId());
             case LIFESPAN -> {
-                if (lifespanRequestId.equals(payload.requestId())) { matched = true; lifespanRequestId = ""; }
+                boolean pending = !lifespanRequestId.isEmpty() && lifespanRequestId.equals(payload.requestId());
+                if (pending) lifespanRequestId = "";
+                yield pending;
             }
-        }
-        if (matched && sessionLost(RuleSaveStatus.fromId(payload.statusCode()))) { invalidateSession(); }
+        };
+        if (matched && sessionLost(RuleSaveStatus.fromId(payload.statusCode()))) invalidateSession();
     }
 
     private synchronized void onSessionEvent(RuleSessionEventPayload payload) {
-        if (sessionId.isEmpty() || !sessionId.equals(payload.sessionId())) { return; }
-        invalidateSession();
+        if (lease.matches(payload.sessionId())) invalidateSession();
     }
 
     private void invalidateSession() {
-        if (state == RuleEditClientState.APPLYING) { sessionInvalidated = true; cancelSave(); }
-        else { endSession(); }
+        if (lease.state() == RuleEditClientState.APPLYING) { lease.invalidate(); cancelSave(); }
+        else endSession();
     }
 
     private static boolean sessionLost(@Nullable RuleSaveStatus status) {
@@ -819,71 +467,32 @@ public final class RuleEditClientWorkspace {
     }
 
     private synchronized void onProgress(RuleSaveProgressPayload payload) {
-        if (state != RuleEditClientState.APPLYING || !sessionId.equals(payload.sessionId())
-                || !savingOperationId.equals(payload.operationId()) || payload.sequence() <= progressSequence) { return; }
-        progressSequence = payload.sequence();
-        saveProgress = payload.progress();
-        if (saveProgress.stage() != RuleSaveProgress.Stage.CANCELLING
-                && saveProgress.stage() != RuleSaveProgress.Stage.ROLLING_BACK && !saveProgress.cancellable()) {
-            // 提交确认先于取消信号：继续显示保存完成阶段，不显示取消成功。
-            cancelRequested = false;
-        }
+        if (lease.state() == RuleEditClientState.APPLYING && lease.matches(payload.sessionId())) ticket.accept(payload);
     }
 
     // 收到保存回执：会话失效类状态结束会话并关闭界面，其余回到 ACTIVE
     private synchronized void onResult(@Nullable RuleSaveResultPayload payload) {
-        if (payload == null) {
-            return;
-        }
-        if (!payload.sessionId().isEmpty() && !payload.sessionId().equals(sessionId)) {
-            LOGGER.debug("忽略非当前会话的回执: session={}", payload.sessionId());
-            return;
-        }
-        if (state != RuleEditClientState.APPLYING || !sessionId.equals(payload.sessionId())
-                || !savingOperationId.equals(payload.operationId())) { return; }
-        lastResult = payload;
+        if (payload == null || lease.state() != RuleEditClientState.APPLYING
+                || !lease.matches(payload.sessionId()) || ticket.rejects(payload.operationId())) return;
+        ticket.complete(payload);
         RuleSaveStatus status = RuleSaveStatus.fromId(payload.statusCode());
-        if (sessionInvalidated || sessionLost(status)) {
-            LOGGER.info("编辑会话已失效: status={}", payload.statusCode());
-            endSession();
-            return;
+        if (lease.invalidated() || sessionLost(status)) { endSession(); return; }
+        lease.activate();
+        lease.revision(payload.resultVersion());
+        if (status == RuleSaveStatus.VERSION_CONFLICT || status == RuleSaveStatus.SAVED_NOT_RELOADED) {
+            snapshotPending = true;
+            snapshotRequestId = "";
         }
-        // 只有属于当前会话的回执才能推进本地状态与版本号；空会话号的服务端拒绝不得污染上下文修订
-        if (!sessionId.isEmpty() && payload.sessionId().equals(sessionId)) {
-            if (state == RuleEditClientState.APPLYING) {
-                state = RuleEditClientState.ACTIVE;
-                savingOperationId = "";
-                saveProgress = null;
-                cancelRequested = false;
-            }
-            contextRevision = payload.resultVersion();
-            if (status == RuleSaveStatus.VERSION_CONFLICT || status == RuleSaveStatus.SAVED_NOT_RELOADED) { snapshotPending = true; snapshotRequestId = ""; }
-            // 保存成功/无变化时服务端不附送快照，回到 ACTIVE 后主动补一次快照请求，
-            // 使列表内容与 contextRevision 同源；VERSION_CONFLICT/SAVED_NOT_RELOADED
-            // 由服务端随回执推送，不再重复请求
-            if (state == RuleEditClientState.ACTIVE && needsSnapshotRefresh(status)) {
-                requestSnapshot();
-            }
-        }
+        if (needsSnapshotRefresh(status)) requestSnapshot();
     }
 
     private synchronized void onCatalog(@Nullable RuleCatalogPayload payload) {
-        if (payload == null || !payload.sessionId().equals(sessionId)) {
-            return;
-        }
+        if (payload == null || !lease.matches(payload.sessionId())) return;
         RuleCatalogType type = RuleCatalogType.fromId(payload.catalogType());
-        if (type == null) {
-            return;
-        }
+        if (type == null || directories.stale(type, payload.requestId())) return;
         RuleCatalog parsed = RuleCatalog.parse(payload.json()).result().orElse(null);
-        if (parsed == null) {
-            LOGGER.warn("规则目录解析失败: type={} bytes={}", payload.catalogType(), payload.json().length());
-            return;
-        }
-        if (!payload.requestId().equals(catalogRequestIds.get(type))) { return; }
-        catalogRequestIds.remove(type);
-        catalogs.put(type, parsed);
-        acceptDirectory(type, parsed);
+        if (parsed == null) LOGGER.warn("规则目录解析失败: type={} bytes={}", payload.catalogType(), payload.json().length());
+        directories.accept(type, payload.requestId(), parsed, lease.canQuery(connected()), this::sendCatalog);
     }
 
     // 保存回执后是否需要客户端补拉快照：成功与无变化没有随回执附带的快照
@@ -893,38 +502,34 @@ public final class RuleEditClientWorkspace {
 
     // 结束会话：清空会话态并关闭界面；界面 close 回调再次进来时直接忽略（防递归）
     private void endSession() {
-        if (endingSession) {
-            return;
-        }
+        if (endingSession) return;
         endingSession = true;
         try {
-            boolean hadSession = !sessionId.isEmpty();
-            state = RuleEditClientState.FREE;
-            savingOperationId = "";
-            saveProgress = null;
-            progressSequence = 0;
-            cancelRequested = false;
-            sessionId = "";
-            contextRevision = 0;
-            snapshot = null;
-            snapshotFailure = null;
-            snapshotRequestId = "";
-            snapshotPending = false;
-            sessionInvalidated = false;
-            catalogs.clear();
-            directories.clear();
-            catalogRequestIds.clear();
-            sourceViews.clear();
-            sourceViewChunks.clear();
-            lifespanRequestId = "";
-            chunkBuffer.clear();
-            lastHeartbeatTick = 0L;
-            if (hadSession) {
-                EditorScreenHooks.close();
-            }
-        } finally {
-            endingSession = false;
-        }
+            boolean hadSession = lease.held();
+            lease.end();
+            ticket.end();
+            clearSessionData();
+            if (hadSession) EditorScreenHooks.close();
+        } finally { endingSession = false; }
+    }
+
+    private boolean sendCatalog(RuleCatalogType type, String requestId, String filter, int page, int pageSize) {
+        return send(new RequestRuleCatalogPayload(lease.id(), requestId, type.id(), filter, page, pageSize));
+    }
+
+    private void clearSessionData() {
+        snapshot = null;
+        snapshotFailure = null;
+        snapshotRequestId = "";
+        snapshotPending = false;
+        directories.clear();
+        sources.clear();
+        chunkBuffer.clear();
+        lifespanRequestId = "";
+        firstLoadStartedNanos = 0;
+        snapshotRecvStartedNanos = 0;
+        snapshotRecvTransferId = "";
+        snapshotRecvChunks = 0;
     }
 
     // 当前客户端 tick；未进入世界时返回 0

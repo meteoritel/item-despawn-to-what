@@ -1,8 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
-import com.meteorite.itemdespawntowhat.client.edit.EditorField;
-import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
+import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDescriptors;
+import com.meteorite.itemdespawntowhat.client.net.RuleEditClientWorkspace;
 import com.meteorite.itemdespawntowhat.client.edit.RuleCategoryAssignment;
 import com.meteorite.itemdespawntowhat.client.edit.RuleCategorySkeleton;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
@@ -79,11 +79,7 @@ final class RuleEditorInfoSection {
     void buildInfo(EditSession session) {
         // 自上而下：只读规则 ID、分类、来源摘要、显示名、启用、加高的优先级控件、多行备注；
         // 页头只保留当前实际生效名称，页内不再重复说明文案
-        TypeEditorDescriptor descriptor = TypeEditorDescriptor.of(RuleEditorPageSupport.INFO_PAGE, Component.translatable(UI + "tab.info"), List.of(
-                EditorField.optionalText(RuleFields.DISPLAY_NAME, UI + "rule.display_name").withHint(UI + "rule.display_name_hint"),
-                EditorField.bool(RuleFields.ENABLED, UI + "rule.enabled"),
-                EditorField.integerSlider(RuleFields.PRIORITY, UI + "rule.priority", Integer.MIN_VALUE, Integer.MAX_VALUE, -100, 100).optional().withHint(UI + "rule.priority.hint"),
-                EditorField.longText(RuleFields.NOTES, UI + "rule.notes").withHint(UI + "rule.notes_hint")));
+        TypeEditorDescriptor descriptor = BuiltinEditorDescriptors.infoDescriptor();
         infoForm = pages.newForm(session, "", descriptor);
         infoForm.useCompactSpacing();
         // 滑条与数字输入同高，备注保留三行可见高度。
@@ -226,15 +222,15 @@ final class RuleEditorInfoSection {
             return null;
         }
         String id = session.targetId();
-        EditorWorkspaceView workspace = pages.workspace;
-        RuleSourceView view = workspace.sourceView(id);
+        RuleEditClientWorkspace workspace = pages.workspace;
+        RuleSourceView view = workspace.sourceView(id).value();
         if (view != null) {
             return describeSource(view);
         }
-        if (workspace.sourceViewFailed(id)) {
+        if (workspace.sourceView(id).failed()) {
             return Component.translatable(UI + "source.failed");
         }
-        if (workspace.sourceViewLoading(id)) {
+        if (workspace.sourceView(id).loading()) {
             return Component.translatable(UI + "source.loading");
         }
         // 本次新建的草稿在服务端还没有来源；已有条目等待请求时也落到这里

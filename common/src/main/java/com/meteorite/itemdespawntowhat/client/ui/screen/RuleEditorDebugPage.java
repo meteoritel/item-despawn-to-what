@@ -1,7 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.edit.DebugTestRules;
-import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
@@ -68,7 +67,6 @@ final class RuleEditorDebugPage implements EditorPage {
 
     private final EditorShell shell;
     private final RuleEditorModel model;
-    private final EditorWorkspaceView workspace;
     private final Font font;
     private final UiModalStack modals;
 
@@ -78,11 +76,10 @@ final class RuleEditorDebugPage implements EditorPage {
     private @Nullable UiButton fillButton;
     private @Nullable UiButton deleteButton;
 
-    RuleEditorDebugPage(EditorShell shell, RuleEditorModel model, EditorWorkspaceView workspace, Font font,
+    RuleEditorDebugPage(EditorShell shell, RuleEditorModel model, Font font,
             UiModalStack modals) {
         this.shell = shell;
         this.model = model;
-        this.workspace = workspace;
         this.font = font;
         this.modals = modals;
     }
@@ -114,11 +111,11 @@ final class RuleEditorDebugPage implements EditorPage {
     // ---- 动作 ----
 
     // 数量输入按整数解析；空值与非法字符用调用方给的哨兵值表示
-    private static int intOr(String raw, int fallback) {
+    private static int intOr(String raw) {
         try {
             return Integer.parseInt(raw.trim());
         } catch (NumberFormatException error) {
-            return fallback;
+            return INVALID_COUNT;
         }
     }
 
@@ -127,7 +124,7 @@ final class RuleEditorDebugPage implements EditorPage {
         if (countField == null) {
             return INVALID_COUNT;
         }
-        int parsed = intOr(countField.value(), INVALID_COUNT);
+        int parsed = intOr(countField.value());
         return parsed < DebugTestRules.MIN_COUNT || parsed > DebugTestRules.MAX_COUNT ? INVALID_COUNT : parsed;
     }
 

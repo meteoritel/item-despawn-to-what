@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDescriptors;
-import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
+import com.meteorite.itemdespawntowhat.client.net.RuleEditClientWorkspace;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRenderLayers;
@@ -67,7 +67,7 @@ public final class RuleEditorScreen extends Screen implements UiLayoutSource {
     private @Nullable UiRect truncatedTitleRect;
     private UiRect contentArea = new UiRect(0, 0, 0, 0);
 
-    public RuleEditorScreen(EditorWorkspaceView workspace) {
+    public RuleEditorScreen(RuleEditClientWorkspace workspace) {
         super(Component.translatable(UI + "title"));
         BuiltinEditorDescriptors.bootstrap();
         RuleEditorModel model = new RuleEditorModel(workspace);

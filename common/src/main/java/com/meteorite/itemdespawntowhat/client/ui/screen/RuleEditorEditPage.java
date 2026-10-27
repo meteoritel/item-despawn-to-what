@@ -3,7 +3,7 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 import com.meteorite.itemdespawntowhat.client.edit.ClientTypeRegistries;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorRegistries;
-import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
+import com.meteorite.itemdespawntowhat.client.net.RuleEditClientWorkspace;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
@@ -67,7 +67,7 @@ final class RuleEditorEditPage implements EditorPage {
 
     private final EditorShell shell;
     private final RuleEditorModel model;
-    private final EditorWorkspaceView workspace;
+    private final RuleEditClientWorkspace workspace;
     private final Font font;
     private final UiModalStack modals;
     private final UiFocusManager focus;
@@ -90,7 +90,7 @@ final class RuleEditorEditPage implements EditorPage {
 
     // 页面宿主适配：把屏幕能力（会话 / 焦点 / 弹窗 / 提示 / 冻结 / 尺寸）暴露给四页编辑流程
 
-    RuleEditorEditPage(EditorShell shell, RuleEditorModel model, EditorWorkspaceView workspace, Font font,
+    RuleEditorEditPage(EditorShell shell, RuleEditorModel model, RuleEditClientWorkspace workspace, Font font,
             UiModalStack modals, UiFocusManager focus) {
         this.shell = shell;
         this.model = model;
@@ -99,7 +99,7 @@ final class RuleEditorEditPage implements EditorPage {
         this.modals = modals;
         this.focus = focus;
         this.validation = new RuleEditorValidation(shell, model, () -> pages);
-        this.seenResultSeq = workspace.resultSeq();
+        this.seenResultSeq = workspace.saving().outcome().sequence();
     }
 
     // ---- 页面度量与标题：屏幕按这些声明统一排版，页不自己算窗口几何 ----
@@ -199,15 +199,15 @@ final class RuleEditorEditPage implements EditorPage {
         if (id == null) {
             return;
         }
-        EditorWorkspaceView workspace = this.workspace;
-        RuleSourceView view = workspace.sourceView(id);
+        RuleEditClientWorkspace workspace = this.workspace;
+        RuleSourceView view = workspace.sourceView(id).value();
         UiModal modal = UiModal.create(THEME, font)
     .title(Component.translatable(UI + "source.title"));
         if (view != null) {
             modal.contentWidget(sourceView(view),
                     Math.clamp(shell.screenHeight() - 100, SOURCE_MODAL_MIN_HEIGHT, SOURCE_MODAL_MAX_HEIGHT));
             modal.cancel(Component.translatable(UI + "button.close"));
-        } else if (workspace.sourceViewFailed(id)) {
+        } else if (workspace.sourceView(id).failed()) {
             modal.message(Component.translatable(UI + "source.failed"));
             modal.confirm(Component.translatable(UI + "source.retry"), () -> {
                 workspace.retrySourceView(id);
@@ -216,7 +216,7 @@ final class RuleEditorEditPage implements EditorPage {
             modal.cancel(Component.translatable(UI + "button.close"));
         } else {
             modal.message(Component.translatable(
-                    workspace.sourceViewLoading(id) ? UI + "source.loading" : UI + "source.none"));
+                    workspace.sourceView(id).loading() ? UI + "source.loading" : UI + "source.none"));
             modal.cancel(Component.translatable(UI + "button.close"));
         }
         modal.preferredWidth(SOURCE_MODAL_WIDTH).layoutCentered(shell.screenWidth(), shell.screenHeight());
@@ -547,7 +547,7 @@ final class RuleEditorEditPage implements EditorPage {
             shell.setNotice(Component.translatable(UI + "notice.frozen"),EditorShell.NoticeLevel.WARNING);
             return;
         }
-        if (workspace.save(workspace.newOperationId(), json)) {
+        if (workspace.save(RuleEditClientWorkspace.newOperationId(), json)) {
             shell.setNotice(Component.translatable(UI + "notice.applying"),EditorShell.NoticeLevel.INFO);
             if (!issues.isEmpty()) {
                 // 提醒项不阻塞保存，但把玩家带到第一条上（例如未注册的第三方条件类型）
@@ -615,7 +615,7 @@ final class RuleEditorEditPage implements EditorPage {
 
     // 服务端 VALIDATION_FAILED 定位：规则 → 页签 → 候选 → 效果 → 条件 → 字段
     void locateValidationIssues() {
-        for (RuleIssue issue : workspace.lastIssues()) {
+        for (RuleIssue issue : workspace.saving().outcome().issues()) {
             if (issue == null || !RuleIssue.SEVERITY_ERROR.equals(issue.severity())) {
                 continue;
             }
@@ -679,10 +679,10 @@ final class RuleEditorEditPage implements EditorPage {
 
     // 保存回执与工作区状态轮询
     void pollWorkspace() {
-        long sequence = workspace.resultSeq();
+        long sequence = workspace.saving().outcome().sequence();
         if (sequence != seenResultSeq) {
             seenResultSeq = sequence;
-            RuleSaveStatus status = workspace.lastStatus();
+            RuleSaveStatus status = workspace.saving().outcome().status();
             model.refresh();
             if (status == RuleSaveStatus.SUCCESS || status == RuleSaveStatus.NO_CHANGES) {
                 model.acceptSaved();
@@ -702,14 +702,14 @@ final class RuleEditorEditPage implements EditorPage {
                 shell.setNotice(Component.translatable(com.meteorite.itemdespawntowhat.core.network.transport.RuleEditMessages.key(status)),EditorShell.NoticeLevel.DANGER);
                 locateValidationIssues();
             } else if (status != null) {
-                shell.setNotice(Component.translatable(com.meteorite.itemdespawntowhat.core.network.transport.RuleEditMessages.key(status), workspace.lastMessageArgs().toArray()),
+                shell.setNotice(Component.translatable(com.meteorite.itemdespawntowhat.core.network.transport.RuleEditMessages.key(status), workspace.saving().outcome().messageArgs().toArray()),
                         EditorShell.NoticeLevel.DANGER);
             }
             shell.refreshList();
             rebuildEdit();
             shell.rebuildFocus();
         }
-        if (workspace.state() == RuleEditClientState.FREE && workspace.openRequest() == null) {
+        if (workspace.session().state() == RuleEditClientState.FREE && workspace.session().openRequest() == null) {
             shell.requestClose();
         }
     }

@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
-import com.meteorite.itemdespawntowhat.client.edit.LiveEditorWorkspace;
+import com.meteorite.itemdespawntowhat.client.net.RuleEditClientWorkspace;
 import com.meteorite.itemdespawntowhat.client.net.EditorOpenRequest;
 import com.meteorite.itemdespawntowhat.client.net.EditorScreenHooks;
 import com.meteorite.itemdespawntowhat.client.net.EditorScreenOpener;
@@ -51,7 +51,7 @@ public final class RuleEditorOpener implements EditorScreenOpener {
             if (current instanceof RuleEditorScreen screen) {
                 screen.refreshFromWorkspace();
             } else {
-                minecraft.setScreen(new RuleEditorScreen(LiveEditorWorkspace.instance()));
+                minecraft.setScreen(new RuleEditorScreen(RuleEditClientWorkspace.instance()));
             }
         });
     }

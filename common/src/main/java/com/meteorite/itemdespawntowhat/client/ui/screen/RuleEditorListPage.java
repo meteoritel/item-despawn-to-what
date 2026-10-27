@@ -1,7 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.google.gson.JsonObject;
-import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
 import com.meteorite.itemdespawntowhat.client.edit.RuleCategorySkeleton;
 import com.meteorite.itemdespawntowhat.client.edit.RulePackExporter;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
@@ -148,7 +147,6 @@ final class RuleEditorListPage implements EditorPage {
     private final RuleListDisplayCache display;
     private final Font font;
     private final UiModalStack modals;
-    private final EditorWorkspaceView workspace;
     private final RuleEditorListActions actions;
 
     // ---- 列表控件与视图状态 ----
@@ -184,13 +182,12 @@ final class RuleEditorListPage implements EditorPage {
     private boolean firstReadyLogged;
 
     RuleEditorListPage(EditorShell shell, RuleEditorModel model, RuleListDisplayCache display, Font font,
-            UiModalStack modals, EditorWorkspaceView workspace) {
+            UiModalStack modals) {
         this.shell = shell;
         this.model = model;
         this.display = display;
         this.font = font;
         this.modals = modals;
-        this.workspace = workspace;
         this.actions = new RuleEditorListActions(shell, model, font, modals, this::selectedRuleId);
     }
 

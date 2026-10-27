@@ -6,7 +6,7 @@ import com.meteorite.itemdespawntowhat.core.type.condition.FluidPresentCondition
 import net.minecraft.resources.ResourceLocation;
 
 /**
- * 页面共享的布局常量、界面文案前缀与描述符 id。
+ * 页面共享的布局常量、界面文案前缀与存在条件类型 id。
  *
  * <p>本类不持有界面状态、不装配控件；业务工具按关注点分在 {@link PresenceLeaves}（存在条件叶）、
  * {@link CatalystQuantities}（催化剂数量联动）与 {@link RuleValueReads}（RuleValue 读取）</p>
@@ -32,11 +32,6 @@ final class RuleEditorPageSupport {
 
     // 界面文案前缀
     static final String UI = TypeLabels.UI_PREFIX;
-
-    // 页签描述符 id
-    static final ResourceLocation INFO_PAGE = ResourceLocation.fromNamespaceAndPath(TypeLabels.OWN_NAMESPACE, "rule_info_page");
-    static final ResourceLocation DELAY_PAGE = ResourceLocation.fromNamespaceAndPath(TypeLabels.OWN_NAMESPACE, "rule_delay_page");
-    static final ResourceLocation CONDITIONS_PAGE = ResourceLocation.fromNamespaceAndPath(TypeLabels.OWN_NAMESPACE, "conditions_page");
 
     // 存在条件叶的类型 id
     static final ResourceLocation CATALYST_PRESENT_ID = CatalystPresentCondition.ID;
