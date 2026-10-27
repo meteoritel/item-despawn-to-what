@@ -1,6 +1,5 @@
 package com.meteorite.itemdespawntowhat.client.edit;
 
-import java.math.BigDecimal;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -55,14 +54,6 @@ public record NumericDomain(@Nullable Double backendMin, @Nullable Double backen
                 displayPrecision, integer);
     }
 
-    // 后端合法域的 "min..max" 文本；任一端缺失时返回 null（表示不约束）
-    public @Nullable String domainText() {
-        if (backendMin == null || backendMax == null) {
-            return null;
-        }
-        return numberText(backendMin) + ".." + numberText(backendMax);
-    }
-
     // 滑块下界（窗口缺省时回落后端域，仍缺省返回 fallback）
     public double sliderMin(double fallback) {
         Double value = windowMin != null ? windowMin : backendMin;
@@ -75,11 +66,4 @@ public record NumericDomain(@Nullable Double backendMin, @Nullable Double backen
         return value == null ? fallback : value;
     }
 
-    // 域文本：整数不带小数点，小数用最短往返表示
-    private String numberText(double value) {
-        if (integer && value == Math.rint(value) && !Double.isInfinite(value)) {
-            return Long.toString((long) value);
-        }
-        return new BigDecimal(Double.toString(value)).stripTrailingZeros().toPlainString();
-    }
 }

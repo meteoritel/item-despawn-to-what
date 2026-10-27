@@ -8,7 +8,6 @@ import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
-import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
@@ -248,7 +247,7 @@ final class RuleEditorInputSection {
             List<String> references = RuleValueReads.stringList(session.draft().valueAt(path));
             if (session.draft().root().has(RuleFields.SOURCE_COST)) {
                 session.draft().replaceWith(CatalystQuantities.withQuantities(session.draft().root(),
-                        RuleFields.SOURCE_COST, references, CatalystCost.DEFAULT_COUNT));
+                        RuleFields.SOURCE_COST, references));
             }
         });
         updateBlacklistVisibility();
@@ -305,7 +304,7 @@ final class RuleEditorInputSection {
                 RuleValue current = draft.valueAt(RuleFields.CATALYST_COST);
                 if (current != null && current.has(RuleFields.CONSUME_COUNTS)) {
                     draft.setAt(RuleFields.CATALYST_COST, CatalystQuantities.withQuantities(current,
-                            RuleFields.CONSUME_COUNTS, references, CatalystCost.DEFAULT_COUNT));
+                            RuleFields.CONSUME_COUNTS, references));
                 }
             });
             bindConsumeVisibility(catalystForm, session);
@@ -366,7 +365,7 @@ final class RuleEditorInputSection {
             }
             if (checked) {
                 RuleValue values = CatalystQuantities.withQuantities(cost, RuleFields.ITEM_COUNTS,
-                        RuleValueReads.stringList(cost.child(RuleFields.CATALYST_ITEMS)), CatalystCost.DEFAULT_COUNT)
+                        RuleValueReads.stringList(cost.child(RuleFields.CATALYST_ITEMS)))
                         .childOr(RuleFields.ITEM_COUNTS, RuleValue.mapping().build());
                 draft.setAt(DraftPaths.child(RuleFields.CATALYST_COST, RuleFields.CONSUME_COUNTS), values.deepCopy());
             } else {
@@ -394,7 +393,7 @@ final class RuleEditorInputSection {
     }
 
     FormView presenceForm(EditSession session, PresenceLeaves.PresenceLeaf leaf) {
-        FormView form = pages.newForm(session, leaf.conditionPath(), presenceDescriptor(leaf));
+        FormView form = pages.newForm(session, leaf.conditionPath(), BuiltinEditorDescriptors.presenceDescriptor(leaf.type()));
         form.hideRowLabel(leaf.fieldPath());
         configurePresenceWrites(form, session, leaf);
         // 类型改写立即落盘（类型 + 关联消耗配置重指向 = 同一次可撤销操作）；此处不重建页面，
@@ -431,15 +430,6 @@ final class RuleEditorInputSection {
         });
     }
 
-    TypeEditorDescriptor presenceDescriptor(PresenceLeaves.PresenceLeaf leaf) {
-        List<EditorField> fields = leaf.catalyst()
-                ? List.of(EditorField.tagList(RuleFields.CATALYST_ITEMS, RuleEditorPageSupport.UI + "field.catalyst_present.items", "minecraft:item")
-                        .asRequired(),
-                        EditorField.note(RuleEditorPageSupport.UI + "rule.catalyst_all_required"))
-                : List.of(EditorField.tagList(RuleFields.FLUIDS, RuleEditorPageSupport.UI + "field.fluid_present.fluid", "minecraft:fluid").optional(),
-                        EditorField.note(RuleEditorPageSupport.UI + "field.fluid_present.fluid.hint"));
-        return TypeEditorDescriptor.of(leaf.type(), TypeLabels.conditionLabel(leaf.type()), fields);
-    }
 
     void onPresenceToggle(ResourceLocation type, boolean checked) {
         EditSession session = pages.shell.editingSession();

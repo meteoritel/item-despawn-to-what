@@ -96,9 +96,9 @@ public final class BuiltinEditorDefaults {
             }
         }
         return switch (field) {
-            case "enabled" -> RuleValue.flag(true);
-            case "priority" -> RuleValue.integer(0);
-            case "trigger_after_seconds" -> RuleValue.integer(RuleCodecs.DEFAULT_TRIGGER_AFTER_SECONDS);
+            case RuleFields.ENABLED -> RuleValue.flag(true);
+            case RuleFields.PRIORITY -> RuleValue.integer(0);
+            case RuleFields.TRIGGER_AFTER_SECONDS -> RuleValue.integer(RuleCodecs.DEFAULT_TRIGGER_AFTER_SECONDS);
             default -> null;
         };
     }

@@ -58,7 +58,7 @@ final class CatalystQuantities {
             RuleValue updated = draft.valueAt(RuleFields.CATALYST_COST);
             if (updated != null && updated.has(RuleFields.CONSUME_COUNTS)) {
                 draft.setAt(RuleFields.CATALYST_COST, withQuantities(updated, RuleFields.CONSUME_COUNTS,
-                        references, CatalystCost.DEFAULT_COUNT));
+                        references));
             }
         }
     }
@@ -69,17 +69,17 @@ final class CatalystQuantities {
         if (owner == null || !owner.isMapping()) {
             return;
         }
-        draft.setAt(RuleFields.CATALYST_COST, withQuantities(owner, RuleFields.ITEM_COUNTS, references, CatalystCost.DEFAULT_COUNT));
+        draft.setAt(RuleFields.CATALYST_COST, withQuantities(owner, RuleFields.ITEM_COUNTS, references));
     }
 
-    // 按 references 顺序重建 field 计数表：已有计数值原样保留，新键取 max(DEFAULT_COUNT, fallback)
-    static RuleValue withQuantities(RuleValue owner, String field, List<String> references, int fallback) {
+    // 按 references 顺序重建 field 计数表：已有计数值原样保留，新键取 DEFAULT_COUNT
+    static RuleValue withQuantities(RuleValue owner, String field, List<String> references) {
         RuleValue previous = owner.childOr(field, RuleValue.mapping().build());
         RuleValue.Mapping next = RuleValue.mapping();
         for (String reference : references) {
             RuleValue existing = previous.isMapping() ? previous.child(reference) : null;
             next.put(reference, existing != null ? existing.deepCopy()
-                    : RuleValue.integer(Math.max(CatalystCost.DEFAULT_COUNT, fallback)));
+                    : RuleValue.integer(CatalystCost.DEFAULT_COUNT));
         }
         return RuleValue.mapping(owner).put(field, next.build()).build();
     }
@@ -92,8 +92,6 @@ final class CatalystQuantities {
     }
 
     static EditorField relabelCatalystCountField(EditorField field) {
-        return new EditorField(field.name(), RuleEditorPageSupport.UI + "rule.catalyst_min_count", field.type(), field.domain(),
-                field.nullable(), field.required(), field.registry(), field.enumGroup(), field.hintKey(),
-                field.subFields(), field.presets(), field.numbers(), field.displayPrecision());
+        return field.withLabel(RuleEditorPageSupport.UI + "rule.catalyst_min_count");
     }
 }

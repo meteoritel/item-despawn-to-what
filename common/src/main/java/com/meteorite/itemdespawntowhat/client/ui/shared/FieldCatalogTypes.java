@@ -13,9 +13,6 @@ public final class FieldCatalogTypes {
     // 字段的注册表提示 -> 目录类型（只覆盖能落到目录面板的类型）
     public static @Nullable RuleCatalogType catalogTypeOf(EditorField field) {
         String registry = field.registry();
-        if ((registry == null || registry.isBlank()) && field.domain() != null) {
-            registry = field.domain();
-        }
         if (registry != null && !registry.isBlank()) {
             RuleCatalogType byRegistry = registryType(registry);
             if (byRegistry != null) {

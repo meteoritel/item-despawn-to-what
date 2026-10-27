@@ -5,6 +5,7 @@ import com.meteorite.itemdespawntowhat.core.api.TypeDefinition;
 import com.meteorite.itemdespawntowhat.core.config.ServerConfig;
 import com.meteorite.itemdespawntowhat.core.model.CatalystCost;
 import com.meteorite.itemdespawntowhat.core.service.RuleEditSessionLimits;
+import com.meteorite.itemdespawntowhat.core.type.condition.CatalystPresentCondition;
 import com.meteorite.itemdespawntowhat.core.type.effect.EntityProduct;
 import com.meteorite.itemdespawntowhat.core.type.effect.PlaceBlockEffect;
 import com.meteorite.itemdespawntowhat.core.type.effect.SpawnEntityEffect;
@@ -31,8 +32,6 @@ public final class BuiltinEditorDescriptors {
     // 规则级标签前缀
     private static final String RULE = TypeLabels.UI_PREFIX + "rule.";
 
-    /** 规则基本信息描述符 id（仅界面按名取用） */
-    public static final ResourceLocation RULE_DESCRIPTOR = id("rule");
     /** 源物品对象描述符 id（仅界面按名取用） */
     public static final ResourceLocation SOURCE_DESCRIPTOR = id("source");
 
@@ -142,18 +141,37 @@ public final class BuiltinEditorDescriptors {
 
     // ---- 规则级与来源对象（不在条件/效果注册表内，界面按需取用） ----
 
-    /** 规则基本信息页签的字段描述符 */
-    public static TypeEditorDescriptor ruleDescriptor() {
-        String r = RULE;
-        return new TypeEditorDescriptor(RULE_DESCRIPTOR, Component.translatable(r + "info"), List.of(
-                EditorField.bool(RuleFields.ENABLED, r + "enabled"),
-                EditorField.integerSlider(RuleFields.PRIORITY, r + "priority", Integer.MIN_VALUE, Integer.MAX_VALUE, -100, 100)
-                        .optional(),
-                EditorField.optionalText(RuleFields.DISPLAY_NAME, r + "display_name"),
-                EditorField.longText(RuleFields.NOTES, r + "notes"),
-                EditorField.integerSlider("trigger_after_seconds", r + "trigger_after_seconds", 0, Integer.MAX_VALUE, 0, DEFAULT_TRIGGER_WINDOW_SECONDS)
-                        .optional()
-        ), false);
+    /** 基本信息的内容字段；本服启用意图由独立动作维护。 */
+    public static TypeEditorDescriptor infoDescriptor() {
+        return TypeEditorDescriptor.of(id("rule_info_page"), Component.translatable(TypeLabels.UI_PREFIX + "tab.info"), List.of(
+                EditorField.optionalText(RuleFields.DISPLAY_NAME, RULE + "display_name").withHint(RULE + "display_name_hint"),
+                EditorField.bool(RuleFields.ENABLED, RULE + "enabled"),
+                EditorField.integerSlider(RuleFields.PRIORITY, RULE + "priority", Integer.MIN_VALUE, Integer.MAX_VALUE, -100, 100)
+                        .optional().withHint(RULE + "priority.hint"),
+                EditorField.longText(RuleFields.NOTES, RULE + "notes").withHint(RULE + "notes_hint")));
+    }
+
+    /** 自然触发延迟字段；实际寿命只更新界面的滑条窗口。 */
+    public static TypeEditorDescriptor delayDescriptor() {
+        return TypeEditorDescriptor.of(id("rule_delay_page"), Component.translatable(RULE + "trigger_after_seconds"), List.of(
+                EditorField.integerSlider(RuleFields.TRIGGER_AFTER_SECONDS, RULE + "trigger_after_seconds",
+                        0, Integer.MAX_VALUE, 0, DEFAULT_TRIGGER_WINDOW_SECONDS).optional()));
+    }
+
+    /** 规则级条件树字段。 */
+    public static TypeEditorDescriptor conditionsDescriptor() {
+        return TypeEditorDescriptor.of(id("conditions_page"), Component.translatable(TypeLabels.UI_PREFIX + "tab.trigger"), List.of(
+                EditorField.conditionTree(RuleFields.CONDITIONS, RULE + "conditions")));
+    }
+
+    /** 输入分区内催化剂或流体存在条件的精简字段与说明。 */
+    public static TypeEditorDescriptor presenceDescriptor(ResourceLocation type) {
+        List<EditorField> fields = CatalystPresentCondition.ID.equals(type)
+                ? List.of(EditorField.tagList(RuleFields.CATALYST_ITEMS, FIELD + "catalyst_present.items", "minecraft:item").asRequired(),
+                        EditorField.note(RULE + "catalyst_all_required"))
+                : List.of(EditorField.tagList(RuleFields.FLUIDS, FIELD + "fluid_present.fluid", "minecraft:fluid").optional(),
+                        EditorField.note(FIELD + "fluid_present.fluid.hint"));
+        return TypeEditorDescriptor.of(type, TypeLabels.conditionLabel(type), fields);
     }
 
     // ---- 规则级固定成本（可省略字段，界面按需取用） ----
