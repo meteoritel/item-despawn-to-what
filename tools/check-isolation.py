@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """依赖方向校验：平台隔离与端隔离。
 
-扫描仓库内所有 Java 源文件，按 import 语句判定四类违规：
+扫描仓库内所有 Java 源文件，按 import 语句判定依赖违规：
 
 1) 平台隔离：加载器 API（net.fabricmc.*、net.neoforged.*）只允许出现在平台源集
    fabric/ 与 neoforge/ 中；
@@ -10,6 +10,9 @@
 3) 端隔离：客户端类只允许出现在客户端路径，即路径含 /client/ 的源码；其它路径不得
    import net.minecraft.client.* 与本模组 .client. 包；
 4) 开发源集隔离：src/main 不得 import core.debug 与 probe 实现包。
+5) 编辑业务隔离：core/service 与 core/catalog 不得 import core/network、
+   CustomPacketPayload 或网络 codec；语义模型由业务包持有。
+6) 编辑注册入口遍历 RuleEditChannels，平台 adapter 仅使用声明中的类型和处理器。
 
 只判定 import 语句：注释与 javadoc 中的全限定名不构成编译期依赖，不计入违规。
 
@@ -32,7 +35,12 @@ EXCLUDED_DIRS = {
 PLATFORM_LOADERS = {"fabric": "net.fabricmc.", "neoforge": "net.neoforged."}
 # 判定为客户端类的 import 前缀
 CLIENT_IMPORT_PREFIXES = ("net.minecraft.client.", "com.meteorite.itemdespawntowhat.client.")
-IMPORT_RE = re.compile(r"^\s*import\s+(?:static\s+)?([A-Za-z_][A-Za-z0-9_.]*)\s*;")
+IMPORT_RE = re.compile(r"^\s*import\s+(?:static\s+)?([A-Za-z_][A-Za-z0-9_.]*(?:\*)?)\s*;")
+REGISTRAR_DIRECTIONS = {
+    "fabric/src/main/java/com/meteorite/itemdespawntowhat/network/registrar/RuleEditPayloadRegistrar.java": ("serverbound", "clientbound"),
+    "fabric/src/main/java/com/meteorite/itemdespawntowhat/client/network/FabricRuleEditClientRegistrar.java": ("clientbound",),
+    "neoforge/src/main/java/com/meteorite/itemdespawntowhat/network/registrar/RuleEditPayloadRegistrar.java": ("serverbound", "clientbound"),
+}
 
 
 def collect_sources(root: Path) -> list[Path]:
@@ -65,12 +73,32 @@ def check(root: Path) -> int:
         modules.add(module)
         client_path = is_client_path(rel)
         text = source.read_text(encoding="utf-8", errors="replace")
+        if rel in REGISTRAR_DIRECTIONS:
+            for direction in REGISTRAR_DIRECTIONS[rel]:
+                if not re.search(r"RuleEditChannels\." + direction + r"\(\)\.forEach\(", text):
+                    violations.append((rel, 1, "通道声明消费", "注册入口须遍历 RuleEditChannels." + direction + "()"))
+            for member in ("type", "codec", "handler"):
+                if "channel." + member + "()" not in text:
+                    # Fabric 公共入口只注册 S2C 类型，客户端入口仅消费处理器；各自核对实际负责的能力。
+                    if member == "codec" and "/client/" in rel:
+                        continue
+                    if member == "handler" and "binding.deliver(channel, payload)" in text:
+                        continue
+                    violations.append((rel, 1, "通道声明消费", "adapter 须消费 channel." + member + "()"))
+            for line_no, line in enumerate(text.splitlines(), 1):
+                if re.search(r"\b\w*Payload\.(?:TYPE|STREAM_CODEC|CHANGE_SET|SNAPSHOT|SOURCE_VIEW)\b", line):
+                    violations.append((rel, line_no, "通道声明消费", "载荷类型与 codec 统一在 RuleEditChannels 声明"))
         for line_no, line in enumerate(text.splitlines(), 1):
             match = IMPORT_RE.match(line)
             if not match:
                 continue
             target = match.group(1)
             import_total += 1
+            if ("/core/service/" in rel or "/core/catalog/" in rel) and target.startswith((
+                    "com.meteorite.itemdespawntowhat.core.network.",
+                    "net.minecraft.network.protocol.common.custom.",
+                    "net.minecraft.network.codec.")):
+                violations.append((rel, line_no, "编辑业务隔离", target))
             if '/src/main/' in rel and ('.core.debug.' in target or '.probe.' in target):
                 violations.append((rel, line_no, "开发源集隔离", target))
             loader = None
@@ -93,7 +121,7 @@ def check(root: Path) -> int:
         print("[违规] 共 " + str(len(violations)) + " 处：")
         for rel, line_no, rule, detail in violations:
             print("  " + rel + ":" + str(line_no) + " [" + rule + "] " + detail)
-        print("修正方式：平台 API 回到 fabric/ 与 neoforge/，客户端依赖回到客户端路径，或改为经窄接口与静态 sink 注入。")
+        print("修正方式：平台 API 回到对应源集，客户端依赖回到客户端路径；编辑业务返回语义模型，由 transport 完成载荷映射。")
         return 1
 
     print("[通过] 依赖方向检查通过：0 处违规。")
