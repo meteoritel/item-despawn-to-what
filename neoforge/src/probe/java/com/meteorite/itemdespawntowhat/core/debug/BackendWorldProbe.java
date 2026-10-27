@@ -5,8 +5,8 @@ import com.google.gson.JsonParser;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.RunnableTask;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEditChangeSet;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveProgress;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleEditChangeSet;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleSaveProgress;
 import com.meteorite.itemdespawntowhat.core.runtime.ProbeLedgerAccess;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ScheduledTaskHandle;
 import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ScheduledTask;
@@ -242,7 +242,7 @@ final class BackendWorldProbe {
             check("retry_file_content/" + id, actual.equals(rule(id, "prismarine_shard", 2, "natural")));
         }
         DebugProbePerformance.phase("SAVE_SESSION");
-        EditSessionManager sessions = new EditSessionManager(Path.of("probe-session"));
+        EditSessionManager sessions = new EditSessionManager();
         var first = sessions.acquire(UUID.randomUUID(), "probe", 1);
         check("acquire", first.acquired());
         check("exclusive", !sessions.acquire(UUID.randomUUID(), "other", 1).acquired());

@@ -4,7 +4,7 @@ import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.RulePackExporter;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshotEntry;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleSnapshotEntry;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashMap;

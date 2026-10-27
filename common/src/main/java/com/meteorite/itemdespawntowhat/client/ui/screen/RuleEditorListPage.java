@@ -27,7 +27,7 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTreeNode;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTreeView;
 import com.meteorite.itemdespawntowhat.core.api.DevelopmentDiagnostics;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshotEntry;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleSnapshotEntry;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;

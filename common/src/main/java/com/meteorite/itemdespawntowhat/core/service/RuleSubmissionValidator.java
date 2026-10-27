@@ -8,14 +8,16 @@ import com.meteorite.itemdespawntowhat.core.api.RuleRuntimeLimits;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
 import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
 import com.meteorite.itemdespawntowhat.core.model.RuleValidation;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEdit;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEditChangeSet;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleEdit;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleEditChangeSet;
 
 /** 网络保存与既有配置迁移共用的提交校验；解码或语义错误必须发生在写入前。 */
 public final class RuleSubmissionValidator {
     private RuleSubmissionValidator() {}
 
-    // 内容动作 upsert 走完整 Codec 与类型校验；delete 与启用状态动作只认 id，无需内容校验。
+    /**
+     * 内容动作 upsert 走完整 Codec 与类型校验；delete 与启用状态动作只认 id，无需内容校验。
+     */
     public static boolean validate(RuleEditChangeSet changes, net.minecraft.server.MinecraftServer server,
                                    BuiltinTypeRegistries types, RuleRuntimeLimits runtimeLimits,
                                    IssueCollector issues) {

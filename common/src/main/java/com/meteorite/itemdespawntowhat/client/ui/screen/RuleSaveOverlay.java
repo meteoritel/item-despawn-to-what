@@ -9,7 +9,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveProgress;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleSaveProgress;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -98,7 +98,7 @@ final class RuleSaveOverlay {
             advancedButton.render(graphics, font, mouseX, mouseY);
             y += RuleEditorPageSupport.DIALOG_BUTTON_H + ROW_GAP;
             if (advanced) {
-                drawLine(graphics, Component.translatable(UI + "step", Component.translatable(progress.stage().messageKey())),
+                drawLine(graphics, Component.translatable(UI + "step", Component.translatable(com.meteorite.itemdespawntowhat.core.network.transport.RuleEditMessages.progressKey(progress.stage()))),
                         left, y, innerWidth, false);
                 y += font.lineHeight + ROW_GAP;
                 Component content = Component.translatable(UI + "current", progress.current().isEmpty()

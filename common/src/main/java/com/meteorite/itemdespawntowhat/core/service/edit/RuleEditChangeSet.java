@@ -1,10 +1,10 @@
-package com.meteorite.itemdespawntowhat.core.network.protocol;
+package com.meteorite.itemdespawntowhat.core.service.edit;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.core.api.RuleDecodeBudget;
-import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditLimits;
+import com.meteorite.itemdespawntowhat.core.service.RuleAuthoringLimits;
 import com.mojang.serialization.DataResult;
 
 import java.util.ArrayList;
@@ -66,8 +66,8 @@ public record RuleEditChangeSet(int expectedVersion, List<RuleEdit> edits) {
             List<RuleEdit> edits = new ArrayList<>();
             if (root.has("edits")) {
                 JsonArray rawEdits = root.getAsJsonArray("edits");
-                if (rawEdits.size() > RuleEditLimits.MAX_EDITS_PER_CHANGE_SET) {
-                    return DataResult.error(() -> "变更集条数超过上限: " + RuleEditLimits.MAX_EDITS_PER_CHANGE_SET);
+                if (rawEdits.size() > RuleAuthoringLimits.MAX_EDITS_PER_CHANGE_SET) {
+                    return DataResult.error(() -> "变更集条数超过上限: " + RuleAuthoringLimits.MAX_EDITS_PER_CHANGE_SET);
                 }
                 for (JsonElement entry : rawEdits) {
                     edits.add(RuleEdit.fromJson(entry.getAsJsonObject()));

@@ -12,7 +12,7 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModalStack;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEdit;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleEdit;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import net.minecraft.client.gui.Font;

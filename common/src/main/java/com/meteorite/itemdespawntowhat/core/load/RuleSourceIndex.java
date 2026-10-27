@@ -19,9 +19,13 @@ public final class RuleSourceIndex {
 
     // 按 id 排序后的分层条目
     private final List<Entry> entries;
+    private final Map<ResourceLocation, Entry> byId;
 
     private RuleSourceIndex(List<Entry> entries) {
         this.entries = entries;
+        Map<ResourceLocation, Entry> lookup = new LinkedHashMap<>();
+        entries.forEach(entry -> lookup.put(entry.id(), entry));
+        byId = Map.copyOf(lookup);
     }
 
     // 单条规则的分层视图：base 为数据包层胜出条目，overlay 为覆盖层胜出条目
@@ -79,6 +83,9 @@ public final class RuleSourceIndex {
         entries.sort(Comparator.comparing(entry -> entry.id().toString()));
         return new RuleSourceIndex(List.copyOf(entries));
     }
+
+    /** 按 id 取得同一分层条目，未找到时为空。 */
+    public @Nullable Entry find(ResourceLocation id) { return byId.get(id); }
 
     // 全部分层条目（按 id 排序）
     public List<Entry> entries() {

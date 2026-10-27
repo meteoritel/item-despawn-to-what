@@ -3,33 +3,30 @@ package com.meteorite.itemdespawntowhat.core.service;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.core.api.Issue;
-import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.IssueSeverity;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
 import com.meteorite.itemdespawntowhat.core.load.LoadedRule;
-import com.meteorite.itemdespawntowhat.core.load.OverlayRuleReader;
 import com.meteorite.itemdespawntowhat.core.load.RawRuleEntry;
 import com.meteorite.itemdespawntowhat.core.load.RuleOrigin;
 import com.meteorite.itemdespawntowhat.core.load.RuleSourceIndex;
 import com.meteorite.itemdespawntowhat.core.load.RuleSourceLayer;
-import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
+import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
 import com.meteorite.itemdespawntowhat.core.model.RuleCategoryClassifier;
 import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleIssue;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleIssue;
 import com.meteorite.itemdespawntowhat.core.state.RuleEnableResolver;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshot;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshotEntry;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSourceView;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleSnapshot;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleSnapshotEntry;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleSourceView;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.JsonOps;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
@@ -56,39 +53,18 @@ import java.util.TreeMap;
  */
 public final class RuleSnapshotAssembler {
 
-    public static final String RULE_KEY = "rule";
-    public static final String ORIGIN_KEY = "origin";
-    public static final String EDITABLE_KEY = "editable";
 
-    // 兜底问题码：某条规则解码失败但加载层没给出可定位问题时使用
+    /**
+     * 兜底问题码：某条规则解码失败但加载层没给出可定位问题时使用
+     */
     public static final String ISSUE_DECODE = "itemdespawntowhat.edit.issue.decode";
-    // 快照级问题码：无法定位到具体条目
+    /**
+     * 快照级问题码：无法定位到具体条目
+     */
     public static final String ISSUE_LOAD = "itemdespawntowhat.edit.issue.load";
 
     private RuleSnapshotAssembler() {
         throw new UnsupportedOperationException("Utility class");
-    }
-
-    // 完整装配：index 为三层来源分层索引（见 RuleLoadingService#sourceIndex），merged 为加载合并结果
-    // version 为覆盖层修订号，contextRevision 为客户端应跟踪的上下文中枢修订号（两者当前一致）
-    public static RuleSnapshot assemble(RuleSourceIndex index,
-                                        List<LoadedRule<Rule>> merged,
-                                        int version,
-                                        int contextRevision,
-                                        TypeRegistry<EffectType<?>> effectTypes,
-                                        TypeRegistry<ConditionType<?>> conditionTypes,
-                                        @Nullable List<Issue> issues,
-                                        @Nullable RuleEnableResolver enableResolver) {
-        Map<ResourceLocation, JsonObject> encoded = new LinkedHashMap<>();
-        if (merged != null) {
-            for (LoadedRule<Rule> loaded : merged) {
-                if (loaded != null && loaded.id() != null) {
-                    JsonObject body = encodeRule(loaded.value(), effectTypes, conditionTypes);
-                    if (body != null) { encoded.put(loaded.id(), body); }
-                }
-            }
-        }
-        return assembleEncoded(index, merged, effectTypes, version, contextRevision, encoded, issues, enableResolver);
     }
 
     /**
@@ -173,31 +149,6 @@ public final class RuleSnapshotAssembler {
 
         return new RuleSnapshot(version, contextRevision, List.copyOf(entries.values()),
                 List.copyOf(associatedIssues.snapshot));
-    }
-
-    // 简化入口：仅有覆盖层与合并结果时装配（命令查询等只读路径使用）
-    public static RuleSnapshot assemble(List<LoadedRule<Rule>> merged,
-                                        Path overlayRoot,
-                                        String overlayNamespace,
-                                        int version,
-                                        TypeRegistry<EffectType<?>> effectTypes,
-                                        TypeRegistry<ConditionType<?>> conditionTypes,
-                                        List<String> issues,
-                                        @Nullable RuleEnableResolver enableResolver) {
-        IssueCollector collector = new IssueCollector();
-        List<RawRuleEntry> raw = OverlayRuleReader.read(overlayRoot, overlayNamespace, collector);
-        RuleSnapshot snapshot = assemble(RuleSourceIndex.build(raw), merged, version, version,
-                effectTypes, conditionTypes, collector.issues(), enableResolver);
-        if (issues == null || issues.isEmpty()) {
-            return snapshot;
-        }
-        // 纯文本问题（以字符串形式传入）追加为快照级告警
-        List<RuleIssue> merged2 = new ArrayList<>(snapshot.issues());
-        for (String text : issues) {
-            merged2.add(new RuleIssue(RuleIssue.SEVERITY_WARNING, null, RuleIssue.ORIGIN_RUNTIME,
-                    "", ISSUE_LOAD, List.of(), text == null ? "" : text));
-        }
-        return new RuleSnapshot(snapshot.version(), snapshot.contextRevision(), snapshot.entries(), List.copyOf(merged2));
     }
 
     /**

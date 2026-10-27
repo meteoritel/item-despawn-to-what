@@ -31,33 +31,17 @@ public final class RuleLoader {
     // 执行一次完整加载（读取 → 合并 → 解码）
     public static <T> RuleLoadResult<T> load(RuleLoadRequest<T> request) {
         IssueCollector issues = new IssueCollector();
-        List<RawRuleEntry> raw = new ArrayList<>();
-        if (request.resourceManager() != null) {
-            raw.addAll(DatapackRuleReader.read(request.resourceManager(), request.layerResolver(), issues));
-        }
-        if (request.overlayRoot() != null) {
-            raw.addAll(OverlayRuleReader.read(request.overlayRoot(), request.overlayDefaultNamespace(), issues));
-        }
-        List<RawRuleEntry> merged = RuleMerger.merge(raw, issues);
+        List<RawRuleEntry> base = request.resourceManager() == null ? List.of()
+                : DatapackRuleReader.read(request.resourceManager(), request.layerResolver(), issues);
+        RuleSourceRead source = RuleSourceRead.read(base, request.overlayRoot(), request.overlayDefaultNamespace(), issues);
+        List<RawRuleEntry> merged = source.entries();
 
         List<LoadedRule<T>> rules = new ArrayList<>(merged.size());
         for (RawRuleEntry entry : merged) {
             decodeEntry(entry, request.decoder(), issues).ifPresent(value ->
                     rules.add(new LoadedRule<>(entry.id(), entry.origin(), value)));
         }
-        return new RuleLoadResult<>(List.copyOf(rules), issues);
-    }
-
-    // 只做读取与合并，不做模型解码（供 /idtw config list 等只关心原始条目的场景使用）
-    public static List<RawRuleEntry> loadRaw(RuleLoadRequest<?> request, IssueCollector issues) {
-        List<RawRuleEntry> raw = new ArrayList<>();
-        if (request.resourceManager() != null) {
-            raw.addAll(DatapackRuleReader.read(request.resourceManager(), request.layerResolver(), issues));
-        }
-        if (request.overlayRoot() != null) {
-            raw.addAll(OverlayRuleReader.read(request.overlayRoot(), request.overlayDefaultNamespace(), issues));
-        }
-        return RuleMerger.merge(raw, issues);
+        return new RuleLoadResult<>(List.copyOf(rules), issues, source.index());
     }
 
     // 解码单条规则；失败即该条拒载，并把解码期问题补全为带来源与字段路径的记录

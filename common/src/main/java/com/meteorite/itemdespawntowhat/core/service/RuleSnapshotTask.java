@@ -4,25 +4,20 @@ import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.RuleDecoder;
 import com.meteorite.itemdespawntowhat.core.load.LoadedRule;
-import com.meteorite.itemdespawntowhat.core.load.OverlayRuleReader;
+import com.meteorite.itemdespawntowhat.core.load.RuleSourceRead;
 import com.meteorite.itemdespawntowhat.core.load.RawRuleEntry;
 import com.meteorite.itemdespawntowhat.core.load.RuleLoader;
-import com.meteorite.itemdespawntowhat.core.load.RuleMerger;
 import com.meteorite.itemdespawntowhat.core.load.RuleSourceIndex;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
 import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
 import com.meteorite.itemdespawntowhat.core.model.RuleValidation;
-import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditLimits;
-import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerContext;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.CancelReason;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTask;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.StepResult;
 import com.meteorite.itemdespawntowhat.core.api.DevelopmentDiagnostics;
-import com.meteorite.itemdespawntowhat.core.network.transport.RuleTextChunker;
 import com.mojang.serialization.Codec;
-import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import org.jetbrains.annotations.Nullable;
@@ -40,24 +35,22 @@ final class RuleSnapshotTask implements ServerTask {
     private record Source(byte[] revision, List<RawRuleEntry> entries, RuleSourceIndex index, IssueCollector issues) { }
 
     /**
-     * 一次快照准备的交付结果：本次要下发/处理的载荷，以及本次装配使用的来源分层索引。
+     * 一次快照准备的交付结果：已装配的列表 JSON，以及本次装配使用的来源分层索引。
      * 来源索引随快照一起交付，供编辑页按需生成来源视图，避免为单条规则再读一次磁盘。
      *
-     * @param packets 整包快照或分片；准备失败时为空列表
+     * @param json 已装配内容；失败或取消时为空
      * @param index   本次装配的来源分层索引；未完成读取或已取消时为 null
      */
-    record Delivery(List<CustomPacketPayload> packets, @Nullable RuleSourceIndex index) { }
-    private final RuleEditServerContext context;
+    record Delivery(@Nullable String json, @Nullable RuleSourceIndex index) { }
+    private final RuleAuthoringContext context;
     private final MinecraftServer server;
-    private final EditSessionManager sessions;
     private final EditAdmission admission;
     private final RuleOverlayStore store;
     private final RuleSaveReloadContext reloadContext;
     private final String sessionId;
-    private final String requestId;
     private final Consumer<Delivery> completion;
     private CompletableFuture<Source> reading;
-    private CompletableFuture<List<CustomPacketPayload>> preparing;
+    private CompletableFuture<String> preparing;
     private Source source;
     private RuleDecoder<Rule> decoder;
     private Codec<Rule> encoder;
@@ -76,11 +69,11 @@ final class RuleSnapshotTask implements ServerTask {
     private final List<LoadedRule<Rule>> decoded = new ArrayList<>();
     private final Map<ResourceLocation, JsonObject> encoded = new LinkedHashMap<>();
 
-    RuleSnapshotTask(RuleEditServerContext context, MinecraftServer server, EditSessionManager sessions,
-                     EditAdmission admission, String sessionId, String requestId, Consumer<Delivery> completion) {
-        this.context = context; this.server = server; this.sessions = sessions; this.admission = admission;
-        store = sessions.store();
-        this.sessionId = sessionId; this.requestId = requestId; this.completion = completion;
+    RuleSnapshotTask(RuleAuthoringContext context, MinecraftServer server,
+                     RuleOverlayStore store, EditAdmission admission, String sessionId, Consumer<Delivery> completion) {
+        this.context = context; this.server = server; this.admission = admission;
+        this.store = store;
+        this.sessionId = sessionId; this.completion = completion;
         profileStartedNanos = DevelopmentDiagnostics.start();
         profileStartTick = server.getTickCount();
         reloadContext = java.util.Objects.requireNonNull(context.saveReloadContext());
@@ -88,16 +81,9 @@ final class RuleSnapshotTask implements ServerTask {
             // 后台读盘与合并的耗时单独计量，不与服务端线程的解码步骤混算
             long readStarted = DevelopmentDiagnostics.start();
             try {
-                byte[] revision = sessions.readDiskRevision(() -> !cancelled);
-                IssueCollector issues = new IssueCollector();
-                reloadContext.baseIssues().forEach(issues::add);
-                var load = reloadContext.loadContext();
-                List<RawRuleEntry> entries = new ArrayList<>(reloadContext.baseRules());
-                entries.addAll(OverlayRuleReader.read(load.overlayRoot(), load.overlayNamespace(), issues));
-                if (!java.util.Arrays.equals(revision, sessions.readDiskRevision(() -> !cancelled))) {
-                    throw new IllegalStateException("准备快照时覆盖层修订已变化");
-                }
-                return new Source(revision, RuleMerger.merge(entries, issues), RuleSourceIndex.build(entries), issues);
+                RuleOverlayStore.Sources sources = store.readSources(reloadContext, () -> !cancelled);
+                RuleSourceRead read = sources.read();
+                return new Source(sources.revision(), read.entries(), read.index(), read.issues());
             } finally {
                 profileReadNanos = DevelopmentDiagnostics.micros(readStarted);
             }
@@ -132,8 +118,8 @@ final class RuleSnapshotTask implements ServerTask {
             if (source == null) {
                 if (!reading.isDone()) { return StepResult.yield(1, 1); }
                 source = reading.join(); reading = null;
-                sessions.acceptDiskRevision(source.revision(), false);
-                version = sessions.version();
+                store.acceptRevision(source.revision(), false);
+                version = store.version();
             }
             if (decoder == null && cursor < source.entries().size() && !budget.exhausted()) {
                 // Codec 构建同样受公共 tick 预算约束，同一快照内复用，不为每条规则重建整棵 Codec。
@@ -142,7 +128,7 @@ final class RuleSnapshotTask implements ServerTask {
                 encoder = RuleCodecs.codec(load.effectTypes(), load.conditionTypes());
             }
             int processed = 0;
-            while (cursor < source.entries().size() && processed < RuleEditLimits.SNAPSHOT_ENTRIES_PER_STEP
+            while (cursor < source.entries().size() && processed < RuleAuthoringLimits.SNAPSHOT_ENTRIES_PER_STEP
                     && !budget.exhausted()) {
                 RawRuleEntry entry = source.entries().get(cursor++);
                 var load = reloadContext.loadContext();
@@ -159,7 +145,7 @@ final class RuleSnapshotTask implements ServerTask {
             }
             if (cursor < source.entries().size()) { return StepResult.yield(1, 1); }
             if (preparing == null) {
-                // 交接后的容器不再由服务端线程修改；装配与分片不触碰 Codec 或世界，
+                // 交接后的容器不再由服务端线程修改；装配不触碰 Codec 或世界，
                 // 效果类型注册表已在启动时冻结，可跨线程只读，用于派生未显式声明的分类。
                 Source capturedSource = source;
                 List<LoadedRule<Rule>> readyRules = List.copyOf(decoded);
@@ -169,16 +155,16 @@ final class RuleSnapshotTask implements ServerTask {
                 var enableResolver = reloadContext.loadContext().enableResolver();
                 int capturedVersion = version;
                 preparing = store.submit("snapshot-assemble", () -> {
-                    // 后台装配与切分的耗时单独计量，与解码步骤分开对比
+                    // 后台装配的耗时单独计量，与解码步骤分开对比
                     long assembleStarted = DevelopmentDiagnostics.start();
                     try {
                         String json = RuleSnapshotAssembler.assembleEncoded(capturedSource.index(), readyRules, effectTypes,
                                 capturedVersion, capturedVersion, readyJson, capturedSource.issues().issues(),
                                 enableResolver).serialize();
-                        if (!java.util.Arrays.equals(capturedSource.revision(), sessions.readDiskRevision(() -> !cancelled))) {
+                        if (!java.util.Arrays.equals(capturedSource.revision(), store.fingerprint(() -> !cancelled))) {
                             throw new IllegalStateException("快照准备期间覆盖层修订已变化");
                         }
-                        return RuleTextChunker.split(RuleTextChunker.Family.SNAPSHOT, sessionId, requestId, json);
+                        return json;
                     } finally {
                         profileAssembleNanos = DevelopmentDiagnostics.micros(assembleStarted);
                     }
@@ -190,20 +176,20 @@ final class RuleSnapshotTask implements ServerTask {
         } catch (RuntimeException failure) {
             profileFailed = true;
             org.apache.logging.log4j.LogManager.getLogger().error("规则快照准备失败", failure);
-            complete(List.of()); return StepResult.done(1);
+            complete(null); return StepResult.done(1);
         }
     }
 
-    private void complete(List<CustomPacketPayload> packets) {
+    private void complete(@Nullable String json) {
         if (finished) { return; }
         finished = true;
-        if (DevelopmentDiagnostics.enabled()) { logProfile(packets); }
+        if (DevelopmentDiagnostics.enabled()) { logProfile(json); }
         Source ready = source;
-        completion.accept(new Delivery(packets, ready == null ? null : ready.index()));
+        completion.accept(new Delivery(json, json == null || ready == null ? null : ready.index()));
     }
 
-    // 首载分段观测：一条日志给出准备阶段的步数、跨 tick 数、线程耗时与下发包数
-    private void logProfile(List<CustomPacketPayload> packets) {
+    // 首载分段观测：一条日志给出准备阶段的步数、跨 tick 数、线程耗时与内容字节数
+    private void logProfile(@Nullable String json) {
         JsonObject data = new JsonObject();
         data.addProperty("entries", source == null ? 0 : source.entries().size());
         data.addProperty("decoded", decoded.size());
@@ -213,11 +199,11 @@ final class RuleSnapshotTask implements ServerTask {
         data.addProperty("step_ms", profileStepNanos / 1000.0);
         data.addProperty("read_ms", profileReadNanos / 1000.0);
         data.addProperty("assemble_ms", profileAssembleNanos / 1000.0);
-        data.addProperty("packets", packets.size());
-        data.addProperty("bytes", RuleTextChunker.encodedBytes(packets));
+
+        data.addProperty("bytes", json == null ? 0 : json.getBytes(java.nio.charset.StandardCharsets.UTF_8).length);
         data.addProperty("failed", profileFailed);
-        // 非失败但没有包：请求被取消或超过上限，两种都按中止记录
-        data.addProperty("aborted", !profileFailed && packets.isEmpty());
+        // 非失败但没有内容：准备被取消，按中止记录
+        data.addProperty("aborted", !profileFailed && json == null);
         data.addProperty("total_ms", DevelopmentDiagnostics.micros(profileStartedNanos) / 1000.0);
         DevelopmentDiagnostics.event(DevelopmentDiagnostics.SCENE_FIRST_LOAD, "SERVER_PREP", data);
     }
@@ -230,7 +216,7 @@ final class RuleSnapshotTask implements ServerTask {
         if (finished) { return; }
         if (store.stalled()) { invalidate(); }
         if (cancelled && (reading == null || reading.isDone()) && (preparing == null || preparing.isDone())) {
-            complete(List.of());
+            complete(null);
         }
     }
 }

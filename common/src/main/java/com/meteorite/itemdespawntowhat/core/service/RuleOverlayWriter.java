@@ -10,10 +10,9 @@ import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.RuleDecodeBudget;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.load.RulePaths;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEdit;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEditChangeSet;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveProgress;
-import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditLimits;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleEdit;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleEditChangeSet;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleSaveProgress;
 import net.minecraft.resources.ResourceLocation;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -107,13 +106,17 @@ public final class RuleOverlayWriter {
     }
     private final Path root;
     private final String namespace;
-    // 写入目录固定为 <overlayRoot>/rules；defaultNamespace 用于无 id 的单对象文件反推规则 id
+    /**
+     * 写入目录固定为 <overlayRoot>/rules；defaultNamespace 用于无 id 的单对象文件反推规则 id
+     */
     public RuleOverlayWriter(Path overlayRoot, String defaultNamespace) {
         root = overlayRoot.toAbsolutePath().normalize().resolve(RulePaths.OVERLAY_RULES_DIRECTORY);
         namespace = defaultNamespace;
     }
 
-    // 拒绝路径穿越、符号链接、重复编辑和文件占用；任何预备错误均不写入。
+    /**
+     * 拒绝路径穿越、符号链接、重复编辑和文件占用；任何预备错误均不写入。
+     */
     public ApplyResult apply(RuleEditChangeSet changes, IssueCollector issues) {
         return apply(changes, issues, () -> true, () -> true);
     }
@@ -151,9 +154,9 @@ public final class RuleOverlayWriter {
         Set<Path> dirty = new LinkedHashSet<>();
         List<String> conflicts = new ArrayList<>();
         try {
-            if (changes.edits().size() > RuleEditLimits.MAX_EDITS_PER_CHANGE_SET) {
+            if (changes.edits().size() > RuleAuthoringLimits.MAX_EDITS_PER_CHANGE_SET) {
                 throw new IOException("变更集条数超过上限: "
-                        + RuleEditLimits.MAX_EDITS_PER_CHANGE_SET);
+                        + RuleAuthoringLimits.MAX_EDITS_PER_CHANGE_SET);
             }
             requireActive(active);
             safePath(root);

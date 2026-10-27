@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.core.service;
 
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveStatus;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleSaveStatus;
 import net.minecraft.server.level.ServerPlayer;
 import org.jetbrains.annotations.Nullable;
 

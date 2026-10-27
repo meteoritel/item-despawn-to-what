@@ -14,10 +14,10 @@ import com.meteorite.itemdespawntowhat.client.edit.draft.DraftConflict;
 import com.meteorite.itemdespawntowhat.client.edit.draft.DraftJournal;
 import com.meteorite.itemdespawntowhat.client.edit.draft.DraftStore;
 import com.meteorite.itemdespawntowhat.client.edit.draft.PersistedDraft;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEdit;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleIssue;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshot;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshotEntry;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleEdit;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleIssue;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleSnapshot;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleSnapshotEntry;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;

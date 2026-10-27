@@ -2,18 +2,16 @@ package com.meteorite.itemdespawntowhat.core.service;
 
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.load.LoadedRule;
-import com.meteorite.itemdespawntowhat.core.load.OverlayRuleReader;
+import com.meteorite.itemdespawntowhat.core.load.RuleSourceRead;
+import com.meteorite.itemdespawntowhat.core.load.RuleSourceIndex;
 import com.meteorite.itemdespawntowhat.core.load.RawRuleEntry;
 import com.meteorite.itemdespawntowhat.core.load.RuleLoader;
-import com.meteorite.itemdespawntowhat.core.load.RuleMerger;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
 import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
 import com.meteorite.itemdespawntowhat.core.model.RuleValidation;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEditChangeSet;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveStatus;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveProgress;
-import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditLimits;
-import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerContext;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleEditChangeSet;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleSaveStatus;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleSaveProgress;
 import com.meteorite.itemdespawntowhat.core.runtime.RuleIndex;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.CancelReason;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTask;
@@ -43,12 +41,11 @@ final class RuleSaveTask implements ServerTask {
                    int expectedVersion, boolean written) { }
     private record Request(RuleEditChangeSet changes, byte[] revision) { }
     private record Written(RuleOverlayWriter.ApplyResult result, IssueCollector issues, byte[] revision) { }
-    private record RawReload(List<RawRuleEntry> entries, IssueCollector issues) { }
+    private record RawReload(List<RawRuleEntry> entries, IssueCollector issues, RuleSourceIndex index) { }
 
-    private final EditSessionManager sessions;
     private final EditAdmission admission;
     private final RuleOverlayStore store;
-    private final RuleEditServerContext context;
+    private final RuleAuthoringContext context;
     private final MinecraftServer server;
     private final RuleSaveReloadContext reloadContext;
     private final Consumer<Outcome> completion;
@@ -77,11 +74,10 @@ final class RuleSaveTask implements ServerTask {
     private final List<LoadedRule<Rule>> decoded = new ArrayList<>();
     private ServerTask apply;
 
-    RuleSaveTask(EditSessionManager sessions, EditAdmission admission, RuleEditServerContext context, MinecraftServer server,
+    RuleSaveTask(RuleOverlayStore store, EditAdmission admission, RuleAuthoringContext context, MinecraftServer server,
                  String sessionId, java.util.UUID owner, java.util.function.Supplier<String> text, Consumer<Outcome> completion) {
-        this.sessions = sessions;
         this.admission = admission;
-        this.store = sessions.store();
+        this.store = store;
         this.context = context;
         this.server = server;
         this.reloadContext = context.saveReloadContext();
@@ -90,13 +86,10 @@ final class RuleSaveTask implements ServerTask {
         this.owner = owner;
         request = store.submit("save-request", () -> {
             String json = java.util.Objects.requireNonNullElse(text.get(), "");
-            if (RuleEditLimits.encodedLength(json) > RuleEditLimits.MAX_CHANGE_SET_BYTES) {
-                throw new IllegalArgumentException("change set too large");
-            }
             var parsed = RuleEditChangeSet.parse(json);
             RuleEditChangeSet value = parsed.result().orElseThrow(() -> new IllegalArgumentException(
                     parsed.error().map(com.mojang.serialization.DataResult.Error::message).orElse("变更集解析失败")));
-            return new Request(value, value.isEmpty() ? null : sessions.readDiskRevision(active::get));
+            return new Request(value, value.isEmpty() ? null : store.fingerprint(active::get));
         });
     }
 
@@ -167,9 +160,9 @@ final class RuleSaveTask implements ServerTask {
                 finish(status, "保存请求已取消");
                 return StepResult.done(1);
             }
-            long deadline = System.nanoTime() + RuleEditLimits.SAVE_STEP_BUDGET_NANOS;
+            long deadline = System.nanoTime() + RuleAuthoringLimits.SAVE_STEP_BUDGET_NANOS;
             int processed = 0;
-            while (processed < RuleEditLimits.SAVE_ENTRIES_PER_STEP && !budget.exhausted()
+            while (processed < RuleAuthoringLimits.SAVE_ENTRIES_PER_STEP && !budget.exhausted()
                     && System.nanoTime() < deadline && phase != Phase.DONE) {
                 if (!advance(budget)) { break; }
                 processed++;
@@ -196,8 +189,8 @@ final class RuleSaveTask implements ServerTask {
                 if (changes.isEmpty()) { finish(RuleSaveStatus.NO_CHANGES, ""); return true; }
                 if (changes.hasContentEdits()) {
                     // 内容动作才推进内容修订号并参与草稿冲突；纯启停批次不碰这两项
-                    sessions.acceptDiskRevision(diskRevision, false);
-                    if (changes.expectedVersion() != sessions.version()) {
+                    store.acceptRevision(diskRevision, false);
+                    if (changes.expectedVersion() != store.version()) {
                         finish(RuleSaveStatus.VERSION_CONFLICT, ""); return true;
                     }
                 }
@@ -212,13 +205,12 @@ final class RuleSaveTask implements ServerTask {
                     appendIssues(local);
                     if (local.hasErrors()) { finish(RuleSaveStatus.VALIDATION_FAILED, local.format()); }
                 } else if (!changes.hasContentEdits()) {
-                    // 纯启停批次：写状态后按保存链路的轻量路径重建索引并发布，APPLY 步骤等待回扫收尾；
-                    // 索引用这份任务已捕捉的数据包基底重建，不重读数据包。
-                    RuleEnableApplyService.Outcome outcome = RuleEnableApplyService.apply(server, context,
-                            changes.enableEdits());
-                    if (outcome.changed() == 0) { finish(RuleSaveStatus.NO_CHANGES, ""); }
-                    else if (outcome.publication() == null) { finish(RuleSaveStatus.UNAVAILABLE, ""); }
-                    else { apply = outcome.publication(); phase = Phase.APPLY; }
+                    // 纯启停也经唯一文件队列取得稳定来源，不改变内容修订或重读数据包。
+                    raw = store.submit("enable-reload-read", () -> {
+                        RuleSourceRead read = store.readSources(reloadContext, active::get).read();
+                        return new RawReload(read.entries(), read.issues(), read.index());
+                    });
+                    phase = Phase.READ;
                 } else {
                     RuleEditChangeSet submitted = changes;
                     byte[] expectedRevision = diskRevision.clone();
@@ -235,7 +227,7 @@ final class RuleSaveTask implements ServerTask {
                         if (result.rollbackFailed()) { store.requireRecovery(); }
                         // 提交先登记修订；后续读取失败不能漏计一次已确认的提交。
                         if (written) { store.committed(); }
-                        byte[] revision = sessions.readDiskRevision();
+                        byte[] revision = store.fingerprint(() -> true);
                         if (written) { store.acceptRevision(revision, false); }
                         return new Written(result, local, revision);
                     });
@@ -258,13 +250,12 @@ final class RuleSaveTask implements ServerTask {
                     raw = store.submit("save-reload-read", () -> {
                         IssueCollector local = new IssueCollector();
                         reloadContext.baseIssues().forEach(local::add);
-                        List<RawRuleEntry> entries = new ArrayList<>(reloadContext.baseRules());
-                        entries.addAll(OverlayRuleReader.read(reloadContext.loadContext().overlayRoot(),
-                                reloadContext.loadContext().overlayNamespace(), local));
-                        if (!Arrays.equals(committedRevision, sessions.readDiskRevision(active::get))) {
+                        var load = reloadContext.loadContext();
+                        RuleSourceRead read = RuleSourceRead.read(reloadContext.baseRules(), load.overlayRoot(), load.overlayNamespace(), local);
+                        if (!Arrays.equals(committedRevision, store.fingerprint(active::get))) {
                             throw new IllegalStateException("准备保存重载时覆盖层修订已变化");
                         }
-                        return new RawReload(RuleMerger.merge(entries, local), local);
+                        return new RawReload(read.entries(), local, read.index());
                     });
                     phase = Phase.READ;
                 }
@@ -272,6 +263,18 @@ final class RuleSaveTask implements ServerTask {
             case READ -> {
                 if (!raw.isDone()) { return false; }
                 reload = raw.join(); appendIssues(reload.issues()); raw = null;
+                if (!changes.hasContentEdits()) {
+                    if (!commitState.compareAndSet(CommitState.OPEN, CommitState.COMMITTED)) {
+                        finish(RuleSaveStatus.CANCELLED, "");
+                        return true;
+                    }
+                    RuleEnableApplyService.Outcome outcome = RuleEnableApplyService.apply(server, context,
+                            changes.enableEdits(), reload.index());
+                    if (outcome.changed() == 0) { finish(RuleSaveStatus.NO_CHANGES, ""); }
+                    else if (outcome.publication() == null) { finish(RuleSaveStatus.UNAVAILABLE, ""); }
+                    else { apply = outcome.publication(); phase = Phase.APPLY; }
+                    return true;
+                }
                 cursor = 0; phase = Phase.DECODE;
             }
             case DECODE -> {
@@ -293,7 +296,7 @@ final class RuleSaveTask implements ServerTask {
                     byte[] indexedRevision = diskRevision.clone();
                     prepared = store.submit("save-index", () -> {
                         RuleIndex index = RuleIndex.build(readyRules, new IssueCollector());
-                        if (!Arrays.equals(indexedRevision, sessions.readDiskRevision(active::get))) {
+                        if (!Arrays.equals(indexedRevision, store.fingerprint(active::get))) {
                             throw new IllegalStateException("索引准备期间覆盖层修订已变化");
                         }
                         return index;
@@ -303,7 +306,7 @@ final class RuleSaveTask implements ServerTask {
             }
             case INDEX -> {
                 if (!prepared.isDone()) { return false; }
-                apply = context.publishIndex(server, prepared.join()); prepared = null;
+                apply = context.publishIndex(server, prepared.join(), reload.index()); prepared = null;
                 phase = Phase.APPLY;
             }
             case APPLY -> {
@@ -317,21 +320,20 @@ final class RuleSaveTask implements ServerTask {
     }
 
     private byte[] readRevision() {
-        try { return sessions.readDiskRevision(active::get); }
+        try { return store.fingerprint(active::get); }
         catch (java.io.IOException failure) { throw new java.io.UncheckedIOException(failure); }
     }
 
     private void acceptWrite(Written result) {
         if (commitState.get() != CommitState.CANCELLED || result.result().rollbackFailed()) { appendIssues(result.issues()); }
         writtenFiles = result.result().writtenFiles(); written = writtenFiles > 0;
-        if (written && !revisionAccepted) { sessions.acceptDiskRevision(result.revision(), false); revisionAccepted = true; }
+        if (written && !revisionAccepted) { store.acceptRevision(result.revision(), false); revisionAccepted = true; }
         diskRevision = result.revision();
     }
 
     private void appendIssues(IssueCollector local) {
-        // 回执本身有问题条数上限；保留有界样本，判定始终基于未经裁剪的 local。
+        // 业务保留完整问题；线上展示裁剪由传输 codec 统一负责。
         for (var issue : local.issues()) {
-            if (issues.issues().size() >= RuleEditLimits.MAX_ISSUES_PER_RESULT) { break; }
             issues.add(issue);
         }
     }

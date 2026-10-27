@@ -1,4 +1,4 @@
-package com.meteorite.itemdespawntowhat.core.network.protocol;
+package com.meteorite.itemdespawntowhat.core.service.edit;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonNull;

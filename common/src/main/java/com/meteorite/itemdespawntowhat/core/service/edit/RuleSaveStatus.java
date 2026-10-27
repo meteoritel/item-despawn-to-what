@@ -1,4 +1,4 @@
-package com.meteorite.itemdespawntowhat.core.network.protocol;
+package com.meteorite.itemdespawntowhat.core.service.edit;
 
 import org.jetbrains.annotations.Nullable;
 
@@ -26,11 +26,6 @@ public enum RuleSaveStatus {
     // 线上传输用的状态码文本（枚举名）
     public String id() {
         return name();
-    }
-
-    // 客户端按状态码取翻译 key：itemdespawntowhat.edit.status.<小写状态码>
-    public String messageKey() {
-        return "itemdespawntowhat.edit.status." + name().toLowerCase(Locale.ROOT);
     }
 
     // 宽松解析：未知状态码返回 null，调用方按 UNAVAILABLE 处理

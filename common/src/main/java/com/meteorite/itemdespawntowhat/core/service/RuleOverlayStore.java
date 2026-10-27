@@ -2,6 +2,8 @@ package com.meteorite.itemdespawntowhat.core.service;
 
 import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.load.RulePaths;
+import com.meteorite.itemdespawntowhat.core.load.RuleSourceRead;
+import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -30,7 +32,7 @@ import java.util.function.BooleanSupplier;
  * 覆盖层文件工作的单一所有者；Future 终态仅在实际调用退出后发布。
  * 作业登记按存档实例隔离：关闭时未能在期限内退出的作业被放弃登记并记录，不再阻塞后续存档。
  */
-final class RuleOverlayStore {
+public final class RuleOverlayStore implements AutoCloseable {
     private static final Logger LOGGER = LogManager.getLogger("IDTW.OverlayStore");
     private static final String VERSION_FILE = ".edit_version";
     private static final String PERSIST_REVISION_JOB = "persist-revision";
@@ -63,16 +65,20 @@ final class RuleOverlayStore {
     private CompletableFuture<Void> persistence;
     private long retryAfter;
 
-    RuleOverlayStore(Path root) {
+    /** @param root 本次生命周期唯一的覆盖层目录 */
+    public RuleOverlayStore(Path root) {
+        requireIdle();
         this.root = root.toAbsolutePath().normalize();
         versionFile = this.root.resolve(VERSION_FILE);
         version = readVersion();
         persistedVersion = version;
     }
 
-    synchronized int version() { return version; }
+    /** @return 当前覆盖层内容修订 */
+    public synchronized int version() { return version; }
 
-    synchronized int bumpVersion() {
+    /** @return 成功发布重载后分配的新修订 */
+    public synchronized int bumpVersion() {
         version = Math.incrementExact(version);
         // 重载已改变基底；下次读取重新建立覆盖层基线，不在服务端线程扫描目录。
         diskRevision = null;
@@ -125,7 +131,8 @@ final class RuleOverlayStore {
         } finally { Files.deleteIfExists(temporary); }
     }
 
-    <T> CompletableFuture<T> submit(String name, Callable<T> action) {
+    /** 在唯一有界队列执行文件读取及其纯数据准备；关闭后拒绝新工作。 */
+    public <T> CompletableFuture<T> submit(String name, Callable<T> action) {
         synchronized (this) {
             if (closed || recoveryRequired) {
                 return CompletableFuture.failedFuture(new RejectedExecutionException("覆盖层已关闭或需要恢复"));
@@ -167,6 +174,19 @@ final class RuleOverlayStore {
         if (job != null) { job.progressAt = System.nanoTime(); }
     }
 
+    record Sources(byte[] revision, RuleSourceRead read) { }
+
+    // 仅文件队列调用；读取前后核对同一覆盖层，交付同批索引和合并条目。
+    Sources readSources(RuleSaveReloadContext captured, BooleanSupplier active) throws IOException {
+        byte[] before = fingerprint(active);
+        IssueCollector issues = new IssueCollector();
+        captured.baseIssues().forEach(issues::add);
+        var load = captured.loadContext();
+        RuleSourceRead read = RuleSourceRead.read(captured.baseRules(), load.overlayRoot(), load.overlayNamespace(), issues);
+        if (!Arrays.equals(before, fingerprint(active))) { throw new IllegalStateException("来源读取期间覆盖层修订已变化"); }
+        return new Sources(before, read);
+    }
+
     byte[] fingerprint(BooleanSupplier active) throws IOException {
         MessageDigest digest;
         try { digest = MessageDigest.getInstance("SHA-256"); }
@@ -202,7 +222,9 @@ final class RuleOverlayStore {
         progress();
     }
 
-    void close() {
+    /** 按实例等待文件工作退出，到期后按跨存档隔离契约退役登记。 */
+    @Override
+    public void close() {
         synchronized (this) { flushRevision(); closed = true; }
         long deadline = System.nanoTime() + STOP_NANOS;
         Set<Job<?>> queued;
@@ -236,7 +258,8 @@ final class RuleOverlayStore {
         }
     }
 
-    static void requireIdle() {
+    /** 下一生命周期读取覆盖层前检查进程内仍登记的文件工作。 */
+    public static void requireIdle() {
         synchronized (JOB_LOCK) {
             // 只保留仍有在途作业的存档：已退役或已空闲的存档不再构成启动阻塞
             OPEN_STORES.removeIf(store -> store.jobs.isEmpty());

@@ -1,4 +1,4 @@
-package com.meteorite.itemdespawntowhat.core.network.protocol;
+package com.meteorite.itemdespawntowhat.core.service.edit;
 
 import com.google.gson.JsonObject;
 import net.minecraft.resources.ResourceLocation;

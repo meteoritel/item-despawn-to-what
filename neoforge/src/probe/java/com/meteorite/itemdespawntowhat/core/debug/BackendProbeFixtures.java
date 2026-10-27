@@ -4,7 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.meteorite.itemdespawntowhat.Constants;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEdit;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleEdit;
 import com.meteorite.itemdespawntowhat.runtime.RuleRuntimeHost;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;

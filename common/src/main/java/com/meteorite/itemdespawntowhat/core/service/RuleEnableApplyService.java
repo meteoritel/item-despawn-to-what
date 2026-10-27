@@ -3,21 +3,19 @@ package com.meteorite.itemdespawntowhat.core.service;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTask;
 import com.meteorite.itemdespawntowhat.core.load.LoadedRule;
-import com.meteorite.itemdespawntowhat.core.load.OverlayRuleReader;
 import com.meteorite.itemdespawntowhat.core.load.RawRuleEntry;
 import com.meteorite.itemdespawntowhat.core.load.RuleLoader;
 import com.meteorite.itemdespawntowhat.core.load.RuleMerger;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
 import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
 import com.meteorite.itemdespawntowhat.core.model.RuleValidation;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEdit;
-import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerContext;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleEdit;
 import com.meteorite.itemdespawntowhat.core.runtime.RuleIndex;
+import com.meteorite.itemdespawntowhat.core.load.RuleSourceIndex;
 import com.meteorite.itemdespawntowhat.core.state.RuleEnableState;
 import net.minecraft.server.MinecraftServer;
 import org.jetbrains.annotations.Nullable;
 
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -77,32 +75,34 @@ public final class RuleEnableApplyService {
      * @param server  当前服务端
      * @param context 编辑运行上下文；需要保存链路已捕捉的数据包基底
      * @param edits   启用状态动作
+     * @param sources 调用方本次读取的来源，存在性检查与运行时发布共用它
      * @return 应用结果；状态无变化或未进入运行时时为 null 发布任务
      */
-    public static Outcome apply(MinecraftServer server, RuleEditServerContext context, List<RuleEdit> edits) {
+    public static Outcome apply(MinecraftServer server, RuleAuthoringContext context, List<RuleEdit> edits, RuleSourceIndex sources) {
         int changed = commitState(server, edits);
         if (changed == 0) {
             return new Outcome(0, null);
         }
-        RuleIndex index = buildSavedIndex(server, context);
-        if (index == null) {
+        Prepared prepared = buildSavedIndex(server, context, sources);
+        if (prepared == null) {
             return new Outcome(changed, null);
         }
-        return new Outcome(changed, context.publishIndex(server, index));
+        return new Outcome(changed, context.publishIndex(server, prepared.index(), prepared.sources()));
     }
 
-    // 用保存链路缓存的数据包基底 + 当前覆盖层重建运行期索引；启用状态按「本服覆盖 ?? 默认启用」注入
-    private static @Nullable RuleIndex buildSavedIndex(MinecraftServer server, RuleEditServerContext context) {
+    // 复用调用方本次读取的来源重建运行期索引，存在性判断与发布使用同批内容。
+    private record Prepared(RuleIndex index, RuleSourceIndex sources) { }
+
+    private static @Nullable Prepared buildSavedIndex(MinecraftServer server, RuleAuthoringContext context, RuleSourceIndex sources) {
         RuleSaveReloadContext saved = context.saveReloadContext();
         BuiltinTypeRegistries types = context.typeRegistries();
-        Path overlayRoot = context.overlayRoot();
-        if (saved == null || types == null || overlayRoot == null) {
+        if (saved == null || types == null) {
             return null;
         }
         IssueCollector issues = new IssueCollector();
         saved.baseIssues().forEach(issues::add);
-        List<RawRuleEntry> raw = new ArrayList<>(saved.baseRules());
-        raw.addAll(OverlayRuleReader.read(overlayRoot, context.overlayNamespace(), issues));
+        List<RawRuleEntry> raw = sources.entries().stream()
+                .map(entry -> entry.overlay() != null ? entry.overlay() : entry.base()).toList();
         var load = saved.loadContext();
         var decoder = RuleCodecs.decoder(load.registryAccess(), load.effectTypes(), load.conditionTypes());
         List<LoadedRule<Rule>> decoded = new ArrayList<>();
@@ -113,6 +113,6 @@ public final class RuleEnableApplyService {
                             && RuleReferenceValidator.validate(rule, server, issues, entry.origin().display()))
                     .ifPresent(rule -> decoded.add(new LoadedRule<>(entry.id(), entry.origin(), rule)));
         }
-        return RuleIndex.build(RuleLoadingService.applyEnableState(load, decoded), new IssueCollector());
+        return new Prepared(RuleIndex.build(RuleLoadingService.applyEnableState(load, decoded), new IssueCollector()), sources);
     }
 }

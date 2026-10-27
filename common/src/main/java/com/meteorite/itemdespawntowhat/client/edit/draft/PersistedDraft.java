@@ -5,7 +5,7 @@ import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.client.edit.EditorChangeSet;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEdit;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleEdit;
 import org.jetbrains.annotations.Nullable;
 
 /**

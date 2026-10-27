@@ -2,14 +2,12 @@ package com.meteorite.itemdespawntowhat.core.service;
 
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.RuleDecoder;
-import com.meteorite.itemdespawntowhat.core.load.DatapackRuleReader;
 import com.meteorite.itemdespawntowhat.core.load.LoadedRule;
-import com.meteorite.itemdespawntowhat.core.load.OverlayRuleReader;
 import com.meteorite.itemdespawntowhat.core.load.RawRuleEntry;
 import com.meteorite.itemdespawntowhat.core.load.RuleLoadRequest;
 import com.meteorite.itemdespawntowhat.core.load.RuleLoadResult;
 import com.meteorite.itemdespawntowhat.core.load.RuleLoader;
-import com.meteorite.itemdespawntowhat.core.load.RuleSourceIndex;
+import com.meteorite.itemdespawntowhat.core.load.RuleSourceRead;
 import com.meteorite.itemdespawntowhat.core.load.RuleSourceLayer;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
 import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
@@ -33,7 +31,9 @@ public final class RuleLoadingService {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    // 加载（含解码），不额外做语义校验
+    /**
+     * 加载（含解码），不额外做语义校验
+     */
     public static RuleLoadResult<Rule> load(RuleLoadContext context) {
         RuleDecoder<Rule> decoder = RuleCodecs.decoder(
                 context.registryAccess(), context.effectTypes(), context.conditionTypes());
@@ -43,7 +43,9 @@ public final class RuleLoadingService {
         return applyEnableState(context, RuleLoader.load(request));
     }
 
-    // 加载 + 语义校验：语义非法的规则被剔除，问题保留在结果的问题收集器中
+    /**
+     * 加载 + 语义校验：语义非法的规则被剔除，问题保留在结果的问题收集器中
+     */
     public static RuleLoadResult<Rule> loadAndValidate(RuleLoadContext context) {
         RuleLoadResult<Rule> loaded = load(context);
         return validateLoaded(context, loaded);
@@ -57,15 +59,14 @@ public final class RuleLoadingService {
      */
     public static RuleLoadResult<Rule> loadAndValidate(RuleLoadContext context, List<RawRuleEntry> base) {
         IssueCollector issues = new IssueCollector();
-        List<RawRuleEntry> raw = new ArrayList<>(base);
-        raw.addAll(OverlayRuleReader.read(context.overlayRoot(), context.overlayNamespace(), issues));
+        RuleSourceRead source = RuleSourceRead.read(base, context.overlayRoot(), context.overlayNamespace(), issues);
         var decoder = RuleCodecs.decoder(context.registryAccess(), context.effectTypes(), context.conditionTypes());
         List<LoadedRule<Rule>> decoded = new ArrayList<>();
-        for (RawRuleEntry entry : com.meteorite.itemdespawntowhat.core.load.RuleMerger.merge(raw, issues)) {
+        for (RawRuleEntry entry : source.entries()) {
             RuleLoader.decodeEntry(entry, decoder, issues).ifPresent(rule -> decoded.add(new LoadedRule<>(entry.id(), entry.origin(), rule)));
         }
         return validateLoaded(context, applyEnableState(context,
-                new RuleLoadResult<>(List.copyOf(decoded), issues)));
+                new RuleLoadResult<>(List.copyOf(decoded), issues, source.index())));
     }
 
     /**
@@ -97,7 +98,7 @@ public final class RuleLoadingService {
 
     // 加载结果级注入：保留原问题收集器
     private static RuleLoadResult<Rule> applyEnableState(RuleLoadContext context, RuleLoadResult<Rule> loaded) {
-        return new RuleLoadResult<>(applyEnableState(context, loaded.rules()), loaded.issues());
+        return new RuleLoadResult<>(applyEnableState(context, loaded.rules()), loaded.issues(), loaded.sourceIndex());
     }
 
     private static RuleLoadResult<Rule> validateLoaded(RuleLoadContext context, RuleLoadResult<Rule> loaded) {
@@ -111,23 +112,12 @@ public final class RuleLoadingService {
                 valid.add(entry);
             }
         }
-        return new RuleLoadResult<>(List.copyOf(valid), loaded.issues());
+        return new RuleLoadResult<>(List.copyOf(valid), loaded.issues(), loaded.sourceIndex());
     }
 
-    // 重建来源分层索引：数据包层原始条目在前、覆盖层原始条目在后（层优先级升序）
-    // 保留数据包与覆盖层的原始条目，供快照装配（RuleSnapshotAssembler）与编辑判定使用
-    public static RuleSourceIndex sourceIndex(RuleLoadContext context, IssueCollector issues) {
-        List<RawRuleEntry> raw = new ArrayList<>();
-        if (context.resourceManager() != null && context.layerResolver() != null) {
-            raw.addAll(DatapackRuleReader.read(context.resourceManager(), context.layerResolver(), issues));
-        }
-        if (context.overlayRoot() != null) {
-            raw.addAll(OverlayRuleReader.read(context.overlayRoot(), context.overlayNamespace(), issues));
-        }
-        return RuleSourceIndex.build(List.copyOf(raw));
-    }
-
-    // 按来源层统计规则条数，供 /idtw config list 与 /idtw debug stats 输出
+    /**
+     * 按来源层统计规则条数，供 /idtw config list 与 /idtw debug stats 输出
+     */
     public static Map<RuleSourceLayer, Integer> countByLayer(RuleLoadResult<Rule> result) {
         Map<RuleSourceLayer, Integer> counts = new EnumMap<>(RuleSourceLayer.class);
         for (LoadedRule<Rule> entry : result.rules()) {
@@ -136,7 +126,9 @@ public final class RuleLoadingService {
         return counts;
     }
 
-    // 生成规则可读清单：每条一行，含来源层、优先级、触发时间与效果数量
+    /**
+     * 生成规则可读清单：每条一行，含来源层、优先级、触发时间与效果数量
+     */
     public static List<String> describeRules(RuleLoadResult<Rule> result) {
         List<String> lines = new ArrayList<>(result.rules().size());
         for (LoadedRule<Rule> entry : result.rules()) {
@@ -153,7 +145,9 @@ public final class RuleLoadingService {
         return lines;
     }
 
-    // 汇总一行统计文本，便于日志与命令回显
+    /**
+     * 汇总一行统计文本，便于日志与命令回显
+     */
     public static String summarize(RuleLoadResult<Rule> result) {
         Map<RuleSourceLayer, Integer> counts = countByLayer(result);
         StringBuilder sb = new StringBuilder("规则 ").append(result.rules().size()).append(" 条");

@@ -29,9 +29,9 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiModalStack;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiSegmentedControl;
 import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleIssue;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveStatus;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSourceView;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleIssue;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleSaveStatus;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleSourceView;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -686,23 +686,23 @@ final class RuleEditorEditPage implements EditorPage {
             model.refresh();
             if (status == RuleSaveStatus.SUCCESS || status == RuleSaveStatus.NO_CHANGES) {
                 model.acceptSaved();
-                shell.setNotice(Component.translatable(status.messageKey()),EditorShell.NoticeLevel.SUCCESS);
+                shell.setNotice(Component.translatable(com.meteorite.itemdespawntowhat.core.network.transport.RuleEditMessages.key(status)),EditorShell.NoticeLevel.SUCCESS);
             } else if (status == RuleSaveStatus.CANCELLED) {
-                shell.setNotice(Component.translatable(status.messageKey()),EditorShell.NoticeLevel.INFO);
+                shell.setNotice(Component.translatable(com.meteorite.itemdespawntowhat.core.network.transport.RuleEditMessages.key(status)),EditorShell.NoticeLevel.INFO);
             } else if (status == RuleSaveStatus.SAVED_NOT_RELOADED) {
                 model.acceptSaved();
-                shell.setNotice(Component.translatable(status.messageKey()),EditorShell.NoticeLevel.WARNING);
+                shell.setNotice(Component.translatable(com.meteorite.itemdespawntowhat.core.network.transport.RuleEditMessages.key(status)),EditorShell.NoticeLevel.WARNING);
             } else if (isSessionLost(status)) {
                 // 失权/断线：取消未完成预览、停用写入、保留草稿；不从 GUI 重开会话，也不写盘
                 cancelPreviews();
-                Component reason = status == null ? Component.empty() : Component.translatable(status.messageKey());
+                Component reason = status == null ? Component.empty() : Component.translatable(com.meteorite.itemdespawntowhat.core.network.transport.RuleEditMessages.key(status));
                 shell.setNotice(reason.copy().append(" ").append(Component.translatable(UI + "notice.session_reopen")),
                         EditorShell.NoticeLevel.DANGER);
             } else if (status == RuleSaveStatus.VALIDATION_FAILED) {
-                shell.setNotice(Component.translatable(status.messageKey()),EditorShell.NoticeLevel.DANGER);
+                shell.setNotice(Component.translatable(com.meteorite.itemdespawntowhat.core.network.transport.RuleEditMessages.key(status)),EditorShell.NoticeLevel.DANGER);
                 locateValidationIssues();
             } else if (status != null) {
-                shell.setNotice(Component.translatable(status.messageKey(), workspace.lastMessageArgs().toArray()),
+                shell.setNotice(Component.translatable(com.meteorite.itemdespawntowhat.core.network.transport.RuleEditMessages.key(status), workspace.lastMessageArgs().toArray()),
                         EditorShell.NoticeLevel.DANGER);
             }
             shell.refreshList();

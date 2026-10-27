@@ -3,8 +3,8 @@ package com.meteorite.itemdespawntowhat.client.edit;
 import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEdit;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEditChangeSet;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleEdit;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleEditChangeSet;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
