@@ -52,7 +52,7 @@ public final class EditorChangeSet {
 
     // 覆盖写入一条草稿（含删除标记与停用标记）
     public EditorChangeSet upsert(RuleDraft draft) {
-        return upsert(draft.id(), draft.toOverlayJson());
+        return upsert(draft.id(), draft.toJson());
     }
 
     // 覆盖写入一条规则体

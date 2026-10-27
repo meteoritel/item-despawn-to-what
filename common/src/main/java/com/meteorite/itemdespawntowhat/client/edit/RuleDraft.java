@@ -3,7 +3,6 @@ package com.meteorite.itemdespawntowhat.client.edit;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonPrimitive;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
@@ -11,15 +10,14 @@ import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import org.jetbrains.annotations.Nullable;
 
 /**
  * 规则草稿：original（服务器基线）/ working（工作副本）/ dirty 判断 / 删除标记。
  * <p>JSON 是唯一事实来源：草稿不建立与后端 record 平行的强类型模型，
- * 因此未识别字段与第三方扩展字段都能原样保留。字段修改优先使用
- * {@link #setAt(String, RuleValue)}、{@link #mergeAt(String, RuleValue)} 这类路径级写入；
+ * 因此未识别字段与第三方扩展字段都能原样保留。通用字段通过
+ * {@link #valueAt(String)}、{@link #setAt(String, RuleValue)} 与 {@link #removeAt(String)} 统一访问；
  * 只有用户显式做结构调整（树编辑器整体变更）时才调用 {@link #setConditions} 整体替换。
  * <p>路径语法：以 {@code .} 分隔字段名，数组下标写在字段名后的方括号中，
  * 例如 {@code conditions.terms[0].condition}、{@code effects[2].chance}。
@@ -42,12 +40,16 @@ public final class RuleDraft {
         this.working = working;
     }
 
-    // 从服务器下发的规则 JSON 建立草稿
+    /**
+     * 从服务器下发的规则 JSON 建立草稿
+     */
     public static RuleDraft of(JsonObject source) {
         return new RuleDraft(source.deepCopy(), source.deepCopy());
     }
 
-    // 从动态值对象建立草稿（界面层入口）：非映射值按空规则处理
+    /**
+     * 从动态值对象建立草稿（界面层入口）：非映射值按空规则处理
+     */
     public static RuleDraft of(RuleValue source) {
         return of(source == null || !source.isMapping() ? new JsonObject() : source.unwrap().getAsJsonObject());
     }
@@ -57,31 +59,26 @@ public final class RuleDraft {
         return this.mutations;
     }
 
-    // 顶层字段是否已是给定内容：写入前判等，保证无变化操作不推进计数、不进入撤销栈
-    private boolean sameField(String field, JsonElement value) {
-        JsonElement current = this.working.get(field);
-        return current != null && current.equals(value);
-    }
-
     // ---- 基本状态 ----
 
-    // 规则 id
+    /**
+     * 规则 id
+     */
     public String id() {
-        return getString(RuleFields.ID, "");
+        return root().text(RuleFields.ID, "");
     }
 
-    // 原始基线（深拷贝）
+    /**
+     * 原始基线（深拷贝）
+     */
     public JsonObject original() {
         return original.deepCopy();
     }
 
-    // 工作副本（深拷贝），可直接交给保存流程
+    /**
+     * 工作副本（深拷贝），可直接交给保存流程
+     */
     public JsonObject toJson() {
-        return working.deepCopy();
-    }
-
-    // 覆盖层保存形态：删除意图由变更集的 DELETE 动作表达，规则体本身不再携带控制字段
-    public JsonObject toOverlayJson() {
         return working.deepCopy();
     }
 
@@ -89,7 +86,9 @@ public final class RuleDraft {
         return deleted;
     }
 
-    // 设置删除标记；标记未变化时不产生改动
+    /**
+     * 设置删除标记；标记未变化时不产生改动
+     */
     public void setDeleted(boolean deleted) {
         if (this.deleted == deleted) {
             return;
@@ -115,7 +114,9 @@ public final class RuleDraft {
         return this.dirty;
     }
 
-    // 丢弃改动，回到服务器基线；已与基线一致时不产生改动
+    /**
+     * 丢弃改动，回到服务器基线；已与基线一致时不产生改动
+     */
     public void revert() {
         if (!isDirty()) {
             return;
@@ -127,98 +128,11 @@ public final class RuleDraft {
 
     // ---- 值对象读写（界面侧入口） ----
 
-    // 工作副本的实时值视图；不复制，随草稿修改而变化
+    /**
+     * 工作副本的实时值视图；不复制，随草稿修改而变化
+     */
     public RuleValue root() {
         return RuleValue.wrap(working);
-    }
-
-    // 顶层字段值；键不存在返回 null，显式 null 返回 RuleValue.nil()
-    public @Nullable RuleValue value(String field) {
-        JsonElement element = working.get(field);
-        return element == null ? null : RuleValue.wrap(element);
-    }
-
-    public void set(String field, RuleValue value) {
-        JsonElement next = value.unwrap();
-        if (sameField(field, next)) {
-            return;
-        }
-        working.add(field, next.deepCopy());
-        this.mutations++;
-    }
-
-    // ---- 顶层字段读写 ----
-
-    public boolean has(String field) {
-        return working.has(field);
-    }
-
-    public boolean remove(String field) {
-        boolean removed = working.remove(field) != null;
-        if (removed) {
-            this.mutations++;
-        }
-        return removed;
-    }
-
-    // 读取字符串，缺失或不是字符串时返回 fallback
-    public String getString(String field, String fallback) {
-        JsonElement element = working.get(field);
-        return element != null && element.isJsonPrimitive() && element.getAsJsonPrimitive().isString()
-                ? element.getAsString() : fallback;
-    }
-
-    // 读取布尔值，缺失或类型不符时返回 fallback
-    public boolean getBoolean(String field, boolean fallback) {
-        JsonElement element = working.get(field);
-        return element != null && element.isJsonPrimitive() && element.getAsJsonPrimitive().isBoolean()
-                ? element.getAsBoolean() : fallback;
-    }
-
-    // 读取整数，缺失或类型不符时返回 fallback
-    public int getInt(String field, int fallback) {
-        JsonElement element = working.get(field);
-        return element != null && element.isJsonPrimitive() && element.getAsJsonPrimitive().isNumber()
-                ? element.getAsInt() : fallback;
-    }
-
-    // 读取小数，缺失或类型不符时返回 fallback
-    public double getDouble(String field, double fallback) {
-        JsonElement element = working.get(field);
-        return element != null && element.isJsonPrimitive() && element.getAsJsonPrimitive().isNumber()
-                ? element.getAsDouble() : fallback;
-    }
-
-    public void setString(String field, String value) {
-        if (sameField(field, new JsonPrimitive(value))) {
-            return;
-        }
-        working.addProperty(field, value);
-        this.mutations++;
-    }
-
-    public void setBoolean(String field, boolean value) {
-        if (sameField(field, new JsonPrimitive(value))) {
-            return;
-        }
-        working.addProperty(field, value);
-        this.mutations++;
-    }
-
-    public void setInt(String field, int value) {
-        if (sameField(field, new JsonPrimitive(value))) {
-            return;
-        }
-        working.addProperty(field, value);
-        this.mutations++;
-    }
-
-    public void setDouble(String field, double value) {
-        if (sameField(field, new JsonPrimitive(value))) {
-            return;
-        }
-        working.addProperty(field, value);
-        this.mutations++;
     }
 
     // ---- 路径级读写（保留未识别字段的关键） ----
@@ -244,7 +158,9 @@ public final class RuleDraft {
         return written;
     }
 
-    // 按路径删除，路径不存在返回 false
+    /**
+     * 按路径删除，路径不存在返回 false
+     */
     public boolean removeAt(String path) {
         boolean removed = remove(working, parsePath(path));
         if (removed) {
@@ -253,79 +169,48 @@ public final class RuleDraft {
         return removed;
     }
 
-    // 按路径读取值；路径不存在返回 null
+    /**
+     * 按路径读取值；路径不存在返回 null
+     */
     public @Nullable RuleValue valueAt(String path) {
         JsonElement element = readAt(path);
         return element == null ? null : RuleValue.wrap(element);
     }
 
-    // 按路径写入值
+    /**
+     * 按路径写入值
+     */
     public boolean setAt(String path, RuleValue value) {
         return writeAt(path, value.unwrap().deepCopy());
     }
 
-    // 按路径合并值：只覆盖 patch 中出现的键，其余字段（含未识别字段）保留
-    public boolean mergeAt(String path, RuleValue patch) {
-        if (patch == null || !patch.isMapping()) {
-            return false;
-        }
-        JsonElement existing = readAt(path);
-        JsonObject target = existing instanceof JsonObject object ? object.deepCopy() : new JsonObject();
-        for (Map.Entry<String, RuleValue> entry : patch.entries().entrySet()) {
-            target.add(entry.getKey(), entry.getValue().unwrap().deepCopy());
-        }
-        return writeAt(path, target);
-    }
-
-    // 路径上的文本；缺失或类型不符返回 fallback
-    public String textAt(String path, String fallback) {
-        RuleValue value = valueAt(path);
-        return value != null && value.isText() ? value.asText() : fallback;
-    }
-
-    // 路径上的整数；缺失或类型不符返回 fallback
-    public int integerAt(String path, int fallback) {
-        RuleValue value = valueAt(path);
-        return value != null && value.isNumber() ? value.asInteger(fallback) : fallback;
-    }
-
-    // 路径上的小数；缺失或类型不符返回 fallback
-    public double decimalAt(String path, double fallback) {
-        RuleValue value = valueAt(path);
-        return value != null && value.isNumber() ? value.asDecimal(fallback) : fallback;
-    }
-
-    // 路径上的布尔；缺失或类型不符返回 fallback
-    public boolean flagAt(String path, boolean fallback) {
-        RuleValue value = valueAt(path);
-        return value != null && value.isFlag() ? value.asFlag(fallback) : fallback;
-    }
-
-    // 路径上的列表元素（保序，含非对象元素）；非列表返回空表
-    public List<RuleValue> valuesAt(String path) {
-        RuleValue value = valueAt(path);
-        return value == null ? List.of() : value.items();
-    }
-
     // ---- 条件树 ----
 
-    // 规则级条件树的值视图；缺失返回 null
+    /**
+     * 规则级条件树的值视图；缺失返回 null
+     */
     public @Nullable RuleValue conditionsValue() {
         return conditionsValueAt("");
     }
 
-    // 任意位置条件树的值视图；path 为空表示规则级 conditions
+    /**
+     * 任意位置条件树的值视图；path 为空表示规则级 conditions
+     */
     public @Nullable RuleValue conditionsValueAt(String path) {
         JsonElement raw = conditionsElementAt(path);
         return raw == null ? null : RuleValue.wrap(raw);
     }
 
-    // 解码可续编的条件草稿；无法识别的形状或类型返回 null，调用方保留原始 JSON。
+    /**
+     * 解码可续编的条件草稿；无法识别的形状或类型返回 null，调用方保留原始 JSON。
+     */
     public @Nullable ConditionExpression conditionsOrNull(TypeRegistry<ConditionType<?>> conditionTypes) {
         return conditionsAt("", conditionTypes);
     }
 
-    // 整体替换条件树：空表达式时删除 conditions 字段（契约要求不得输出 null）
+    /**
+     * 整体替换条件树：空表达式时删除 conditions 字段（契约要求不得输出 null）
+     */
     public boolean setConditions(ConditionExpression expression, TypeRegistry<ConditionType<?>> conditionTypes) {
         return setConditionsAt("", expression, conditionTypes);
     }
@@ -338,7 +223,9 @@ public final class RuleDraft {
         return raw == null || raw.isJsonNull() ? null : raw;
     }
 
-    // 解码任意位置的条件草稿；空组与缺项 NOT 保留，正式配置解码仍由后端严格执行。
+    /**
+     * 解码任意位置的条件草稿；空组与缺项 NOT 保留，正式配置解码仍由后端严格执行。
+     */
     public @Nullable ConditionExpression conditionsAt(String path, TypeRegistry<ConditionType<?>> conditionTypes) {
         JsonElement raw = conditionsElementAt(path);
         if (raw == null) {
@@ -347,17 +234,15 @@ public final class RuleDraft {
         return decodeConditionsElement(raw, conditionTypes);
     }
 
-    // 替换任意位置的条件树；空表达式删除该字段（契约要求不得输出 null）
+    /**
+     * 替换任意位置的条件树；空表达式删除该字段（契约要求不得输出 null）
+     */
     public boolean setConditionsAt(String path, ConditionExpression expression, TypeRegistry<ConditionType<?>> conditionTypes) {
         if (expression.isEmpty()) {
             if (!isRootPath(path)) {
                 return removeAt(path);
             }
-            boolean removed = remove(RuleFields.CONDITIONS);
-            if (removed) {
-                this.mutations++;
-            }
-            return removed;
+            return removeAt(RuleFields.CONDITIONS);
         }
         JsonElement encoded = encodeConditionsElement(expression, conditionTypes);
         if (encoded == null) {
@@ -374,14 +259,18 @@ public final class RuleDraft {
         return writeAt(path, encoded);
     }
 
-    // 条件树 → 值对象（供表单控件比较与写回；编码失败返回 null）
+    /**
+     * 条件树 → 值对象（供表单控件比较与写回；编码失败返回 null）
+     */
     public static @Nullable RuleValue encodeConditionsValue(ConditionExpression expression,
             TypeRegistry<ConditionType<?>> conditionTypes) {
         JsonElement encoded = encodeConditionsElement(expression, conditionTypes);
         return encoded == null ? null : RuleValue.wrap(encoded);
     }
 
-    // 值对象 → 可续编条件草稿（无法识别返回 null，调用方保留原文）
+    /**
+     * 值对象 → 可续编条件草稿（无法识别返回 null，调用方保留原文）
+     */
     public static @Nullable ConditionExpression decodeConditions(@Nullable RuleValue raw,
             TypeRegistry<ConditionType<?>> conditionTypes) {
         return raw == null ? ConditionExpression.EMPTY : decodeConditionsElement(raw.unwrap(), conditionTypes);
@@ -410,40 +299,54 @@ public final class RuleDraft {
         return path == null || path.isBlank();
     }
 
-    // 用快照整体替换工作副本（撤销/重做与草稿恢复使用，不改变 original 基线）
+    /**
+     * 用快照整体替换工作副本（撤销/重做与草稿恢复使用，不改变 original 基线）
+     */
     public void replaceWith(JsonObject source) {
         this.working = source == null ? new JsonObject() : source.deepCopy();
         this.mutations++;
     }
 
-    // 用动态值对象整体替换工作副本（界面层入口）：非映射值按空规则处理
+    /**
+     * 用动态值对象整体替换工作副本（界面层入口）：非映射值按空规则处理
+     */
     public void replaceWith(RuleValue source) {
         replaceWith(source == null || !source.isMapping() ? new JsonObject() : source.unwrap().getAsJsonObject());
     }
 
     // ---- 效果列表（顶层 effects 与候选内 effects 共用同一套操作） ----
 
-    // 效果数量：默认取顶层 effects
+    /**
+     * 效果数量：默认取顶层 effects
+     */
     public int effectCount() {
         return effectCountAt(RuleFields.EFFECTS);
     }
 
-    // 移动效果位置（数组重排）
+    /**
+     * 移动效果位置（数组重排）
+     */
     public boolean moveEffect(int from, int to) {
         return moveInList(RuleFields.EFFECTS, from, to);
     }
 
-    // 候选结果内效果列表的路径
+    /**
+     * 候选结果内效果列表的路径
+     */
     public static String candidateEffectsPath(int candidateIndex) {
         return DraftPaths.child(DraftPaths.indexPath(RuleFields.OUTCOMES, candidateIndex), RuleFields.CANDIDATE_EFFECTS);
     }
 
-    // 任意位置效果数量（按原始数组长度计数，畸变元素同样占位，保证下标与 JSON 一致）
+    /**
+     * 任意位置效果数量（按原始数组长度计数，畸变元素同样占位，保证下标与 JSON 一致）
+     */
     public int effectCountAt(String listPath) {
         return readAt(listPath) instanceof JsonArray array ? array.size() : 0;
     }
 
-    // 任意位置效果列表的值视图（保序，含非对象元素）；非数组返回空表
+    /**
+     * 任意位置效果列表的值视图（保序，含非对象元素）；非数组返回空表
+     */
     public List<RuleValue> effectValuesAt(String listPath) {
         JsonElement raw = readAt(listPath);
         if (!(raw instanceof JsonArray array)) {
@@ -456,7 +359,9 @@ public final class RuleDraft {
         return out;
     }
 
-    // 任意列表路径的重排（effects / outcomes / outcomes[i].effects / conditions.terms 共用）
+    /**
+     * 任意列表路径的重排（effects / outcomes / outcomes[i].effects / conditions.terms 共用）
+     */
     public boolean moveInList(String listPath, int from, int to) {
         if (from == to) {
             return false;
@@ -499,18 +404,24 @@ public final class RuleDraft {
         return outcomeCount() > 0;
     }
 
-    // 结构互斥：effects 与 outcomes 是否同时声明（该形状服务端按错误拒绝）
+    /**
+     * 结构互斥：effects 与 outcomes 是否同时声明（该形状服务端按错误拒绝）
+     */
     public boolean hasConflictingStructures() {
         return hasFlatEffects() && hasOutcomes();
     }
 
-    // 候选数量（按原始数组长度计数）
+    /**
+     * 候选数量（按原始数组长度计数）
+     */
     public int outcomeCount() {
         JsonElement raw = working.get(RuleFields.OUTCOMES);
         return raw instanceof JsonArray array ? array.size() : 0;
     }
 
-    // 候选列表的值视图（保序，含非对象元素）
+    /**
+     * 候选列表的值视图（保序，含非对象元素）
+     */
     public List<RuleValue> outcomeValues() {
         JsonElement raw = working.get(RuleFields.OUTCOMES);
         if (!(raw instanceof JsonArray array)) {
@@ -523,7 +434,9 @@ public final class RuleDraft {
         return out;
     }
 
-    // 取第 index 个候选的值视图（越界返回 null）
+    /**
+     * 取第 index 个候选的值视图（越界返回 null）
+     */
     public @Nullable RuleValue outcomeValueAt(int index) {
         JsonElement raw = working.get(RuleFields.OUTCOMES);
         if (!(raw instanceof JsonArray array) || index < 0 || index >= array.size()) {
@@ -532,12 +445,16 @@ public final class RuleDraft {
         return RuleValue.wrap(array.get(index));
     }
 
-    // 移动候选位置（数组重排）
+    /**
+     * 移动候选位置（数组重排）
+     */
     public boolean moveOutcome(int from, int to) {
         return moveInList(RuleFields.OUTCOMES, from, to);
     }
 
-    // 已声明的候选 id 集合（非字符串 id 不入集合）
+    /**
+     * 已声明的候选 id 集合（非字符串 id 不入集合）
+     */
     public Set<String> candidateIds() {
         Set<String> ids = new LinkedHashSet<>();
         for (RuleValue candidate : outcomeValues()) {
@@ -549,16 +466,20 @@ public final class RuleDraft {
         return ids;
     }
 
-    // 候选 id 是否已被占用（同一规则内候选 id 必须唯一）
+    /**
+     * 候选 id 是否已被占用（同一规则内候选 id 必须唯一）
+     */
     public boolean candidateIdExists(String candidateId) {
         return candidateId != null && !candidateId.isBlank() && candidateIds().contains(candidateId);
     }
 
     // ---- 结构互斥的原子转换 ----
 
-    // 顶层 effects → outcomes：一次操作内删除 effects、写入只含一个候选的 outcomes，
-    // 原效果对象逐字保留（由 EditSession.apply 包成一条撤销记录）；
-    // 已经声明 outcomes 时返回 false，避免覆盖既有候选。
+    /**
+     * 顶层 effects → outcomes：一次操作内删除 effects、写入只含一个候选的 outcomes，
+     * 原效果对象逐字保留（由 EditSession.apply 包成一条撤销记录）；
+     * 已经声明 outcomes 时返回 false，避免覆盖既有候选。
+     */
     public boolean convertToOutcomes(String candidateId) {
         if (hasOutcomes() || candidateId == null || candidateId.isBlank()) {
             return false;
@@ -611,8 +532,4 @@ public final class RuleDraft {
         return DraftPaths.remove(root, segments);
     }
 
-    // 便于测试与外部构造基本类型：不做模型校验，仅保证 JSON 合法
-    static JsonPrimitive primitive(String value) {
-        return new JsonPrimitive(value);
-    }
 }

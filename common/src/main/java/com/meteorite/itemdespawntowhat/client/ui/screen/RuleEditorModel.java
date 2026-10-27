@@ -200,7 +200,7 @@ public final class RuleEditorModel {
     public boolean defaultEnabled(String id) {
         EditSession session = this.sessions.get(id);
         if (session != null && !isReadOnly(id)) {
-            return session.draft().getBoolean(RuleFields.ENABLED, true);
+            return session.draft().root().flag(RuleFields.ENABLED, true);
         }
         RuleSnapshotEntry entry = this.entries.get(id);
         return entry == null || entry.defaultEnabled();
@@ -270,9 +270,9 @@ public final class RuleEditorModel {
             if (session == null) {
                 return null;
             }
-            boolean enabled = !session.draft().getBoolean(RuleFields.ENABLED, true);
+            boolean enabled = !session.draft().root().flag(RuleFields.ENABLED, true);
             session.apply(EditSession.OP_SET_FIELD,
-                    () -> session.draft().setBoolean(RuleFields.ENABLED, enabled));
+                    () -> session.draft().setAt(RuleFields.ENABLED, RuleValue.flag(enabled)));
             return enabled ? RuleEdit.Action.ENABLE : RuleEdit.Action.DISABLE;
         }
         // 列表页直接点启停时还没有会话：先按服务端内容打开，草稿才会带上内容与基线
