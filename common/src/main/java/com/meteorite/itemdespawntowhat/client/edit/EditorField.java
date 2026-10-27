@@ -3,7 +3,9 @@ package com.meteorite.itemdespawntowhat.client.edit;
 import com.meteorite.itemdespawntowhat.core.api.param.ClimateDomain;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import org.jetbrains.annotations.Nullable;
 
@@ -211,122 +213,188 @@ public record EditorField(String name, String labelKey, EditorFieldType type, @N
                 subFields, null, numbers, -1);
     }
 
-    // ---- 分类谓词 ----
+    // 类型的独立事实集中于穷举分类；字段自身仍持有 nullable、registry 和取值域。
+    private enum Shape {
+        TEXT, LONG_TEXT, NUMBER, BOOLEAN, ENUM, REFERENCE, LIST, ITEM_COUNTS,
+        CLIMATE_RANGE, SUBLIST, OBJECT, CONDITION_TREE, NOTE, RAW_JSON
+    }
 
-    // 调用方按语义提问，不再自行 switch EditorFieldType；新增取值只需在谓词里补一处。
+    private enum NumberKind { NONE, INTEGER, TICKS, DECIMAL, PERCENT, AMPLIFIER }
+    private enum ReferenceKind { NONE, ID, TAGGED }
 
+    private record Classification(Shape shape, NumberKind number, ReferenceKind reference) {
+        private static Classification plain(Shape shape) {
+            return new Classification(shape, NumberKind.NONE, ReferenceKind.NONE);
+        }
+
+        private static Classification numeric(NumberKind number) {
+            return new Classification(Shape.NUMBER, number, ReferenceKind.NONE);
+        }
+
+        private static Classification reference(Shape shape, ReferenceKind reference) {
+            return new Classification(shape, NumberKind.NONE, reference);
+        }
+    }
+
+    private static final Map<EditorFieldType, Classification> CLASSIFICATIONS = classifications();
+
+    private static Map<EditorFieldType, Classification> classifications() {
+        Map<EditorFieldType, Classification> result = new EnumMap<>(EditorFieldType.class);
+        for (EditorFieldType type : EditorFieldType.values()) {
+            result.put(type, switch (type) {
+                case TEXT -> Classification.plain(Shape.TEXT);
+                case LONG_TEXT -> Classification.plain(Shape.LONG_TEXT);
+                case INTEGER -> Classification.numeric(NumberKind.INTEGER);
+                case TICKS -> Classification.numeric(NumberKind.TICKS);
+                case DECIMAL -> Classification.numeric(NumberKind.DECIMAL);
+                case PERCENT -> Classification.numeric(NumberKind.PERCENT);
+                case AMPLIFIER -> Classification.numeric(NumberKind.AMPLIFIER);
+                case BOOLEAN -> Classification.plain(Shape.BOOLEAN);
+                case ENUM -> Classification.plain(Shape.ENUM);
+                case RESOURCE_LOCATION, REGISTRY_ID -> Classification.reference(Shape.REFERENCE, ReferenceKind.ID);
+                case TAG -> Classification.reference(Shape.REFERENCE, ReferenceKind.TAGGED);
+                case TAG_LIST -> Classification.reference(Shape.LIST, ReferenceKind.TAGGED);
+                case RL_LIST -> Classification.reference(Shape.LIST, ReferenceKind.ID);
+                case STRING_LIST -> Classification.plain(Shape.LIST);
+                case ITEM_COUNTS -> Classification.plain(Shape.ITEM_COUNTS);
+                case CLIMATE_RANGE -> Classification.plain(Shape.CLIMATE_RANGE);
+                case SUBLIST -> Classification.plain(Shape.SUBLIST);
+                case OBJECT -> Classification.plain(Shape.OBJECT);
+                case CONDITION_TREE -> Classification.plain(Shape.CONDITION_TREE);
+                case NOTE -> Classification.plain(Shape.NOTE);
+                case RAW_JSON -> Classification.plain(Shape.RAW_JSON);
+            });
+        }
+        return Map.copyOf(result);
+    }
+
+    private Classification classification() {
+        return CLASSIFICATIONS.get(type);
+    }
+
+    /** 只读说明行。 */
     public boolean isNote() {
-        return type == EditorFieldType.NOTE;
+        return classification().shape() == Shape.NOTE;
     }
 
+    /** 第三方参数的原始 JSON 只读展示。 */
     public boolean isRawJson() {
-        return type == EditorFieldType.RAW_JSON;
+        return classification().shape() == Shape.RAW_JSON;
     }
 
-    // 只读展示行：不承载字段值，不写入 JSON，也不参与校验
+    /** 展示行不承载字段值，也不参与写入与校验。 */
     public boolean isDisplayOnly() {
         return isNote() || isRawJson();
     }
 
-    // 条件树由触发页统一编辑，不进入动作参数说明与结果页表单
+    /** 条件树由触发页统一编辑。 */
     public boolean isConditionTree() {
-        return type == EditorFieldType.CONDITION_TREE;
+        return classification().shape() == Shape.CONDITION_TREE;
     }
 
+    /** 单行文本。 */
     public boolean isText() {
-        return type == EditorFieldType.TEXT;
+        return classification().shape() == Shape.TEXT;
     }
 
+    /** 多行文本。 */
     public boolean isLongText() {
-        return type == EditorFieldType.LONG_TEXT;
+        return classification().shape() == Shape.LONG_TEXT;
     }
 
+    /** 使用单值数值控件的字段。 */
     public boolean isNumeric() {
-        return type == EditorFieldType.INTEGER || type == EditorFieldType.TICKS
-                || type == EditorFieldType.DECIMAL || type == EditorFieldType.PERCENT
-                || type == EditorFieldType.AMPLIFIER;
+        return classification().shape() == Shape.NUMBER;
     }
 
-    // 区间条与循环时间条按整数处理，与 DECIMAL/PERCENT 的数值控件不同
+    /** 使用普通整数交互的字段；amplifier 另有等级换算。 */
     public boolean isIntegerLike() {
-        return type == EditorFieldType.INTEGER || type == EditorFieldType.TICKS;
+        return classification().number() == NumberKind.INTEGER || classification().number() == NumberKind.TICKS;
     }
 
-    // JSON 存完整刻数；0 显示「立即」，界面可按秒显示
+    /** JSON 保存完整刻数，界面可以按秒显示。 */
     public boolean isTicks() {
-        return type == EditorFieldType.TICKS;
+        return classification().number() == NumberKind.TICKS;
     }
 
-    // JSON 存 0..1，界面按百分比显示
+    /** 界面按百分比显示的数值。 */
     public boolean isPercent() {
-        return type == EditorFieldType.PERCENT;
+        return classification().number() == NumberKind.PERCENT;
     }
 
-    // JSON 存 amplifier（0 起算），界面显示等级
+    /** JSON 保存从零起算的 amplifier，界面显示等级。 */
     public boolean isAmplifier() {
-        return type == EditorFieldType.AMPLIFIER;
+        return classification().number() == NumberKind.AMPLIFIER;
     }
 
+    /** 布尔开关。 */
     public boolean isBoolean() {
-        return type == EditorFieldType.BOOLEAN;
+        return classification().shape() == Shape.BOOLEAN;
     }
 
+    /** 固定枚举选项。 */
     public boolean isEnum() {
-        return type == EditorFieldType.ENUM;
+        return classification().shape() == Shape.ENUM;
     }
 
+    /** 单个资源引用。 */
     public boolean isReference() {
-        return type == EditorFieldType.RESOURCE_LOCATION || type == EditorFieldType.REGISTRY_ID
-                || type == EditorFieldType.TAG;
+        return classification().shape() == Shape.REFERENCE;
     }
 
-    // 可由目录面板挑选的引用或引用列表
+    /** 可由目录面板挑选的单个引用或引用列表。 */
     public boolean isCatalogReference() {
-        return isReference() || type == EditorFieldType.TAG_LIST || type == EditorFieldType.RL_LIST;
+        return classification().reference() != ReferenceKind.NONE;
     }
 
+    /** 引用允许使用标签。 */
     public boolean allowsTags() {
-        return type == EditorFieldType.TAG || type == EditorFieldType.TAG_LIST;
+        return classification().reference() == ReferenceKind.TAGGED;
     }
 
+    /** 允许标签的引用列表。 */
     public boolean isTagList() {
-        return type == EditorFieldType.TAG_LIST;
+        return isListShaped() && allowsTags();
     }
 
+    /** 不使用目录的字符串列表。 */
     public boolean isStringList() {
-        return type == EditorFieldType.STRING_LIST;
+        return isListShaped() && !isCatalogReference();
     }
 
+    /** 标量列表；嵌套对象列表另由 sublist 表示。 */
     public boolean isListShaped() {
-        return type == EditorFieldType.TAG_LIST || type == EditorFieldType.RL_LIST
-                || type == EditorFieldType.STRING_LIST;
+        return classification().shape() == Shape.LIST;
     }
 
-    // 目录多选列表；字符串列表不参与目录挑选
+    /** 支持目录多选的引用列表。 */
     public boolean isMultiCatalog() {
-        return type == EditorFieldType.TAG_LIST || type == EditorFieldType.RL_LIST;
+        return isListShaped() && isCatalogReference();
     }
 
+    /** 引用到数量的映射。 */
     public boolean isItemCounts() {
-        return type == EditorFieldType.ITEM_COUNTS;
+        return classification().shape() == Shape.ITEM_COUNTS;
     }
 
+    /** 两端可空的气候区间。 */
     public boolean isClimateRange() {
-        return type == EditorFieldType.CLIMATE_RANGE;
+        return classification().shape() == Shape.CLIMATE_RANGE;
     }
 
+    /** 可增删的嵌套对象列表。 */
     public boolean isSublist() {
-        return type == EditorFieldType.SUBLIST;
+        return classification().shape() == Shape.SUBLIST;
     }
 
-    // 单个嵌套对象：展示为固定子表单，不提供增删
+    /** 固定子字段组成的嵌套对象。 */
     public boolean isObject() {
-        return type == EditorFieldType.OBJECT;
+        return classification().shape() == Shape.OBJECT;
     }
 
-    // 行标签由控件自带绘制（气候范围与布尔开关），表单不再预留标签列
+    /** 控件自行绘制标签，表单不预留标签列。 */
     public boolean hidesRowLabel() {
-        return type == EditorFieldType.CLIMATE_RANGE || type == EditorFieldType.BOOLEAN;
+        return isClimateRange() || isBoolean();
     }
 
     // ---- 派生 ----
@@ -363,7 +431,7 @@ public record EditorField(String name, String labelKey, EditorFieldType type, @N
 
     // 枚举取值列表
     public List<String> enumValues() {
-        if (type != EditorFieldType.ENUM || domain == null || domain.isBlank()) {
+        if (!isEnum() || domain == null || domain.isBlank()) {
             return List.of();
         }
         List<String> out = new ArrayList<>();

@@ -77,9 +77,9 @@ flowchart LR
 | `DraftPaths`（client/edit） | 路径工具 | 草稿 JSON 的字段与数组路径解析、读写、删除；必要时创建中间容器 | `RuleDraft` |
 | `TypeEditorRegistry` / `EditorRegistries`（client/edit） | 扩展点 | 类型 id 到编辑描述符的注册表；未注册类型返回只读回退描述 | 界面表单、内置类型表 |
 | `ParamProjection`（client/edit） | 参数投影 | 把 core 的类型参数声明投影成 `EditorField` 列表：顺序等于声明顺序，标签 key 由类型 id 与字段名派生，窗口、单位、精度与枚举分组取自声明，不显示的参数跳过 | `BuiltinEditorDescriptors`、`TypeEditorDescriptor` |
-| `EditorField`（client/edit） | 字段契约 | 描述字段名、标签 key、类型、值域与编辑器元数据；是否列表、是否数值、是否说明行、是否可带标签等分类问题由字段自己的谓词回答，调用方不再 switch `EditorFieldType` | `ParamProjection`、界面表单控件 |
+| `EditorField`（client/edit） | 字段契约 | 描述字段名、标签 key、类型、值域与编辑器元数据；以无 default 的枚举 switch 集中分类为形状、数值类别与引用能力；公开谓词回答列表、数值与标签等问题，调用方只问字段 | `ParamProjection`、界面表单控件 |
 | `BuiltinEditorDescriptors` / `BuiltinEditorDefaults`（client/edit） | 描述符与新建初值 | 遍历本地已发现类型表按 `params()` 投影注册描述符，并为少数内置类型补说明行与半径窗口；新建条目按 `initialValues()` 写初值，条件与效果各查自己的默认值表 | `ClientTypeRegistries`、`ParamProjection`、`EditorRegistries` |
-| `ClientTypeRegistries`（client/edit） | 客户端类型表 | 复用 `BuiltinTypeRegistries` 惰性装配内置与本地 SPI 类型，冻结后的条件表、效果表与条件 Codec 共用同一实例 | 注册表、条件编解码 |
+| `ClientTypeRegistries`（client/edit） | 客户端类型表 | 复用 `BuiltinTypeRegistries` 惰性装配内置与本地 SPI 类型，从 `core/type/BuiltinTypeRegistries` 取得冻结查询视图，条件表、效果表与条件 Codec 共用同一实例 | 注册表、条件编解码 |
 | `DraftJournal`（client/edit/draft） | 落盘调度 | 跟踪脏草稿、节流写盘、失败重排与一次性失败上报 | `DraftStore`、界面模型 |
 | `DraftStore` / `PersistedDraft` / `DraftConflict`（client/edit/draft） | 持久化 | 客户端私有目录的原子读写、磁盘格式与版本、恢复时的冲突原因 | `DraftJournal`、界面模型 |
 
