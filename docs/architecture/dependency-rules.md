@@ -14,7 +14,7 @@ authority:
 ## TL;DR
 
 - 方向只朝下：契约 `core/api` 被引用、不引用别人；加载层不认识模型；运行时不被命令、调试与网络反向依赖。
-- 平台、端与编辑业务隔离由 `tools/check-isolation.py` 校验，UI kit 引用白名单由 `tools/check-ui-kit-boundaries.ps1` 校验；其余方向由编译期 import 直接体现。
+- 平台、端、契约/模型与编辑数据分层由 `tools/check-isolation.py` 校验，UI kit 引用白名单由 `tools/check-ui-kit-boundaries.ps1` 校验；其余方向由编译期 import 直接体现。
 - 现存跨包只读例外集中在本页表格，新增同类引用先在表内登记。
 
 ## 适用对象
@@ -25,14 +25,14 @@ authority:
 
 | # | 约束 | 允许方向 | 固化手段 |
 |---|---|---|---|
-| D1 | 契约包只被引用 | `core/api`、`core/api/scheduler`、`core/api/param` 只依赖 JDK、原版契约类型与自身 | 编译期（契约包内无对其它 `core` 包的 import）+ 评审 |
-| D2 | 模型只依赖契约 | `core/model` → `core/api` | 编译期 + 评审 |
+| D1 | 契约包只被引用 | `core/api`、`core/api/scheduler`、`core/api/param` 只依赖 JDK、原版契约类型与自身 | `tools/check-isolation.py` |
+| D2 | 模型只依赖契约 | `core/model` → `core/api` | `tools/check-isolation.py` |
 | D3 | 类型系统不依赖编辑面 | `core/registry`、`core/extension`、`core/type` → 契约、模型与只读辅助类型 | 编译期 + [已知例外](#已知例外) |
 | D4 | 加载层不认识模型 | `core/load` → `core/api`；模型以 `RuleDecoder` 注入 | 编译期 + 评审 |
 | D5 | 运行时聚合向下依赖 | `core/runtime` → 契约、配置、加载、模型、状态、类型 | 编译期 + [已知例外](#已知例外) |
 | D6 | 命令、调试、网络是使用方 | `core/command`、`core/debug`、`core/network` → 运行时与编辑服务 | 编译期 + 评审 |
 | D7 | 宿主是唯一向上装配点 | `core/host` → `core` 其余包与 `platform/Services` | 编译期 + 评审 |
-| D8 | 客户端单向分层 | `client/net` → 协议；`client/edit` → `client/net` 与 `client/ui/kit`；`client/ui` → `client/edit`、`client/net` | 编译期 + 包内注释 + 评审 |
+| D8 | 客户端单向分层 | `client/net` → 协议；`client/edit` → `client/net` 与 `client/ui/kit`；`client/ui` → `client/edit`、`client/net` | `tools/check-isolation.py` + 评审 |
 | D9 | UI kit 不引用本模组其它包 | `client/ui/kit` 只引用自身包与白名单 | `tools/check-ui-kit-boundaries.ps1` |
 | D10 | 平台隔离 | `net.fabricmc.*`、`net.neoforged.*` 只出现在 `fabric/`、`neoforge/` | `tools/check-isolation.py` |
 | D11 | 跨加载器隔离 | `fabric/` 引用 `net.fabricmc.*`，`neoforge/` 引用 `net.neoforged.*`，两者互不引用对方加载器 API | `tools/check-isolation.py` |
@@ -62,6 +62,8 @@ flowchart LR
 4. `src/main` 只依赖生产契约，禁止 import `core/debug` 和探针实现包。
 5. `core/service` 与 `core/catalog` 禁止 import `core/network`、`CustomPacketPayload` 与网络 codec。
 6. Fabric 公共/客户端与 NeoForge 注册入口须遍历统一通道声明，消费其中的 type、codec 与 handler；逐载荷类型常量回流到 adapter 会被拒绝。
+7. `core/api` 对本模组 core 代码只引用自身；`core/model` 只引用契约与自身；内置装配器归 `core/type`。
+8. `client/edit` 的 UI 依赖限定为 `client/ui/kit`，控件和表单工厂归 `client/ui`。
 
 编辑通道的 id 唯一、处理器齐备、同方向 direct/chunk 配对由 `RuleEditChannels` 初始化校验，平台注册器共同遍历该声明。
 
@@ -92,8 +94,7 @@ flowchart LR
 | 效果执行读取区块存在性 | `core/type/effect/exec` → `core/runtime/LoadedChunks` | 只读判定：目标区块是否加载，决定生成还是顺延 |
 | 返还物生成读写实体状态 | `core/type/effect/exec/ReturnItemSpawner` → `core/state/DropStateStore` | 返还物授予永久保护与永久禁转，状态由公共门面写入 |
 | 保存续接发布预建索引 | `core/service/RuleSaveTask` → `core/runtime/RuleIndex` | 后台解码后按公共 tick 预算发布索引 |
-| 运行时消费内置类型注册表 | `core/runtime` → `core/service/BuiltinTypeRegistries` | 装配记录，运行时只读 |
-| 客户端装配本地类型表 | `client/edit/ClientTypeRegistries` → `core/service/BuiltinTypeRegistries` | 复用内置与 SPI 注册顺序，客户端惰性缓存冻结后的类型表与条件 Codec |
+| 客户端装配本地类型表 | `client/edit/ClientTypeRegistries` → `core/type/BuiltinTypeRegistries` | 仅消费规范装配记录与冻结查询视图 |
 | 传输层取得会话上下文与服务 | `core/network/transport` → `core/runtime/RuleIndex`、`core/service` | 编辑会话需要当前索引与保存服务，权限谓词在构造点注入 |
 | 实体状态与平台能力互引类型 | `core/state/DropStateStore` ↔ `platform/Services`、`platform/services/IPlatformHelper` | 平台能力接口以 `DropState` 为参数；状态由运行时单向持有 |
 | 编辑数据用 kit 的树编辑契约 | `client/edit` → `client/ui/kit` | 复用 `UiTreeEditor`、`UiTreePath`、`UiTreeCodec`，不引用宿主与主题 |

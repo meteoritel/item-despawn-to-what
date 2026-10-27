@@ -13,6 +13,8 @@
 5) 编辑业务隔离：core/service 与 core/catalog 不得 import core/network、
    CustomPacketPayload 或网络 codec；语义模型由业务包持有。
 6) 编辑注册入口遍历 RuleEditChannels，平台 adapter 仅使用声明中的类型和处理器。
+7) 契约只依赖自身，模型只依赖契约与自身；类型装配器位于 core/type。
+8) client/edit 只依赖 UI kit 的公开契约，表单控件留在 client/ui。
 
 只判定 import 语句：注释与 javadoc 中的全限定名不构成编译期依赖，不计入违规。
 
@@ -36,6 +38,8 @@ PLATFORM_LOADERS = {"fabric": "net.fabricmc.", "neoforge": "net.neoforged."}
 # 判定为客户端类的 import 前缀
 CLIENT_IMPORT_PREFIXES = ("net.minecraft.client.", "com.meteorite.itemdespawntowhat.client.")
 IMPORT_RE = re.compile(r"^\s*import\s+(?:static\s+)?([A-Za-z_][A-Za-z0-9_.]*(?:\*)?)\s*;")
+PROJECT_CORE = "com.meteorite.itemdespawntowhat.core."
+PROJECT_UI = "com.meteorite.itemdespawntowhat.client.ui."
 REGISTRAR_DIRECTIONS = {
     "fabric/src/main/java/com/meteorite/itemdespawntowhat/network/registrar/RuleEditPayloadRegistrar.java": ("serverbound", "clientbound"),
     "fabric/src/main/java/com/meteorite/itemdespawntowhat/client/network/FabricRuleEditClientRegistrar.java": ("clientbound",),
@@ -73,6 +77,8 @@ def check(root: Path) -> int:
         modules.add(module)
         client_path = is_client_path(rel)
         text = source.read_text(encoding="utf-8", errors="replace")
+        if rel.endswith("/core/service/BuiltinTypeRegistries.java"):
+            violations.append((rel, 1, "类型装配归属", "内置类型装配位于 core/type"))
         if rel in REGISTRAR_DIRECTIONS:
             for direction in REGISTRAR_DIRECTIONS[rel]:
                 if not re.search(r"RuleEditChannels\." + direction + r"\(\)\.forEach\(", text):
@@ -94,6 +100,15 @@ def check(root: Path) -> int:
                 continue
             target = match.group(1)
             import_total += 1
+            if "/core/api/" in rel and target.startswith(PROJECT_CORE) and not target.startswith(PROJECT_CORE + "api."):
+                violations.append((rel, line_no, "契约依赖方向", target))
+            if "/core/model/" in rel and target.startswith(PROJECT_CORE) and not target.startswith((
+                    PROJECT_CORE + "api.", PROJECT_CORE + "model.")):
+                violations.append((rel, line_no, "模型依赖方向", target))
+            if "/client/edit/" in rel and target.startswith(PROJECT_UI) and not target.startswith(PROJECT_UI + "kit."):
+                violations.append((rel, line_no, "编辑数据分层", target))
+            if target == PROJECT_CORE + "service.BuiltinTypeRegistries":
+                violations.append((rel, line_no, "类型装配归属", target))
             if ("/core/service/" in rel or "/core/catalog/" in rel) and target.startswith((
                     "com.meteorite.itemdespawntowhat.core.network.",
                     "net.minecraft.network.protocol.common.custom.",
