@@ -150,6 +150,7 @@ public final class UiFocusManager {
             return activateFocused();
         }
         if (spaceActivates && keyCode == GLFW.GLFW_KEY_SPACE) {
+            if (focused != null && focused.acceptsTextInput()) return false;
             return activateFocused();
         }
         return false;

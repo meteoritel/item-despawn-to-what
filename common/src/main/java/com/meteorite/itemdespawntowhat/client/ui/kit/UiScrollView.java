@@ -178,25 +178,13 @@ public final class UiScrollView {
     private void clampOffset() { offset = Math.clamp(offset, 0, maxOffset()); }
 
     // 滚动条始终贴着视口右边界；视口窄于滚动条时退化为整个视口宽。
-    private UiRect scrollbarTrack() {
-        int width = Math.min(SCROLLBAR_WIDTH, viewport.width());
-        return new UiRect(viewport.right() - width, viewport.y(), width, viewport.height());
-    }
+    private UiRect scrollbarTrack() { return UiScrollbarGeometry.track(viewport, SCROLLBAR_WIDTH); }
 
     // 滑块高度按「视口/内容」比例缩放，并保底 MIN_THUMB_HEIGHT；没有可滚距离时占满轨道。
-    private int thumbHeight() {
-        int view = viewport.height();
-        if (view <= 0 || maxOffset() <= 0) return view;
-        int scaled = (int) Math.round((double) view * view / contentHeight);
-        return Math.clamp(scaled, Math.min(MIN_THUMB_HEIGHT, view), view);
-    }
+    private int thumbHeight() { return UiScrollbarGeometry.thumbHeight(viewport.height(), contentHeight, MIN_THUMB_HEIGHT); }
 
     private int thumbTravel() { return Math.max(0, viewport.height() - thumbHeight()); }
 
     // 滑块位置按偏移占可滚距离的比例映射；无位移空间时停在轨道顶部。
-    private int thumbTop() {
-        int travel = thumbTravel();
-        if (travel <= 0 || maxOffset() <= 0) return viewport.y();
-        return viewport.y() + (int) Math.round((double) travel * offset / maxOffset());
-    }
+    private int thumbTop() { return UiScrollbarGeometry.thumbTop(viewport.y(), viewport.height(), contentHeight, offset, MIN_THUMB_HEIGHT); }
 }

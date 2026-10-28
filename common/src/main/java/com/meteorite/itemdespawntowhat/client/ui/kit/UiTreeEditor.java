@@ -1,9 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.Collection;
-import java.util.IdentityHashMap;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -61,7 +59,7 @@ public final class UiTreeEditor<N> {
      * @param after 操作后的根节点
      * @param kind 操作种类
      * @param paths 旧路径到新路径的映射，视图据此跟随结构变化
-     * @param removed 本次操作移除的路径
+     * @param removed 本次完全移除的子树根路径，保留后代的包装节点不作为整棵子树移除
      * @param added 本次操作新增的路径
      * @param <N> 宿主节点类型
      */
@@ -139,9 +137,7 @@ public final class UiTreeEditor<N> {
     private final Function<N, Component> validator;
     private final Component invalidPath;
     private final Component invalidParent;
-    private final Set<UiTreePath> collapsed = new HashSet<>();
-    private @Nullable UiTreePath selected;
-    private final Set<UiTreePath> selection = new LinkedHashSet<>();
+    private UiTreeViewState view = UiTreeViewState.EMPTY;
     private Consumer<ViewChange> onViewChanged = change -> {};
     private Runnable beforeEdit = () -> {};
     private MoveErrors moveErrors;
@@ -170,10 +166,13 @@ public final class UiTreeEditor<N> {
     public <S> @Nullable S encode(UiTreeCodec<N, S> codec) { return codec.encode(root.get()); }
     public void setBeforeEdit(Runnable handler) { beforeEdit = Objects.requireNonNull(handler); }
     public void setOnViewChanged(Consumer<ViewChange> listener) { onViewChanged = Objects.requireNonNull(listener); }
-    public @Nullable UiTreePath selected() { return selected; }
-    public Set<UiTreePath> collapsed() { return Set.copyOf(collapsed); }
+    /** 当前主选择路径；无选择时为 null。 */
+    public @Nullable UiTreePath selected() { return view.selected(); }
+    /** 当前视图折叠路径的只读快照。 */
+    public Set<UiTreePath> collapsed() { return Set.copyOf(view.collapsed()); }
 
-    public Set<UiTreePath> selection() { return Set.copyOf(selection); }
+    /** 当前视图多选路径的只读快照。 */
+    public Set<UiTreePath> selection() { return Set.copyOf(view.selection()); }
 
     public void select(@Nullable UiTreePath path) {
         if (path != null && query(path) == null) return;
@@ -182,26 +181,23 @@ public final class UiTreeEditor<N> {
 
     /** 选择集合与主节点仅产生视图事件；主节点用于逐节点参数编辑。 */
     public void setSelection(Collection<UiTreePath> paths, @Nullable UiTreePath primary) {
-        Set<UiTreePath> next = new LinkedHashSet<>();
-        paths.stream().filter(path -> query(path) != null).sorted(PATH_ORDER).forEach(next::add);
-        UiTreePath nextPrimary = primary != null && next.contains(primary) ? primary : next.stream().findFirst().orElse(null);
-        if (selection.equals(next) && Objects.equals(selected, nextPrimary)) return;
-        selection.clear();
-        selection.addAll(next);
-        selected = nextPrimary;
+        List<UiTreePath> valid = paths.stream().filter(path -> query(path) != null).sorted(PATH_ORDER).toList();
+        UiTreeViewState next = view.withSelection(valid, primary);
+        if (view.equals(next)) return;
+        view = next;
         notifyView();
     }
 
     public void toggleSelection(UiTreePath path) {
         if (query(path) == null) return;
-        Set<UiTreePath> next = new LinkedHashSet<>(selection);
+        Set<UiTreePath> next = new LinkedHashSet<>(view.selection());
         boolean added = next.add(path);
         if (!added) next.remove(path);
-        setSelection(next, added ? path : selected);
+        setSelection(next, added ? path : view.selected());
     }
 
     /** 按树顺序排序、去重并去掉已选祖先覆盖的后代，结构操作只处理这些子树。 */
-    public List<UiTreePath> normalizedSelection() { return normalize(selection); }
+    public List<UiTreePath> normalizedSelection() { return normalize(view.selection()); }
 
     public static List<UiTreePath> normalize(Collection<UiTreePath> paths) {
         List<UiTreePath> result = new ArrayList<>();
@@ -221,16 +217,19 @@ public final class UiTreeEditor<N> {
 
     public void setCollapsed(UiTreePath path, boolean value) {
         if (query(path) == null) return;
-        if (value ? collapsed.add(path) : collapsed.remove(path)) notifyView();
-    }
-
-    public void expandAll() {
-        if (collapsed.isEmpty()) return;
-        collapsed.clear();
+        UiTreeViewState next = view.fold(path, value);
+        if (view.equals(next)) return;
+        view = next;
         notifyView();
     }
 
-    private void notifyView() { onViewChanged.accept(new ViewChange(selected, collapsed, selection)); }
+    public void expandAll() {
+        if (view.collapsed().isEmpty()) return;
+        view = view.expandAll();
+        notifyView();
+    }
+
+    private void notifyView() { onViewChanged.accept(new ViewChange(view.selected(), view.collapsed(), view.selection())); }
 
     /** 按路径查找节点；路径不存在或越界时返回 null。 */
     public @Nullable N query(UiTreePath path) { return query(root.get(), path); }
@@ -356,7 +355,7 @@ public final class UiTreeEditor<N> {
     public Outcome commitMove(MovePreview<N> preview) {
         if (!Objects.equals(root.get(), preview.before())) return new Outcome(false, moveErrors.stale());
         if (!preview.outcome().changed()) return preview.outcome();
-        UiTreePath primary = selected;
+        UiTreePath primary = view.selected();
         Outcome result = accept(preview.before(), preview.after(), Kind.MOVE, preview.paths());
         if (result.changed()) {
             remapView(preview.paths());
@@ -399,8 +398,22 @@ public final class UiTreeEditor<N> {
         if (sources.stream().anyMatch(path -> query(before, path) == null)) return new Outcome(false, invalidPath);
         if (!canLift(before, sources)) return new Outcome(false, moveErrors.fullParent());
         N after = liftChildren(before, sources);
-        Outcome result = accept(before, after, Kind.DELETE, survivingPaths(before, after));
-        if (result.changed()) setSelection(List.of(), null);
+        Map<UiTreePath, UiTreePath> paths = new LinkedHashMap<>();
+        collectPaths(before, UiTreePath.ROOT, path -> {
+            UiTreePath next = path;
+            for (UiTreePath source : sources.reversed()) {
+                next = liftedPath(next, source, adapter.children(Objects.requireNonNull(query(before, source))).size());
+                if (next == null) break;
+            }
+            return next;
+        }, paths);
+        // 有后代的包装节点只移除自身；存活后代的输入仍要按 paths 迁移。
+        Set<UiTreePath> removedSubtrees = new LinkedHashSet<>();
+        for (UiTreePath source : sources) {
+            if (adapter.children(Objects.requireNonNull(query(before, source))).isEmpty()) removedSubtrees.add(source);
+        }
+        Outcome result = accept(before, after, Kind.DELETE, paths, removedSubtrees);
+        if (result.changed()) { remapView(paths); setSelection(List.of(), null); }
         return result;
     }
 
@@ -433,25 +446,20 @@ public final class UiTreeEditor<N> {
         return after;
     }
 
-    // 上移后节点对象保持不变：按身份对比前后树即可得到旧路径到新路径的映射，缺失的路径就是被删除的路径
-    private Map<UiTreePath, UiTreePath> survivingPaths(@Nullable N before, @Nullable N after) {
-        Map<N, UiTreePath> oldPaths = new IdentityHashMap<>();
-        Map<N, UiTreePath> newPaths = new IdentityHashMap<>();
-        collectIdentity(before, UiTreePath.ROOT, oldPaths);
-        collectIdentity(after, UiTreePath.ROOT, newPaths);
-        Map<UiTreePath, UiTreePath> paths = new LinkedHashMap<>();
-        oldPaths.forEach((node, path) -> {
-            UiTreePath next = newPaths.get(node);
-            if (next != null && !next.equals(path)) paths.put(path, next);
-        });
-        return paths;
-    }
-
-    private void collectIdentity(@Nullable N node, UiTreePath path, Map<N, UiTreePath> paths) {
-        if (node == null) return;
-        paths.putIfAbsent(node, path);
-        List<N> children = adapter.children(node);
-        for (int index = 0; index < children.size(); index++) collectIdentity(children.get(index), path.child(index), paths);
+    // 删除包装节点时，后代提升一级，靠后的兄弟按提升数量平移；祖先仍保留原路径。
+    private static @Nullable UiTreePath liftedPath(UiTreePath path, UiTreePath source, int childCount) {
+        if (path.equals(source)) return null;
+        UiTreePath parent = source.parent();
+        if (!parent.isAncestorOf(path)) return path;
+        int depth = parent.indices().size();
+        List<Integer> indices = new ArrayList<>(path.indices());
+        if (source.isAncestorOf(path)) {
+            indices.remove(depth);
+            indices.set(depth, indices.get(depth) + lastIndex(source));
+        } else if (indices.get(depth) > lastIndex(source)) {
+            indices.set(depth, indices.get(depth) + childCount - 1);
+        }
+        return new UiTreePath(indices);
     }
 
     /** 批量插入不替换既有根，不合并分组；容量或候选失败时整批不写入。 */
@@ -528,10 +536,10 @@ public final class UiTreeEditor<N> {
     }
 
     private void remapView(Map<UiTreePath, UiTreePath> paths) {
-        Set<UiTreePath> folded = new HashSet<>();
-        collapsed.forEach(path -> { UiTreePath next = paths.get(path); if (next != null) folded.add(next); });
-        collapsed.clear();
-        collapsed.addAll(folded);
+        UiTreeViewState next = view.remap(paths);
+        if (view.equals(next)) return;
+        view = next;
+        notifyView();
     }
 
     private @Nullable N removeAll(@Nullable N before, List<UiTreePath> sources) {

@@ -22,6 +22,9 @@ public interface UiFocusTarget {
     /** 当前是否持有焦点；模态入口据此判断「这个入口是不是键盘到达的」，避免鼠标点击也留下焦点轮廓。 */
     boolean isFocused();
 
+    /** 是否接收文字输入；焦点管理器据此将空格留给文本模型。 */
+    default boolean acceptsTextInput() { return false; }
+
     /** Enter / Space 的激活语义；不适用（例如原生输入框）时返回 {@code false} 不消费。 */
     boolean activate();
 

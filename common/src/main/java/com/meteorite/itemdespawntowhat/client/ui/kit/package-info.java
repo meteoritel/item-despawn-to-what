@@ -29,7 +29,11 @@
  *   <li>树编辑：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeEditor}（节点操作、绑定与视图事件）、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTreePath}（节点路径）、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeCodec}（宿主编解码注入）、
- *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeMoveInteraction}（捕获、移动预览、释放提交与取消）</li>
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeMoveInteraction}（捕获、移动预览、释放提交与取消）；
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeProjection}（结构版本的先序索引）、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeViewState}（各视图独立的选择与折叠）、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeNavigation}（可见行导航）、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeRowMarker}（缩进、命中与展开标记）</li>
  *   <li>输入与捕获：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiInputTarget}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiInputRouter}（路由顺序：顶层 modal 作用域 →
@@ -50,6 +54,9 @@
  *       样式由宿主注入：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderStyle}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderPainter}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.PixelSliderPainter}</li>
+ *   <li>文本能力：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTextValue} 与
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTextAcceptance}；滚动条几何由
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollbarGeometry} 共用</li>
  *   <li>文本局部历史：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTextHistory}（文本、光标与选择快照）、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTextSelection}（鼠标选择：固定锚点、Shift 扩选与矩形外拖动）、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut}（事件修饰键识别撤销与重做）、
@@ -62,7 +69,9 @@
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.LightboxImage}</li>
  *   <li>实体与加载预览：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiEntityPreview}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon.Rendered}、
- *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiSpinner}；实体创建、缓存和兜底由宿主负责</li>
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiSpinner}；
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiPreviewCache} 提供有界 LRU 与显式世代失效，
+ *       实体创建、资源世代、失败值和关闭清理由宿主负责</li>
  *   <li>进度：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiProgressBar}（宿主时间与样式驱动的平滑计数进度与未知总量往返动画）</li>
  *   <li>模型与图标轮播：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiModelBounds}（实际顶点测量与整圈适框）、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiBlockPreview}、
@@ -88,7 +97,94 @@
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiFloatingPanel}（拖动 / 折叠 / 贴边吸附 / 贴底抽屉）</li>
  * </ul>
  *
- * <p><b>内部实现</b>（同为 {@code public}，但不承诺兼容，宿主不应依赖）：公开类型之外只有包内可见的
+ * <p><b>消费角色登记</b>：host 表示本项目生产源码直接使用；library 表示面向外部宿主保留的库 API，
+ * 本项目当前无直接生产引用；example 表示装配示例。角色只说明消费现状，三类均为公开契约。
+ * 嵌套公开契约随所属顶层类型维护。新增类型必须在下表登记一次。</p>
+ * <ul>
+ *   <li>{@code LightboxImage}: library</li>
+ *   <li>{@code PixelSliderPainter}: host</li>
+ *   <li>{@code TextMeasurer}: library</li>
+ *   <li>{@code TextScroll}: host</li>
+ *   <li>{@code UiAction}: host</li>
+ *   <li>{@code UiBlockPreview}: host</li>
+ *   <li>{@code UiCarousel}: host</li>
+ *   <li>{@code UiControl}: host</li>
+ *   <li>{@code UiControlGroup}: library</li>
+ *   <li>{@code UiControlRole}: host</li>
+ *   <li>{@code UiControlStyle}: host</li>
+ *   <li>{@code UiCyclicRange}: host</li>
+ *   <li>{@code UiDocument}: library</li>
+ *   <li>{@code UiDotGrid}: host</li>
+ *   <li>{@code UiEntityPreview}: host</li>
+ *   <li>{@code UiFlatText}: host</li>
+ *   <li>{@code UiFloatingPanel}: library</li>
+ *   <li>{@code UiFlowLayout}: host</li>
+ *   <li>{@code UiFocusManager}: host</li>
+ *   <li>{@code UiFocusTarget}: host</li>
+ *   <li>{@code UiHistoryDispatcher}: host</li>
+ *   <li>{@code UiHistoryShortcut}: host</li>
+ *   <li>{@code UiIcon}: host</li>
+ *   <li>{@code UiIconSheet}: host</li>
+ *   <li>{@code UiIconStrip}: host</li>
+ *   <li>{@code UiImageView}: library</li>
+ *   <li>{@code UiInputCapture}: host</li>
+ *   <li>{@code UiInputContext}: host</li>
+ *   <li>{@code UiInputRouter}: library</li>
+ *   <li>{@code UiInputTarget}: host</li>
+ *   <li>{@code UiJsonText}: host</li>
+ *   <li>{@code UiLayoutNode}: host</li>
+ *   <li>{@code UiLayoutSource}: host</li>
+ *   <li>{@code UiLightbox}: library</li>
+ *   <li>{@code UiLinearLayout}: library</li>
+ *   <li>{@code UiLinkedValues}: host</li>
+ *   <li>{@code UiMetrics}: library</li>
+ *   <li>{@code UiModelBounds}: host</li>
+ *   <li>{@code UiNavigationHistory}: library</li>
+ *   <li>{@code UiNineSlice}: host</li>
+ *   <li>{@code UiNode}: library</li>
+ *   <li>{@code UiNumberPolicy}: host</li>
+ *   <li>{@code UiNumbers}: host</li>
+ *   <li>{@code UiOrthoLink}: library</li>
+ *   <li>{@code UiPointer}: host</li>
+ *   <li>{@code UiPreviewCache}: host</li>
+ *   <li>{@code UiProgressBar}: host</li>
+ *   <li>{@code UiRangeEnd}: host</li>
+ *   <li>{@code UiRangeSlider}: host</li>
+ *   <li>{@code UiRangeValue}: host</li>
+ *   <li>{@code UiRect}: host</li>
+ *   <li>{@code UiRenderLayers}: host</li>
+ *   <li>{@code UiRubberBand}: host</li>
+ *   <li>{@code UiScalarSlider}: host</li>
+ *   <li>{@code UiScrollView}: host</li>
+ *   <li>{@code UiSliderExamples}: example</li>
+ *   <li>{@code UiSliderPainter}: host</li>
+ *   <li>{@code UiSliderRole}: host</li>
+ *   <li>{@code UiSliderSkin}: host</li>
+ *   <li>{@code UiSliderStyle}: host</li>
+ *   <li>{@code UiSliderWindow}: host</li>
+ *   <li>{@code UiSpinner}: host</li>
+ *   <li>{@code UiStyleSource}: host</li>
+ *   <li>{@code UiTarget}: host</li>
+ *   <li>{@code UiTextValue}: host</li>
+ *   <li>{@code UiTextAcceptance}: host</li>
+ *   <li>{@code UiScrollbarGeometry}: host</li>
+ *   <li>{@code UiTextHistory}: host</li>
+ *   <li>{@code UiTextSelection}: host</li>
+ *   <li>{@code UiTidyTreeLayout}: host</li>
+ *   <li>{@code UiTransform}: host</li>
+ *   <li>{@code UiTreeCodec}: host</li>
+ *   <li>{@code UiTreeProjection}: host</li>
+ *   <li>{@code UiTreeViewState}: host</li>
+ *   <li>{@code UiTreeNavigation}: host</li>
+ *   <li>{@code UiTreeRowMarker}: host</li>
+ *   <li>{@code UiTreeEditor}: host</li>
+ *   <li>{@code UiTreeMoveInteraction}: host</li>
+ *   <li>{@code UiTreePath}: host</li>
+ *   <li>{@code UiValueInteraction}: host</li>
+ *   <li>{@code UiValueTextBinding}: host</li>
+ * </ul>
+ *
+ * <p><b>内部实现</b>：公开类型之外只有包内可见的
  * 共享外壳 {@code AbstractRangeCore}（{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiCyclicRange} 与
  * {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeSlider} 共同的输入生命周期与容器几何），
  * 其余内部口径落在各类的非公开成员上——{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiDocument}
@@ -104,7 +200,7 @@
  * import 白名单为 {@code java.*} / {@code javax.*} / {@code net.minecraft.*} / {@code org.jetbrains.*} /
  * {@code org.joml.*} / {@code org.lwjgl.*}，另精确允许上述三个渲染类，不放开其父包；同一 kit 包内互相引用允许；本模组其它包与
  * {@code net.fabricmc.*} / {@code net.neoforged.*} / {@code com.google.gson.*} 一律禁用；
- * 同一脚本还核对本文件的登记清单：kit 顶层 {@code public} 类型未出现在本清单或内部实现说明里即失败。</p>
+ * 同一脚本还核对本文件的登记清单：kit 顶层 {@code public} 类型缺少唯一的 host/library/example 角色登记即失败。</p>
  *
  * <p><b>宿主适配层</b>：{@code client/ui/theme/}（把主题色映射成 {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderStyle} 等 kit 样式后注入）、
  * {@code client/ui/widget/}（把既有控件委托给 kit 核心并保持公开 API 兼容）属于宿主层，
