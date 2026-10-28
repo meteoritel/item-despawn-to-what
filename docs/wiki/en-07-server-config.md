@@ -12,7 +12,7 @@ These settings control how the server runs: how often the mod checks, how much w
 - When it takes effect: the server reads it once at startup. Restart the server after a change. `/idtw config reload` reloads rules only; it does not reread this file.
 - Missing fields take their default values, so write only the entries you want to change.
 - What happens when a value is wrong: one bad entry voids the whole file, which then falls back to its default values. A bad entry is a value out of range, a wrong type such as text where a number belongs, or JSON that does not parse, from a stray bracket or comma to content that is not a JSON object. Correct entries elsewhere do not apply either, and the startup log records one error. The mod never rewrites the file, so check the startup log after an edit.
-- Fields that the table below does not list are not read and do not affect the game.
+- Unknown fields produce a startup WARN with the full path, such as `nearby_products.item_limt`. Other valid fields still apply. Correct the spelling and restart the server.
 
 The **overlay directory** is the folder under `config/` that holds your own rule files, and `overlay_directory` is the only setting that moves it. How `server.json` differs from rule files:
 
@@ -29,24 +29,29 @@ You can indent and wrap the file however you like. The game writes it as one com
 
 The following lists the complete default values. The Codec omits keys equal to their defaults when saving. Configuration keys remain flat, with `nearby_products` as a nested object:
 
+<!-- config-reference:defaults:begin -->
 ```json
 {
   "check_interval_ticks": 20,
   "backoff_max_ticks": 100,
   "max_checks_per_tick": 512,
-  "overlay_directory": "itemdespawntowhat",
-  "fabric_lifespan_fallback_ticks": 6000,
-  "debug_logging": false,
   "server_budget_us": 10000,
   "effects_work_units_per_tick": 64,
   "check_spread_window_ticks": 20,
   "dispatch_batch_size": 64,
+  "rescan_entities_per_step": 16,
+  "cancels_per_step": 1,
+  "prepare_groups_per_step": 8,
+  "settlement_recovery_max_attempts": 3,
+  "fabric_lifespan_fallback_ticks": 6000,
   "new_product_protection_seconds": 2,
   "conversion_cooldown_seconds": 5,
   "position_search_checks_per_tick": 16,
+  "max_place_block_radius": 8,
+  "debug_logging": false,
   "debug_scenario_prepare_batch_size": 128,
   "debug_scenario_prepare_budget_us": 2000,
-  "max_place_block_radius": 8,
+  "overlay_directory": "itemdespawntowhat",
   "nearby_products": {
     "item_limit": 1024,
     "item_radius": 6,
@@ -54,46 +59,45 @@ The following lists the complete default values. The Codec omits keys equal to t
     "entity_radius": 6,
     "experience_orb_limit": 64,
     "experience_radius": 6
-  },
-  "rescan_entities_per_step": 16,
-  "cancels_per_step": 1,
-  "prepare_groups_per_step": 8,
-  "settlement_recovery_max_attempts": 3
+  }
 }
 ```
+<!-- config-reference:defaults:end -->
 
 `max_work_units_per_tick` does not appear in the file by default, because its fallback applies only while the entry is absent. See the next section. Its absence from the generated file is normal.
 
 ## All Fields
 
-Time values are in game ticks, and 20 ticks equal 1 second on a normal server.
+See the table for each time field's unit. At the normal game speed, 20 ticks equal 1 second.
 
-| Field | What It Does | Range | Default | When to Change It |
-|---|---|---|---|---|
-| `check_interval_ticks` | How long to wait before checking a condition again while it does not hold. The first retry uses this interval, and every retry after that doubles it | 1 to 1200 ticks | `20` (1 second) | Lower it to convert sooner after a condition starts holding. Raise it to check less often when many drops are loaded |
-| `backoff_max_ticks` | The cap on that doubling. A condition that stays false waits at most this long before the next check | 1 to 72000 ticks | `100` (5 seconds) | Lower it so a rule that will hold later retries sooner. Raise it to save more performance at the cost of slower reaction |
-| `max_checks_per_tick` | The checks-per-tick ceiling, used only while `max_work_units_per_tick` is absent | 1 to 100000 | `512` | Change it only when you want to control how many checks run per tick. Most servers never need this |
-| `overlay_directory` | The name of the rule overlay directory, relative to `config/`, so rules live in `config/<this value>/rules/` | Any directory name (string) | `"itemdespawntowhat"` | Change it only to rename the config directory. Move the whole directory with it, or the overlay rules stop loading. The location of `server.json` itself does not change |
-| `fabric_lifespan_fallback_ticks` | Fabric only: the tick count to assume for how long a drop can still live when the mod cannot read its real lifespan | 1 to 72000 ticks | `6000` (5 minutes) | The default matches how long vanilla drops live. Adjust it only when the server changes drop lifespan rules |
-| `debug_logging` | Whether the mod writes its run-time progress to the log, such as a drop whose condition does not hold and how many ticks until the next retry | `true` or `false` | `false` | Turn it on temporarily while you diagnose why something does not convert. Keep it off otherwise, because it floods the log |
-| `server_budget_us` | The time in microseconds the mod may spend per game tick. Work that does not fit continues over the following ticks | 100 to 100000 microseconds | `10000` (about 10 milliseconds) | Lower it for extra safety on a busy server. Raise it when conversions lag and the server has spare capacity |
-| `max_work_units_per_tick` | The total work-unit ceiling per tick. It applies together with `server_budget_us`, and whichever comes first wins | 1 to 100000 | Absent, which uses the `max_checks_per_tick` value of `512` | Leave it absent. Write it only when you need to set the work per tick on its own |
-| `effects_work_units_per_tick` | The per-tick quota reserved for running effects, such as spawning items, placing blocks, and granting experience, so that heavy output does not crowd out the checks | 1 to 100000 | `64` | Raise it when a large batch of products takes too long to appear. Lower it to keep the checks prompt |
-| `check_spread_window_ticks` | When many drops come due at once, the mod spreads those checks over a window of this many game ticks | 1 to 1200 ticks | `20` (1 second) | Raise it when a simultaneous batch causes lag, which is smoother but delays individual conversions. Lower it to keep conversions on time when a single tick can take the load |
-| `dispatch_batch_size` | How many queued conversions the mod advances per tick at most, and it also caps the returned items delivered in one batch | 1 to 100000 | `64` | Raise it when large batches back up |
-| `prepare_groups_per_step` | How many groups one step prepares fixed effect inputs for during the preparation stage of a settlement, spreading the preparation of a whole stack over several game ticks | 1 to 4096 groups | `8` | Lower it when many settlements start at once and preparation hitches a single tick. Raise it to start producing sooner for very large stacks, at the cost of more work per tick |
-| `new_product_protection_seconds` | How many seconds a freshly converted product (dropped item, mob, or other entity) resists destruction by fire, lava, and cacti | 0 to 3600 seconds | `2` | Raise it when products burn as soon as they appear, for example next to lava. Set `0` to let products be destroyed right away |
-| `conversion_cooldown_seconds` | How many seconds a freshly converted item cannot start another conversion | 0 to 3600 seconds | `5` | Raise it when products convert again immediately under another rule. Set `0` to let a product convert again at once |
-| `position_search_checks_per_tick` | How many candidate positions the mod tries per tick when it looks for a spot for a product or a returned item | 1 to 4096 | `16` | Raise it when items stay undelivered because the terrain leaves few spots. Lower it to save performance |
-| `rescan_entities_per_step` | How many loaded drops one step rebuilds when tracking is rebuilt after startup, a dimension load, or a rule reload. The rest continues over later ticks | 1 to 4096 | `16` | Lower it when a server with tens of thousands of drops still hitches on a single tick after startup or a reload. Raise it to finish sooner, at the cost of more work per tick |
-| `cancels_per_step` | How many queued tasks one step cancels when a rule reload, a dimension unload, or a server stop detaches them. The rest continues over later ticks | 1 to 4096 | `1` | Keep it at the default (or lower) when a reload or unload still spikes on a single tick. Raise it to finish clearing old queues sooner, at the cost of more cancel callbacks per tick |
-| `debug_scenario_prepare_batch_size` | Affects only the preparation stage of test scenarios in a development environment, with no effect on normal play | 1 to 100000 | `128` | Players never need to change it |
-| `debug_scenario_prepare_budget_us` | The time cap in microseconds for that same preparation stage | 1 to 100000 microseconds | `2000` | Players never need to change it |
-| `settlement_recovery_max_attempts` | How many times the mod retries a settlement that failed mid-run before giving up for this session and leaving the record for the next startup scan | 1 to 100 | `3` | Lower it when a dimension stays unavailable for long and you would rather let the next restart take over. Raise it only when a settlement fails for reasons that clear up after a few seconds |
-| `max_place_block_radius` | Largest `radius` a single `place_block` action may use; rules above it are rejected when loaded or saved | 1 and above | `8` | Raise it to let one action cover a wider area, but the cost of one placement grows with the cube of the radius, so keep it modest; lowering it rejects existing rules that now exceed the cap, so edit those rules as well |
-| `nearby_products` | The nearby product limits. The count of products already nearby, together with the declared output per group, decides how many groups this settlement may open. See the next section | Object | See the next section | Lower it when piled-up products cause lag. Set the matching limit to `0` to remove the cap |
+<!-- config-reference:fields:begin -->
+| Field | What It Does | Type / Range | Default | When to Change It |
+| --- | --- | --- | --- | --- |
+| `check_interval_ticks` | How long to wait before checking a condition again while it does not hold. The first retry uses this interval, and every retry after that doubles it | Integer [1, 1200] ticks | `20` | Lower it to convert sooner after a condition starts holding. Raise it to check less often when many drops are loaded |
+| `backoff_max_ticks` | The cap on that doubling. A condition that stays false waits at most this long before the next check | Integer [1, 72000] ticks | `100` | Lower it so a rule that will hold later retries sooner. Raise it to save more performance at the cost of slower reaction |
+| `max_checks_per_tick` | The checks-per-tick ceiling, used only while `max_work_units_per_tick` is absent | Integer [1, 100000] | `512` | Change it only when you want to control how many checks run per tick. Most servers never need this |
+| `server_budget_us` | The time in microseconds the mod may spend per game tick. Work that does not fit continues over the following ticks | Integer [100, 100000] microseconds | `10000` | Lower it for extra safety on a busy server. Raise it when conversions lag and the server has spare capacity |
+| `max_work_units_per_tick` | The total work-unit ceiling per tick. It applies together with `server_budget_us`, and whichever comes first wins | Integer [1, 100000] | Absent: follows `max_checks_per_tick` | Leave it absent. Write it only when you need to set the work per tick on its own |
+| `effects_work_units_per_tick` | The per-tick quota reserved for running effects, such as spawning items, placing blocks, and granting experience, so that heavy output does not crowd out the checks | Integer [1, 100000] | `64` | Raise it when a large batch of products takes too long to appear. Lower it to keep the checks prompt |
+| `check_spread_window_ticks` | When many drops come due at once, the mod spreads those checks over a window of this many game ticks | Integer [1, 1200] ticks | `20` | Raise it when a simultaneous batch causes lag, which is smoother but delays individual conversions. Lower it to keep conversions on time when a single tick can take the load |
+| `dispatch_batch_size` | How many queued conversions the mod advances per tick at most, and it also caps the returned items delivered in one batch | Integer [1, 100000] | `64` | Raise it when large batches back up |
+| `rescan_entities_per_step` | How many loaded drops one step rebuilds when tracking is rebuilt after startup, a dimension load, or a rule reload. The rest continues over later ticks | Integer [1, 4096] | `16` | Lower it when a server with tens of thousands of drops still hitches on a single tick after startup or a reload. Raise it to finish sooner, at the cost of more work per tick |
+| `cancels_per_step` | How many queued tasks one step cancels when a rule reload, a dimension unload, or a server stop detaches them. The rest continues over later ticks | Integer [1, 4096] | `1` | Keep it at the default (or lower) when a reload or unload still spikes on a single tick. Raise it to finish clearing old queues sooner, at the cost of more cancel callbacks per tick |
+| `prepare_groups_per_step` | How many groups one step prepares fixed effect inputs for during the preparation stage of a settlement, spreading the preparation of a whole stack over several game ticks | Integer [1, 4096] | `8` | Lower it when many settlements start at once and preparation hitches a single tick. Raise it to start producing sooner for very large stacks, at the cost of more work per tick |
+| `settlement_recovery_max_attempts` | How many times the mod retries a settlement that failed mid-run before giving up for this session and leaving the record for the next startup scan | Integer [1, 100] | `3` | Lower it when a dimension stays unavailable for long and you would rather let the next restart take over. Raise it only when a settlement fails for reasons that clear up after a few seconds |
+| `fabric_lifespan_fallback_ticks` | Fabric only: the natural lifespan in ticks used until the current server run samples a reference drop lifespan | Integer [1, 72000] ticks | `6000` | The default matches how long vanilla drops live. Adjust it only when the server changes drop lifespan rules |
+| `new_product_protection_seconds` | How many seconds a freshly converted product (dropped item, mob, or other entity) resists destruction by fire, lava, and cacti | Integer [0, 3600] seconds | `2` | Raise it when products burn as soon as they appear, for example next to lava. Set `0` to let products be destroyed right away |
+| `conversion_cooldown_seconds` | How many seconds a freshly converted item cannot start another conversion | Integer [0, 3600] seconds | `5` | Raise it when products convert again immediately under another rule. Set `0` to let a product convert again at once |
+| `position_search_checks_per_tick` | How many candidate positions the mod tries per tick when it looks for a spot for a product or a returned item | Integer [1, 4096] | `16` | Raise it when items stay undelivered because the terrain leaves few spots. Lower it to save performance |
+| `max_place_block_radius` | Largest `radius` a single `place_block` action may use; rules above it are rejected when loaded or saved | Integer [1, 2147483647] | `8` | Raise it to let one action cover a wider area, but the cost of one placement grows with the cube of the radius, so keep it modest; lowering it rejects existing rules that now exceed the cap, so edit those rules as well |
+| `debug_logging` | Whether the mod writes its run-time progress to the log, such as a drop whose condition does not hold and how many ticks until the next retry | Boolean | `false` | Turn it on temporarily while you diagnose why something does not convert. Keep it off otherwise, because it floods the log |
+| `debug_scenario_prepare_batch_size` | Affects only the preparation stage of test scenarios in a development environment, with no effect on normal play | Integer [1, 100000] | `128` | Players never need to change it |
+| `debug_scenario_prepare_budget_us` | The time cap in microseconds for that same preparation stage | Integer [1, 100000] microseconds | `2000` | Players never need to change it |
+| `overlay_directory` | The name of the rule overlay directory, relative to `config/`, so rules live in `config/<this value>/rules/` | String | `"itemdespawntowhat"` | Change it only to rename the config directory. Move the whole directory with it, or the overlay rules stop loading. The location of `server.json` itself does not change |
+| `nearby_products` | The nearby product limits. The count of products already nearby, together with the declared output per group, decides how many groups this settlement may open. See the next section | Object | See sub-fields | Lower it when piled-up products cause lag. Set the matching limit to `0` to remove the cap |
+<!-- config-reference:fields:end -->
 
-`new_product_protection_seconds` and `conversion_cooldown_seconds` accept `0`, and no other field does. `server_budget_us` has a minimum of `100`, not `1`. Any value outside its range makes the whole file fall back to the defaults and logs an error, as described in the previous section.
+Use the table for accepted ranges and defaults. A `0` state duration and a `0` nearby capacity limit each have their own meaning. Any out-of-range value makes the whole file fall back to the defaults and logs an error.
 
 ## Nearby Product Limits
 
@@ -101,18 +105,20 @@ At the start of a settlement, the mod allocates an output budget from the initia
 
 These limits apply to every rule. They are not set per rule.
 
-| Sub-field | What It Does | Range | Default |
-|---|---|---|---|
-| `item_limit` | The cap on the total number of nearby items of the same kind, counted by the item or item tag that would be produced | 0 to 1000000 | `1024` |
-| `item_radius` | The counting radius in blocks for the limit above, as a cube centered on the source block with an edge length of 2 × radius + 1 | 1 to 32 | `6`, an edge of 13 blocks |
-| `entity_limit` | The cap on the number of nearby entities of the same kind, counted by the entity type or entity tag that would be produced | 0 to 1000000 | `128` |
-| `entity_radius` | The entity counting radius in blocks, with the same meaning as above | 1 to 32 | `6` |
-| `experience_orb_limit` | A kept field. It stays in the file so existing configs keep working, and it no longer affects any conversion | 0 to 1000000 | `64` |
-| `experience_radius` | A kept field as well. It maps to no counting radius at all | 1 to 32 | `6` |
+<!-- config-reference:nearby-products:begin -->
+| Field | What It Does | Type / Range | Default |
+| --- | --- | --- | --- |
+| `item_limit` | The cap on the total number of nearby items of the same kind, counted by the item or item tag that would be produced | Integer [0, 1000000] | `1024` |
+| `item_radius` | The counting radius in blocks for the limit above, as a cube centered on the source block with an edge length of 2 × radius + 1 | Integer [1, 32] | `6` |
+| `entity_limit` | The cap on the number of nearby entities of the same kind, counted by the entity type or entity tag that would be produced | Integer [0, 1000000] | `128` |
+| `entity_radius` | The entity counting radius in blocks, with the same meaning as above | Integer [1, 32] | `6` |
+| `experience_orb_limit` | A kept field. It stays in the file so existing configs keep working, and it no longer affects any conversion | Integer [0, 1000000] | `64` |
+| `experience_radius` | A kept field as well. It maps to no counting radius at all | Integer [1, 32] | `6` |
+<!-- config-reference:nearby-products:end -->
 
 Notes:
 
-- `0` turns the matching check off, which means no limit. Of the three `*_limit` fields, only the item and entity ones still work; the experience one is kept but does nothing. Only `item_radius` and `entity_radius` are real counting radii, and neither accepts `0`. `experience_radius` still accepts 1 to 32, but its value has no effect.
+- Set an item or entity capacity limit to `0` to turn that check off. Only `item_radius` and `entity_radius` are active counting radii. Experience fields retain config read/write compatibility and the ranges shown in the table.
 - A limit only decides whether a new conversion group can start. It is not a hard ceiling on what exists nearby, and it does not keep the count at or below the limit.
 - A group stopped by a limit consumes no source items. The source items that cannot start a group go through the return path, as described in [Outcome Candidates and Settlement](en-05-outcomes-and-settlement). A returned item never converts again, so the surplus does not queue up for a later slot.
 - Lowering a limit makes conversions easier to postpone, and heavy product buildup can stop output for a long time. When the item and entity limits are both in use, the tightest one decides.
@@ -133,10 +139,10 @@ Example: lift the nearby count limits for items and entities while the other set
 
 `new_product_protection_seconds` covers every product: dropped items, mobs, and other entities. `conversion_cooldown_seconds` affects dropped items only, because entity products take part in no conversion. Returned items follow other rules, as the note at the end of this section explains.
 
-| Field | What It Does | Default | What `0` Means |
-|---|---|---|---|
-| `new_product_protection_seconds` | A freshly produced product resists destruction by fire, lava, and cacti for this long. Other damage sources are unaffected | `2` seconds | No protection. A product can burn, sink into lava, or break on a cactus as soon as it appears |
-| `conversion_cooldown_seconds` | A freshly produced item cannot start another conversion for this long, which prevents a product from converting on immediately under another rule | `5` seconds | No cooldown. A product that matches a rule converts again right away |
+| Field | What It Does | What `0` Means |
+| --- | --- | --- |
+| `new_product_protection_seconds` | A freshly produced product resists destruction by fire, lava, and cacti for this long. Other damage sources are unaffected | No protection. A product can burn, sink into lava, or break on a cactus as soon as it appears |
+| `conversion_cooldown_seconds` | A freshly produced item cannot start another conversion for this long, which prevents a product from converting on immediately under another rule | No cooldown. A product that matches a rule converts again right away |
 
 Protection for mobs and other entities is not written to entity data: it is kept in memory under the entity identity and ends when the entity unloads or the server restarts. Those products take part in no conversion, so they have no cooldown.
 
@@ -183,7 +189,7 @@ Faster conversion:
 }
 ```
 
-Effect: after a condition fails once, the mod retries sooner, and the wait cap drops from 5 seconds to 2. The cost is more checks in the same time.
+Effect: after a condition fails once, the mod retries sooner, with the example setting the wait cap to 2 seconds. The cost is more checks in the same time.
 
 Setting the work per tick on its own, where the `max_checks_per_tick` value applies while `max_work_units_per_tick` is absent:
 
@@ -208,9 +214,9 @@ Effect: rules now load from `config/my_idtw/rules/`. Move the contents of the ol
 
 - `overlay_directory`: change it only when you want a different directory layout, because a mistake stops every overlay rule from loading.
 - `max_checks_per_tick`, `max_work_units_per_tick`, `effects_work_units_per_tick`, `dispatch_batch_size`, `prepare_groups_per_step`, `position_search_checks_per_tick`, `rescan_entities_per_step`, `cancels_per_step`: the defaults suit most servers. Change them only when you see lag or a clear backlog.
-- `fabric_lifespan_fallback_ticks`: used only when the Fabric side cannot read a drop's lifespan.
+- `fabric_lifespan_fallback_ticks`: used on Fabric until the current server run samples a reference drop lifespan.
 - `debug_logging`: turn it on temporarily while you diagnose a problem.
-- `settlement_recovery_max_attempts`: the default of `3` covers the usual transient failures. Change it only when a dimension is expected to stay unavailable far longer than a few seconds.
+- `settlement_recovery_max_attempts`: the number of recovery attempts in the current server session. Change it only when a dimension is expected to stay unavailable for a long time.
 - `debug_scenario_prepare_batch_size`, `debug_scenario_prepare_budget_us`: these serve test scenarios in a development environment only, and normal play never needs them.
 - The default limits under `nearby_products` are generous, so normal play rarely reaches them. Its two experience sub-fields no longer do anything, so leave them alone.
 

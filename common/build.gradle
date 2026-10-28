@@ -31,3 +31,25 @@ artifacts {
     commonJava sourceSets.main.java.sourceDirectories.singleFile
     commonResources sourceSets.main.resources.sourceDirectories.singleFile
 }
+
+// 配置参考工具单独编译，既不扩展模组源集，也不进入发布 jar。
+def configDocsClasses = layout.buildDirectory.dir('config-docs/classes')
+tasks.register('compileConfigDocs', JavaCompile) {
+    dependsOn tasks.named('classes')
+    source rootProject.file('tools/config-docs/ConfigReferenceExporter.java')
+    classpath = sourceSets.main.runtimeClasspath
+    destinationDirectory = configDocsClasses
+    javaCompiler = javaToolchains.compilerFor { languageVersion = JavaLanguageVersion.of(21) }
+    options.encoding = 'UTF-8'
+}
+tasks.register('exportConfigReference', JavaExec) {
+    dependsOn tasks.named('compileConfigDocs')
+    workingDir layout.buildDirectory.get().asFile
+    classpath = files(configDocsClasses) + sourceSets.main.runtimeClasspath
+    mainClass = 'com.meteorite.itemdespawntowhat.core.config.ConfigReferenceExporter'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    def output = rootProject.layout.buildDirectory.file('config-docs/schema.json')
+    args output.get().asFile.absolutePath
+    inputs.files(sourceSets.main.runtimeClasspath, configDocsClasses)
+    outputs.file(output)
+}

@@ -10,6 +10,15 @@ tasks.register('checkProbePackaging', Exec) {
     dependsOn ':common:assemble', ':fabric:assemble', ':neoforge:assemble'
     commandLine 'python', rootProject.file('tools/check-probe-packaging.py')
 }
+['generateConfigReference': false, 'checkConfigReference': true].each { taskName, checkOnly ->
+    tasks.register(taskName, Exec) {
+        group = checkOnly ? 'verification' : 'documentation'
+        dependsOn ':common:exportConfigReference'
+        workingDir rootProject.projectDir
+        commandLine 'python', rootProject.file('tools/gen-config-reference.py')
+        if (checkOnly) args '--check'
+    }
+}
 subprojects {
     plugins.withId('java') {
         tasks.named('check') { dependsOn rootProject.tasks.named('checkProbePackaging') }
