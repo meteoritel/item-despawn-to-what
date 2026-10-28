@@ -139,6 +139,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Ui
     private final UiTreeMoveInteraction<ConditionNode> move;
 
     private ConditionExpression expression = ConditionExpression.EMPTY;
+    private ConditionTreeViewModel viewModel = new ConditionTreeViewModel();
     private UiRect bounds = new UiRect(0, 0, 0, 0);
     private boolean visible = true;
     private boolean enabled = true;
@@ -163,6 +164,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Ui
     private @Nullable Component operationError;
     private String lastOpKey = EditSession.OP_EDIT_CONDITIONS;
     private @Nullable String selectedPath;
+    private long viewRevision;
 
     // 手势状态（世界坐标，缩放与平移无关）
     private @Nullable UiTreePath armedDrag;
@@ -220,6 +222,11 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Ui
         }, ConditionTreeInspection::validateCandidate,
                 Component.translatable(TypeLabels.UI_PREFIX + "tree.invalid_path"),
                 Component.translatable(TypeLabels.UI_PREFIX + "tree.invalid_parent"));
+        tree.setOnViewChanged(change -> {
+            followPrimarySelection();
+            inlinePanel.validateAnchor();
+            viewRevision++;
+        });
         tree.setMoveErrors(new UiTreeEditor.MoveErrors(
                 Component.translatable(TypeLabels.UI_PREFIX + "tree.move_cycle"),
                 Component.translatable(TypeLabels.UI_PREFIX + "tree.move_root_sibling"),
@@ -240,6 +247,12 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Ui
     }
 
     // ---- 宿主注入面 ----
+
+    /** 使用字段级展示协调器复用摘要与画布的结构诊断版本。 */
+    public void setViewModel(ConditionTreeViewModel model) { viewModel = model; rebuild(); }
+
+    /** 选择或表达式版本变化时递增，供宿主同步节点地址与参数面板。 */
+    public long viewRevision() { return viewRevision; }
 
     public UiTreeEditor<ConditionNode> tree() {
         return tree;
@@ -371,7 +384,9 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Ui
     /** 外部设置表达式：不触发变更回调，避免与宿主形成回环。 */
     public void setExpression(ConditionExpression newExpression) {
         endInteractions(UiInputCapture.EndReason.UNMOUNTED);
-        this.expression = newExpression == null ? ConditionExpression.EMPTY : newExpression;
+        ConditionExpression next = newExpression == null ? ConditionExpression.EMPTY : newExpression;
+        if (!this.expression.equals(next)) viewRevision++;
+        this.expression = next;
         tree.setSelection(tree.selection(), tree.selected());
         followPrimarySelection();
         rebuild();
@@ -965,8 +980,8 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Ui
         ConditionNode previousRoot = laidOutRoot;
         ConditionNode root = expression.root();
         laidOutRoot = root;
-        graph.rebuild(expression, typeOptions, leafSummary);
-        tree.setSelection(tree.selection(), tree.selected());
+        graph.rebuild(viewModel.project(expression, typeOptions), typeOptions, leafSummary);
+        // 结构提交后 Kit 还要按 Change.paths 迁移旧路径；几何重建不裁剪其视图状态。
         followPrimarySelection();
         inlinePanel.validateAnchor();
         if (!viewInitialized || root == null && previousRoot != null) {
@@ -1912,6 +1927,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Ui
 
     private void applyNode(@Nullable ConditionNode newRoot) {
         this.expression = new ConditionExpression(newRoot);
+        viewRevision++;
         rebuild();
         if (listener != null) {
             listener.onExpressionChanged(this.expression);
@@ -2019,7 +2035,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Ui
         List<ConditionNode> copy = new ArrayList<>(terms);
         ConditionNode element = copy.remove(from);
         copy.add(to, element);
-        return node instanceof ConditionNode.AllOf ? new ConditionNode.AllOf(copy) : new ConditionNode.AnyOf(copy);
+        return ConditionTreeNodes.INSTANCE.withChildren(node, copy);
     }
 
     // ---- 焦点 ----

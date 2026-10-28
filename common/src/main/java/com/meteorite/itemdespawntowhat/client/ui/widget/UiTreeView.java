@@ -1,5 +1,13 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreePath;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeProjection;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeViewState;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeNavigation;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeRowMarker;
+import java.util.function.Predicate;
+import java.util.HashSet;
+import java.util.Set;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiControlRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlatText;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
@@ -43,8 +51,6 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
     public static final int INDENT_WIDTH = 10;
     // 展开标记区宽度
     public static final int MARKER_WIDTH = 9;
-    // 默认行高
-    public static final int DEFAULT_ROW_HEIGHT = UiHostThemes.defaultTheme().rowHeight();
     // 双击判定间隔（毫秒）
     private static final long DOUBLE_CLICK_MS = 250L;
 
@@ -80,10 +86,12 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
     // 控件矩形
     private UiRect bounds = new UiRect(0, 0, 0, 0);
     // 行高
-    private int rowHeight = DEFAULT_ROW_HEIGHT;
+    private int rowHeight;
     private ToIntFunction<UiTreeNode<T>> rowHeightProvider;
     // 选中节点
-    private UiTreeNode<T> selectedNode;
+    private UiTreeProjection<UiTreeNode<T>> projection = UiTreeProjection.forest(List.of(), UiTreeNode::children);
+    private List<UiTreeProjection.Entry<UiTreeNode<T>>> navigationRows = List.of();
+    private UiTreeViewState view = UiTreeViewState.EMPTY;
     // 空树提示
     private Component emptyMessage = Component.empty();
     // 选中变化回调
@@ -101,27 +109,38 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
     // 行文本测量字体：渲染时宿主传同一实例，快照导出靠它量文案宽度
     private final Font font;
 
+    /** 使用注入主题的实例度量初始化行布局。 */
     public UiTreeView(UiHostTheme theme, Font font, NodeRenderer<T> nodeRenderer) {
         this.theme = UiHostThemes.require(theme);
+        this.rowHeight = this.theme.rowHeight();
+        scrollView.setStep(Math.max(1, rowHeight * 2));
         this.font = font;
         this.nodeRenderer = nodeRenderer;
     }
 
     // ---- 数据 ----
 
-    // 替换全部根节点；已有展开状态全部丢失
+    /** 替换结构并清除选择；分支初始折叠，宿主随后按稳定身份恢复展开状态。 */
     public UiTreeView<T> setRoots(List<UiTreeNode<T>> newRoots) {
         roots.clear();
         roots.addAll(newRoots);
-        selectedNode = null;
+        projection = UiTreeProjection.forest(roots, UiTreeNode::children);
+        view = UiTreeViewState.EMPTY;
         lastClickNode = null;
-        rebuild();
+        setExpansion(node -> false);
         return this;
     }
 
-    // 追加根节点
+    /** 追加根节点，保留已有状态；新分支初始折叠。 */
     public UiTreeView<T> addRoot(UiTreeNode<T> root) {
         roots.add(root);
+        projection = UiTreeProjection.forest(roots, UiTreeNode::children);
+        Set<UiTreePath> folded = new HashSet<>(view.collapsed());
+        int rootIndex = roots.size() - 1;
+        for (var entry : projection.entries()) {
+            if (entry.path().indices().getFirst() == rootIndex && !entry.node().isLeaf()) folded.add(entry.path());
+        }
+        view = new UiTreeViewState(view.selected(), folded, view.selection());
         rebuild();
         return this;
     }
@@ -168,38 +187,39 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
         return this;
     }
 
-    // 展开全部节点
-    public void expandAll() {
-        for (UiTreeNode<T> root : roots) {
-            root.expandAll();
-        }
-        rebuild();
-    }
+    /** 展开当前视图的全部节点，保留选择。 */
+    public void expandAll() { view = view.expandAll(); rebuild(); }
 
-    // 折叠全部节点
-    public void collapseAll() {
-        for (UiTreeNode<T> root : roots) {
-            root.collapseAll();
-        }
-        rebuild();
-    }
+    /** 折叠当前视图的全部分支，保留选择。 */
+    public void collapseAll() { setExpansion(node -> false); }
 
     // 选中节点
     public UiTreeNode<T> selectedNode() {
-        return selectedNode;
+        var row = view.selected() == null ? null : projection.entry(view.selected());
+        return row == null ? null : row.node();
     }
 
     public UiTreeView<T> setSelectedNode(UiTreeNode<T> node) {
-        if (selectedNode == node) {
-            ensureVisibleFor(node);
-            return this;
-        }
-        selectedNode = node;
+        UiTreePath path = node == null ? null : projection.pathOf(node);
+        if (java.util.Objects.equals(view.selected(), path)) { ensureVisibleFor(node); return this; }
+        view = view.select(path);
         ensureVisibleFor(node);
-        if (onSelectionChanged != null) {
-            onSelectionChanged.accept(selectedNode);
-        }
+        if (onSelectionChanged != null) onSelectionChanged.accept(selectedNode());
         return this;
+    }
+
+    /** 按宿主稳定身份在当前投影上恢复展开状态，不跨结构版本复用位置路径。 */
+    public void setExpansion(Predicate<UiTreeNode<T>> expanded) {
+        Set<UiTreePath> folded = new HashSet<>();
+        for (var entry : projection.entries()) if (!entry.node().isLeaf() && !expanded.test(entry.node())) folded.add(entry.path());
+        view = new UiTreeViewState(view.selected(), folded, view.selection());
+        rebuild();
+    }
+
+    /** 查询本视图的节点展开状态。 */
+    public boolean isExpanded(UiTreeNode<T> node) {
+        UiTreePath path = projection.pathOf(node);
+        return path != null && !view.collapsed().contains(path);
     }
 
     /**
@@ -260,8 +280,12 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
     // 重新展平可见行并同步滚动范围
     private void rebuild() {
         visibleRows.clear();
-        for (UiTreeNode<T> root : roots) {
-            append(root, 0);
+        navigationRows = projection.visible(view);
+        int top = 0;
+        for (var entry : navigationRows) {
+            int height = rowHeightProvider == null ? rowHeight : Math.max(9, rowHeightProvider.applyAsInt(entry.node()));
+            visibleRows.add(new VisibleRow<>(entry.node(), entry.depth(), top, height));
+            top += height;
         }
         syncScrollRange();
     }
@@ -294,16 +318,7 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
     }
 
     // 递归展平
-    private void append(UiTreeNode<T> node, int depth) {
-        int top = visibleRows.isEmpty() ? 0 : visibleRows.getLast().top + visibleRows.getLast().height;
-        int height = rowHeightProvider == null ? rowHeight : Math.max(9, rowHeightProvider.applyAsInt(node));
-        visibleRows.add(new VisibleRow<>(node, depth, top, height));
-        if (!node.isLeaf() && node.isExpanded()) {
-            for (UiTreeNode<T> child : node.children()) {
-                append(child, depth + 1);
-            }
-        }
-    }
+
 
     // 屏幕坐标换算为内容坐标下的可见行下标；行高是否等高由 indexAtContentY 的二分决定
     private int indexAt(double mouseX, double mouseY) {
@@ -345,7 +360,7 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
 
     // 选中节点在可见行中的下标，未选中时为 -1
     private int selectedIndex() {
-        for (int i = 0; i < visibleRows.size(); i++) if (visibleRows.get(i).node == selectedNode) return i;
+        for (int i = 0; i < visibleRows.size(); i++) if (visibleRows.get(i).node == selectedNode()) return i;
         return -1;
     }
 
@@ -398,7 +413,7 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
             VisibleRow<T> visibleRow = visibleRows.get(i);
             if (visibleRow.top >= scrollView.offset() + viewport.height()) break;
             UiRect row = rowRect(visibleRow, rowWidth);
-            boolean selected = visibleRow.node == selectedNode;
+            boolean selected = visibleRow.node == selectedNode();
             if (selected) {
                 theme.drawSelection(graphics, row);
             } else if (i == hoveredIndex) {
@@ -407,7 +422,7 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
             int markerX = visibleRow.depth * INDENT_WIDTH;
             if (!visibleRow.node.isLeaf()) {
                 drawTriangle(graphics, markerX + 1, row.y() + row.height() / 2,
-                        visibleRow.node.isExpanded());
+                        isExpanded(visibleRow.node));
             }
             UiRect textRow = textRect(visibleRow, rowWidth, markerX);
             nodeRenderer.renderNode(graphics, font, visibleRow.node, textRow, visibleRow.depth, selected, i == hoveredIndex, focused);
@@ -423,15 +438,7 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
 
     // 像素三角不依赖字体字形；叶子只保留缩进，不绘制虚假的展开按钮。
     private void drawTriangle(GuiGraphics graphics, int x, int centerY, boolean expanded) {
-        for (int step = 0; step < 4; step++) {
-            if (expanded) {
-                graphics.fill(x + step, centerY - 2 + step, x + 7 - step, centerY - 1 + step,
-                        theme.palette().textPrimary());
-            } else {
-                graphics.fill(x + 1 + step, centerY - 3 + step, x + 2 + step, centerY + 4 - step,
-                        theme.palette().textPrimary());
-            }
-        }
+        UiTreeRowMarker.draw(graphics, x, centerY, expanded, theme.palette().textPrimary());
     }
 
     @Override
@@ -449,13 +456,12 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
         VisibleRow<T> visibleRow = visibleRows.get(index);
         UiRect viewport = scrollView.viewport();
         int contentX = (int) (mouseX - viewport.x());
-        int markerX = visibleRow.depth * INDENT_WIDTH;
         long now = Util.getMillis();
         boolean doubleClick = visibleRow.node == lastClickNode && now - lastClickTime <= DOUBLE_CLICK_MS;
         lastClickNode = visibleRow.node;
         lastClickTime = now;
         setSelectedNode(visibleRow.node);
-        if (contentX >= markerX && contentX <= markerX + MARKER_WIDTH && !visibleRow.node.isLeaf()) {
+        if (UiTreeRowMarker.hit(contentX, visibleRow.depth, INDENT_WIDTH, MARKER_WIDTH) && !visibleRow.node.isLeaf()) {
             lastClickNode = null;
             toggleExpanded(visibleRow.node);
             return true;
@@ -492,111 +498,32 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (!visible || visibleRows.isEmpty()) {
-            return false;
-        }
-        if (keyCode == GLFW.GLFW_KEY_UP) {
-            moveSelection(-1);
+        if (!visible || visibleRows.isEmpty()) return false;
+        UiTreeNavigation.Intent intent = UiTreeNavigation.fromKey(keyCode);
+        if (intent != null) {
+            int page = Math.max(1, scrollView.viewport().height() / Math.max(1, rowHeight));
+            int index = selectedIndex();
+            if (index >= 0 && (intent == UiTreeNavigation.Intent.PAGE_UP || intent == UiTreeNavigation.Intent.PAGE_DOWN)) {
+                int direction = intent == UiTreeNavigation.Intent.PAGE_UP ? -1 : 1;
+                int y = visibleRows.get(index).top + direction * Math.max(1, scrollView.viewport().height());
+                page = Math.max(1, Math.abs(indexAtContentY(Math.clamp(y, 0, visibleRows.getLast().top)) - index));
+            }
+            UiTreeNode<T> previous = selectedNode();
+            view = UiTreeNavigation.navigate(navigationRows, view, intent, page);
+            rebuild();
+            ensureVisibleFor(selectedNode());
+            if (previous != selectedNode() && onSelectionChanged != null) onSelectionChanged.accept(selectedNode());
             return true;
         }
-        if (keyCode == GLFW.GLFW_KEY_DOWN) {
-            moveSelection(1);
-            return true;
-        }
-        if (keyCode == GLFW.GLFW_KEY_PAGE_UP) {
-            movePage(-1);
-            return true;
-        }
-        if (keyCode == GLFW.GLFW_KEY_PAGE_DOWN) {
-            movePage(1);
-            return true;
-        }
-        if (keyCode == GLFW.GLFW_KEY_HOME) {
-            setSelectedNode(visibleRows.getFirst().node);
-            return true;
-        }
-        if (keyCode == GLFW.GLFW_KEY_END) {
-            setSelectedNode(visibleRows.getLast().node);
-            return true;
-        }
-        if (keyCode == GLFW.GLFW_KEY_LEFT) {
-            return collapseOrJumpToParent();
-        }
-        if (keyCode == GLFW.GLFW_KEY_RIGHT) {
-            return expandOrEnterChild();
-        }
-        if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
-            return activate();
-        }
-        return false;
-    }
-
-    // 相对移动选中行
-    private void moveSelection(int delta) {
-        int index = selectedIndex();
-        int base = index < 0 ? (delta > 0 ? -1 : visibleRows.size()) : index;
-        int target = Math.clamp(base + delta, 0, visibleRows.size() - 1);
-        setSelectedNode(visibleRows.get(target).node);
-    }
-
-    // 按一屏实际高度翻页，目录行与规则行混排时仍能稳定定位。
-    private void movePage(int direction) {
-        int index = selectedIndex();
-        if (index < 0) { moveSelection(direction); return; }
-        int contentY = visibleRows.get(index).top + direction * Math.max(1, scrollView.viewport().height());
-        int lastY = visibleRows.getLast().top;
-        int target = indexAtContentY(Math.clamp(contentY, 0, lastY));
-        setSelectedNode(visibleRows.get(target).node);
+        return (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) && activate();
     }
 
     private void toggleExpanded(UiTreeNode<T> node) {
-        node.toggleExpanded();
+        UiTreePath path = projection.pathOf(node);
+        if (path == null) return;
+        view = view.fold(path, isExpanded(node));
         rebuild();
         ensureVisibleFor(node);
-    }
-
-    // 左方向键：优先折叠，已折叠则跳到父节点
-    private boolean collapseOrJumpToParent() {
-        int index = selectedIndex();
-        if (index < 0) {
-            return false;
-        }
-        VisibleRow<T> current = visibleRows.get(index);
-        if (!current.node.isLeaf() && current.node.isExpanded()) {
-            current.node.setExpanded(false);
-            rebuild();
-            ensureVisibleFor(current.node);
-            return true;
-        }
-        for (int i = index - 1; i >= 0; i--) {
-            if (visibleRows.get(i).depth < current.depth) {
-                setSelectedNode(visibleRows.get(i).node);
-                return true;
-            }
-        }
-        return true;
-    }
-
-    // 右方向键：优先展开，已展开则进入第一个子节点
-    private boolean expandOrEnterChild() {
-        int index = selectedIndex();
-        if (index < 0) {
-            return false;
-        }
-        VisibleRow<T> current = visibleRows.get(index);
-        if (current.node.isLeaf()) {
-            return true;
-        }
-        if (!current.node.isExpanded()) {
-            current.node.setExpanded(true);
-            rebuild();
-            ensureVisibleFor(current.node);
-            return true;
-        }
-        if (index + 1 < visibleRows.size() && visibleRows.get(index + 1).depth > current.depth) {
-            setSelectedNode(visibleRows.get(index + 1).node);
-        }
-        return true;
     }
 
     // ---- 焦点 ----
@@ -618,15 +545,16 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
 
     @Override
     public boolean activate() {
-        if (!visible || selectedNode == null) {
+        UiTreeNode<T> selected = selectedNode();
+        if (!visible || selected == null) {
             return false;
         }
-        if (!selectedNode.isLeaf()) {
-            toggleExpanded(selectedNode);
+        if (!selected.isLeaf()) {
+            toggleExpanded(selected);
             return true;
         }
         if (onActivate == null) return false;
-        onActivate.accept(selectedNode);
+        onActivate.accept(selected);
         return true;
     }
 

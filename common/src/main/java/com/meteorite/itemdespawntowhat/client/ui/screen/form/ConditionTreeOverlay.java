@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionTreeViewModel;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.edit.ConditionTreeClipboard;
 import com.meteorite.itemdespawntowhat.client.edit.ConditionTreeJsonCodec;
 import com.meteorite.itemdespawntowhat.client.edit.ConditionTreeNodes;
@@ -56,9 +58,8 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
 
     // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
     // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
-    private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
     // 画布页外壳（功能栏/工具列/状态栏/帮助浮层）使用扁平宿主主题（仅显式取用生效）
-    private static final UiHostTheme CHROME_THEME = UiHostThemes.flatTheme();
+    private final UiHostTheme CHROME_THEME;
 
     // 本地化前缀：条件树页
     private static final String UI = TypeLabels.UI_PREFIX + "tree.";
@@ -170,7 +171,9 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
     // 宿主注入的撤销/重做入口；为空时退回本页直接调用会话台账
     private @Nullable Runnable undoAction;
     private @Nullable Runnable redoAction;
+    private long seenViewRevision = -1;
     private FocusSlot focusSlot = FocusSlot.CANVAS;
+    private final UiFocusManager regions = new UiFocusManager();
     private boolean sourceView;
     private boolean helpOpen;
     private boolean focused;
@@ -182,12 +185,17 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
      * @param font             渲染字体
      * @param session          草稿会话
      * @param scope            本视图对应的条件树绝对草稿作用域
+     * @param theme            表单与控件主题
+     * @param chromeTheme      画布外壳主题
+     * @param viewModel        条件字段拥有的共享结构诊断协调器
      * @param support          共享的条件定义与按场景创建能力
      * @param parameterFactory 叶参数表单工厂
      * @param changed          草稿发生变化时的通知
      */
-    public ConditionTreeOverlay(Font font, EditSession session, String scope, ConditionEditingSupport support,
+    public ConditionTreeOverlay(UiHostTheme theme, UiHostTheme chromeTheme, Font font, EditSession session, String scope, ConditionEditingSupport support, ConditionTreeViewModel viewModel,
                                 ParameterFactory parameterFactory, Runnable changed) {
+        UiHostTheme THEME = UiHostThemes.require(theme);
+        this.CHROME_THEME = UiHostThemes.require(chromeTheme);
         this.font = font;
         this.session = session;
         this.scope = scope;
@@ -199,6 +207,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
         source.setEmptyHint(Component.translatable(UI + "source_empty"));
         source.setAccessibleName(Component.translatable(UI + "source_title"));
         editor = new UiConditionGraphEditor(THEME, font);
+        editor.setViewModel(viewModel);
         editor.setTypeOptions(support.typeOptions());
         editor.setLeafFactory(support.leafFactory());
         editor.setLeafSummary(leaf -> {
@@ -233,7 +242,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
             changed.run();
         });
 
-        functionBar = new ConditionTreeChrome.Strip(font, UiIconStrip.Orientation.HORIZONTAL);
+        functionBar = new ConditionTreeChrome.Strip(CHROME_THEME, font, UiIconStrip.Orientation.HORIZONTAL);
         undoItem = functionBar.add(CHROME_THEME.icon(UiHostTheme.ICON_UNDO, false), CHROME_THEME.icon(UiHostTheme.ICON_UNDO, true),
                 Component.translatable(EDIT_UI + "button.undo_shortcut"), this::undo);
         redoItem = functionBar.add(CHROME_THEME.icon(UiHostTheme.ICON_REDO, false), CHROME_THEME.icon(UiHostTheme.ICON_REDO, true),
@@ -245,7 +254,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
                 Component.translatable(UI + "tool.help"), this::toggleHelp);
         functionItems = List.of(undoItem, redoItem, jsonItem, helpItem);
 
-        toolColumn = new ConditionTreeChrome.Strip(font, UiIconStrip.Orientation.VERTICAL);
+        toolColumn = new ConditionTreeChrome.Strip(CHROME_THEME, font, UiIconStrip.Orientation.VERTICAL);
         // 7 格：新建分支与包组的 ∧ / ∨ 由点击工具格后贴着它弹出的选择菜单决定，工具列不再各占两格
         addConditionItem = addTool(UiHostTheme.ICON_ADD_CONDITION, UI + "button.add", false, editor::beginAddCondition);
         branchItem = addTool(UiHostTheme.ICON_NEW_BRANCH, UI + "button.new_branch", false, this::beginBranchMenu);
@@ -255,6 +264,12 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
         moveDownItem = addTool(UiHostTheme.ICON_MOVE_DOWN, UI + "button.down", false, () -> editor.moveSelection(1));
         wrapItem = addTool(UiHostTheme.ICON_WRAP_ALL, UI + "button.wrap", true, editor::beginWrapWithKind);
 
+        regions.setListener((previous, current) -> {
+            if (current == functionBar) focusSlot = FocusSlot.FUNCTION_BAR;
+            else if (current == toolColumn) focusSlot = FocusSlot.TOOL_COLUMN;
+            else if (current == source) focusSlot = FocusSlot.JSON;
+            else if (current == editor) focusSlot = FocusSlot.CANVAS;
+        });
         reloadExpression();
     }
 
@@ -535,16 +550,15 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
     public void reveal(String fieldPath) {
         sourceView = false;
         source.setFocused(false);
-        String[] split = splitNodePath(fieldPath);
-        if (split == null) {
+        var address = ConditionTreeNodes.address(fieldPath, scope);
+        if (address == null) {
             setFocusSlot(FocusSlot.CANVAS);
             return;
         }
-        String nodePath = split[0];
-        String parameterSuffix = split[1];
-        UiTreePath treePath = ConditionTreeNodes.path(nodePath);
-        if (treePath == null || !ConditionTreeNodes.jsonPath(editor.expression().root(), treePath,
-                ConditionTreeContract.ROOT_PATH).equals(nodePath)) {
+        UiTreePath treePath = address.path();
+        String nodePath = ConditionTreeNodes.jsonPath(editor.expression().root(), treePath, ConditionTreeContract.ROOT_PATH);
+        String parameterSuffix = address.parameterSuffix();
+        if (!ConditionTreeNodes.jsonPath(editor.expression().root(), treePath, scope).equals(address.nodePath())) {
             // 结构回渲染与本路径不一致：路径语义与当前树不符，退化为只打开树
             setFocusSlot(FocusSlot.CANVAS);
             return;
@@ -591,54 +605,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
 
     // 拆出「完整节点前缀 + 可选参数字段后缀」：结构语法不合法或节点后还有尾随字符时返回 null。
     // 后缀以「.condition」开头时才是参数字段，其余未知后缀一律判不合法，避免截成祖先节点
-    private @Nullable String[] splitNodePath(String fieldPath) {
-        if (fieldPath == null || !(fieldPath.equals(scope) || fieldPath.startsWith(scope + "."))) {
-            return null;
-        }
-        String relative = ConditionTreeContract.ROOT_PATH + fieldPath.substring(scope.length());
-        int cursor = ConditionTreeContract.ROOT_PATH.length();
-        while (cursor < relative.length() && relative.charAt(cursor) == '.') {
-            // 结构段至此结束：其余后缀交给参数判定，不能在这里当成未知结构
-            if (relative.startsWith("." + RuleFields.CONDITION, cursor)) {
-                break;
-            }
-            if (relative.startsWith("." + RuleFields.TERMS + "[", cursor)) {
-                int close = relative.indexOf(']', cursor);
-                if (close < 0 || close == cursor + RuleFields.TERMS.length() + 1) {
-                    return null;
-                }
-                String digits = relative.substring(cursor + RuleFields.TERMS.length() + 2, close);
-                try {
-                    if (Integer.parseInt(digits) < 0) return null;
-                } catch (NumberFormatException invalid) {
-                    return null;
-                }
-                cursor = close + 1;
-            } else if (relative.startsWith("." + RuleFields.TERM, cursor)) {
-                int after = cursor + 1 + RuleFields.TERM.length();
-                if (after >= relative.length()) {
-                    cursor = after;
-                    break;
-                }
-                // 必须正好是 term 段：后面是另一个「.」；.termX 这类相似前缀不合法
-                if (relative.charAt(after) != '.') {
-                    return null;
-                }
-                cursor = after;
-            } else {
-                return null;
-            }
-        }
-        if (cursor >= relative.length()) {
-            return new String[]{relative, null};
-        }
-        String suffix = relative.substring(cursor);
-        // 参数字段后缀必须以「.condition」开头；其余未知后缀（conditions.garbage）判不合法
-        if (!suffix.startsWith("." + RuleFields.CONDITION)) {
-            return null;
-        }
-        return new String[]{relative.substring(0, cursor), suffix};
-    }
+
 
     // ---- 布局 ----
 
@@ -755,7 +722,8 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
             finishParameters();
             unmountParameters();
         }
-        if (!sourceView && !editor.isDragging() && !Objects.equals(selectedPath, editor.selectedPath())) {
+        if (!sourceView && !editor.isDragging() && seenViewRevision != editor.viewRevision()) {
+            seenViewRevision = editor.viewRevision();
             syncSelection();
         }
         drawShell(graphics);
@@ -1300,40 +1268,22 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
     }
 
     private void applyFocus() {
-        functionBar.setFocused(focused && focusSlot == FocusSlot.FUNCTION_BAR);
-        toolColumn.setFocused(focused && focusSlot == FocusSlot.TOOL_COLUMN && !sourceView);
-        source.setFocused(focused && focusSlot == FocusSlot.JSON && sourceView);
-        editor.setFocused(focused && focusSlot == FocusSlot.CANVAS && editor.isVisible());
+        if (!focused) { regions.clear(); return; }
+        regions.beginUpdate();
+        regions.add(functionBar);
+        if (sourceView) regions.add(source);
+        else { regions.add(toolColumn); if (editor.isVisible()) regions.add(editor); }
+        regions.endUpdate();
+        UiFocusTarget preferred = switch (focusSlot) {
+            case FUNCTION_BAR -> functionBar; case TOOL_COLUMN -> toolColumn;
+            case CANVAS -> editor; case JSON -> source;
+        };
+        if (!regions.focusOn(preferred) && regions.focused() == null) regions.focusFirst();
     }
 
     private void cycleFocus(boolean backwards) {
-        List<FocusSlot> order = focusOrder();
-        if (order.isEmpty()) {
-            return;
-        }
-        int index = order.indexOf(focusSlot);
-        int next = index < 0 ? (backwards ? order.size() - 1 : 0)
-                : Math.floorMod(index + (backwards ? -1 : 1), order.size());
-        setFocusSlot(order.get(next));
-    }
-
-    // 只列出当前可见且可聚焦的区域，隐藏的 JSON 视图不进 Tab 序列
-    private List<FocusSlot> focusOrder() {
-        List<FocusSlot> order = new ArrayList<>();
-        if (functionBar.canFocus()) {
-            order.add(FocusSlot.FUNCTION_BAR);
-        }
-        if (sourceView) {
-            order.add(FocusSlot.JSON);
-        } else {
-            if (toolColumn.canFocus()) {
-                order.add(FocusSlot.TOOL_COLUMN);
-            }
-            if (editor.canFocus()) {
-                order.add(FocusSlot.CANVAS);
-            }
-        }
-        return order;
+        applyFocus();
+        regions.moveFocus(backwards ? -1 : 1);
     }
 
 }

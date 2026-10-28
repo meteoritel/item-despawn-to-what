@@ -73,25 +73,47 @@ public final class ConditionTreeNodes implements UiTreeEditor.Adapter<ConditionN
         return copies;
     }
 
-    public static @Nullable UiTreePath path(@Nullable String jsonPath) {
-        if (jsonPath == null || !jsonPath.startsWith(RuleFields.CONDITIONS)) return null;
-        String suffix = jsonPath.substring(RuleFields.CONDITIONS.length());
+    /** 节点结构地址与可选参数后缀；nodePath 使用调用方传入的作用域。 */
+    public record Address(UiTreePath path, String nodePath, @Nullable String parameterSuffix) {}
+
+    /** 完整段解析节点地址，参数字段仅允许从 .condition 段开始，空槽路径同样可表达。 */
+    public static @Nullable Address address(@Nullable String jsonPath, String scope) {
+        if (jsonPath == null || !(jsonPath.equals(scope) || jsonPath.startsWith(scope + "."))) return null;
+        int cursor = scope.length();
         List<Integer> indices = new ArrayList<>();
-        while (!suffix.isEmpty()) {
-            if (suffix.startsWith("." + RuleFields.TERM) && !suffix.startsWith("." + RuleFields.TERMS)) {
+        while (cursor < jsonPath.length()) {
+            String condition = "." + RuleFields.CONDITION;
+            if (jsonPath.startsWith(condition, cursor)) {
+                int end = cursor + condition.length();
+                if (end != jsonPath.length() && jsonPath.charAt(end) != '.' && jsonPath.charAt(end) != '[') return null;
+                return new Address(new UiTreePath(indices), jsonPath.substring(0, cursor), jsonPath.substring(cursor));
+            }
+            String terms = "." + RuleFields.TERMS + "[";
+            String term = "." + RuleFields.TERM;
+            if (jsonPath.startsWith(terms, cursor)) {
+                int begin = cursor + terms.length();
+                int end = jsonPath.indexOf(']', begin);
+                if (end <= begin) return null;
+                for (int i = begin; i < end; i++) if (jsonPath.charAt(i) < '0' || jsonPath.charAt(i) > '9') return null;
+                try { indices.add(Integer.parseInt(jsonPath.substring(begin, end))); }
+                catch (NumberFormatException invalid) { return null; }
+                cursor = end + 1;
+            } else if (jsonPath.startsWith(term, cursor)) {
+                cursor += term.length();
+                if (cursor < jsonPath.length() && jsonPath.charAt(cursor) != '.') return null;
                 indices.add(0);
-                suffix = suffix.substring(RuleFields.TERM.length() + 1);
-            } else if (suffix.startsWith("." + RuleFields.TERMS + "[")) {
-                int end = suffix.indexOf(']');
-                if (end < 0) return null;
-                try { indices.add(Integer.parseInt(suffix.substring(RuleFields.TERMS.length() + 2, end))); }
-                catch (IllegalArgumentException invalid) { return null; }
-                suffix = suffix.substring(end + 1);
             } else return null;
         }
-        return indices.stream().anyMatch(index -> index < 0) ? null : new UiTreePath(indices);
+        return new Address(new UiTreePath(indices), jsonPath, null);
     }
 
+    /** 树内纯节点路径；参数后缀通过 address 单独读取。 */
+    public static @Nullable UiTreePath path(@Nullable String jsonPath) {
+        Address address = address(jsonPath, RuleFields.CONDITIONS);
+        return address == null || address.parameterSuffix() != null ? null : address.path();
+    }
+
+    /** 按模型节点形态把位置路径还原为 JSON 地址，缺失槽位保留可定位的结构段。 */
     public static String jsonPath(@Nullable ConditionNode root, UiTreePath path, String scope) {
         StringBuilder result = new StringBuilder(scope);
         ConditionNode current = root;

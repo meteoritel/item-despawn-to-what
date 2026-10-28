@@ -1,5 +1,11 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.edit.ConditionTreeNodes;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreePath;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeProjection;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeViewState;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeNavigation;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeRowMarker;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiControlRole;
@@ -8,12 +14,9 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollView;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
-import com.meteorite.itemdespawntowhat.core.api.RuleFields;
-import com.meteorite.itemdespawntowhat.core.model.Condition;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.ConditionNode;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -25,7 +28,6 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
@@ -49,15 +51,12 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
     private static final int MARKER_WIDTH = 9;
     private static final int MARKER_INSET = 1;
     // 扫描线层数、最大宽度与半高，与 UiTreeView 的像素三角同形同尺寸
-    private static final int MARK_SCANLINES = 4;
-    private static final int MARK_SPAN = 7;
-    private static final int MARK_HALF_HEIGHT = 3;
     // 对齐上一层标记区中心，使同一分支的引导线连成一条竖线
     private static final int GUIDE_INSET = 6;
     private static final int DEFAULT_ROW_HEIGHT = 12;
 
     // 展平后的可见行；node 为空表示空组合的占位行
-    private record Row(@Nullable ConditionNode node, String path, int depth, int parentIndex,
+    private record Row(@Nullable ConditionNode node, String path, UiTreePath treePath, int depth, int parentIndex,
                        boolean incomplete, boolean overflow, boolean deep) {
     }
 
@@ -68,7 +67,10 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
     private final List<Row> rows = new ArrayList<>();
     // 与可见行分开维护：折叠只影响 rows，不改变节点计数与违规标记
     private final Map<String, Row> allNodes = new HashMap<>();
-    private final Set<String> collapsed = new HashSet<>();
+    private UiTreeViewState view = UiTreeViewState.EMPTY;
+    private ConditionTreeViewModel viewModel = new ConditionTreeViewModel();
+    private @Nullable ConditionTreeProjection projection;
+    private List<UiTreeProjection.Entry<Row>> navigationRows = List.of();
     private final List<ConditionTreeInspection.Issue> issues = new ArrayList<>();
     // 按表达式扫描一次算出，绘制时按路径查表，避免逐行遍历 issues
     private final Set<String> flaggedPaths = new HashSet<>();
@@ -86,8 +88,6 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
     private @Nullable Font emptyTextFont;
     private @Nullable Object emptyTextLanguage;
     // 避免内容未变时重复校验
-    private @Nullable ConditionExpression inspectedExpression;
-    private @Nullable String selectedPath;
     // -1 表示无悬停
     private int hoveredIndex = -1;
     // 选中行每帧要画两次（底色与标记），几何不变时复用同一矩形
@@ -186,6 +186,7 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
      */
     public void setTypeOptions(List<ConditionTreeContract.TypeOption> options) {
         this.typeOptions = List.copyOf(options);
+        rebuild();
         contentEpoch++;
     }
 
@@ -258,8 +259,11 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
      */
     @Override
     public @Nullable String selectedPath() {
-        return selectedPath;
+        return view.selected() == null ? null : ConditionTreeNodes.jsonPath(expression.root(), view.selected(), ConditionTreeContract.ROOT_PATH);
     }
+
+    /** 注入字段级展示协调器；摘要和画布各自拥有选择折叠，复用结构诊断。 */
+    public void setViewModel(ConditionTreeViewModel model) { viewModel = model; projection = null; rebuild(); }
 
     /**
      * 选中的节点。
@@ -268,7 +272,7 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
      */
     @Override
     public @Nullable ConditionNode selectedNode() {
-        Row row = selectedPath == null ? null : allNodes.get(selectedPath);
+        Row row = selectedPath() == null ? null : allNodes.get(selectedPath());
         return row == null ? null : row.node();
     }
 
@@ -289,24 +293,17 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
      */
     @Override
     public void selectPath(@Nullable String path) {
-        if (path == null) {
-            selectedPath = null;
-            return;
-        }
-        String nodePath = allNodes.keySet().stream()
-                .filter(candidate -> path.equals(candidate) || path.startsWith(candidate + "."))
-                .max(Comparator.comparingInt(String::length)).orElse(null);
-        if (nodePath == null) {
-            return;
-        }
-        boolean collapsedChanged = collapsed.removeIf(ancestor -> nodePath.startsWith(ancestor + "."));
-        boolean selectionChanged = !nodePath.equals(selectedPath);
-        selectedPath = nodePath;
-        // 只有展开态或选中项真的变化才需要重排可见行；滚动定位始终执行，命中路径语义不变
-        if (collapsedChanged || selectionChanged) {
-            rebuild();
-        }
-        ensureVisible(indexOfPath(nodePath));
+        if (path == null) { view = view.select(null); return; }
+        var address = ConditionTreeNodes.address(path, ConditionTreeContract.ROOT_PATH);
+        if (address == null) return;
+        UiTreePath chosen = address.path();
+        while (chosen != null && (projection == null || projection.structure().entry(chosen) == null)) chosen = chosen.indices().isEmpty() ? null : chosen.parent();
+        if (chosen == null) return;
+        for (UiTreePath ancestor = chosen.indices().isEmpty() ? null : chosen.parent(); ancestor != null;
+                ancestor = ancestor.indices().isEmpty() ? null : ancestor.parent()) view = view.fold(ancestor, false);
+        view = view.select(chosen);
+        rebuild();
+        ensureVisible(indexOfPath(selectedPath()));
     }
 
     @Override
@@ -331,29 +328,47 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
 
     // 重新展平可见行并同步滚动范围；只在表达式、折叠态、选中路径等内容真的变化时调用
     private void rebuild() {
-        // 行高可能已变（setRowHeight），滚动步长按行高派生，必须与可见行一起刷新
         scrollView.setStep(Math.max(1, rowHeight * 2));
-        rows.clear();
-        ConditionNode root = expression.root();
-        if (inspectedExpression != expression) {
+        ConditionTreeProjection next = viewModel.project(expression, typeOptions);
+        if (projection != next) {
+            projection = next;
             issues.clear();
+            issues.addAll(next.issues());
             allNodes.clear();
-            if (root != null) {
-                inspect(root, ConditionTreeContract.ROOT_PATH, 0, new int[2]);
+            for (var entry : next.structure().entries()) {
+                var info = next.info(entry.path());
+                String json = next.jsonPath(entry.path());
+                allNodes.put(json, new Row(entry.node(), json, entry.path(), entry.depth(), -1,
+                        info.incomplete(), info.overflow(), info.deep()));
             }
-            inspectedExpression = expression;
             contentEpoch++;
             rebuildFlaggedPaths();
         }
-        if (root != null) {
-            append(root, ConditionTreeContract.ROOT_PATH, 0, -1);
+        rows.clear();
+        List<UiTreeProjection.Entry<Row>> nav = new ArrayList<>();
+        Map<UiTreePath, Integer> parents = new HashMap<>();
+        for (var entry : next.structure().visible(view)) {
+            Row info = allNodes.get(next.jsonPath(entry.path()));
+            int parent = entry.parent() == null ? -1 : parents.getOrDefault(entry.parent(), -1);
+            Row row = new Row(entry.node(), info.path(), entry.path(), entry.depth(), parent,
+                    info.incomplete(), info.overflow(), info.deep());
+            parents.put(entry.path(), rows.size());
+            rows.add(row);
+            boolean branch = hasChildren(entry.node());
+            nav.add(new UiTreeProjection.Entry<>(row, entry.path(), entry.depth(), entry.parent(), branch ? Math.max(1, entry.childCount()) : 0));
+            if (branch && entry.childCount() == 0 && !view.collapsed().contains(entry.path())) {
+                UiTreePath slot = entry.path().child(0);
+                String json = ConditionTreeNodes.jsonPath(expression.root(), slot, ConditionTreeContract.ROOT_PATH);
+                Row placeholder = new Row(null, json, slot, entry.depth() + 1, rows.size() - 1, false, false, false);
+                rows.add(placeholder);
+                nav.add(new UiTreeProjection.Entry<>(placeholder, slot, entry.depth() + 1, entry.path(), 0));
+            }
         }
-        if (selectedPath != null && !allNodes.containsKey(selectedPath) && indexOfPath(selectedPath) < 0) {
-            selectedPath = rows.isEmpty() ? null : rows.get(Math.clamp(hoveredIndex, 0, rows.size() - 1)).path();
+        navigationRows = List.copyOf(nav);
+        if (view.selected() != null && next.structure().entry(view.selected()) == null && indexOfPath(selectedPath()) < 0) {
+            view = view.select(rows.isEmpty() ? null : rows.get(Math.clamp(hoveredIndex, 0, rows.size() - 1)).treePath());
         }
-        if (hoveredIndex >= rows.size()) {
-            hoveredIndex = -1;
-        }
+        if (hoveredIndex >= rows.size()) hoveredIndex = -1;
         updateScrollRange();
     }
 
@@ -380,85 +395,18 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         }
     }
 
-    // 深度优先扫描完整表达式；占位行不计为真实节点。
-    private void inspect(ConditionNode node, String path, int depthOffset, int[] counters) {
-        counters[0]++;
-        int nodeOrdinal = counters[0];
-        int leafOrdinal = -1;
-        if (node instanceof ConditionNode.Leaf) {
-            counters[1]++;
-            leafOrdinal = counters[1];
-        }
-        int depth = depthOffset + 1;
-        allNodes.put(path, new Row(node, path, depthOffset, -1,
-                ConditionTreeInspection.isIncomplete(node),
-                ConditionTreeInspection.isOverflow(depth, nodeOrdinal, leafOrdinal),
-                ConditionTreeInspection.isDeep(depth)));
-        issues.addAll(ConditionTreeInspection.nodeIssues(node, path, depth, nodeOrdinal, leafOrdinal));
-        switch (node) {
-            case ConditionNode.AllOf(var terms) -> inspectTerms(terms, path, depthOffset, counters);
-            case ConditionNode.AnyOf(var terms) -> inspectTerms(terms, path, depthOffset, counters);
-            case ConditionNode.Inverted(var term) -> {
-                if (term != null) {
-                    inspect(term, path + "." + RuleFields.TERM, depthOffset + 1, counters);
-                }
-            }
-            case ConditionNode.Leaf ignored -> {
-            }
-        }
-    }
-
-    private void inspectTerms(List<ConditionNode> terms, String path, int depthOffset, int[] counters) {
-        for (int i = 0; i < terms.size(); i++) {
-            inspect(terms.get(i), path + "." + RuleFields.TERMS + "[" + i + "]", depthOffset + 1, counters);
-        }
-    }
-
-    // 只投影展开节点；标记和序号来自全树扫描，不受折叠影响。
-    private void append(@Nullable ConditionNode node, String path, int depth, int parentIndex) {
-        if (node == null) {
-            rows.add(new Row(null, path, depth, parentIndex, false, false, false));
-            return;
-        }
-        Row info = allNodes.get(path);
-        int index = rows.size();
-        rows.add(new Row(node, path, depth, parentIndex, info.incomplete(), info.overflow(), info.deep()));
-        if (isCollapsed(path)) {
-            return;
-        }
-        switch (node) {
-            case ConditionNode.AllOf(var terms) -> appendTerms(terms, path, depth, index);
-            case ConditionNode.AnyOf(var terms) -> appendTerms(terms, path, depth, index);
-            case ConditionNode.Inverted(var term) -> append(term, path + "." + RuleFields.TERM, depth + 1, index);
-            case ConditionNode.Leaf ignored -> {
-            }
-        }
-    }
-
-    // 空组合补一个占位行，其余子项按 terms[i] 路径展开
-    private void appendTerms(List<ConditionNode> terms, String path, int depth, int parentIndex) {
-        if (terms.isEmpty()) {
-            append(null, path + "." + RuleFields.TERMS + "[0]", depth + 1, parentIndex);
-        }
-        for (int i = 0; i < terms.size(); i++) {
-            append(terms.get(i), path + "." + RuleFields.TERMS + "[" + i + "]", depth + 1, parentIndex);
-        }
-    }
-
-    private boolean isCollapsed(String path) {
-        return collapsed.contains(path);
-    }
-
-    // 返回该节点此前是否处于折叠态
     private boolean unfold(String path) {
-        return collapsed.remove(path);
+        UiTreePath tree = ConditionTreeNodes.path(path);
+        if (tree == null || !view.collapsed().contains(tree)) return false;
+        view = view.fold(tree, false);
+        return true;
     }
 
     private void fold(String path) {
-        collapsed.add(path);
+        UiTreePath tree = ConditionTreeNodes.path(path);
+        if (tree != null) view = view.fold(tree, true);
     }
 
-    // 屏幕坐标换算为可见行下标；行内容与行距同为 rowHeight，固定行高直接整除
     private int indexAt(double mouseX, double mouseY) {
         if (!scrollView.canHoverContent(mouseX, mouseY)) {
             return -1;
@@ -482,14 +430,6 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
             return;
         }
         scrollView.ensureVisible(new UiRect(0, index * rowHeight, Math.max(0, scrollView.viewport().width()), rowHeight));
-    }
-
-    private @Nullable Row selectedRow() {
-        if (selectedPath == null) {
-            return null;
-        }
-        int index = indexOfPath(selectedPath);
-        return index < 0 ? null : rows.get(index);
     }
 
     private int visibleRowCount() {
@@ -547,7 +487,7 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
     }
 
     private void drawRow(GuiGraphics graphics, Font renderFont, Row row, int index, int rowY, int rowWidth) {
-        boolean selected = row.path().equals(selectedPath);
+        boolean selected = row.treePath().equals(view.selected());
         if (selected) {
             UiRect selection = selectionBounds(rowY, rowWidth);
             theme.drawSelection(graphics, selection);
@@ -555,14 +495,14 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         } else if (index == hoveredIndex) {
             graphics.fill(0, rowY, rowWidth, rowY + rowHeight, theme.palette().controlHover());
         }
-        int markerX = theme.selectMarkerWidth() + row.depth() * INDENT_WIDTH;
+        int markerX = theme.selectMarkerWidth() + UiTreeRowMarker.left(row.depth(), INDENT_WIDTH);
         // 层级引导：上一层标记列上的 1 像素竖线，贯穿本行；用更浅的正文色与标记拉开层次
         if (row.depth() > 0) {
             int guideX = markerX - GUIDE_INSET;
             graphics.fill(guideX, rowY, guideX + 1, rowY + rowHeight, theme.palette().textDisabled());
         }
         if (hasChildren(row.node())) {
-            drawMark(graphics, markerX + MARKER_INSET, rowY + rowHeight / 2, !isCollapsed(row.path()));
+            drawMark(graphics, markerX + MARKER_INSET, rowY + rowHeight / 2, !view.collapsed().contains(row.treePath()));
         }
         int textX = markerX + MARKER_WIDTH;
         int color = flaggedPaths.contains(row.path())
@@ -572,7 +512,7 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
     }
 
     /**
-     * 绘制展开 / 收起标记：{@code MARK_SCANLINES} 层 1 像素扫描线拼成的像素三角，不依赖字体字形。
+     * 绘制展开 / 收起标记：kit 统一的七像素三角，不依赖字体字形。
      *
      * <p>几何与 {@link UiTreeView} 的树标记一致——已展开画向下的实心三角、已收起画向右的实心三角，
      * 让弹窗树与缩进摘要共用同一种标记；三角最大宽度落在标记区内，命中范围仍是
@@ -584,15 +524,7 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
      * @param expanded 已展开时画向下三角，收起时画向右三角
      */
     private void drawMark(GuiGraphics graphics, int x, int centerY, boolean expanded) {
-        for (int step = 0; step < MARK_SCANLINES; step++) {
-            if (expanded) {
-                graphics.fill(x + step, centerY - MARK_HALF_HEIGHT + 1 + step, x + MARK_SPAN - step,
-                        centerY - MARK_HALF_HEIGHT + 2 + step, theme.palette().textPrimary());
-            } else {
-                graphics.fill(x + step + 1, centerY - MARK_HALF_HEIGHT + step, x + step + 2,
-                        centerY + MARK_HALF_HEIGHT + 1 - step, theme.palette().textPrimary());
-            }
-        }
+        UiTreeRowMarker.draw(graphics, x, centerY, expanded, theme.palette().textPrimary());
     }
 
     /**
@@ -617,14 +549,7 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         if (node == null) {
             return Component.translatable(TypeLabels.UI_PREFIX + "tree.add_placeholder");
         }
-        Component label = switch (node) {
-            case ConditionNode.AllOf(var terms) -> Component.translatable(TypeLabels.UI_PREFIX + "tree.group_label",
-                    Component.translatable(TypeLabels.UI_PREFIX + "tree.node.all"), terms.size());
-            case ConditionNode.AnyOf(var terms) -> Component.translatable(TypeLabels.UI_PREFIX + "tree.group_label",
-                    Component.translatable(TypeLabels.UI_PREFIX + "tree.node.any"), terms.size());
-            case ConditionNode.Inverted ignored -> Component.translatable(TypeLabels.UI_PREFIX + "tree.operator.not");
-            case ConditionNode.Leaf leaf -> leafLabel(leaf);
-        };
+        Component label = ConditionTreeLabels.summary(node, typeOptions, leafDetail);
         if (row.incomplete()) {
             label = label.copy().append(" ").append(Component.translatable(TypeLabels.UI_PREFIX + "tree.incomplete"));
         }
@@ -678,36 +603,14 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
     }
 
     // 叶标签：条件名（参数摘要）；缺条件或参数摘要为空时只留条件名
-    private Component leafLabel(ConditionNode.Leaf leaf) {
-        Condition condition = leaf.condition();
-        if (condition == null) {
-            return Component.translatable(TypeLabels.UI_PREFIX + "tree.leaf_missing");
-        }
-        Component name = typeLabel(condition.type());
-        Function<ConditionNode.Leaf, Component> detail = leafDetail;
-        Component params = detail == null ? null : detail.apply(leaf);
-        return params == null || params.getString().isEmpty()
-                ? name : Component.translatable(TypeLabels.UI_PREFIX + "summary.leaf", name, params);
-    }
 
     // 条件类型标签：优先使用宿主注入的选项标签，其次走本地化 key，最后回退原始 id
-    private Component typeLabel(@Nullable ResourceLocation type) {
-        if (type == null) {
-            return Component.translatable(TypeLabels.UI_PREFIX + "tree.leaf_missing");
-        }
-        for (ConditionTreeContract.TypeOption option : typeOptions) {
-            if (option.id().equals(type)) {
-                return option.label();
-            }
-        }
-        return TypeLabels.conditionLabel(type);
-    }
 
     // ---- 输入：只做导航与进入画布 ----
 
     // 选中并进入画布：只回调宿主，不在摘要内改变结构
     private void openCanvas(String path) {
-        selectedPath = path;
+        view = view.select(ConditionTreeNodes.path(path));
         Consumer<String> handler = onOpenCanvas;
         if (handler != null) {
             handler.accept(path);
@@ -731,9 +634,8 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         Row row = rows.get(index);
         UiRect viewport = scrollView.viewport();
         int contentX = (int) (mouseX - viewport.x());
-        int markerX = theme.selectMarkerWidth() + row.depth() * INDENT_WIDTH;
-        selectedPath = row.path();
-        if (row.node() != null && hasChildren(row.node()) && contentX >= markerX && contentX <= markerX + MARKER_WIDTH) {
+        view = view.select(row.treePath());
+        if (row.node() != null && hasChildren(row.node()) && UiTreeRowMarker.hit(contentX - theme.selectMarkerWidth(), row.depth(), INDENT_WIDTH, MARKER_WIDTH)) {
             // 展开标记只切换展示，不进入画布
             if (!unfold(row.path())) {
                 fold(row.path());
@@ -773,109 +675,16 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (!visible || !enabled) {
-            return false;
-        }
-        if (rows.isEmpty()) {
-            if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER
-                    || keyCode == GLFW.GLFW_KEY_SPACE) {
-                openCanvas(ConditionTreeContract.ROOT_PATH);
-                return true;
-            }
-            return false;
-        }
-        if (keyCode == GLFW.GLFW_KEY_UP) {
-            return moveSelection(-1);
-        }
-        if (keyCode == GLFW.GLFW_KEY_DOWN) {
-            return moveSelection(1);
-        }
-        if (keyCode == GLFW.GLFW_KEY_PAGE_UP) {
-            return moveSelection(-visibleRowCount());
-        }
-        if (keyCode == GLFW.GLFW_KEY_PAGE_DOWN) {
-            return moveSelection(visibleRowCount());
-        }
-        if (keyCode == GLFW.GLFW_KEY_HOME) {
-            return selectIndex(0);
-        }
-        if (keyCode == GLFW.GLFW_KEY_END) {
-            return selectIndex(rows.size() - 1);
-        }
-        if (keyCode == GLFW.GLFW_KEY_LEFT) {
-            return collapseOrJumpToParent();
-        }
-        if (keyCode == GLFW.GLFW_KEY_RIGHT) {
-            return expandOrEnterChild();
-        }
-        if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER
-                || keyCode == GLFW.GLFW_KEY_SPACE) {
-            return activate();
-        }
-        return false;
-    }
-
-    private boolean moveSelection(int delta) {
-        if (rows.isEmpty()) {
-            return false;
-        }
-        int index = selectedPath == null ? -1 : indexOfPath(selectedPath);
-        int next = Math.clamp(index < 0 ? 0 : index + delta, 0, rows.size() - 1);
-        return selectIndex(next);
-    }
-
-    private boolean selectIndex(int index) {
-        if (index < 0 || index >= rows.size()) {
-            return false;
-        }
-        selectedPath = rows.get(index).path();
-        rebuild();
-        ensureVisible(index);
-        return true;
-    }
-
-    // ←：已展开则折叠，否则跳到父节点
-    private boolean collapseOrJumpToParent() {
-        Row row = selectedRow();
-        if (row == null) {
-            return false;
-        }
-        if (hasChildren(row.node()) && !isCollapsed(row.path())) {
-            fold(row.path());
+        if (!visible || rows.isEmpty()) return false;
+        UiTreeNavigation.Intent intent = UiTreeNavigation.fromKey(keyCode);
+        if (intent != null) {
+            view = UiTreeNavigation.navigate(navigationRows, view, intent, visibleRowCount());
             rebuild();
+            ensureVisible(indexOfPath(selectedPath()));
             return true;
         }
-        if (row.parentIndex() >= 0 && row.parentIndex() < rows.size()) {
-            selectedPath = rows.get(row.parentIndex()).path();
-            rebuild();
-            ensureVisible(row.parentIndex());
-            return true;
-        }
-        return false;
+        return (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER || keyCode == GLFW.GLFW_KEY_SPACE) && activate();
     }
-
-    // →：已折叠则展开，否则进入第一个子节点
-    private boolean expandOrEnterChild() {
-        Row row = selectedRow();
-        if (row == null) {
-            return false;
-        }
-        if (hasChildren(row.node()) && isCollapsed(row.path())) {
-            unfold(row.path());
-            rebuild();
-            return true;
-        }
-        int index = indexOfPath(row.path());
-        if (index >= 0 && index + 1 < rows.size() && rows.get(index + 1).parentIndex() == index) {
-            selectedPath = rows.get(index + 1).path();
-            rebuild();
-            ensureVisible(index + 1);
-            return true;
-        }
-        return false;
-    }
-
-    // ---- 焦点 ----
 
     @Override
     public boolean canFocus() {
@@ -897,7 +706,7 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         if (!enabled) {
             return false;
         }
-        openCanvas(selectedPath == null ? ConditionTreeContract.ROOT_PATH : selectedPath);
+        openCanvas(selectedPath() == null ? ConditionTreeContract.ROOT_PATH : selectedPath());
         return true;
     }
 

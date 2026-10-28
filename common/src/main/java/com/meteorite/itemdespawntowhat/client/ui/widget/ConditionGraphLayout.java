@@ -1,7 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
 import com.meteorite.itemdespawntowhat.client.edit.ConditionTreeNodes;
-import com.meteorite.itemdespawntowhat.client.edit.OpaqueCondition;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
@@ -121,13 +120,7 @@ final class ConditionGraphLayout {
     // 卡片文本快照：标题已按卡片宽裁剪、内容行已折行，绘制直接取用
     record CardText(String title, int titleWidth, boolean container, List<FormattedCharSequence> lines) {}
 
-    record NodeInfo(boolean incomplete, boolean overflow, boolean deep,
-                    boolean leafMissing, boolean subtreeIssue) {}
 
-    private static final class NodeCounts {
-        private int nodes;
-        private int leaves;
-    }
 
     private final Font font;
     private final UiTidyTreeLayout<GraphNode> layout = new UiTidyTreeLayout<>(LEVEL_PITCH, SIBLING_GAP);
@@ -146,7 +139,7 @@ final class ConditionGraphLayout {
     private final Map<ConditionNode, UiTreePath> paths = new IdentityHashMap<>();
     // 路径 → 节点反查：内联框锚点与菜单定位使用
     private final Map<UiTreePath, ConditionNode> nodesByPath = new HashMap<>();
-    private final Map<ConditionNode, NodeInfo> infos = new IdentityHashMap<>();
+    private final Map<ConditionNode, ConditionTreeProjection.Info> infos = new IdentityHashMap<>();
     private final Map<ConditionNode, Component> leafSummaries = new IdentityHashMap<>();
     private final Map<ConditionNode, Integer> cardWidths = new IdentityHashMap<>();
     // 树序（深度优先前序），Shift 范围选择与键盘导航使用
@@ -172,6 +165,7 @@ final class ConditionGraphLayout {
 
     private ConditionExpression expression = ConditionExpression.EMPTY;
     private List<ConditionTreeContract.TypeOption> typeOptions = List.of();
+    private ConditionTreeProjection projection = new ConditionTreeProjection(ConditionExpression.EMPTY);
     private @Nullable Function<ConditionNode.Leaf, Component> leafSummary;
     private final List<ConditionNode> nodeView = Collections.unmodifiableList(order);
     private final List<Hotspot> hotspotView = Collections.unmodifiableList(hotspots);
@@ -333,13 +327,14 @@ final class ConditionGraphLayout {
 
     // 标题带是否要留结构标记：与 statusLabel 的非空判定保持一致
     boolean hasStatus(ConditionNode node) {
-        NodeInfo info = infos.get(node);
+        ConditionTreeProjection.Info info = infos.get(node);
         return info != null && (info.incomplete() || info.overflow() || info.deep());
     }
 
-    void rebuild(ConditionExpression expression, List<ConditionTreeContract.TypeOption> options,
+    void rebuild(ConditionTreeProjection projection, List<ConditionTreeContract.TypeOption> options,
                  @Nullable Function<ConditionNode.Leaf, Component> leafSummary) {
-        this.expression = expression;
+        this.projection = projection;
+        this.expression = projection.expression();
         this.typeOptions = options;
         this.leafSummary = leafSummary;
         clearLayout();
@@ -350,8 +345,8 @@ final class ConditionGraphLayout {
             hotspotSlots.add(empty);
             layoutRoot = empty;
         } else {
-            inspect(root, UiTreePath.ROOT, 1, new NodeCounts());
-            layoutRoot = wrap(root);
+            indexProjection();
+            layoutRoot = wrappers.get(root);
         }
         this.layoutRoot = layoutRoot;
         layout.layout(layoutRoot, layoutSource);
@@ -391,50 +386,32 @@ final class ConditionGraphLayout {
         resultRect = new UiRect(resultX, rootRect.y(), endpointWidth(resultSlot), CARD_HEIGHT);
     }
 
-    private boolean inspect(ConditionNode node, UiTreePath path, int depth, NodeCounts counters) {
-        int nodeOrdinal = ++counters.nodes;
-        int leafOrdinal = -1;
-        if (node instanceof ConditionNode.Leaf) {
-            leafOrdinal = ++counters.leaves;
+    private void indexProjection() {
+        issues.addAll(projection.issues());
+        for (var entry : projection.structure().entries()) {
+            ConditionNode node = entry.node();
+            paths.put(node, entry.path());
+            nodesByPath.put(entry.path(), node);
+            order.add(node);
+            infos.put(node, projection.info(entry.path()));
+            NodeSlot wrapper = new NodeSlot(node);
+            wrappers.put(node, wrapper);
+            graphNodes.add(wrapper);
         }
-        paths.put(node, path);
-        nodesByPath.put(path, node);
-        order.add(node);
-        if (node instanceof ConditionNode.Leaf leaf && leaf.condition() != null && leafSummary != null) {
-            leafSummaries.put(node, leafSummary.apply(leaf));
+        refillLeafSummaries();
+        for (var entry : projection.structure().entries().reversed()) {
+            List<GraphNode> children = new ArrayList<>(entry.childCount() + 1);
+            for (int index = 0; index < entry.childCount(); index++) {
+                var child = projection.structure().entry(entry.path().child(index));
+                if (child != null) children.add(wrappers.get(child.node()));
+            }
+            if (isContainer(entry.node()) && ConditionTreeNodes.INSTANCE.childCapacity(entry.node()) > entry.childCount()) {
+                HotspotSlot hotspot = new HotspotSlot(entry.node());
+                hotspotSlots.add(hotspot);
+                children.add(hotspot);
+            }
+            wrappers.get(entry.node()).children = List.copyOf(children);
         }
-        boolean incomplete = ConditionTreeInspection.isIncomplete(node);
-        boolean overflow = ConditionTreeInspection.isOverflow(depth, nodeOrdinal, leafOrdinal);
-        boolean deep = ConditionTreeInspection.isDeep(depth);
-        boolean leafMissing = ConditionTreeInspection.isLeafMissing(node);
-        // 违规项由共用校验生成：缩进摘要与画布只有一份判定与一套文案
-        String jsonPath = ConditionTreeNodes.jsonPath(expression.root(), path, ConditionTreeContract.ROOT_PATH);
-        issues.addAll(ConditionTreeInspection.nodeIssues(node, jsonPath, depth, nodeOrdinal, leafOrdinal));
-        boolean subtreeIssue = incomplete || leafMissing || overflow;
-        List<ConditionNode> children = ConditionTreeNodes.INSTANCE.children(node);
-        for (int index = 0; index < children.size(); index++) {
-            subtreeIssue |= inspect(children.get(index), path.child(index), depth + 1, counters);
-        }
-        infos.put(node, new NodeInfo(incomplete, overflow, deep, leafMissing, subtreeIssue));
-        return subtreeIssue;
-    }
-
-    private NodeSlot wrap(ConditionNode node) {
-        NodeSlot wrapper = new NodeSlot(node);
-        wrappers.put(node, wrapper);
-        graphNodes.add(wrapper);
-        List<ConditionNode> children = ConditionTreeNodes.INSTANCE.children(node);
-        List<GraphNode> wrapped = new ArrayList<>(children.size() + 1);
-        for (ConditionNode child : children) {
-            wrapped.add(wrap(child));
-        }
-        if (isContainer(node) && ConditionTreeNodes.INSTANCE.childCapacity(node) > children.size()) {
-            HotspotSlot hotspot = new HotspotSlot(node);
-            hotspotSlots.add(hotspot);
-            wrapped.add(hotspot);
-        }
-        wrapper.children = List.copyOf(wrapped);
-        return wrapper;
     }
 
     private void collectHotspots() {
@@ -506,18 +483,7 @@ final class ConditionGraphLayout {
 
     // 叶标题：类型名是该行唯一内容，参数摘要与结构标记分别占内容行 1 与内容行 2
     private Component leafTitleLabel(ConditionNode node) {
-        // 容器走标题带的运算符，不会进到这里
-        if (!(node instanceof ConditionNode.Leaf(var condition))) {
-            return Component.empty();
-        }
-        Component label = condition == null
-                ? Component.translatable(TypeLabels.UI_PREFIX + "tree.leaf_missing")
-                : typeLabel(condition.type());
-        if (condition instanceof OpaqueCondition) {
-            label = label.copy().append(" ").append(Component.translatable(
-                    TypeLabels.UI_PREFIX + "tree.parameters_readonly"));
-        }
-        return label;
+        return node instanceof ConditionNode.Leaf leaf ? ConditionTreeLabels.leaf(leaf, typeOptions) : Component.empty();
     }
 
     /** 卡片内容区第一行文本：叶为参数摘要，容器为子项计数；卡片宽度测量与悬停提示共用这一段。 */
@@ -549,32 +515,14 @@ final class ConditionGraphLayout {
     }
 
     // 容器内容行 1：子项计数，空容器显示「暂无条件」
-    private Component branchCountLabel(ConditionNode node) {
-        List<ConditionNode> children = ConditionTreeNodes.INSTANCE.children(node);
-        if (children.isEmpty()) {
-            return Component.translatable(TypeLabels.UI_PREFIX + "tree.empty");
-        }
-        String key = children.size() == 1
-                ? TypeLabels.UI_PREFIX + "tree.card.count.one"
-                : TypeLabels.UI_PREFIX + "tree.card.count";
-        return key.endsWith(".one")
-                ? Component.translatable(key)
-                : Component.translatable(key, children.size());
-    }
+    private Component branchCountLabel(ConditionNode node) { return ConditionTreeLabels.count(node); }
 
     // 容器内容行 2：运算符的展开说法，与标题带里的单字运算符互为注解
-    private Component operatorHintLabel(ConditionNode node) {
-        String key = switch (node) {
-            case ConditionNode.AllOf ignored -> TypeLabels.UI_PREFIX + "tree.card.hint.all";
-            case ConditionNode.AnyOf ignored -> TypeLabels.UI_PREFIX + "tree.card.hint.any";
-            default -> TypeLabels.UI_PREFIX + "tree.card.hint.not";
-        };
-        return Component.translatable(key);
-    }
+    private Component operatorHintLabel(ConditionNode node) { return ConditionTreeLabels.hint(node); }
 
     // 结构问题文案：卡片标题带右上角的标记、悬停提示与缩进摘要共用一套判定。超限优先于层级较深，避免同一节点堆叠两个标记
     Component statusLabel(ConditionNode node) {
-        NodeInfo info = infos.get(node);
+        ConditionTreeProjection.Info info = infos.get(node);
         if (info == null) {
             return Component.empty();
         }
@@ -592,7 +540,7 @@ final class ConditionGraphLayout {
 
     /** 结构问题是否属于必须修的错误（不完整 / 超限）；「层级较深」只是提示，按提示色画。 */
     boolean statusSevere(ConditionNode node) {
-        NodeInfo info = infos.get(node);
+        ConditionTreeProjection.Info info = infos.get(node);
         return info != null && (info.incomplete() || info.overflow());
     }
 
@@ -600,31 +548,13 @@ final class ConditionGraphLayout {
      * 节点自身或子树是否存在结构问题：描边取色与悬停提示标题行色共用同一判定。
      */
     boolean hasIssue(ConditionNode node) {
-        NodeInfo info = infos.get(node);
+        ConditionTreeProjection.Info info = infos.get(node);
         return info != null && info.subtreeIssue();
     }
 
-    private Component typeLabel(@Nullable ResourceLocation type) {
-        if (type == null) {
-            return Component.translatable(TypeLabels.UI_PREFIX + "tree.leaf_missing");
-        }
-        for (ConditionTreeContract.TypeOption option : typeOptions) {
-            if (option.id().equals(type)) {
-                return option.label();
-            }
-        }
-        return TypeLabels.conditionLabel(type);
-    }
+    private Component typeLabel(@Nullable ResourceLocation type) { return ConditionTreeLabels.type(type, typeOptions); }
 
-    Component operatorLabel(ConditionNode node) {
-        String key = switch (node) {
-            case ConditionNode.AllOf ignored -> TypeLabels.UI_PREFIX + "tree.operator.all";
-            case ConditionNode.AnyOf ignored -> TypeLabels.UI_PREFIX + "tree.operator.any";
-            case ConditionNode.Inverted ignored -> TypeLabels.UI_PREFIX + "tree.operator.not";
-            default -> throw new IllegalArgumentException("Not a logic node");
-        };
-        return Component.translatable(key);
-    }
+    Component operatorLabel(ConditionNode node) { return ConditionTreeLabels.operator(node); }
 
     @Nullable ConditionNode nodeAt(double localX, double localY) {
         for (int index = graphNodes.size() - 1; index >= 0; index--) {
@@ -648,20 +578,15 @@ final class ConditionGraphLayout {
     }
 
     @Nullable ConditionNode nodeForJsonPath(String path) {
-        ConditionNode best = null;
-        int bestLength = -1;
-        for (Map.Entry<ConditionNode, UiTreePath> entry : paths.entrySet()) {
-            String candidate = ConditionTreeNodes.jsonPath(expression.root(), entry.getValue(),
-                    ConditionTreeContract.ROOT_PATH);
-            if (!path.equals(candidate) && !path.startsWith(candidate + ".")) {
-                continue;
-            }
-            if (candidate.length() > bestLength) {
-                bestLength = candidate.length();
-                best = entry.getKey();
-            }
+        var address = ConditionTreeNodes.address(path, ConditionTreeContract.ROOT_PATH);
+        if (address == null) return null;
+        UiTreePath nodePath = address.path();
+        while (nodePath != null) {
+            ConditionNode node = nodesByPath.get(nodePath);
+            if (node != null) return node;
+            nodePath = nodePath.indices().isEmpty() ? null : nodePath.parent();
         }
-        return best;
+        return null;
     }
 
     int indexOfNode(ConditionNode node) {

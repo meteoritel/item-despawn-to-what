@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import java.util.Objects;
 import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.client.edit.RuleCategorySkeleton;
 import com.meteorite.itemdespawntowhat.client.edit.RulePackExporter;
@@ -14,7 +15,6 @@ import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine;
 import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine.Tone;
 import com.meteorite.itemdespawntowhat.client.ui.shared.TagPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
@@ -68,7 +68,7 @@ final class RuleEditorListPage implements EditorPage {
         return Component.translatable(UI + (shell.editable() ? "state.active" : "state.freezing")).getString();
     }
 
-    private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
+    private final UiHostTheme THEME;
     // 布局常量
     private static final int ROW_H = 12;
     private static final int SEARCH_MAX_WIDTH = 160;
@@ -183,6 +183,7 @@ final class RuleEditorListPage implements EditorPage {
 
     RuleEditorListPage(EditorShell shell, RuleEditorModel model, RuleListDisplayCache display, Font font,
             UiModalStack modals) {
+        this.THEME = shell.theme();
         this.shell = shell;
         this.model = model;
         this.display = display;
@@ -538,7 +539,8 @@ EditorShell.NoticeLevel.SUCCESS)))
         long bodyMicros = 0L;
         // 未收到首份快照不能判为空；有效空快照和筛选结果为空才使用空列表文案。
         ruleList.setEmptyMessage(Component.translatable(UI + (model.isLoaded() ? "list.empty" : "list.loading")));
-        String selectedValue = ruleList.selectedNode() == null ? null : ruleList.selectedNode().value();
+        UiTreeNode<String> selected = ruleList.selectedNode();
+        String selectedValue = selected == null ? null : selected.value();
         int scrollOffset = ruleList.scrollOffset();
         List<String> ruleIds = model.ruleIds();
         // 只保留仍在列表里的条目，缓存随规则集合一起收敛
@@ -617,6 +619,7 @@ EditorShell.NoticeLevel.SUCCESS)))
         long treeMicros = profile ? DevelopmentDiagnostics.micros(treeStarted) : 0L;
         long rootsStarted = profile ? DevelopmentDiagnostics.start() : 0L;
         ruleList.setRoots(nonempty);
+        ruleList.setExpansion(node -> !lastQuery.isBlank() || expandedCategories.contains(node.value().substring(1)));
         ruleList.setSelectedNode(findNode(nonempty, selectedValue));
         ruleList.setScrollOffset(scrollOffset);
         // 首份快照后的首次刷新即「列表可用」，与开关状态无关地只认一次
@@ -672,8 +675,7 @@ EditorShell.NoticeLevel.SUCCESS)))
     }
 
     private UiTreeNode<String> counted(UiTreeNode<String> node) {
-        UiTreeNode<String> copy = new UiTreeNode<>(node.value(), node.label().copy().append(" (" + ruleCount(node) + ")"))
-                .setExpanded(node.isExpanded());
+        UiTreeNode<String> copy = new UiTreeNode<>(node.value(), node.label().copy().append(" (" + ruleCount(node) + ")"));
         node.children().forEach(copy::addChild);
         return copy;
     }
@@ -687,26 +689,25 @@ EditorShell.NoticeLevel.SUCCESS)))
     }
 
     private UiTreeNode<String> categoryNode(RuleCategorySkeleton.Category category) {
-        return new UiTreeNode<>("@" + category.id(), Component.translatable(category.labelKey()))
-                .setExpanded(!lastQuery.isBlank() || expandedCategories.contains(category.id()));
+        return new UiTreeNode<>("@" + category.id(), Component.translatable(category.labelKey()));
     }
 
     // 未知分类：用原文标识成组并挂在扩展分组下；同一分类只建一次
     private UiTreeNode<String> unknownCategoryNode(Map<String, UiTreeNode<String>> groups, String category) {
-        UiTreeNode<String> node = new UiTreeNode<>("@" + category, Component.literal(category))
-                .setExpanded(!lastQuery.isBlank() || expandedCategories.contains(category));
+        UiTreeNode<String> node = new UiTreeNode<>("@" + category, Component.literal(category));
         groups.get(RuleCategorySkeleton.EXTENSION).addChild(node);
         groups.put(category, node);
         return node;
     }
 
     private void rememberCategoryState(List<UiTreeNode<String>> nodes) {
+        UiTreeView<String> tree = Objects.requireNonNull(ruleList);
         for (UiTreeNode<String> node : nodes) {
             if (!node.value().startsWith("@")) {
                 continue;
             }
             String category = node.value().substring(1);
-            if (node.isExpanded()) {
+            if (tree.isExpanded(node)) {
                 expandedCategories.add(category);
             } else {
                 expandedCategories.remove(category);
@@ -807,7 +808,7 @@ EditorShell.NoticeLevel.SUCCESS)))
         if (tag == null) {
             return false;
         }
-        TagCarouselView view = new TagCarouselView(font, tag);
+        TagCarouselView view = new TagCarouselView(THEME, font, tag);
         modals.push(UiModal.create(THEME, font).title(Component.translatable(UI + "tag.title", tag.id()))
                 .contentWidget(view, Math.clamp(shell.screenHeight() - 70, 110, 220))
                 .preferredWidth(TAG_MODAL_WIDTH).cancel(Component.translatable(UI + "button.close"))

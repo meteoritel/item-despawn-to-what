@@ -7,7 +7,7 @@ import net.minecraft.network.chat.Component;
 
 /**
  * 树节点。
- * <p>只承载展示数据（业务值、显示文本、子节点、展开状态），
+ * <p>只承载展示数据（业务值、显示文本、子节点），
  * 不包含布局与渲染逻辑，几何计算由 {@link UiTreeView} 负责。
  */
 public final class UiTreeNode<T> {
@@ -18,7 +18,6 @@ public final class UiTreeNode<T> {
     private final Component label;
     // 子节点
     private final List<UiTreeNode<T>> children = new ArrayList<>();
-    private boolean expanded;
 
     public UiTreeNode(T value, Component label) {
         this.value = value;
@@ -57,33 +56,4 @@ public final class UiTreeNode<T> {
         return children.isEmpty();
     }
 
-    public boolean isExpanded() {
-        return expanded;
-    }
-
-    public UiTreeNode<T> setExpanded(boolean expanded) {
-        this.expanded = expanded;
-        return this;
-    }
-
-    public UiTreeNode<T> toggleExpanded() {
-        this.expanded = !expanded;
-        return this;
-    }
-
-    // 递归展开自身与全部后代
-    public void expandAll() {
-        expanded = true;
-        for (UiTreeNode<T> child : children) {
-            child.expandAll();
-        }
-    }
-
-    // 递归折叠自身与全部后代
-    public void collapseAll() {
-        expanded = false;
-        for (UiTreeNode<T> child : children) {
-            child.collapseAll();
-        }
-    }
 }

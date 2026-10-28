@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionTreeViewModel;
 import net.minecraft.client.gui.Font;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModalStack;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.ConditionEditContextFactory;
@@ -34,7 +35,7 @@ import org.jetbrains.annotations.Nullable;
 
 /** 条件画布、局部参数表与原宿主的装配协调。 */
 final class EditorConditionForms {
-    private static final UiHostTheme THEME = RuleEditorEditSections.THEME;
+    private final UiHostTheme THEME;
     private final EditorShell shell;
     private final Font font;
     private final RuleEditClientWorkspace workspace;
@@ -42,6 +43,7 @@ final class EditorConditionForms {
     private final ConditionEditingSupport baseSupport;
 
     EditorConditionForms(EditorShell shell, Font font, ConditionEditingSupport baseSupport) {
+        this.THEME = shell.theme();
         this.shell = shell;
         this.font = font;
         this.workspace = shell.workspace();
@@ -122,12 +124,12 @@ final class EditorConditionForms {
             }
 
             @Override
-            public boolean open(@Nullable String treePath) {
+            public boolean open(@Nullable String treePath, ConditionTreeViewModel viewModel) {
                 // null 是显式「只打开作用域画布」；非空坐标转换失败则不开画布，也不提交原宿主输入
-                if (treePath == null) return openConditionTree(coordination, scope, ownerPath, null);
+                if (treePath == null) return openConditionTree(coordination, scope, ownerPath, null, viewModel);
                 String absolute = absolutePath(treePath);
                 if (absolute == null) return false;
-                return openConditionTree(coordination, scope, ownerPath, absolute);
+                return openConditionTree(coordination, scope, ownerPath, absolute, viewModel);
             }
         };
     }
@@ -141,7 +143,7 @@ final class EditorConditionForms {
                     CatalystQuantities.relabelCatalystThreshold(descriptor.fields()), descriptor.readOnly());
         }
         PresenceLeaves.PresenceLeaf presence = catalystLeaf ? EditorQuantityBindings.findPresenceLeaf(session, path) : null;
-        FormView form = new FormView(font, session, path);
+        FormView form = new FormView(shell.theme(), font, session, path);
         form.useCatalogSelections();
         form.setConditionEditingSupport(sharedConditionSupport());
         form.setConditionContextFactory(conditionContextFactory(form));
@@ -194,12 +196,12 @@ final class EditorConditionForms {
     }
 
     boolean openConditionTree(ConditionHostCoordination coordination, String scope, String ownerPath,
-                              @Nullable String fieldPath) {
+                              @Nullable String fieldPath, ConditionTreeViewModel viewModel) {
         EditSession session = shell.editingSession();
         if (session == null || !shell.editable()) return false;
         coordination.prepareHost();
         RuleValue owners = ResultStructure.conditionOwnerShape(session.root());
-        ConditionTreeOverlay overlay = new ConditionTreeOverlay(font, session, scope, sharedConditionSupport(),
+        ConditionTreeOverlay overlay = new ConditionTreeOverlay(THEME, shell.chromeTheme(), font, session, scope, sharedConditionSupport(), viewModel,
                 new ConditionTreeOverlay.ParameterFactory() {
                     @Override
                     public ConditionTreeOverlay.Parameters create(String path, ConditionNode.Leaf leaf) {
@@ -216,7 +218,7 @@ final class EditorConditionForms {
                     }
                 }, shell::draftChanged);
         int chromeReserve = THEME.headerHeight() + THEME.padding() * 3 + UiModal.BUTTON_HEIGHT;
-        UiModal modal = UiModal.create(RuleEditorEditSections.THEME, font).title(Component.translatable(RuleEditorPageSupport.UI + "tree.title"))
+        UiModal modal = UiModal.create(THEME, font).title(Component.translatable(RuleEditorPageSupport.UI + "tree.title"))
                 .preferredWidth(Math.max(UiModal.MIN_WIDTH, shell.screenWidth() - RuleEditorPageSupport.TREE_OVERLAY_MARGIN))
                 .contentWidget(overlay, Math.max(0, shell.screenHeight() - RuleEditorPageSupport.TREE_OVERLAY_MARGIN - chromeReserve));
         // 功能栏的撤销/重做按钮与 Ctrl+Z 走同一条历史链路

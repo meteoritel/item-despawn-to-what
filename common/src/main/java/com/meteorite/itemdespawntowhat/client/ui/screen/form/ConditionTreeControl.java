@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionTreeViewModel;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.edit.ConditionTreeJsonCodec;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
@@ -53,6 +55,7 @@ final class ConditionTreeControl extends FormControl {
     private int toolbarVisibilityMask = -1;
     private @Nullable Object toolbarLayoutLanguage;
 
+    private final ConditionTreeViewModel viewModel = new ConditionTreeViewModel();
     private final UiConditionTreeSummary editor;
     private final @Nullable ConditionEditingSupport support;
     private final @Nullable Supplier<ConditionEditContext> contextFactory;
@@ -67,13 +70,14 @@ final class ConditionTreeControl extends FormControl {
      * @param contextFactory 按当前绑定解析本字段局部编辑上下文的供应器；null 时摘要只读。
      *                       供应而非固定实例，因为嵌套表单重排后字段的绝对路径会变化
      */
-    ConditionTreeControl(Font font, EditorField field, @Nullable ConditionEditingSupport support,
+    ConditionTreeControl(UiHostTheme theme, Font font, EditorField field, @Nullable ConditionEditingSupport support,
                          @Nullable Supplier<ConditionEditContext> contextFactory) {
-        super(field);
+        super(theme, field);
         this.support = support;
         this.contextFactory = contextFactory;
         this.font = font;
         this.editor = new UiConditionTreeSummary(THEME, font);
+        this.editor.setViewModel(viewModel);
         this.editor.setTypeOptions(support == null ? List.of() : support.typeOptions());
         this.editor.setEmptyMessage(Component.translatable(TypeLabels.UI_PREFIX + "tree.add_placeholder"));
         // 摘要按「条件名（参数摘要）」展示，与规则列表悬停的条件树文案保持一致
@@ -89,17 +93,17 @@ final class ConditionTreeControl extends FormControl {
         this.editor.setOnOpenCanvas(path -> {
             editor.selectPath(path);
             ConditionEditContext context = context();
-            if (context != null) context.open(path);
+            if (context != null) context.open(path, viewModel);
         });
-        if (contextFactory != null) addButton("open", () -> {
+        if (contextFactory != null) addButton( () -> {
             ConditionEditContext context = context();
-            if (context != null) context.open(null);
+            if (context != null) context.open(null, viewModel);
         });
     }
 
     // 条件卡片提供大屏编辑入口。
-    private void addButton(String name, Runnable action) {
-        toolbar.add(new UiButton(THEME, font, Component.translatable(TypeLabels.UI_PREFIX + "tree.button." + name),
+    private void addButton(Runnable action) {
+        toolbar.add(new UiButton(THEME, font, Component.translatable(TypeLabels.UI_PREFIX + "tree.button.open"),
                 UiButtonVariant.SECONDARY, action::run).setChipStyle(true));
     }
 
@@ -338,7 +342,7 @@ final class ConditionTreeControl extends FormControl {
             return editor;
         }
         // 先尝试打开画布；坐标无效或会话不可用时返回 null，由表单结束定位且不退回通用焦点
-        if (!context.open(treePath)) return null;
+        if (!context.open(treePath, viewModel)) return null;
         editor.selectPath(treePath);
         return toolbar.isEmpty() ? null : toolbar.getFirst();
     }

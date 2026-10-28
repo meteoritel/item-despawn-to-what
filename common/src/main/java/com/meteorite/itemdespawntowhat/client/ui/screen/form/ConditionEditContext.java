@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionTreeViewModel;
 import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionTreeContract;
 import org.jetbrains.annotations.Nullable;
 
@@ -45,7 +46,8 @@ public interface ConditionEditContext {
      * 打开本上下文对应的条件画布。
      *
      * @param treePath 需要定位的树内相对坐标；null 表示只打开作用域不定位节点
+     * @param viewModel 本字段的展示协调器，不持有绝对路径
      * @return 是否已打开画布
      */
-    boolean open(@Nullable String treePath);
+    boolean open(@Nullable String treePath, ConditionTreeViewModel viewModel);
 }

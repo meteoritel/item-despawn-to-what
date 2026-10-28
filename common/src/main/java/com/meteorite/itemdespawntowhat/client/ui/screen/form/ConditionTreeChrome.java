@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiAction;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
@@ -9,7 +10,6 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTarget;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiConditionGraphEditor;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
 import java.util.List;
@@ -52,10 +52,10 @@ final class ConditionTreeChrome {
 
         private final UiIconStrip strip;
 
-        Strip(Font font, UiIconStrip.Orientation orientation) {
+        Strip(UiHostTheme theme, Font font, UiIconStrip.Orientation orientation) {
             this.strip = new UiIconStrip(font, orientation);
             // 画布页外壳使用扁平宿主主题的条带样式（仅显式取用时生效）
-            strip.setStyle(UiHostThemes.flatTheme().stripStyle());
+            strip.setStyle(theme.stripStyle());
         }
 
         UiIconStrip.Item add(UiIcon normal, UiIcon disabled, Component tooltip, UiAction action) {
