@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiTextValue;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiTextAcceptance;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
@@ -18,7 +19,6 @@ import java.util.function.Predicate;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.TextColor;
 import org.jetbrains.annotations.Nullable;
@@ -30,20 +30,20 @@ import org.lwjgl.glfw.GLFW;
  * 支持占位提示、长度限制、输入过滤、提交（Enter）与取消（Esc）。
  * <p>点击输入框可定位光标并拖动选择；焦点顺序由宿主的 {@code UiFocusManager} 统一维护。
  */
-public final class UiTextInput implements UiWidget, UiFocusTarget, UiLayoutSource {
+public final class UiTextInput implements UiWidget, UiTextValue, UiLayoutSource {
 
     // 左右内边距
-    private static final int PADDING_X = 3;
+    private static final int PADDING_X = TextInputSupport.PADDING_X;
     // 上下内边距
-    private static final int PADDING_Y = 2;
+    private static final int PADDING_Y = TextInputSupport.PADDING_Y;
     // 最小宽度
-    private static final int MIN_WIDTH = 24;
+    private static final int MIN_WIDTH = TextInputSupport.MIN_WIDTH;
 
     // 原版输入框
     private final TrackedEditBox editBox;
     private final UiTextHistory textHistory = new UiTextHistory();
     private final UiTextSelection selection;
-    private boolean programmatic;
+    private final UiTextAcceptance acceptance = new UiTextAcceptance(256);
     private final Font font;
     // 控件矩形
     private UiRect bounds = new UiRect(0, 0, 0, 0);
@@ -56,16 +56,6 @@ public final class UiTextInput implements UiWidget, UiFocusTarget, UiLayoutSourc
     private boolean visible = true;
     // 是否可编辑（原版 EditBox 未暴露读取方法，这里自行记录）
     private boolean editable = true;
-    // 码点上限：原版 EditBox 的上限按 UTF-16 单元截断，不能直接用，这里自己按 Unicode 码点判定
-    private int maxLength = 256;
-    // 最近一次被接受的文本（构造函数里初始化），超限时整体回退到它
-    private String lastAccepted;
-    // 业务过滤规则
-    private Predicate<String> filter = text -> true;
-    // 输入因超上限被拒绝时的回调
-    private @Nullable Runnable onOverflow;
-    // 文本被接受发生变化时的回调（宿主据此清除超限提示）
-    private @Nullable Runnable onValueChanged;
 
     // 注入的宿主主题
     private final UiHostTheme theme;
@@ -83,7 +73,7 @@ public final class UiTextInput implements UiWidget, UiFocusTarget, UiLayoutSourc
         installFilter();
         this.editBox.setCanLoseFocus(true);
         this.editBox.setResponder(text -> onValueAccepted());
-        this.lastAccepted = editBox.getValue();
+        acceptance.reset(editBox.getValue());
         this.accessibleName = hint;
         selection = new UiTextSelection(new UiTextSelection.Target() {
             @Override
@@ -100,86 +90,68 @@ public final class UiTextInput implements UiWidget, UiFocusTarget, UiLayoutSourc
         });
     }
 
+    /** {@inheritDoc} */
+    @Override
     public String value() {
         return editBox.getValue();
     }
 
+    /** {@inheritDoc} */
+    @Override
     public UiTextInput setValue(String value) {
         backfill(value == null ? "" : value);
         return this;
     }
 
+    /** {@inheritDoc} */
+    @Override
     public UiTextInput clear() {
         backfill("");
         return this;
     }
 
     // 设置长度上限（Unicode 码点）：超出上限的输入整体被拒绝，不截断，并触发 onOverflow
+    /** {@inheritDoc} */
+    @Override
     public UiTextInput setMaxLength(int maxLength) {
-        this.maxLength = Math.max(1, maxLength);
+        acceptance.setMaximum(Math.max(1, maxLength));
         installFilter();
         return this;
     }
 
     // 设置输入过滤规则：与码点上限共同构成 EditBox 的过滤器
     public UiTextInput setFilter(Predicate<String> filter) {
-        this.filter = filter == null ? text -> true : filter;
+        acceptance.setFilter(filter);
         installFilter();
         return this;
     }
 
     // 安装过滤器：先判码点上限（超限整体拒绝并上报），再判业务规则
     private void installFilter() {
-        editBox.setFilter(candidate -> {
-            if (programmatic) {
-                return true;
-            }
-            if (codePoints(candidate) > maxLength) {
-                reportOverflow();
-                return false;
-            }
-            return filter.test(candidate);
-        });
+        editBox.setFilter(acceptance::accepts);
     }
 
     // 文本被接受：更新回退基线并清除超限提示；超限兜底回退（正常已被过滤器拦住）
     private void onValueAccepted() {
-        String value = editBox.getValue();
-        if (programmatic || value.equals(lastAccepted)) {
-            return;
-        }
-        if (codePoints(value) > maxLength) {
-            editBox.setValue(lastAccepted);
-            return;
-        }
-        this.lastAccepted = value;
-        if (onValueChanged != null) {
-            onValueChanged.run();
-        }
+        acceptance.changed(editBox.getValue(), editBox::setValue);
     }
 
-    // Unicode 码点计数：补充平面字符（emoji）按 1 个码点计
-    private static int codePoints(String text) {
-        return text == null ? 0 : text.codePointCount(0, text.length());
-    }
-
-    // 上报一次「输入超出码点上限被拒绝」
-    private void reportOverflow() {
-        if (onOverflow != null) {
-            onOverflow.run();
-        }
-    }
-
+    /** {@inheritDoc} */
+    @Override
     public UiTextInput setOnOverflow(@Nullable Runnable onOverflow) {
-        this.onOverflow = onOverflow;
+        acceptance.setOnOverflow(onOverflow);
         return this;
     }
 
+    /** {@inheritDoc} */
+    @Override
     public UiTextInput setOnValueChanged(@Nullable Runnable onValueChanged) {
-        this.onValueChanged = onValueChanged;
+        acceptance.setOnChanged(onValueChanged);
         return this;
     }
 
+    /** {@inheritDoc} */
+    @Override
     public UiTextInput setEditable(boolean editable) {
         if (!editable) endInteraction(UiInputCapture.EndReason.DISABLED);
         this.editable = editable;
@@ -225,6 +197,8 @@ public final class UiTextInput implements UiWidget, UiFocusTarget, UiLayoutSourc
     }
 
     // 全选当前文本
+    /** {@inheritDoc} */
+    @Override
     public UiTextInput selectAll() {
         editBox.setHighlightPos(0);
         editBox.moveCursorToEnd(true);
@@ -232,6 +206,8 @@ public final class UiTextInput implements UiWidget, UiFocusTarget, UiLayoutSourc
     }
 
     // 把光标与水平滚动复位到开头；回填后调用一次，编辑期间不调用
+    /** {@inheritDoc} */
+    @Override
     public UiTextInput moveCursorToStart() {
         editBox.moveCursorToStart(false);
         editBox.setHighlightPos(0);
@@ -320,13 +296,14 @@ public final class UiTextInput implements UiWidget, UiFocusTarget, UiLayoutSourc
         return selection.mouseDragged(pointerContext(mouseX, mouseY, button));
     }
 
+    /** {@inheritDoc} */
+    @Override
     public void endInteraction(UiInputCapture.EndReason reason) {
         selection.endInteraction(reason);
     }
 
     private static UiInputContext pointerContext(double mouseX, double mouseY, int button) {
-        return UiInputContext.of(mouseX, mouseY, button,
-                Screen.hasShiftDown(), Screen.hasControlDown(), Screen.hasAltDown());
+        return TextInputSupport.pointer(mouseX, mouseY, button);
     }
 
     private void seekCursor(double mouseX, double mouseY) {
@@ -417,13 +394,8 @@ public final class UiTextInput implements UiWidget, UiFocusTarget, UiLayoutSourc
     private void backfill(String value) {
         endInteraction(UiInputCapture.EndReason.UNMOUNTED);
         boolean changed = !value.equals(editBox.getValue());
-        programmatic = true;
-        try {
-            editBox.setValue(value);
-        } finally {
-            programmatic = false;
-        }
-        lastAccepted = editBox.getValue();
+        acceptance.silently(() -> editBox.setValue(value));
+        acceptance.reset(editBox.getValue());
         if (changed) {
             textHistory.clear();
         }
@@ -437,18 +409,13 @@ public final class UiTextInput implements UiWidget, UiFocusTarget, UiLayoutSourc
         if (snapshot == null) {
             return;
         }
-        programmatic = true;
-        try {
+        acceptance.silently(() -> {
             editBox.setValue(snapshot.text());
             editBox.setCursorPosition(snapshot.cursor());
             editBox.setHighlightPos(snapshot.anchor());
-        } finally {
-            programmatic = false;
-        }
-        lastAccepted = editBox.getValue();
-        if (onValueChanged != null) {
-            onValueChanged.run();
-        }
+        });
+        acceptance.reset(editBox.getValue());
+        acceptance.notifyChanged();
     }
 
     // 原版未暴露选择锚点；记录公开设置入口，避免用重复文本猜测选择方向。

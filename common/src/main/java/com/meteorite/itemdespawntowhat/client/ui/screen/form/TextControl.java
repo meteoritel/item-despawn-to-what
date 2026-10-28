@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.EditorPreset;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
@@ -9,6 +10,8 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextArea;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiTextValue;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import java.util.ArrayList;
@@ -27,9 +30,8 @@ final class TextControl extends FormControl {
     private static final int NOTES_ROWS = 3;
 
     private final Font font;
-    private final UiTextInput input;
-    // 备注专用多行编辑框；单行字段为 null
-    private final @Nullable UiTextArea area;
+    private final UiTextValue input;
+    private final UiWidget widget;
     private final List<UiButton> presetButtons = new ArrayList<>();
     private final Function<String, RuleValue> parse;
     private final Function<RuleValue, String> format;
@@ -40,39 +42,35 @@ final class TextControl extends FormControl {
     // 本次输入因超出码点上限被拒绝（下一次被接受的输入变化时清除）
     private boolean rejectedOverflow;
 
-    TextControl(Font font, EditorField field, Predicate<String> filter,
+    TextControl(UiHostTheme theme, Font font, EditorField field, Predicate<String> filter,
             Function<String, RuleValue> parse, Function<RuleValue, String> format,
             Runnable onChanged, String invalidKey) {
-        super(field);
+        super(theme, field);
         this.font = font;
         this.parse = parse;
         this.format = format;
         this.invalidKey = invalidKey;
         Component hint = hint();
-        this.input = new UiTextInput(THEME, font, hint == null ? Component.empty() : hint);
-        this.input.setMaxLength(textLimit());
-        this.input.setFilter(filter);
-        this.input.setOnCommit(text -> {
-            markEdited();
-            onChanged.run();
-        });
-        this.input.setOnOverflow(this::notifyTooLong);
-        // 下一次被接受的输入变化即清除超限提示
-        this.input.setOnValueChanged(() -> this.rejectedOverflow = false);
         if (field.isLongText()) {
-            // 备注使用真正的多行编辑框：支持换行、选择与滚动；单行输入框隐藏但保留装载基线
-            this.area = new UiTextArea(THEME, font, hint);
-            this.area.setRows(NOTES_ROWS);
-            this.area.setOnChanged(() -> {
-                this.rejectedOverflow = false;
+            UiTextArea area = new UiTextArea(THEME, font, hint);
+            area.setRows(NOTES_ROWS);
+            area.setOnValueChanged(() -> {
+                rejectedOverflow = false;
                 markEdited();
                 onChanged.run();
             });
-            this.area.setOnOverflow(this::notifyTooLong);
-            this.input.setVisible(false);
+            input = area;
+            widget = area;
         } else {
-            this.area = null;
+            UiTextInput single = new UiTextInput(THEME, font, hint == null ? Component.empty() : hint);
+            single.setFilter(filter);
+            single.setOnCommit(text -> { markEdited(); onChanged.run(); });
+            single.setOnValueChanged(() -> rejectedOverflow = false);
+            input = single;
+            widget = single;
         }
+        input.setMaxLength(textLimit());
+        input.setOnOverflow(this::notifyTooLong);
         for (EditorPreset preset : field.presets()) {
             UiButton button = new UiButton(THEME, font, Component.translatable(preset.labelKey()), UiButtonVariant.SECONDARY,
                     () -> {
@@ -86,14 +84,13 @@ final class TextControl extends FormControl {
 
     @Override
     int height() {
-        return area != null ? area.height() : DEFAULT_HEIGHT;
+        return field.isLongText() ? NOTES_ROWS * font.lineHeight + 4 : DEFAULT_HEIGHT;
     }
 
     @Override
     void setBounds(int x, int y, int width) {
-        if (area != null) {
-            // 多行备注不支持预设按钮：直接铺满整行（presetButtons 恒为空，加预设需另行布局）
-            area.setBounds(x, y, width, layoutHeight());
+        if (field.isLongText()) {
+            widget.setBounds(x, y, width, layoutHeight());
             return;
         }
         int reserved = 0;
@@ -101,7 +98,7 @@ final class TextControl extends FormControl {
             reserved += buttonWidth(button) + 2;
         }
         int inputWidth = Math.max(16, width - reserved);
-        input.setBounds(x, y, inputWidth, layoutHeight());
+        widget.setBounds(x, y, inputWidth, layoutHeight());
         int cursor = x + inputWidth + 2;
         for (UiButton button : presetButtons) {
             int buttonWidth = buttonWidth(button);
@@ -117,11 +114,7 @@ final class TextControl extends FormControl {
 
     @Override
     void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
-        if (area != null) {
-            area.render(graphics, font, mouseX, mouseY);
-            return;
-        }
-        input.render(graphics, font, mouseX, mouseY);
+        widget.render(graphics, font, mouseX, mouseY);
         for (UiButton button : presetButtons) {
             button.render(graphics, font, mouseX, mouseY);
         }
@@ -134,7 +127,7 @@ final class TextControl extends FormControl {
                 return true;
             }
         }
-        return area != null ? area.mouseClicked(mouseX, mouseY, button) : input.mouseClicked(mouseX, mouseY, button);
+        return widget.mouseClicked(mouseX, mouseY, button);
     }
 
     @Override
@@ -145,8 +138,7 @@ final class TextControl extends FormControl {
         for (UiButton preset : presetButtons) {
             handled |= preset.mouseReleased(mouseX, mouseY, button);
         }
-        boolean fieldHandled = area != null ? area.mouseReleased(mouseX, mouseY, button)
-                : input.mouseReleased(mouseX, mouseY, button);
+        boolean fieldHandled = widget.mouseReleased(mouseX, mouseY, button);
         return handled | fieldHandled;
     }
 
@@ -155,44 +147,33 @@ final class TextControl extends FormControl {
         // 隐藏/禁用/卸载/关闭不会收到释放事件，chip 的按下态要在这里清掉，否则会一直停在按下外观
         cancelButtonPresses(presetButtons);
         input.endInteraction(reason);
-        if (area != null) area.endInteraction(reason);
     }
 
     @Override
     boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        return area != null ? area.mouseDragged(mouseX, mouseY, button, dragX, dragY)
-                : input.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+        return widget.mouseDragged(mouseX, mouseY, button, dragX, dragY);
     }
 
     @Override
     boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        return area != null && area.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+        return widget.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
     }
 
     @Override
     boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        return area != null ? area.keyPressed(keyCode, scanCode, modifiers) : input.keyPressed(keyCode, scanCode, modifiers);
+        return widget.keyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override
     boolean charTyped(char codePoint, int modifiers) {
-        return area != null ? area.charTyped(codePoint, modifiers) : input.charTyped(codePoint, modifiers);
+        return widget.charTyped(codePoint, modifiers);
     }
 
     @Override
-    void addFocusTargets(List<UiFocusTarget> out) {
-        if (area != null) {
-            out.add(area);
-            return;
-        }
-        out.add(input);
-    }
+    void addFocusTargets(List<UiFocusTarget> out) { out.add(input); }
 
     @Override
     void setEnabled(boolean enabled) {
-        if (area != null) {
-            area.setEditable(enabled);
-        }
         input.setEditable(enabled);
         for (UiButton preset : presetButtons) {
             preset.setEnabled(enabled);
@@ -211,22 +192,16 @@ final class TextControl extends FormControl {
 
     @Override
     boolean isEditing() {
-        return area != null ? area.isFocused() : input.isFocused();
+        return input.isFocused();
     }
 
     // 当前文本：备注取自多行编辑框
     private String text() {
-        return area != null ? area.value() : input.value();
+        return input.value();
     }
 
     // 程序化写入文本（预设值与建议值）
-    private void setText(String value) {
-        if (area != null) {
-            area.setValue(value);
-        } else {
-            input.setValue(value);
-        }
-    }
+    private void setText(String value) { input.setValue(value); }
 
     @Override
     void load(@Nullable RuleValue value) {
@@ -234,14 +209,6 @@ final class TextControl extends FormControl {
         this.loaded = value == null || value.isNull() ? null : value.deepCopy();
         this.loadedText = loaded == null ? "" : format.apply(loaded);
         this.rejectedOverflow = false;
-        if (area != null) {
-            // 原值超出编辑长度也必须完整回填；上限按码点，避免多字节字符被算成多个
-            area.setMaxLength(Math.max(textLimit(), loadedText.codePointCount(0, loadedText.length())));
-            area.setValue(loadedText);
-            // 回填后光标与滚动停在开头：先回填再按窄宽度布局也不会把显示推到末尾
-            area.moveCursorToStart();
-            return;
-        }
         // 原值超长也必须完整回填，浏览或修改其他字段不能截短它；上限按码点抬高（既有超长原文只提示不改写）
         input.setMaxLength(Math.max(textLimit(), loadedText.codePointCount(0, loadedText.length())));
         input.setValue(loadedText);

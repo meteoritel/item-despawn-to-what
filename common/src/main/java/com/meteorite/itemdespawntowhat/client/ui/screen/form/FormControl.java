@@ -13,8 +13,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextArea;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiTextValue;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
@@ -33,10 +32,10 @@ import org.jetbrains.annotations.Nullable;
 abstract class FormControl {
 
     // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件；子类继承本字段取样式
-    static final UiHostTheme THEME = UiHostThemes.defaultTheme();
+    final UiHostTheme THEME;
 
     // 行默认高度（与主题行高一致）
-    static final int DEFAULT_HEIGHT = THEME.rowHeight();
+    final int DEFAULT_HEIGHT;
 
     // 卡片表单的单行控件高度：FormView 的卡片密度与条件树工具条都按这个值对齐
     static final int CARD_CONTROL_HEIGHT = 20;
@@ -67,7 +66,9 @@ abstract class FormControl {
     // 转发到 FormView.invalidateMeasure 使行测量与页面布局缓存失效
     private @Nullable Runnable geometryListener;
 
-    FormControl(EditorField field) {
+    FormControl(UiHostTheme theme, EditorField field) {
+        this.THEME = UiHostThemes.require(theme);
+        this.DEFAULT_HEIGHT = THEME.rowHeight();
         this.field = field;
     }
 
@@ -197,8 +198,7 @@ abstract class FormControl {
         focusTargetBuffer.clear();
         addFocusTargets(focusTargetBuffer);
         for (UiFocusTarget target : focusTargetBuffer) {
-            if (target instanceof UiTextInput input) out.add(input.value());
-            else if (target instanceof UiTextArea area) out.add(area.value());
+            if (target instanceof UiTextValue input) out.add(input.value());
         }
     }
 
@@ -208,8 +208,7 @@ abstract class FormControl {
         int index = 0;
         for (UiFocusTarget target : focusTargetBuffer) {
             if (index >= text.size()) break;
-            if (target instanceof UiTextInput input) input.setValue(text.get(index++));
-            else if (target instanceof UiTextArea area) area.setValue(text.get(index++));
+            if (target instanceof UiTextValue input) input.setValue(text.get(index++));
         }
         markEdited();
     }
@@ -333,7 +332,7 @@ abstract class FormControl {
     static FormControl create(Font font, FormView owner, EditorField field, Runnable onChanged) {
         // 数值字段优先走「滑杆 + 行内精确输入」，域元数据不足时仍回退文本控件
         if (field.isNumeric()) {
-            NumberControl numeric = NumberControl.create(font, field, onChanged);
+            NumberControl numeric = NumberControl.create(owner.theme(), font, field, onChanged);
             if (numeric != null) {
                 return numeric;
             }

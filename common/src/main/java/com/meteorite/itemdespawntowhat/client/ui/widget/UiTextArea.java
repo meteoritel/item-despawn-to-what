@@ -1,7 +1,9 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlatText;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollbarGeometry;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiTextValue;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiTextAcceptance;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
@@ -19,7 +21,6 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.MultilineTextField;
 import net.minecraft.client.gui.components.Whence;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
 import net.minecraft.util.StringUtil;
@@ -31,14 +32,14 @@ import org.lwjgl.glfw.GLFW;
  * <p>与 {@link UiTextInput} 的分工：单行短文本仍走原版 {@code EditBox}；需要同时看到多行或允许换行的字段用本控件。
  * <p>长度上限按 Unicode 码点计数，超限的这一次输入整体回退，不会把半个代理对或超过上限的整段文本写进草稿。
  */
-public final class UiTextArea implements UiWidget, UiFocusTarget, UiLayoutSource {
+public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
 
     // 左右内边距
-    private static final int PADDING_X = 3;
+    private static final int PADDING_X = TextInputSupport.PADDING_X;
     // 上下内边距
-    private static final int PADDING_Y = 2;
+    private static final int PADDING_Y = TextInputSupport.PADDING_Y;
     // 最小宽度
-    private static final int MIN_WIDTH = 24;
+    private static final int MIN_WIDTH = TextInputSupport.MIN_WIDTH;
     // 默认可见行数
     private static final int DEFAULT_ROWS = 3;
     // 内容超出可视高度时的滚动条宽度
@@ -60,18 +61,10 @@ public final class UiTextArea implements UiWidget, UiFocusTarget, UiLayoutSource
     private List<int[]> displayedLines = List.of();
     // 可见行数
     private int rows = DEFAULT_ROWS;
-    // 长度上限（Unicode 码点）
-    private int maxLength = 1024;
-    // 最近一次被接受的文本，超限时整体回退到它
-    private String lastAccepted = "";
     // 垂直滚动偏移（像素）
     private int scrollOffset;
     // 占位提示
     private @Nullable Component hint;
-    // 文本变化回调
-    private @Nullable Runnable onChanged;
-    // 输入因超出码点上限被拒绝时的回调（表单据此即时提示）
-    private @Nullable Runnable onOverflow;
     // 取消回调（Esc）
     private @Nullable Runnable onCancel;
     // 无障碍名称
@@ -81,7 +74,7 @@ public final class UiTextArea implements UiWidget, UiFocusTarget, UiLayoutSource
     private boolean selectableWhenReadOnly;
     private boolean focused;
     // 程序化写入期间不触发变化回调与长度回退
-    private boolean programmatic;
+    private final UiTextAcceptance acceptance = new UiTextAcceptance(1024);
     // 获得焦点的时刻，用于光标闪烁
     private long focusedTime;
 
@@ -123,36 +116,54 @@ public final class UiTextArea implements UiWidget, UiFocusTarget, UiLayoutSource
         return field;
     }
 
+    /** {@inheritDoc} */
+    @Override
     public String value() {
         return textField.value();
     }
 
     // 程序化设置文本：光标留在末尾，回填路径随后调用 moveCursorToStart()
-    public void setValue(String value) {
+    /** {@inheritDoc} */
+    @Override
+    public UiTextArea setValue(String value) {
         endInteraction(UiInputCapture.EndReason.UNMOUNTED);
         String next = value == null ? "" : value;
         boolean changed = !next.equals(textField.value());
-        programmatic = true;
-        try {
-            textField.setValue(next);
-        } finally {
-            programmatic = false;
-        }
-        this.lastAccepted = textField.value();
+        acceptance.silently(() -> textField.setValue(next));
+        acceptance.reset(textField.value());
         if (changed) {
             textHistory.clear();
         }
         scrollToCursor();
+        return this;
+    }
+
+    /** 全选原版文本模型并将选择末端滚动进视口。 */
+    @Override
+    public UiTextArea selectAll() {
+        textField.setSelecting(false);
+        textField.seekCursor(Whence.ABSOLUTE, 0);
+        textField.setSelecting(true);
+        textField.seekCursor(Whence.ABSOLUTE, value().length());
+        textField.setSelecting(false);
+        scrollToCursor();
+        return this;
     }
 
     // 设置长度上限（Unicode 码点）
-    public void setMaxLength(int maxLength) {
-        this.maxLength = Math.max(0, maxLength);
+    /** {@inheritDoc} */
+    @Override
+    public UiTextArea setMaxLength(int maxLength) {
+        acceptance.setMaximum(maxLength);
+        return this;
     }
 
-    public void setEditable(boolean editable) {
+    /** {@inheritDoc} */
+    @Override
+    public UiTextArea setEditable(boolean editable) {
         if (!editable && !selectableWhenReadOnly) endInteraction(UiInputCapture.EndReason.DISABLED);
         this.editable = editable;
+        return this;
     }
 
     /** 允许只读文本获得焦点、选择和复制；不启用修改或文本局部历史。 */
@@ -165,12 +176,18 @@ public final class UiTextArea implements UiWidget, UiFocusTarget, UiLayoutSource
         this.hint = hint;
     }
 
-    public void setOnChanged(@Nullable Runnable onChanged) {
-        this.onChanged = onChanged;
+    /** {@inheritDoc} */
+    @Override
+    public UiTextArea setOnValueChanged(@Nullable Runnable onChanged) {
+        acceptance.setOnChanged(onChanged);
+        return this;
     }
 
-    public void setOnOverflow(@Nullable Runnable onOverflow) {
-        this.onOverflow = onOverflow;
+    /** {@inheritDoc} */
+    @Override
+    public UiTextArea setOnOverflow(@Nullable Runnable onOverflow) {
+        acceptance.setOnOverflow(onOverflow);
+        return this;
     }
 
     // 设置取消回调（Esc）
@@ -192,10 +209,13 @@ public final class UiTextArea implements UiWidget, UiFocusTarget, UiLayoutSource
     }
 
     // 回填后把光标与垂直滚动复位到开头；编辑期间不调用，避免抢走用户光标
-    public void moveCursorToStart() {
+    /** {@inheritDoc} */
+    @Override
+    public UiTextArea moveCursorToStart() {
         textField.seekCursor(Whence.ABSOLUTE, 0);
         this.scrollOffset = 0;
         clampScroll();
+        return this;
     }
 
     // 控件高度：可见行数加内边距
@@ -340,8 +360,8 @@ public final class UiTextArea implements UiWidget, UiFocusTarget, UiLayoutSource
         }
         int x = bounds.right() - SCROLLBAR_WIDTH - 1;
         theme.drawScrollTrack(graphics, new UiRect(x, innerY, SCROLLBAR_WIDTH, innerHeight));
-        int thumbHeight = Math.max(8, innerHeight * innerHeight / Math.max(1, textField.getLineCount() * font.lineHeight));
-        int thumbY = innerY + (innerHeight - thumbHeight) * scrollOffset / maxScroll;
+        int thumbHeight = UiScrollbarGeometry.thumbHeight(innerHeight, textField.getLineCount() * font.lineHeight, 8);
+        int thumbY = UiScrollbarGeometry.thumbTop(innerY, innerHeight, textField.getLineCount() * font.lineHeight, scrollOffset, 8);
         theme.drawScrollThumb(graphics, new UiRect(x, thumbY, SCROLLBAR_WIDTH, thumbHeight));
     }
 
@@ -364,13 +384,14 @@ public final class UiTextArea implements UiWidget, UiFocusTarget, UiLayoutSource
         return selection.mouseDragged(pointerContext(mouseX, mouseY, button));
     }
 
+    /** {@inheritDoc} */
+    @Override
     public void endInteraction(UiInputCapture.EndReason reason) {
         selection.endInteraction(reason);
     }
 
     private static UiInputContext pointerContext(double mouseX, double mouseY, int button) {
-        return UiInputContext.of(mouseX, mouseY, button,
-                Screen.hasShiftDown(), Screen.hasControlDown(), Screen.hasAltDown());
+        return TextInputSupport.pointer(mouseX, mouseY, button);
     }
 
     @Override
@@ -472,27 +493,12 @@ public final class UiTextArea implements UiWidget, UiFocusTarget, UiLayoutSource
 
     // 文本变化：超限时整体回退，否则记录并上报
     private void onTextChanged(String text) {
-        if (programmatic || text.equals(lastAccepted)) {
-            return;
-        }
-        if (text.codePointCount(0, text.length()) > maxLength) {
+        acceptance.changed(text, previous -> {
             int cursor = textField.cursor();
-            programmatic = true;
-            try {
-                textField.setValue(lastAccepted);
-                textField.seekCursor(Whence.ABSOLUTE, Math.min(cursor, lastAccepted.length()));
-            } finally {
-                programmatic = false;
-            }
-            scrollToCursor();
-            reportOverflow();
-            return;
-        }
-        this.lastAccepted = text;
+            textField.setValue(previous);
+            textField.seekCursor(Whence.ABSOLUTE, Math.min(cursor, previous.length()));
+        });
         scrollToCursor();
-        if (onChanged != null) {
-            onChanged.run();
-        }
     }
 
     private UiTextHistory.Snapshot snapshot() {
@@ -503,22 +509,17 @@ public final class UiTextArea implements UiWidget, UiFocusTarget, UiLayoutSource
         if (snapshot == null) {
             return;
         }
-        programmatic = true;
-        try {
+        acceptance.silently(() -> {
             textField.setValue(snapshot.text());
             textField.setSelecting(false);
             textField.seekCursor(Whence.ABSOLUTE, snapshot.anchor());
             textField.setSelecting(true);
             textField.seekCursor(Whence.ABSOLUTE, snapshot.cursor());
             textField.setSelecting(false);
-        } finally {
-            programmatic = false;
-        }
-        lastAccepted = textField.value();
+        });
+        acceptance.reset(textField.value());
         scrollToCursor();
-        if (onChanged != null) {
-            onChanged.run();
-        }
+        acceptance.notifyChanged();
     }
 
     // 在子类中读取原版受保护的选择区间，准确保留选择方向。
@@ -534,11 +535,7 @@ public final class UiTextArea implements UiWidget, UiFocusTarget, UiLayoutSource
     }
 
     // 上报一次「输入超出码点上限被拒绝」
-    private void reportOverflow() {
-        if (onOverflow != null) {
-            onOverflow.run();
-        }
-    }
+
 
     // 按点击位置定位光标
     private void seekCursor(double mouseX, double mouseY) {
@@ -567,17 +564,14 @@ public final class UiTextArea implements UiWidget, UiFocusTarget, UiLayoutSource
         UiTextHistory.Snapshot snapshot = snapshot();
         AccessibleTextField next = createField(width);
         this.textWidth = width;
-        programmatic = true;
-        try {
+        acceptance.silently(() -> {
             next.setValue(snapshot.text());
             next.setSelecting(false);
             next.seekCursor(Whence.ABSOLUTE, snapshot.anchor());
             next.setSelecting(true);
             next.seekCursor(Whence.ABSOLUTE, snapshot.cursor());
             next.setSelecting(false);
-        } finally {
-            programmatic = false;
-        }
+        });
         this.textField = next;
         scrollToCursor();
     }
