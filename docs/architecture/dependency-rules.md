@@ -76,8 +76,9 @@ flowchart LR
 
 ### `tools/check-ui-kit-boundaries.ps1`
 
-扫描 `client/ui/kit` 下全部 `.java` 的 import 与全限定引用：
+扫描 `client/ui/kit` 下全部 `.java` 的 import、全限定引用与顶层 public 登记：
 
+- 每个顶层 public 类型在 package-info 的角色表唯一登记为 host、library 或 example，过期登记也报违规；
 - 允许 kit 自身包内互引；
 - import 白名单为 `java.*`、`javax.*`、`net.minecraft.*`、`org.jetbrains.*`、`org.joml.*`、`org.lwjgl.*`，另有 `com.mojang.blaze3d` 的顶点与光照类型；
 - 本模组其它包、`net.fabricmc.*`、`net.neoforged.*`、`com.google.gson.*` 判违规。

@@ -138,13 +138,24 @@ if (-not (Test-Path -LiteralPath $packageInfo -PathType Leaf)) {
     exit 2
 }
 $packageInfoText = Get-Content -LiteralPath $packageInfo -Raw -Encoding UTF8
-foreach ($typeName in $publicTypes) {
-    if ($packageInfoText -notmatch ('\b' + [regex]::Escape($typeName) + '\b')) {
-        $unregisteredTypes.Add($typeName)
+$rolePattern = '<li>\{@code ([A-Za-z_][A-Za-z0-9_]*)\}: (host|library|example)</li>'
+$roles = @{}
+foreach ($entry in [regex]::Matches($packageInfoText, $rolePattern)) {
+    $name = $entry.Groups[1].Value
+    if ($roles.ContainsKey($name)) {
+        $violations.Add(('package-info.java [角色重复] ' + $name))
+    } else {
+        $roles[$name] = $entry.Groups[2].Value
+    }
+    if (-not $publicTypes.Contains($name)) {
+        $violations.Add(('package-info.java [过期登记] ' + $name))
     }
 }
-foreach ($typeName in $unregisteredTypes) {
-    $violations.Add(('package-info.java [-登记缺失-] 顶层 public 类型 ' + $typeName + ' 未登记'))
+foreach ($typeName in $publicTypes) {
+    if (-not $roles.ContainsKey($typeName)) {
+        $unregisteredTypes.Add($typeName)
+        $violations.Add(('package-info.java [角色缺失] 顶层 public 类型 ' + $typeName + ' 未登记 host/library/example'))
+    }
 }
 
 Write-Host ('[信息] 扫描目录：' + $kitFull)
