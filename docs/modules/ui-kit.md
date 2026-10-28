@@ -9,7 +9,7 @@ authority: common/client/ui/kit、common/client/ui/kit/package-info.java
 
 > **TL;DR**
 > - `client/ui/kit` 是与本模组业务无关的声明式客户端 UI 原语集：排版与几何、固定矩形控件与控件组、输入路由与捕获、树编辑、数值与文本契约、预览与绘制层次。
-> - 视觉规格、业务文案、模态归属与数据解释都由宿主注入：kit 只约定接口与不可变值。
+> - 视觉规格、业务文案、模态归属与数据解释都由宿主注入：kit 提供通用算法、状态容器、接口与不可变值。
 > - 公开面以 `package-info.java` 为权威登记；依赖边界由 `tools/check-ui-kit-boundaries.ps1` 强制。
 
 **适用对象**：编写新界面或新控件、实现宿主主题、给画布或树增加交互、排查输入与捕获问题的开发者。
@@ -24,8 +24,8 @@ authority: common/client/ui/kit、common/client/ui/kit/package-info.java
 - **固定矩形控件与控件组**：控件基类、按稳定 key 复用的一组控件、滚动视口，绘制统一走相对 z 偏移的绘制层。
 - **宿主样式注入**：语义角色（`UiControlRole`、`UiSliderRole`）、控件样式（`UiControlStyle`）、滑块样式与画法（`UiSliderStyle` + `UiSliderPainter` 打包成 `UiSliderSkin`）、样式来源接口 `UiStyleSource`。
 - **输入与操作生命周期**：输入上下文与目标契约、路由顺序、单捕获与统一结束原因、单值操作生命周期、焦点与键盘导航、局部撤销快捷键派发。
-- **数值与文本契约**：合法域与吸附策略、轨道显示窗口、数值文本的显示与解析、数值与精确文本的双向绑定、标量/区间/循环滑条、文本选择与局部历史。
-- **树与画布原语**：不可变树的编解码注入、结构操作与移动预览、tidy 布局、点阵网格、正交连线、框选。
+- **数值与文本契约**：合法域与吸附策略、轨道显示窗口、数值文本的显示与解析、数值与精确文本的双向绑定、标量/区间/循环滑条、文本值能力、码点接纳、文本选择与局部历史。
+- **树与画布原语**：不可变树的编解码注入、结构操作与移动预览、结构投影、独立视图状态与导航、tidy 布局、点阵网格、正交连线、框选。
 - **预览与层次**：实体/方块/模型预览、图标图集与图标条、浮动面板、灯箱、悬停指针门禁。
 
 kit 是记录来源与差异的维护副本，按可独立发布的库 API 维护（[ADR-0025](../adr/0025-reusable-client-ui-kit-boundary.md)、[ADR-0030](../adr/0030-ui-kit-as-standalone-library-api.md)）；新增公开类需要在 `package-info.java` 登记（[ADR-0033](../adr/0033-kit-zero-reference-public-api-retention.md)）。
@@ -42,6 +42,12 @@ kit 是记录来源与差异的维护副本，按可独立发布的库 API 维�
 - **树与数据适配方**：`UiTreeEditor.Adapter` 提供不可变节点的读取、替换与容量，`UiTreeCodec` 提供外部表示编解码，`UiTreeMoveInteraction` 把拖动绑定到捕获。
 - **数值字段装配方**：`UiNumberPolicy` + `UiSliderWindow` 描述合法域与显示窗口，`UiNumbers` 负责显示与解析，`UiValueTextBinding` 负责滑条与精确输入的双向同步。
 - **诊断与自动化测试方**：`UiLayoutSource` 把当前排版导成 `UiLayoutNode` 只读快照（矩形、文案、测量宽度与带宽），`UiDocument#layoutNodes` 给出文档自己的行几何；快照只读、不参与绘制与命中，[GUI 探针](../guides/gui-probes.md) 据此断言界面几何。
+
+### 本项目消费与库入口
+
+`package-info.java` 逐项登记 `host`（本项目生产直接使用）、`library`（当前供其它宿主使用）与 `example`（装配示例）。三类都保留公开契约，零生产引用不作为删减依据。
+
+本项目以固定矩形控件、滚动视口、焦点与捕获、树编辑、数值与文本交互装配页面。`UiDocument`/`UiNode`、`UiControlGroup`、`UiLightbox`、`UiFloatingPanel`、`UiNavigationHistory` 等保留为库接入能力；`UiSliderExamples` 提供无业务装配示例。公开成员与嵌套契约随所属顶层类型维护。
 
 ### 依赖方向
 
@@ -73,8 +79,8 @@ flowchart LR
 ### 被谁依赖
 
 - `client/ui/theme`：把主题色与度量映射成 kit 的样式值后注入，是 `UiStyleSource` 在本项目的实现侧。
-- `client/ui/widget`：把可复用控件委托给 kit 核心（数值、文本、树、图标条），对外保持既有调用签名。滚动控件的行宽、屏幕到内容的纵向换算与固定行高命中共用本层 `RowGeometry`，滚动条预留宽度直接取 `UiScrollView.SCROLLBAR_WIDTH`；两个区间宿主控件（`UiCyclicTimeBar`、`UiRangeBar`）共用 `AbstractBarShell`，其内核 `AbstractRangeCore` 在 kit 内为包内可见，不进 kit 公开面。
-- `client/ui/shared`：目录图标与条件摘要复用 kit 的图标、滚动与布局原语。
+- `client/ui/widget`：把可复用控件委托给 kit 核心（数值、文本、树、图标条），原版文本模型由宿主适配。滚动控件的行宽、屏幕到内容的纵向换算与固定行高命中共用本层 `RowGeometry`，滚动条预留宽度直接取 `UiScrollView.SCROLLBAR_WIDTH`；两个区间宿主控件（`UiCyclicTimeBar`、`UiRangeBar`）共用 `AbstractBarShell`，其内核 `AbstractRangeCore` 在 kit 内为包内可见，不进 kit 公开面。
+- `client/ui/shared`：目录图标与条件摘要复用 kit 的图标、滚动与布局原语；预览缓存消费 `UiPreviewCache`，资源世代、类型加载、失败值与清理由宿主拥有。
 - `client/ui/screen` 与 `client/ui/screen/form`：页面级装配，持有控件、捕获与焦点管理器。
 - `client/edit`：条件树的编解码与节点适配引用 `UiTreeCodec`、`UiTreeEditor`、`UiTreePath`。
 
@@ -106,6 +112,10 @@ kit 的形态由宿主的注入决定，缺一不可：
 | `UiValueInteraction` | 操作生命周期 | begin → preview → commit 或 cancel；值未变化时 `commit` 返回 false；同一次操作不会同时出现 commit 与 cancel | 滑条、精确输入行、宿主历史 |
 | `UiFocusManager` / `UiFocusTarget` | 焦点唯一决策者 | 按宿主给出的视觉顺序登记目标并唯一决定焦点，处理 Tab/Shift+Tab 与 Enter/Space；鼠标点击不夺取焦点 | 屏幕、弹窗栈、控件组 |
 | `UiTreeEditor` / `UiTreeEditor.Adapter` / `UiTreeCodec` | 树聚合根与扩展点 | 绑定宿主不可变节点做结构操作，配置变更与视图变更分开上报；一次操作以一条 `Change` 提交 | `UiTreePath`、`UiTreeMoveInteraction`、宿主节点 |
+| `UiTreeProjection` / `UiTreeViewState` / `UiTreeNavigation` / `UiTreeRowMarker` | 树展示原语 | 每个结构版本建立先序索引；每个视图独立保存选择与折叠；可见行统一导航与标记命中，完整旧新路径映射迁移状态 | 管理树、条件摘要、`UiTreeEditor` |
+| `UiTextValue` / `UiTextAcceptance` | 文本契约 | 程序回填静默保留原文；按码点整体接纳或回退；原版输入与历史由适配器负责 | 单行、多行文本与字段控件 |
+| `UiScrollbarGeometry` | 纯几何 | 共用轨道、比例、最小滑块与偏移映射；滚动偏移由视口唯一持有 | `UiScrollView`、多行文本 |
+| `UiPreviewCache` | 有界状态容器 | 客户端线程使用的 LRU；显式世代变化清空，非 null 结果及加载失败含义由宿主提供 | `client/ui/shared` 预览类 |
 | `UiTreeMoveInteraction` | 拖动与捕获绑定 | 预览不写绑定、正常释放提交一次、其它结束原因取消 | `UiTreeEditor`、`UiInputCapture` |
 | `UiNumberPolicy` / `UiSliderWindow` / `UiNumbers` | 数值契约值 | 合法域与粗细步长吸附、轨道显示窗口、数值文本显示与解析各由唯一实现承担 | 滑条、精确输入、宿主字段 |
 | `UiValueTextBinding` | 双向绑定 | 统一数值预览/提交/取消与程序回填的重入保护；解析暂不可用时保留原文并停在最近有效值 | 数值控件、精确输入行 |
@@ -145,6 +155,12 @@ sequenceDiagram
 
 指针离开控件矩形、控件被隐藏或禁用、所在焦点作用域切换、宿主关闭，都走同一条结束通道，只是 `EndReason` 不同：只有 `RELEASE` 落地，其余原因由控件回退预览。
 
+### 树结构与视图同步
+
+`UiTreeProjection.single` 的根使用 ROOT，forest 的根使用 ROOT.child(rootIndex)，视觉深度均从 0 开始。结构变化重建索引，折叠只派生可见行；位置路径跨重建的身份恢复由宿主完成。`UiTreeViewState.remap` 接收覆盖全部存活旧路径的映射，未位移路径也须登记。`UiTreeEditor` 的结构提交回调负责写入新根，视图重映射由编辑器完成；宿主几何重建保留待迁移状态。只改变视图时发出 `ViewChange`，不写入结构历史。
+
+新文本、树与缓存 API 的最小接入示例、null/失败含义、线程与生命周期说明在各类型 JavaDoc 中维护。
+
 ### 样式注入到渲染
 
 ```mermaid
@@ -159,11 +175,13 @@ flowchart LR
 
 ### 扩展点
 
-- **新增 kit 公开原语**：在 `package-info.java` 的公开面清单登记分组与用途，然后跑边界脚本；随库发布的定位与命名沿用现有分组。
+- **新增 kit 公开原语**：在 `package-info.java` 的公开面清单登记分组、用途及 host/library/example 角色，然后跑边界脚本；随库发布的定位与命名沿用现有分组。
 - **新增控件**：实现 `UiInputTarget`（必要时加 `UiFocusTarget`）；输入交给 `UiInputRouter` 路由，一次拖动用 `UiInputCapture`，一次数值操作从 `UiValueInteraction` 起算。
 - **新增主题或皮肤**：实现 `UiStyleSource`，同一角色重复调用返回同一份值；滑块务必以 `UiSliderSkin` 成对给出样式与画法，使 `UiSliderPainter.Frame` 携带的样式与轨道用色同源。宿主侧的落点见 [client-ui](client-ui.md)。
 - **新增数值字段**：`UiNumberPolicy` 描述合法域、粗细步长与整数策略，`UiSliderWindow` 描述这一段域映射到轨道的哪一截，`UiNumbers` 负责显示与解析，精确输入用 `UiValueTextBinding` 绑定。窗口只影响几何，超出窗口但仍在合法域内的值继续精确显示与编辑。
 - **新增树或树操作**：提供 `UiTreeEditor.Adapter`（不可变节点、容量、可接受子节点）与 `UiTreeCodec`；结构操作统一走 `UiTreeEditor`，拖动走 `UiTreeMoveInteraction`，一次拖动只提交一次。
+- **新增文本适配**：实现 `UiTextValue`，每个控件持有一份 `UiTextAcceptance`；回填在静默作用域内写入原版模型并 reset 实际值，历史恢复后显式通知。现有单行下限为 1、多行为 0；原生模型差异留在适配器。
+- **新增预览缓存**：用 `UiPreviewCache` 明确容量，加载器返回非 null 的成功或失败结果；读取前同步宿主世代，卸载时 clear。renderer 异常保护留在实际渲染边界。
 - **新增画布能力**：tidy 布局、点阵网格、正交连线、框选各有单一入口；图标统一从 `UiIconSheet` 的图集切片取，图标条按同一格子尺寸重排。
 
 ### 约束
@@ -173,7 +191,7 @@ flowchart LR
 - 模态归属由宿主解析后以参数传入，kit 的控件按传入的目标派发。
 - 尺寸钳制统一在 kit 内完成：控件、文档视口与滚动视图把负尺寸钳到 0，灯箱的最小边长钳到 1；只有 `UiRect` 在构造期拒绝负尺寸。
 - 数值显示与解析以 `UiNumbers` 为唯一实现；吸附按 `min + k × step` 档位计算，避免浮点连加误差。
-- kit 只声明接口与不可变值：节点业务语义、单位换算、权限与错误文案由宿主承担；角色与样式不承载具体色值语义。
+- kit 提供通用算法、状态容器与值契约：节点业务语义、单位换算、权限与错误文案由宿主承担；角色与样式不承载具体色值语义。
 
 ### 改动后的验证
 
