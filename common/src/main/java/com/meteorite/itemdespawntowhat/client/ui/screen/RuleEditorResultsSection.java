@@ -1,7 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.shared.RuleDisplayLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollView;
 import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDefaults;
@@ -109,7 +108,7 @@ final class RuleEditorResultsSection {
     private record EffectRowText(String text, @Nullable UiIcon icon, int inset) {}
 
     // 主题：与容器共用宿主默认主题
-    private static final UiHostTheme THEME = RuleEditorEditSections.THEME;
+    private final UiHostTheme THEME;
     private static final int NAVIGATION_MIN_WIDTH = 128;
     private static final int NAVIGATION_MAX_WIDTH = 184;
     private static final int DETAIL_MIN_WIDTH = 240;
@@ -127,6 +126,7 @@ final class RuleEditorResultsSection {
     private static final int DETAIL_PADDING = 8;
     private static final int EMPTY_MESSAGE_GAP = 8;
     RuleEditorResultsSection(EditorShell shell, Font font, EditorFormFactory forms, EditorSectionActions actions, UiScrollView scroll) {
+        this.THEME = shell.theme();
         this.shell = shell;
         this.font = font;
         this.forms = forms;
@@ -134,7 +134,7 @@ final class RuleEditorResultsSection {
         this.content = new EditorSectionContent(font);
         this.scroll = scroll;
 
-        typePicker = new UiTypePicker(UiHostThemes.flatTheme(), font,
+        typePicker = new UiTypePicker(shell.chromeTheme(), font,
                 Component.translatable(RuleEditorPageSupport.UI + "pick.type_title"), type -> {
                     addEffectOfType(type);
                     commands.flushRebuild();
@@ -262,12 +262,12 @@ final class RuleEditorResultsSection {
                 || RuleValue.flag(candidate, RuleFields.SAFE_SPAWN, false));
         boolean blocks = ResourceLocation.fromNamespaceAndPath(TypeLabels.OWN_NAMESPACE, "place_block").equals(selectedType);
         if (showSafeSpawn) {
-            safeSpawnBox = new UiCheckBox(RuleEditorEditSections.THEME, font, Component.translatable(RuleEditorPageSupport.UI + "candidate.safe_spawn"), RuleValue.flag(candidate, RuleFields.SAFE_SPAWN, OutcomeCandidate.DEFAULT_SAFE_SPAWN));
+            safeSpawnBox = new UiCheckBox(THEME, font, Component.translatable(RuleEditorPageSupport.UI + "candidate.safe_spawn"), RuleValue.flag(candidate, RuleFields.SAFE_SPAWN, OutcomeCandidate.DEFAULT_SAFE_SPAWN));
             safeSpawnBox.setOnChanged(checked -> setCandidateStrategy(RuleFields.SAFE_SPAWN, checked));
             content.widgets.add(safeSpawnBox);
         }
         if (blocks) {
-            fillOriginBox = new UiCheckBox(RuleEditorEditSections.THEME, font, Component.translatable(RuleEditorPageSupport.UI + "candidate.fill_origin"), RuleValue.flag(candidate, RuleFields.FILL_ORIGIN, true));
+            fillOriginBox = new UiCheckBox(THEME, font, Component.translatable(RuleEditorPageSupport.UI + "candidate.fill_origin"), RuleValue.flag(candidate, RuleFields.FILL_ORIGIN, true));
             fillOriginBox.setOnChanged(checked -> setCandidateStrategy(RuleFields.FILL_ORIGIN, checked));
             content.widgets.add(fillOriginBox);
         }
@@ -280,7 +280,7 @@ final class RuleEditorResultsSection {
 
         int effectCount = ResultStructure.effectCount(rule, candidateIndex);
         effectIndex = Math.clamp(effectIndex, 0, Math.max(0, effectCount - 1));
-        effectList = new UiListView<>(RuleEditorEditSections.THEME, font, this::renderEffectRow);
+        effectList = new UiListView<>(THEME, font, this::renderEffectRow);
         effectList.setRowHeight(ACTION_ROW_HEIGHT);
         effectList.setSelectionMarkerVisible(false);
         effectList.setChipRows(true);

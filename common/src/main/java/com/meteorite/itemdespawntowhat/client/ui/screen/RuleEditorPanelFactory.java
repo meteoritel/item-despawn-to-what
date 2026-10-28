@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.ui.shared.PreviewResources;
 import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
@@ -22,7 +23,6 @@ import com.meteorite.itemdespawntowhat.client.ui.shared.FieldCatalogTypes;
 import com.meteorite.itemdespawntowhat.client.ui.shared.FluidPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.shared.TagPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCatalogGrid;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCyclicTimeBar;
@@ -61,7 +61,6 @@ import org.jetbrains.annotations.Nullable;
 public final class RuleEditorPanelFactory {
 
     // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
-    private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
 
     private static final String RANGE_MIN_FIELD = "min";
     private static final String RANGE_MAX_FIELD = "max";
@@ -83,9 +82,6 @@ public final class RuleEditorPanelFactory {
     private static final int PICKER_MIN_BODY_HEIGHT = 120;
     private static final int PICKER_MAX_BODY_HEIGHT = 300;
     private static final int PICKER_MARGIN = 32;
-    // 弹窗除内容区外的固定高度：标题栏 + 三处内边距 + 一行按钮
-    private static final int MODAL_CHROME_HEIGHT = THEME.headerHeight() + THEME.padding() * 3
-            + UiModal.BUTTON_HEIGHT;
 
     private RuleEditorPanelFactory() {
     }
@@ -123,8 +119,8 @@ public final class RuleEditorPanelFactory {
                 Component.translatable(UI + "range.precise"));
     }
 
-    // 全天 / 白天 / 夜间预设；点击即一次提交
-    public static UiCyclicTimeBar dailyBar(Font font, UiCyclicTimeBar.Listener listener) {
+    /** 用调用方主题装配一天内循环时间条；预设点击提交一次。 */
+    public static UiCyclicTimeBar dailyBar(UiHostTheme THEME, Font font, UiCyclicTimeBar.Listener listener) {
         UiCyclicTimeBar bar = new UiCyclicTimeBar(THEME, font, cyclicTexts(), listener);
         bar.setTicks(dayTicks());
         bar.setFormatter(RuleEditorPanelFactory::clockText);
@@ -207,6 +203,7 @@ public final class RuleEditorPanelFactory {
                                         Consumer<List<String>> onPicked, @Nullable EditorField field,
                                         List<String> selected, Function<String, @Nullable Component> unavailableReason,
                                         @Nullable Predicate<String> entryFilter) {
+        UiHostTheme THEME = shell.theme();
         boolean includeTags = field != null && field.allowsTags();
         workspace.refreshDirectory(type);
         if (includeTags) workspace.refreshDirectory(RuleCatalogType.TAG);
@@ -303,7 +300,7 @@ public final class RuleEditorPanelFactory {
         modal.preferredWidth(pickerWidth(screenWidth));
         // 翻页与状态排到确认/取消同一行的左侧，省下独立一行的底部空间
         modal.inlineFooter();
-        modal.contentWidget(grid, pickerBodyHeight(screenHeight));
+        modal.contentWidget(grid, pickerBodyHeight(shell.theme(), screenHeight));
         modal.confirm(Component.translatable(UI + "button.confirm"), () -> {
             List<String> selection = grid.selection();
             if (shell.editable() && selection.stream().noneMatch(id -> unavailableReason.apply(id) != null))
@@ -339,9 +336,9 @@ public final class RuleEditorPanelFactory {
         return Math.clamp(screenWidth - PICKER_MARGIN, PICKER_MIN_WIDTH, PICKER_MAX_WIDTH);
     }
 
-    // 选择页内容区高度：扣掉弹窗固定部分，剩下的都留给列表
-    public static int pickerBodyHeight(int screenHeight) {
-        return Math.clamp(screenHeight - MODAL_CHROME_HEIGHT - PICKER_MARGIN, PICKER_MIN_BODY_HEIGHT,
+    /** 依据注入主题扣除弹窗固定高度，计算目录列表可用高度。 */
+    public static int pickerBodyHeight(UiHostTheme theme, int screenHeight) {
+        return Math.clamp(screenHeight - theme.headerHeight() - theme.padding() * 3L - UiModal.BUTTON_HEIGHT - PICKER_MARGIN, PICKER_MIN_BODY_HEIGHT,
                 PICKER_MAX_BODY_HEIGHT);
     }
 
@@ -377,7 +374,7 @@ public final class RuleEditorPanelFactory {
 
         @Nullable
         List<UiCatalogGrid.Entry> map(RuleEditClientWorkspace workspace, RuleCatalogType type) {
-            Object nextResources = EntityPreviewIcons.generation();
+            Object nextResources = PreviewResources.generation();
             Object nextLanguage = Language.getInstance();
             if (resources != null && (resources != nextResources || language != nextLanguage)) {
                 workspace.invalidateDirectories(); cached = null;
@@ -543,7 +540,7 @@ public final class RuleEditorPanelFactory {
         EditorField to = field(fields, "to");
         if (from != null && to != null && from.isIntegerLike() && to.isIntegerLike()
                 && from.intMin(0) == TIME_MIN && from.intMax(TIME_MAX) == TIME_MAX) {
-            UiCyclicTimeBar bar = timeBar(font, session, from, to, basePath, applyChange, onChange);
+            UiCyclicTimeBar bar = timeBar(form.theme(), font, session, from, to, basePath, applyChange, onChange);
             extras.add(bar);
             reloadValues.add(() -> bar.setRange(intAt(session, join(basePath, from.name()), TIME_MIN),
                     intAt(session, join(basePath, to.name()), DEFAULT_TIME_RANGE_END)));
@@ -554,7 +551,7 @@ public final class RuleEditorPanelFactory {
         boolean heightCondition = condition != null && Y_LEVEL_ID.toString()
                 .equals(condition.text(RuleFields.TYPE, ""));
         if (min != null && max != null && min.isIntegerLike() && max.isIntegerLike()) {
-            UiRangeBar bar = intRangeBar(font, session, min, max, basePath, applyChange, onChange);
+            UiRangeBar bar = intRangeBar(form.theme(), font, session, min, max, basePath, applyChange, onChange);
             if (heightCondition) {
                 form.field(min.name()).setVisible(false);
                 form.field(max.name()).setVisible(false);
@@ -645,7 +642,7 @@ public final class RuleEditorPanelFactory {
     }
 
     // 高度/光照区间：两个可省略的整数端点
-    private static UiRangeBar intRangeBar(Font font, EditSession session, EditorField minField, EditorField maxField,
+    private static UiRangeBar intRangeBar(UiHostTheme THEME, Font font, EditSession session, EditorField minField, EditorField maxField,
                                           String basePath, Consumer<Consumer<RuleDraft>> applyChange, Runnable onChange) {
         String lowPath = join(basePath, minField.name());
         String highPath = join(basePath, maxField.name());
@@ -665,11 +662,11 @@ public final class RuleEditorPanelFactory {
     }
 
     // 昼夜时间条：0..23999 刻，from>to 跨零点，同刻单点
-    private static UiCyclicTimeBar timeBar(Font font, EditSession session, EditorField from, EditorField to,
+    private static UiCyclicTimeBar timeBar(UiHostTheme THEME, Font font, EditSession session, EditorField from, EditorField to,
                                            String basePath, Consumer<Consumer<RuleDraft>> applyChange, Runnable onChange) {
         String fromPath = join(basePath, from.name());
         String toPath = join(basePath, to.name());
-        UiCyclicTimeBar bar = dailyBar(font, (fromTick, toTick) -> {
+        UiCyclicTimeBar bar = dailyBar(THEME, font, (fromTick, toTick) -> {
             applyChange.accept( edits -> {
                 edits.setAt(fromPath, RuleValue.integer((int) Math.round(fromTick)));
                 edits.setAt(toPath, RuleValue.integer((int) Math.round(toTick)));

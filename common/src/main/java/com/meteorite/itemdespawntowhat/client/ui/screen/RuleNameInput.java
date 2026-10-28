@@ -18,7 +18,7 @@ import org.jetbrains.annotations.Nullable;
 final class RuleNameInput implements UiWidget, UiFocusTarget {
 
     // 宿主默认主题：屏幕按主题取色与绘制原语
-    private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
+    private final UiHostTheme THEME;
 
     // 命名空间与路径的分隔符
     private static final char NAMESPACE_SEPARATOR = ':';
@@ -36,7 +36,8 @@ final class RuleNameInput implements UiWidget, UiFocusTarget {
     private @Nullable Component problem;
     private UiRect bounds = new UiRect(0, 0, 0, 0);
 
-    RuleNameInput(Font font) {
+    RuleNameInput(UiHostTheme theme, Font font) {
+        this.THEME = UiHostThemes.require(theme);
         this.font = font;
         input = new UiTextInput(THEME, font, Component.translatable(TypeLabels.UI_PREFIX + "prompt.name_hint"));
         input.setFilter(RuleNameInput::allowsCharacters);

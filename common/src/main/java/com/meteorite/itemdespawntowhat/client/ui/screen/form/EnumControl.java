@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
@@ -18,8 +19,8 @@ final class EnumControl extends FormControl {
 
     private final UiSegmentedControl segments;
 
-    EnumControl(Font font, EditorField field, Runnable onChanged) {
-        super(field);
+    EnumControl(UiHostTheme theme, Font font, EditorField field, Runnable onChanged) {
+        super(theme, field);
         String group = field.enumGroup() == null || field.enumGroup().isBlank() ? field.name() : field.enumGroup();
         List<UiSegmentedControl.Option> options = new ArrayList<>();
         for (String value : field.enumValues()) {

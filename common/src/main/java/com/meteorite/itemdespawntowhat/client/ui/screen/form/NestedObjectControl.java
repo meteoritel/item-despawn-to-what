@@ -24,7 +24,7 @@ final class NestedObjectControl extends FormControl {
     private int measuredHeight;
 
     NestedObjectControl(Font font, FormView owner, EditorField field, Runnable onChanged) {
-        super(field);
+        super(owner.theme(), field);
         this.child = owner.newChildForm(field.name(), field.subFields());
         this.child.setOnChanged(() -> {
             markEdited();

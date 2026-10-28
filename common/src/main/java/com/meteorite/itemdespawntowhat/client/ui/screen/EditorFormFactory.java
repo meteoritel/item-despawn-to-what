@@ -30,7 +30,7 @@ final class EditorFormFactory {
     }
 
     FormView create(EditSession session, String basePath, TypeEditorDescriptor descriptor) {
-        FormView form = new FormView(font, session, basePath);
+        FormView form = new FormView(shell.theme(), font, session, basePath);
         // 表单行几何变化时让页面布局缓存失效，页面滚动帧因此不必重排
         form.setOnGeometryChanged(geometryChanged);
         form.useCatalogSelections();

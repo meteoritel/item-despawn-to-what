@@ -2,7 +2,6 @@ package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlowLayout;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
@@ -29,7 +28,7 @@ import org.lwjgl.glfw.GLFW;
 public final class LeafPanel implements UiWidget, UiFocusTarget {
 
     // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
-    private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
+    private final UiHostTheme THEME;
     private static final String UI = TypeLabels.UI_PREFIX;
     // 区间条 / 昼夜条高度（标签行 + 轨道；昼夜条另含预设行）
     private static final int RANGE_HEIGHT = 24;
@@ -65,6 +64,7 @@ public final class LeafPanel implements UiWidget, UiFocusTarget {
         this.font = font;
         this.noteLineHeight = font.lineHeight + 1;
         this.form = form;
+        this.THEME = form.theme();
         this.extras = extras;
         this.buttons = buttons;
         this.reloadValues = reloadValues;

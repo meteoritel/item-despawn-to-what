@@ -17,7 +17,7 @@ import net.minecraft.network.chat.Component;
 
 /** 变更清单的只读条目快照，与管理列表共用配方行和标题布局。 */
 final class RuleChangesView implements UiWidget, UiFocusTarget {
-    private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
+    private final UiHostTheme THEME;
     private static final String UI = TypeLabels.UI_PREFIX;
     private static final int NOTE_GAP = 4;
     private static final int TOOLTIP_WIDTH = 240;
@@ -28,7 +28,8 @@ final class RuleChangesView implements UiWidget, UiFocusTarget {
 
     private record Change(String title, Component kind, RuleRecipeView recipe) { }
 
-    RuleChangesView(Font font, RuleEditorModel model, Function<String, String> labels) {
+    RuleChangesView(UiHostTheme theme, Font font, RuleEditorModel model, Function<String, String> labels) {
+        this.THEME = UiHostThemes.require(theme);
         this.font = font;
         rowHeight = font.lineHeight + 5 + RuleRecipeView.CONTENT_HEIGHT;
         list = new UiListView<>(THEME, font, (graphics, rowFont, change, index, row, selected, hovered, focused) ->

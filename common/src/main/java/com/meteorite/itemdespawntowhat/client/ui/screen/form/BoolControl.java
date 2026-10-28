@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
@@ -20,8 +21,8 @@ final class BoolControl extends FormControl {
 
     private final UiCheckBox checkBox;
 
-    BoolControl(Font font, EditorField field, Runnable onChanged) {
-        super(field);
+    BoolControl(UiHostTheme theme, Font font, EditorField field, Runnable onChanged) {
+        super(theme, field);
         this.checkBox = new UiCheckBox(THEME, font, label(), false);
         this.checkBox.setOnChanged(checked -> {
             markEdited();

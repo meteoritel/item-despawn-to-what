@@ -41,7 +41,7 @@ import org.jetbrains.annotations.Nullable;
 public final class FormView implements UiWidget, UiLayoutSource {
 
     // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
-    private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
+    private final UiHostTheme THEME;
 
     // 行间距
     private static final int ROW_GAP = 2;
@@ -138,11 +138,21 @@ public final class FormView implements UiWidget, UiLayoutSource {
     // 高亮框缓存：随同步一起重算，渲染帧不再分配矩形。
     private @Nullable UiRect highlightBounds;
 
+    /** 独立表单入口使用默认主题。 */
     public FormView(Font font, EditSession session, String basePath) {
+        this(UiHostThemes.defaultTheme(), font, session, basePath);
+    }
+
+    /** 页面装配时显式注入主题，子表单和字段继承同一实例。 */
+    public FormView(UiHostTheme theme, Font font, EditSession session, String basePath) {
+        this.THEME = UiHostThemes.require(theme);
         this.font = font;
         this.session = session;
         this.basePath = basePath == null ? "" : basePath;
     }
+
+    /** 当前表单及其字段使用的主题。 */
+    public UiHostTheme theme() { return THEME; }
 
     /** 用描述符整体替换字段列表 */
     public List<FormField> setDescriptor(TypeEditorDescriptor descriptor) {
@@ -162,7 +172,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
         var catalogType = FieldCatalogTypes.catalogTypeOf(field);
         boolean iconSelection = catalogSelections && catalogType != null && field.isCatalogReference();
         FormRow row = new FormRow(field, pathFor(field), iconSelection
-                ? new CatalogSelectionControl(font, field, this::notifyChanged)
+                ? new CatalogSelectionControl(THEME, font, field, this::notifyChanged)
                 : FormControl.create(font, this, field, this::notifyChanged));
         row.control.setMinimumHeight(minimumControlHeight);
         // 控件自身高度变化（如条件树摘要行数）经这一出口让行测量与页面布局失效
@@ -541,7 +551,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
 
     // 新建子表单（子列表的每一项）
     FormView newChildForm(String relativePath, List<EditorField> fields) {
-        FormView child = new FormView(font, session, childPath(relativePath));
+        FormView child = new FormView(THEME, font, session, childPath(relativePath));
         child.childForm = true;
         if (catalogSelections) child.useCatalogSelections();
         child.setConditionEditingSupport(conditionEditingSupport);

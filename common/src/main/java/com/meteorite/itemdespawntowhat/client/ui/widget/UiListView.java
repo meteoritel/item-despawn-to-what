@@ -35,8 +35,6 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
         void renderRow(GuiGraphics graphics, Font font, T item, int index, UiRect row, boolean selected, boolean hovered, boolean focused);
     }
 
-    // 默认行高
-    public static final int DEFAULT_ROW_HEIGHT = UiHostThemes.defaultTheme().rowHeight();
     // 双击判定间隔（毫秒）
     private static final long DOUBLE_CLICK_MS = 250L;
     private static final int CHIP_ROW_GAP = 4;
@@ -50,7 +48,7 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
     // 控件矩形
     private UiRect bounds = new UiRect(0, 0, 0, 0);
     // 行高
-    private int rowHeight = DEFAULT_ROW_HEIGHT;
+    private int rowHeight;
     // 选中行下标，-1 表示无选中
     private int selectedIndex = -1;
     // 一屏可见行数
@@ -76,8 +74,11 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
     // 注入的宿主主题
     private final UiHostTheme theme;
 
+    /** 使用注入主题的实例度量初始化行布局。 */
     public UiListView(UiHostTheme theme, @SuppressWarnings("unused") Font font, RowRenderer<T> rowRenderer) {
         this.theme = UiHostThemes.require(theme);
+        this.rowHeight = this.theme.rowHeight();
+        scrollView.setStep(Math.max(1, rowHeight * 2));
         this.rowRenderer = rowRenderer;
     }
 

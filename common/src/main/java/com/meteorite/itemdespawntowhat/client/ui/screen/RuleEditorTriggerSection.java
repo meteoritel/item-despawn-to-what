@@ -30,9 +30,10 @@ final class RuleEditorTriggerSection {
     private final EditorSectionActions commands;
 
     // 主题：与容器共用宿主默认主题
-    private static final UiHostTheme THEME = RuleEditorEditSections.THEME;
+    private final UiHostTheme THEME;
 
     RuleEditorTriggerSection(EditorShell shell, Font font, EditorFormFactory forms, EditorSectionActions actions) {
+        this.THEME = shell.theme();
         this.shell = shell;
         this.font = font;
         this.forms = forms;
@@ -66,7 +67,7 @@ final class RuleEditorTriggerSection {
         RuleValue rule = session.root();
         List<String> effective = RuleTriggers.effective(rule);
         for (String value : RuleTriggers.known()) {
-            UiCheckBox box = new UiCheckBox(RuleEditorEditSections.THEME, font, Component.translatable(RuleEditorPageSupport.UI + "trigger." + value), effective.contains(value));
+            UiCheckBox box = new UiCheckBox(THEME, font, Component.translatable(RuleEditorPageSupport.UI + "trigger." + value), effective.contains(value));
             box.setOnChanged(checked -> onTriggerToggled());
             triggerBoxes.add(box);
             content.widgets.add(box);

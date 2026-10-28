@@ -2,7 +2,6 @@ package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiMarkIcons;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiMarkIcons.Mark;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
@@ -32,7 +31,6 @@ import org.lwjgl.glfw.GLFW;
 final class CatalogSelectionControl extends FormControl implements UiFocusTarget {
 
     // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
-    private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
     private static final String UI = TypeLabels.UI_PREFIX;
     private static final int CHIP_HEIGHT = 24;
     private static final int GAP = 4;
@@ -57,8 +55,8 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
     /** 完整保留既有元素，格式错误的条目不会因其它编辑而丢失。 */
     private record Selection(RuleValue value, String id, Component name, @Nullable UiIcon icon) { }
 
-    CatalogSelectionControl(Font font, EditorField field, Runnable onChanged) {
-        super(field);
+    CatalogSelectionControl(UiHostTheme theme, Font font, EditorField field, Runnable onChanged) {
+        super(theme, field);
         this.font = font;
         this.onChanged = onChanged;
         scroll.setStep(CHIP_HEIGHT + GAP);

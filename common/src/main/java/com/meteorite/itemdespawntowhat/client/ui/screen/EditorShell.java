@@ -18,7 +18,6 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiListEditor;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModalStack;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiNarration;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
 import com.meteorite.itemdespawntowhat.core.api.DevelopmentDiagnostics;
 import com.meteorite.itemdespawntowhat.core.service.edit.RuleIssue;
 import com.meteorite.itemdespawntowhat.core.service.edit.RuleSnapshotEntry;
@@ -51,7 +50,8 @@ final class EditorShell {
         DANGER
     }
 
-    private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
+    private final UiHostTheme THEME;
+    private final UiHostTheme chromeTheme;
     private static final String UI = TypeLabels.UI_PREFIX;
     private static final long NOTICE_TTL_MS = 5000L;
     private static final int CHANGES_MODAL_WIDTH = 420;
@@ -63,7 +63,7 @@ final class EditorShell {
     private final RuleListDisplayCache display;
     private final Font font;
     private final UiFocusManager focus = new UiFocusManager();
-    private final UiModalStack modals = new UiModalStack(THEME);
+    private final UiModalStack modals;
 
     private final RuleEditorListPage listPage;
     private final RuleEditorEditPage editPage;
@@ -87,7 +87,10 @@ final class EditorShell {
     private boolean released;
     private boolean closeRequested;
 
-    EditorShell(RuleEditClientWorkspace workspace, RuleEditorModel model, RuleListDisplayCache display, Font font) {
+    EditorShell(UiHostTheme theme, UiHostTheme chromeTheme, RuleEditClientWorkspace workspace, RuleEditorModel model, RuleListDisplayCache display, Font font) {
+        this.THEME = UiHostThemes.require(theme);
+        this.chromeTheme = UiHostThemes.require(chromeTheme);
+        this.modals = new UiModalStack(THEME);
         this.workspace = workspace;
         this.model = model;
         this.display = display;
@@ -105,12 +108,15 @@ final class EditorShell {
         // 焦点变化时播报控件的可读名称（未开启朗读时 GameNarrator 内部会静默）
         focus.setListener((previous, next) -> {
             UiNarration.focus(next);
-            focus.setSpaceActivates(!(next instanceof UiTextInput)
+            focus.setSpaceActivates((next == null || !next.acceptsTextInput())
                     && !(next instanceof UiListEditor));
             editPage.ensureVisible(next);
         });
         model.refresh();
     }
+
+    UiHostTheme theme() { return THEME; }
+    UiHostTheme chromeTheme() { return chromeTheme; }
 
     // ---- 查询 ----
 
@@ -301,7 +307,7 @@ final class EditorShell {
 
     // 草稿改动清单（管理页底排与编辑页底排共用）
     void showChanges() {
-        RuleChangesView changes = new RuleChangesView(font, model, this::labelText);
+        RuleChangesView changes = new RuleChangesView(THEME, font, model, this::labelText);
         modals.push(UiModal.create(THEME, font).title(Component.translatable(UI + "button.changes"))
                 .contentWidget(changes, changes.preferredHeight(Math.clamp(screenHeight() - CHANGES_MODAL_SCREEN_MARGIN,
                         RuleRecipeView.CONTENT_HEIGHT, CHANGES_MODAL_MAX_HEIGHT)))

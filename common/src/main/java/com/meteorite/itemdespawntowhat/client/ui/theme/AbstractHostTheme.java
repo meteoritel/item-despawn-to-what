@@ -14,11 +14,6 @@ import net.minecraft.client.gui.GuiGraphics;
 abstract class AbstractHostTheme implements UiHostTheme {
 
     @Override
-    public UiHostPalette palette() {
-        return UiHostPalette.hostPalette();
-    }
-
-    @Override
     public int padding() {
         return UiTheme.PADDING;
     }

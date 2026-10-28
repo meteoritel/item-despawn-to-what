@@ -17,7 +17,7 @@ final class FormControlRegistry {
     }
 
     // 纯文本字段的共用工厂：长度由输入框管理，过滤器不拒绝程序化回填
-    private static final Factory TEXT_FACTORY = (font, owner, field, onChanged) -> new TextControl(font, field,
+    private static final Factory TEXT_FACTORY = (font, owner, field, onChanged) -> new TextControl(owner.theme(), font, field,
             FormControl.textFilter(), FormControl::literalValue, FormControl::textOf, onChanged,
             FormControl.ISSUE_PREFIX + "invalid_text");
 
@@ -29,54 +29,54 @@ final class FormControlRegistry {
     private static Factory factory(EditorFieldType type) {
         return switch (type) {
             case ITEM_COUNTS -> (font, owner, field, onChanged) ->
-                    new ItemCountsControl(font, field, onChanged);
+                    new ItemCountsControl(owner.theme(), font, field, onChanged);
             case TEXT, LONG_TEXT -> TEXT_FACTORY;
             case RESOURCE_LOCATION, REGISTRY_ID -> (font, owner, field, onChanged) ->
-                    new TextControl(font, field, FormControl::idChars, text -> FormControl.referenceValue(text, false),
+                    new TextControl(owner.theme(), font, field, FormControl::idChars, text -> FormControl.referenceValue(text, false),
                             FormControl::textOf, onChanged, FormControl.ISSUE_PREFIX + "invalid_id");
             case TAG -> (font, owner, field, onChanged) ->
-                    new TextControl(font, field, FormControl::tagChars, text -> FormControl.referenceValue(text, true),
+                    new TextControl(owner.theme(), font, field, FormControl::tagChars, text -> FormControl.referenceValue(text, true),
                             FormControl::textOf, onChanged, FormControl.ISSUE_PREFIX + "invalid_id");
             case INTEGER -> (font, owner, field, onChanged) -> {
                 int min = field.intMin(Integer.MIN_VALUE);
                 int max = field.intMax(Integer.MAX_VALUE);
-                return new TextControl(font, field, FormControl::integerChars, text -> FormControl.boundedInt(text, min, max),
+                return new TextControl(owner.theme(), font, field, FormControl::integerChars, text -> FormControl.boundedInt(text, min, max),
                         FormControl::intOf, onChanged, FormControl.ISSUE_PREFIX + "invalid_number");
             };
             case TICKS -> (font, owner, field, onChanged) -> {
                 // 刻数合法域为 0..INT_MAX；UI 侧不额外收紧，后端合法域才是提交依据
                 int min = field.intMin(0);
                 int max = field.intMax(Integer.MAX_VALUE);
-                return new TextControl(font, field, FormControl::integerChars, text -> FormControl.boundedInt(text, min, max),
+                return new TextControl(owner.theme(), font, field, FormControl::integerChars, text -> FormControl.boundedInt(text, min, max),
                         FormControl::intOf, onChanged, FormControl.ISSUE_PREFIX + "invalid_number");
             };
             case DECIMAL -> (font, owner, field, onChanged) -> {
                 double min = field.doubleMin(-Double.MAX_VALUE);
                 double max = field.doubleMax(Double.MAX_VALUE);
-                return new TextControl(font, field, FormControl::decimalChars, text -> FormControl.boundedDouble(text, min, max),
+                return new TextControl(owner.theme(), font, field, FormControl::decimalChars, text -> FormControl.boundedDouble(text, min, max),
                         FormControl::decimalOf, onChanged, FormControl.ISSUE_PREFIX + "invalid_number");
             };
             case PERCENT -> (font, owner, field, onChanged) -> {
                 double min = field.doubleMin(0.0D);
                 double max = field.doubleMax(1.0D);
-                return new TextControl(font, field, FormControl::decimalChars,
+                return new TextControl(owner.theme(), font, field, FormControl::decimalChars,
                         text -> FormControl.percentValue(text, min, max), FormControl::percentText,
                         onChanged, FormControl.ISSUE_PREFIX + "invalid_number");
             };
             case AMPLIFIER -> (font, owner, field, onChanged) ->
-                    new TextControl(font, field, FormControl::integerChars, FormControl::amplifierValue, FormControl::amplifierText,
+                    new TextControl(owner.theme(), font, field, FormControl::integerChars, FormControl::amplifierValue, FormControl::amplifierText,
                             onChanged, FormControl.ISSUE_PREFIX + "invalid_number");
-            case BOOLEAN -> (font, owner, field, onChanged) -> new BoolControl(font, field, onChanged);
-            case ENUM -> (font, owner, field, onChanged) -> new EnumControl(font, field, onChanged);
+            case BOOLEAN -> (font, owner, field, onChanged) -> new BoolControl(owner.theme(), font, field, onChanged);
+            case ENUM -> (font, owner, field, onChanged) -> new EnumControl(owner.theme(), font, field, onChanged);
             case TAG_LIST, RL_LIST, STRING_LIST ->
-                    (font, owner, field, onChanged) -> new ListControl(font, field, onChanged);
-            case CLIMATE_RANGE -> (font, owner, field, onChanged) -> new ClimateControl(font, field, onChanged);
+                    (font, owner, field, onChanged) -> new ListControl(owner.theme(), font, field, onChanged);
+            case CLIMATE_RANGE -> (font, owner, field, onChanged) -> new ClimateControl(owner.theme(), font, field, onChanged);
             case CONDITION_TREE -> (font, owner, field, onChanged) ->
-                    new ConditionTreeControl(font, field, owner.conditionEditingSupport(), () -> owner.conditionContext(field));
+                    new ConditionTreeControl(owner.theme(), font, field, owner.conditionEditingSupport(), () -> owner.conditionContext(field));
             case SUBLIST -> SublistControl::new;
             case OBJECT -> NestedObjectControl::new;
-            case RAW_JSON -> (font, owner, field, onChanged) -> new RawJsonControl(field);
-            case NOTE -> (font, owner, field, onChanged) -> new NoteControl(field);
+            case RAW_JSON -> (font, owner, field, onChanged) -> new RawJsonControl(owner.theme(), field);
+            case NOTE -> (font, owner, field, onChanged) -> new NoteControl(owner.theme(), field);
         };
     }
 

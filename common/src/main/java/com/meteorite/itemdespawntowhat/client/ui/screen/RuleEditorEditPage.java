@@ -18,7 +18,6 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.screen.RuleEditorEditSections.EditSection;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.ConditionEditingSupport;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionTreeContract;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCodeView;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
@@ -54,7 +53,7 @@ import org.jetbrains.annotations.Nullable;
  */
 final class RuleEditorEditPage implements EditorPage {
 
-    private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
+    private final UiHostTheme THEME;
     // 布局常量
     private static final int TAB_H = 22;
     private static final int HEADER_H = 24;
@@ -96,6 +95,7 @@ final class RuleEditorEditPage implements EditorPage {
 
     RuleEditorEditPage(EditorShell shell, RuleEditorModel model, RuleEditClientWorkspace workspace, Font font,
             UiModalStack modals, UiFocusManager focus) {
+        this.THEME = shell.theme();
         this.shell = shell;
         this.model = model;
         this.workspace = workspace;

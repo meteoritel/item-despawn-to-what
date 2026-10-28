@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import net.minecraft.client.gui.Font;
@@ -12,8 +13,8 @@ import org.jetbrains.annotations.Nullable;
 
 final class NoteControl extends FormControl {
 
-    NoteControl(EditorField field) {
-        super(field);
+    NoteControl(UiHostTheme theme, EditorField field) {
+        super(theme, field);
     }
 
     @Override

@@ -18,7 +18,6 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderWindow;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiValueInteraction;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiValueTextBinding;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiSlider;
@@ -43,7 +42,6 @@ import org.jetbrains.annotations.Nullable;
 final class NumberControl extends FormControl {
 
     // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
-    private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
 
     // 行内精确输入框的最小宽度
     private static final int MIN_INPUT_WIDTH = 34;
@@ -81,8 +79,8 @@ final class NumberControl extends FormControl {
     private String loadedText = "";
     private final UiValueTextBinding<Double, String> binding;
 
-    private NumberControl(Font font, EditorField field, Runnable onChanged, NumericDomain numbers) {
-        super(field);
+    private NumberControl(UiHostTheme theme, Font font, EditorField field, Runnable onChanged, NumericDomain numbers) {
+        super(theme, field);
         this.font = font;
         this.integerDomain = numbers.integer();
         this.percentField = field.isPercent();
@@ -170,7 +168,7 @@ final class NumberControl extends FormControl {
     }
 
     // 域元数据完整时返回数值控件，否则返回 null 由调用方回退文本控件
-    static @Nullable NumberControl create(Font font, EditorField field, Runnable onChanged) {
+    static @Nullable NumberControl create(UiHostTheme theme, Font font, EditorField field, Runnable onChanged) {
         NumericDomain declared = field.numbers();
         if (declared == null) {
             return null;
@@ -187,7 +185,7 @@ final class NumberControl extends FormControl {
         } else if (!(declared.step() > 0.0D) || !(declared.shiftStep() > 0.0D)) {
             return null;
         }
-        return new NumberControl(font, field, onChanged, declared);
+        return new NumberControl(theme, font, field, onChanged, declared);
     }
 
     private static double domainMinOf(EditorField field, NumericDomain numbers) {

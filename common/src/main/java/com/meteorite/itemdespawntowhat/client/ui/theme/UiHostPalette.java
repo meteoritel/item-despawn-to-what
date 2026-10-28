@@ -1,411 +1,206 @@
 package com.meteorite.itemdespawntowhat.client.ui.theme;
 
 /**
- * 宿主控件调色板视图：把像素主题与画布页的用色收敛成控件可见的一组只读语义色。
- *
- * <p>控件不再自行读取全局调色板常量，而是经注入的 {@link UiHostTheme#palette()} 取色；本类只暴露控件
- * 真正用到的颜色，不把整套调色板摊到控件层，换主题只需替换主题实现，控件代码不变。</p>
- *
- * <p>像素皮肤与画布页共享本调色板：两者的差别在绘制原语（立体边、同色描边与层次）上，而不在控件用色上，
- * 因此画布页的 {@code canvas*} 色同样由本表提供，注入主题不会改变画布页既有配色。</p>
+ * 宿主主题持有的完整不可变语义色值；构造参数可逐项配置，控件只经主题读取。
+ * <p>pixel 与 flat 默认工厂分别创建值，沿用现行控件和画布配色；皮肤的结构画法由主题决定。</p>
  */
-// 宿主调色板 API：由页面层经主题调用；本包内暂无调用点的项暂不触发未使用提示
-public final class UiHostPalette {
-
-    // 宿主共用实例：调色板按定义不可变，无需按皮肤复制
-    private static final UiHostPalette INSTANCE = new UiHostPalette();
-
-    // 只允许经主题入口获取
-    private UiHostPalette() {
-    }
-
-    // 宿主调色板
-    public static UiHostPalette hostPalette() {
-        return INSTANCE;
-    }
-
-    // ---- 文本 ----
-
-    public int textPrimary() {
-        return UiPalette.TEXT_PRIMARY;
-    }
-
-    public int textSecondary() {
-        return UiPalette.TEXT_SECONDARY;
-    }
-
-    public int textDisabled() {
-        return UiPalette.TEXT_DISABLED;
-    }
-
-    public int textOnDark() {
-        return UiPalette.TEXT_ON_DARK;
-    }
-
-    // ---- 控件结构色 ----
-
-    public int controlFill() {
-        return UiPalette.CONTROL_FILL;
-    }
-
-    public int controlHover() {
-        return UiPalette.CONTROL_HOVER;
-    }
-
-    public int controlSelected() {
-        return UiPalette.CONTROL_SELECTED;
-    }
-
-    public int controlDisabled() {
-        return UiPalette.CONTROL_DISABLED;
-    }
-
-    public int controlBevelLight() {
-        return UiPalette.CONTROL_BEVEL_LIGHT;
-    }
-
-    public int controlBevelDark() {
-        return UiPalette.CONTROL_BEVEL_DARK;
-    }
-
-    // ---- 状态色 ----
-
-    public int accent() {
-        return UiPalette.ACCENT;
-    }
-
-    public int accentHover() {
-        return UiPalette.ACCENT_HOVER;
-    }
-
-    public int accentPressed() {
-        return UiPalette.ACCENT_PRESSED;
-    }
-
-    public int danger() {
-        return UiPalette.DANGER;
-    }
-
-    // ---- 区域与滚动 ----
-
-    public int slotFill() {
-        return UiPalette.SLOT_FILL;
-    }
-
-    public int slotInner() {
-        return UiPalette.SLOT_INNER;
-    }
-
-    public int headerText() {
-        return UiPalette.HEADER_TEXT;
-    }
-
-    public int listRowOdd() {
-        return UiPalette.LIST_ROW_ODD;
-    }
-
-    public int link() {
-        return UiPalette.LINK;
-    }
-
-    public int modalDim() {
-        return UiPalette.MODAL_DIM;
-    }
-
-    public int scrollTrack() {
-        return UiPalette.SCROLL_TRACK;
-    }
-
-    public int scrollThumb() {
-        return UiPalette.SCROLL_THUMB;
-    }
-
-    // ---- 状态色（补充） ----
-
-    // 警告状态
-    public int warning() {
-        return UiPalette.WARNING;
-    }
-
-    // 成功状态
-    public int success() {
-        return UiPalette.SUCCESS;
-    }
-
-    // 分区面板底色
-    public int panelFill() {
-        return UiPalette.PANEL_FILL;
-    }
-
-    // ---- 只读代码视图 ----
-
-    // 对象键
-    public int codeKey() {
-        return UiPalette.CODE_KEY;
-    }
-
-    // 字符串值
-    public int codeString() {
-        return UiPalette.CODE_STRING;
-    }
-
-    // 数字值
-    public int codeNumber() {
-        return UiPalette.CODE_NUMBER;
-    }
-
-    // true / false / null
-    public int codeLiteral() {
-        return UiPalette.CODE_LITERAL;
-    }
-
-    // 标点与结构字符
-    public int codePunctuation() {
-        return UiPalette.CODE_PUNCTUATION;
-    }
-
-    // 行号
-    public int codeGutterText() {
-        return UiPalette.CODE_GUTTER_TEXT;
-    }
-
-    // 行号栏分隔线
-    public int codeGutterLine() {
-        return UiPalette.CODE_GUTTER_LINE;
-    }
-
-    // 代码块标题条底色
-    public int codeSectionFill() {
-        return UiPalette.CODE_SECTION_FILL;
-    }
-
-    // 代码块标题
-    public int codeSectionText() {
-        return UiPalette.CODE_SECTION_TEXT;
-    }
-
-    // 代码块副标题（文件路径）
-    public int codePathText() {
-        return UiPalette.CODE_PATH_TEXT;
-    }
-
-    // ---- 画布扁平外壳 ----
-
-    // 功能栏与工具列描边
-    public int chromeBorder() {
-        return UiFlatPalette.CHROME_BORDER;
-    }
-
-    // 功能栏 / 工具列的图标分组线
-    public int chromeDivider() {
-        return UiFlatPalette.CHROME_DIVIDER;
-    }
-
-    // 底部状态栏正文
-    public int statusText() {
-        return UiFlatPalette.STATUS_TEXT;
-    }
-
-    // 底部状态栏次要文字
-    public int statusTextMuted() {
-        return UiFlatPalette.STATUS_TEXT_MUTED;
-    }
-
-    // 底部状态栏错误文字
-    public int statusTextDanger() {
-        return UiFlatPalette.STATUS_TEXT_DANGER;
-    }
-
-    // 底部状态栏警告文字
-    public int statusTextWarning() {
-        return UiFlatPalette.STATUS_TEXT_WARNING;
-    }
-
-    // 帮助浮层标题
-    public int helpText() {
-        return UiFlatPalette.HELP_TEXT;
-    }
-
-    // 帮助浮层正文
-    public int helpTextMuted() {
-        return UiFlatPalette.HELP_TEXT_MUTED;
-    }
-
-    // 浮动调板正文
-    public int panelText() {
-        return UiFlatPalette.PANEL_TEXT;
-    }
-
-    // 浮动调板控件常态底色
-    public int panelControlFill() {
-        return UiFlatPalette.PANEL_CONTROL_FILL;
-    }
-
-    // ---- 条件树画布 ----
-
-    public int canvasFill() {
-        return UiFlatPalette.CANVAS_FILL;
-    }
-
-    public int canvasBorder() {
-        return UiFlatPalette.CANVAS_BORDER;
-    }
-
-    public int canvasGridDot() {
-        return UiFlatPalette.CANVAS_GRID_DOT;
-    }
-
-    public int canvasHintText() {
-        return UiFlatPalette.CANVAS_HINT_TEXT;
-    }
-
-    public int canvasLink() {
-        return UiFlatPalette.CANVAS_LINK;
-    }
-
-    public int canvasLinkSelected() {
-        return UiFlatPalette.CANVAS_LINK_SELECTED;
-    }
-
-    public int canvasCardFill() {
-        return UiFlatPalette.CANVAS_CARD_FILL;
-    }
-
-    // 卡片标题带：用色阶区分层级，替代原来的横贯分隔线
-    public int canvasCardBand() {
-        return UiFlatPalette.CANVAS_CARD_BAND;
-    }
-
-    // 端点槽位（来源 / 结果）主体与标题带
-    public int canvasEndpointFill() {
-        return UiFlatPalette.CANVAS_ENDPOINT_FILL;
-    }
-
-    public int canvasEndpointBand() {
-        return UiFlatPalette.CANVAS_ENDPOINT_BAND;
-    }
-
-    public int canvasAllFill() { return UiFlatPalette.CANVAS_ALL_FILL; }
-    public int canvasAllBand() { return UiFlatPalette.CANVAS_ALL_BAND; }
-    public int canvasAllText() { return UiFlatPalette.CANVAS_ALL_TEXT; }
-    public int canvasAnyFill() { return UiFlatPalette.CANVAS_ANY_FILL; }
-    public int canvasAnyBand() { return UiFlatPalette.CANVAS_ANY_BAND; }
-    public int canvasAnyText() { return UiFlatPalette.CANVAS_ANY_TEXT; }
-    public int canvasNotFill() { return UiFlatPalette.CANVAS_NOT_FILL; }
-    public int canvasNotBand() { return UiFlatPalette.CANVAS_NOT_BAND; }
-    public int canvasNotText() { return UiFlatPalette.CANVAS_NOT_TEXT; }
-    public int canvasFlowLink() { return UiFlatPalette.CANVAS_FLOW_LINK; }
-
-    public int canvasCardHoverFill() {
-        return UiFlatPalette.CANVAS_CARD_HOVER_FILL;
-    }
-
-    public int canvasCardSelectedFill() {
-        return UiFlatPalette.CANVAS_CARD_SELECTED_FILL;
-    }
-
-    public int canvasCardBorder() {
-        return UiFlatPalette.CANVAS_CARD_BORDER;
-    }
-
-    public int canvasCardBorderSelected() {
-        return UiFlatPalette.CANVAS_CARD_BORDER_SELECTED;
-    }
-
-    public int canvasText() {
-        return UiFlatPalette.CANVAS_TEXT;
-    }
-
-    public int canvasTextMuted() {
-        return UiFlatPalette.CANVAS_TEXT_MUTED;
-    }
-
-    public int canvasTextDanger() {
-        return UiFlatPalette.CANVAS_TEXT_DANGER;
-    }
-
-    public int canvasTextOnAccent() {
-        return UiFlatPalette.CANVAS_TEXT_ON_ACCENT;
-    }
-
-    public int canvasAccent() {
-        return UiFlatPalette.CANVAS_ACCENT;
-    }
-
-    public int canvasAccentHover() {
-        return UiFlatPalette.CANVAS_ACCENT_HOVER;
-    }
-
-    public int canvasHotspotFill() {
-        return UiFlatPalette.CANVAS_HOTSPOT_FILL;
-    }
-
-    public int canvasHotspotBorder() {
-        return UiFlatPalette.CANVAS_HOTSPOT_BORDER;
-    }
-
-    public int canvasDragGhostFill() {
-        return UiFlatPalette.CANVAS_DRAG_GHOST_FILL;
-    }
-
-    public int canvasRubberFill() {
-        return UiFlatPalette.CANVAS_RUBBER_FILL;
-    }
-
-    public int canvasPickerFill() {
-        return UiFlatPalette.CANVAS_PICKER_FILL;
-    }
-
-    public int canvasPickerBorder() {
-        return UiFlatPalette.CANVAS_PICKER_BORDER;
-    }
-
-    public int canvasPickerHeaderFill() {
-        return UiFlatPalette.CANVAS_PICKER_HEADER_FILL;
-    }
-
-    public int canvasPickerHeaderText() {
-        return UiFlatPalette.CANVAS_PICKER_HEADER_TEXT;
-    }
-
-    public int canvasPickerInputFill() {
-        return UiFlatPalette.CANVAS_PICKER_INPUT_FILL;
-    }
-
-    public int canvasPickerInputBorder() {
-        return UiFlatPalette.CANVAS_PICKER_INPUT_BORDER;
-    }
-
-    public int canvasPickerRowSelected() {
-        return UiFlatPalette.CANVAS_PICKER_ROW_SELECTED;
-    }
-
-    public int canvasPickerText() {
-        return UiFlatPalette.CANVAS_PICKER_TEXT;
-    }
-
-    public int canvasPickerTextMuted() {
-        return UiFlatPalette.CANVAS_PICKER_TEXT_MUTED;
-    }
-
-    public int canvasPickerTextDisabled() {
-        return UiFlatPalette.CANVAS_PICKER_TEXT_DISABLED;
-    }
-
-    // ---- 悬停说明面板 ----
-
-    // 面板标题与分区标题
-    public int tooltipTitle() {
-        return UiPalette.TOOLTIP_TITLE;
-    }
-
-    // 可度量取值：数值、区间、时刻
-    public int tooltipMetric() {
-        return UiPalette.TOOLTIP_METRIC;
-    }
-
-    // 注册表引用：维度、群系、方块、物品、流体
-    public int tooltipReference() {
-        return UiPalette.TOOLTIP_REFERENCE;
+public record UiHostPalette(
+        int textPrimary,
+        int textSecondary,
+        int textDisabled,
+        int textOnDark,
+        int controlFill,
+        int controlHover,
+        int controlSelected,
+        int controlDisabled,
+        int controlBevelLight,
+        int controlBevelDark,
+        int accent,
+        int accentHover,
+        int accentPressed,
+        int danger,
+        int slotFill,
+        int slotInner,
+        int headerText,
+        int listRowOdd,
+        int link,
+        int modalDim,
+        int scrollTrack,
+        int scrollThumb,
+        int warning,
+        int success,
+        int panelFill,
+        int codeKey,
+        int codeString,
+        int codeNumber,
+        int codeLiteral,
+        int codePunctuation,
+        int codeGutterText,
+        int codeGutterLine,
+        int codeSectionFill,
+        int codeSectionText,
+        int codePathText,
+        int chromeBorder,
+        int chromeDivider,
+        int statusText,
+        int statusTextMuted,
+        int statusTextDanger,
+        int statusTextWarning,
+        int helpText,
+        int helpTextMuted,
+        int panelText,
+        int panelControlFill,
+        int canvasFill,
+        int canvasBorder,
+        int canvasGridDot,
+        int canvasHintText,
+        int canvasLink,
+        int canvasLinkSelected,
+        int canvasCardFill,
+        int canvasCardBand,
+        int canvasEndpointFill,
+        int canvasEndpointBand,
+        int canvasAllFill,
+        int canvasAllBand,
+        int canvasAllText,
+        int canvasAnyFill,
+        int canvasAnyBand,
+        int canvasAnyText,
+        int canvasNotFill,
+        int canvasNotBand,
+        int canvasNotText,
+        int canvasFlowLink,
+        int canvasCardHoverFill,
+        int canvasCardSelectedFill,
+        int canvasCardBorder,
+        int canvasCardBorderSelected,
+        int canvasText,
+        int canvasTextMuted,
+        int canvasTextDanger,
+        int canvasTextOnAccent,
+        int canvasAccent,
+        int canvasAccentHover,
+        int canvasHotspotFill,
+        int canvasHotspotBorder,
+        int canvasDragGhostFill,
+        int canvasRubberFill,
+        int canvasPickerFill,
+        int canvasPickerBorder,
+        int canvasPickerHeaderFill,
+        int canvasPickerHeaderText,
+        int canvasPickerInputFill,
+        int canvasPickerInputBorder,
+        int canvasPickerRowSelected,
+        int canvasPickerText,
+        int canvasPickerTextMuted,
+        int canvasPickerTextDisabled,
+        int tooltipTitle,
+        int tooltipMetric,
+        int tooltipReference) {
+
+    /** 像素主题的默认语义色。 */
+    public static UiHostPalette pixelDefaults() {
+        return defaults();
+    }
+
+    /** 扁平外壳的默认语义色，保持现行内联控件外观。 */
+    public static UiHostPalette flatDefaults() {
+        return defaults();
+    }
+
+    private static UiHostPalette defaults() {
+        return new UiHostPalette(
+                UiPalette.TEXT_PRIMARY,
+                UiPalette.TEXT_SECONDARY,
+                UiPalette.TEXT_DISABLED,
+                UiPalette.TEXT_ON_DARK,
+                UiPalette.CONTROL_FILL,
+                UiPalette.CONTROL_HOVER,
+                UiPalette.CONTROL_SELECTED,
+                UiPalette.CONTROL_DISABLED,
+                UiPalette.CONTROL_BEVEL_LIGHT,
+                UiPalette.CONTROL_BEVEL_DARK,
+                UiPalette.ACCENT,
+                UiPalette.ACCENT_HOVER,
+                UiPalette.ACCENT_PRESSED,
+                UiPalette.DANGER,
+                UiPalette.SLOT_FILL,
+                UiPalette.SLOT_INNER,
+                UiPalette.HEADER_TEXT,
+                UiPalette.LIST_ROW_ODD,
+                UiPalette.LINK,
+                UiPalette.MODAL_DIM,
+                UiPalette.SCROLL_TRACK,
+                UiPalette.SCROLL_THUMB,
+                UiPalette.WARNING,
+                UiPalette.SUCCESS,
+                UiPalette.PANEL_FILL,
+                UiPalette.CODE_KEY,
+                UiPalette.CODE_STRING,
+                UiPalette.CODE_NUMBER,
+                UiPalette.CODE_LITERAL,
+                UiPalette.CODE_PUNCTUATION,
+                UiPalette.CODE_GUTTER_TEXT,
+                UiPalette.CODE_GUTTER_LINE,
+                UiPalette.CODE_SECTION_FILL,
+                UiPalette.CODE_SECTION_TEXT,
+                UiPalette.CODE_PATH_TEXT,
+                UiFlatPalette.CHROME_BORDER,
+                UiFlatPalette.CHROME_DIVIDER,
+                UiFlatPalette.STATUS_TEXT,
+                UiFlatPalette.STATUS_TEXT_MUTED,
+                UiFlatPalette.STATUS_TEXT_DANGER,
+                UiFlatPalette.STATUS_TEXT_WARNING,
+                UiFlatPalette.HELP_TEXT,
+                UiFlatPalette.HELP_TEXT_MUTED,
+                UiFlatPalette.PANEL_TEXT,
+                UiFlatPalette.PANEL_CONTROL_FILL,
+                UiFlatPalette.CANVAS_FILL,
+                UiFlatPalette.CANVAS_BORDER,
+                UiFlatPalette.CANVAS_GRID_DOT,
+                UiFlatPalette.CANVAS_HINT_TEXT,
+                UiFlatPalette.CANVAS_LINK,
+                UiFlatPalette.CANVAS_LINK_SELECTED,
+                UiFlatPalette.CANVAS_CARD_FILL,
+                UiFlatPalette.CANVAS_CARD_BAND,
+                UiFlatPalette.CANVAS_ENDPOINT_FILL,
+                UiFlatPalette.CANVAS_ENDPOINT_BAND,
+                UiFlatPalette.CANVAS_ALL_FILL,
+                UiFlatPalette.CANVAS_ALL_BAND,
+                UiFlatPalette.CANVAS_ALL_TEXT,
+                UiFlatPalette.CANVAS_ANY_FILL,
+                UiFlatPalette.CANVAS_ANY_BAND,
+                UiFlatPalette.CANVAS_ANY_TEXT,
+                UiFlatPalette.CANVAS_NOT_FILL,
+                UiFlatPalette.CANVAS_NOT_BAND,
+                UiFlatPalette.CANVAS_NOT_TEXT,
+                UiFlatPalette.CANVAS_FLOW_LINK,
+                UiFlatPalette.CANVAS_CARD_HOVER_FILL,
+                UiFlatPalette.CANVAS_CARD_SELECTED_FILL,
+                UiFlatPalette.CANVAS_CARD_BORDER,
+                UiFlatPalette.CANVAS_CARD_BORDER_SELECTED,
+                UiFlatPalette.CANVAS_TEXT,
+                UiFlatPalette.CANVAS_TEXT_MUTED,
+                UiFlatPalette.CANVAS_TEXT_DANGER,
+                UiFlatPalette.CANVAS_TEXT_ON_ACCENT,
+                UiFlatPalette.CANVAS_ACCENT,
+                UiFlatPalette.CANVAS_ACCENT_HOVER,
+                UiFlatPalette.CANVAS_HOTSPOT_FILL,
+                UiFlatPalette.CANVAS_HOTSPOT_BORDER,
+                UiFlatPalette.CANVAS_DRAG_GHOST_FILL,
+                UiFlatPalette.CANVAS_RUBBER_FILL,
+                UiFlatPalette.CANVAS_PICKER_FILL,
+                UiFlatPalette.CANVAS_PICKER_BORDER,
+                UiFlatPalette.CANVAS_PICKER_HEADER_FILL,
+                UiFlatPalette.CANVAS_PICKER_HEADER_TEXT,
+                UiFlatPalette.CANVAS_PICKER_INPUT_FILL,
+                UiFlatPalette.CANVAS_PICKER_INPUT_BORDER,
+                UiFlatPalette.CANVAS_PICKER_ROW_SELECTED,
+                UiFlatPalette.CANVAS_PICKER_TEXT,
+                UiFlatPalette.CANVAS_PICKER_TEXT_MUTED,
+                UiFlatPalette.CANVAS_PICKER_TEXT_DISABLED,
+                UiPalette.TOOLTIP_TITLE,
+                UiPalette.TOOLTIP_METRIC,
+                UiPalette.TOOLTIP_REFERENCE);
     }
 }

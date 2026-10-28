@@ -33,9 +33,10 @@ final class RuleEditorInputSection {
     private final EditorSectionActions commands;
 
     // 主题：与容器共用宿主默认主题
-    private static final UiHostTheme THEME = RuleEditorEditSections.THEME;
+    private final UiHostTheme THEME;
 
     RuleEditorInputSection(EditorShell shell, Font font, EditorFormFactory forms, EditorSectionActions actions) {
+        this.THEME = shell.theme();
         this.shell = shell;
         this.font = font;
         this.forms = forms;
@@ -159,7 +160,7 @@ final class RuleEditorInputSection {
         content.forms.add(sourceForm);
         content.widgets.add(sourceForm);
 
-        sourceCostButton = new UiButton(RuleEditorEditSections.THEME, font, Component.translatable(RuleEditorPageSupport.UI + "cost.mode.custom"),
+        sourceCostButton = new UiButton(THEME, font, Component.translatable(RuleEditorPageSupport.UI + "cost.mode.custom"),
                 UiButtonVariant.SECONDARY, this::specifySourceCost).setChipStyle(true);
         {
             boolean custom = rule.has(RuleFields.SOURCE_COST);
@@ -275,7 +276,7 @@ final class RuleEditorInputSection {
 
     void buildPresenceSection(EditSession session, ResourceLocation type, String toggleKey) {
         List<PresenceLeaves.PresenceLeaf> ruleLevel = PresenceLeaves.ruleLevelPresence(session.root(), type);
-        UiCheckBox toggle = new UiCheckBox(RuleEditorEditSections.THEME, font, Component.translatable(toggleKey), !ruleLevel.isEmpty());
+        UiCheckBox toggle = new UiCheckBox(THEME, font, Component.translatable(toggleKey), !ruleLevel.isEmpty());
         toggle.setOnChanged(checked -> onPresenceToggle(type, checked));
         content.widgets.add(toggle);
         if (RuleEditorPageSupport.CATALYST_PRESENT_ID.equals(type)) {
@@ -309,7 +310,7 @@ final class RuleEditorInputSection {
         });
         // 选择卡片自带逐项移除；多个同类型叶保留移除整条条件的入口。
         if (PresenceLeaves.ruleLevelPresence(session.root(), leaf.type()).size() > 1) {
-            form.field(leaf.fieldName()).setAction(new UiButton(RuleEditorEditSections.THEME, font, Component.translatable(RuleEditorPageSupport.UI + "rule.presence.remove"),
+            form.field(leaf.fieldName()).setAction(new UiButton(THEME, font, Component.translatable(RuleEditorPageSupport.UI + "rule.presence.remove"),
                     UiButtonVariant.SECONDARY, () -> removePresenceLeaf(leaf)).setChipStyle(true));
         }
         return form;

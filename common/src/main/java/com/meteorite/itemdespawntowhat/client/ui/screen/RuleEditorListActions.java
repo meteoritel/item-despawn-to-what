@@ -6,7 +6,6 @@ import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
@@ -29,7 +28,7 @@ import org.jetbrains.annotations.Nullable;
  */
 final class RuleEditorListActions {
 
-    private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
+    private final UiHostTheme THEME;
     private static final String DEFAULT_RULE_NAME = "new_rule";
     private static final String COPY_SUFFIX = "_copy";
     private static final int COPY_BASE_MAX_LENGTH = RuleNameInput.MAX_NAME_LENGTH - COPY_SUFFIX.length()
@@ -45,6 +44,7 @@ final class RuleEditorListActions {
     RuleEditorListActions(EditorShell shell, RuleEditorModel model, Font font, UiModalStack modals,
             Supplier<@Nullable String> selection) {
         this.shell = shell;
+        this.THEME = shell.theme();
         this.model = model;
         this.font = font;
         this.modals = modals;
@@ -80,7 +80,7 @@ final class RuleEditorListActions {
     }
 
     private void promptRuleName(String titleKey, String initial, Predicate<String> onSubmit) {
-        RuleNameInput content = new RuleNameInput(font);
+        RuleNameInput content = new RuleNameInput(shell.theme(), font);
         UiTextInput input = content.input();
         input.setMaxLength(RuleNameInput.MAX_NAME_LENGTH);
         input.setValue(initial);

@@ -23,7 +23,7 @@ import net.minecraft.network.chat.Component;
 public final class TagCarouselView implements UiWidget, UiFocusTarget {
 
     // 宿主默认主题：屏幕按主题取色与绘制原语
-    private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
+    private final UiHostTheme THEME;
 
     private static final String UI = TypeLabels.UI_PREFIX + "tag.";
     // 预览区高度：轮播图标与名称
@@ -38,7 +38,9 @@ public final class TagCarouselView implements UiWidget, UiFocusTarget {
     private final UiListView<TagPreviewIcons.Member> list;
     private UiRect bounds = new UiRect(0, 0, 0, 0);
 
-    public TagCarouselView(Font font, TagPreviewIcons.Tag tag) {
+    /** 以宿主主题装配标签成员预览和列表，两者共享同一字体与视觉。 */
+    public TagCarouselView(UiHostTheme theme, Font font, TagPreviewIcons.Tag tag) {
+        this.THEME = UiHostThemes.require(theme);
         this.tag = tag;
         list = new UiListView<>(THEME, font, (g, f, member, index, row, selected, hovered, focused) -> {
             member.icon().render(g, row.x() + 2, row.y() + 2);

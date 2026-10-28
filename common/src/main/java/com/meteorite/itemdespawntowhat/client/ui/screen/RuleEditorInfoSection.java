@@ -40,7 +40,7 @@ final class RuleEditorInfoSection {
     private final EditorSectionActions commands;
 
     // 主题：与容器共用宿主默认主题
-    private static final UiHostTheme THEME = RuleEditorEditSections.THEME;
+    private final UiHostTheme THEME;
 
     // 页面文案前缀
     private static final String UI = RuleEditorPageSupport.UI;
@@ -49,6 +49,7 @@ final class RuleEditorInfoSection {
     private static final float TEXT_SCALE = 0.8F;
 
     RuleEditorInfoSection(EditorShell shell, RuleEditorModel model, Font font, EditorFormFactory forms, EditorSectionActions actions) {
+        this.THEME = shell.theme();
         this.shell = shell;
         this.font = font;
         this.forms = forms;

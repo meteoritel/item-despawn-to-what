@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
@@ -23,8 +24,8 @@ final class ListControl extends FormControl {
     // 装载时的条目基线；用户未改动且条目未变时视为「未编辑」
     private List<String> loadedItems = List.of();
 
-    ListControl(Font font, EditorField field, Runnable onChanged) {
-        super(field);
+    ListControl(UiHostTheme theme, Font font, EditorField field, Runnable onChanged) {
+        super(theme, field);
         UiListEditor.Mode mode = field.isTagList() ? UiListEditor.Mode.TAG
                 : field.isStringList() ? UiListEditor.Mode.TEXT : UiListEditor.Mode.ID;
         this.editor = new UiListEditor(THEME, font, mode, field.registry());

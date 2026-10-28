@@ -24,29 +24,17 @@ public interface UiHostTheme extends UiStyleSource {
     // ---- 图标图集行号 ----
     // 与 UiFlatSkin 的图集行序一致；图标图集是宿主共用资源，两种皮肤同源
 
-    // 页面层经主题消费；本包内暂无调用点
     int ICON_UNDO = UiFlatSkin.ICON_UNDO;
-    // 页面层经主题消费；本包内暂无调用点
     int ICON_REDO = UiFlatSkin.ICON_REDO;
-    // 页面层经主题消费；本包内暂无调用点
     int ICON_VIEW_TREE = UiFlatSkin.ICON_VIEW_TREE;
-    // 页面层经主题消费；本包内暂无调用点
     int ICON_VIEW_JSON = UiFlatSkin.ICON_VIEW_JSON;
-    // 页面层经主题消费；本包内暂无调用点
     int ICON_HELP = UiFlatSkin.ICON_HELP;
-    // 页面层经主题消费；本包内暂无调用点
     int ICON_ADD_CONDITION = UiFlatSkin.ICON_ADD_CONDITION;
-    // 页面层经主题消费；本包内暂无调用点
     int ICON_NEW_BRANCH = UiFlatSkin.ICON_NEW_BRANCH;
-    // 页面层经主题消费；本包内暂无调用点
     int ICON_INVERT = UiFlatSkin.ICON_INVERT;
-    // 页面层经主题消费；本包内暂无调用点
     int ICON_REMOVE = UiFlatSkin.ICON_REMOVE;
-    // 页面层经主题消费；本包内暂无调用点
     int ICON_MOVE_UP = UiFlatSkin.ICON_MOVE_UP;
-    // 页面层经主题消费；本包内暂无调用点
     int ICON_MOVE_DOWN = UiFlatSkin.ICON_MOVE_DOWN;
-    // 页面层经主题消费；本包内暂无调用点
     int ICON_WRAP_ALL = UiFlatSkin.ICON_WRAP_ALL;
 
     // 控件可见的调色板
@@ -94,7 +82,6 @@ public interface UiHostTheme extends UiStyleSource {
     UiSliderSkin sliderSkin(UiSliderRole role);
 
     // 功能栏与工具列格子样式（与浮动调板同属宿主外壳）
-    // 页面层经主题消费；本包内暂无调用点
     UiControlStyle stripStyle();
 
     // ---- 结构绘制 ----
@@ -137,15 +124,12 @@ public interface UiHostTheme extends UiStyleSource {
     void drawSegment(GuiGraphics graphics, UiRect rect, boolean enabled, boolean selected, boolean hovered);
 
     // 圆角卡片（像素皮肤为九宫格贴图，扁平皮肤为同色描边面）
-    // 页面层经主题消费；本包内暂无调用点
     void drawCard(GuiGraphics graphics, UiRect rect);
 
     // 分区面板
-    // 页面层经主题消费；本包内暂无调用点
     void drawPanel(GuiGraphics graphics, UiRect rect);
 
     // 可选中小底（选中 / 悬停 / 常态）
-    // 页面层经主题消费；本包内暂无调用点
     void drawChip(GuiGraphics graphics, UiRect rect, boolean selected, boolean hovered);
 
     // ---- 宿主外壳（画布页使用扁平实现；其它页面不装配外壳） ----
@@ -154,7 +138,6 @@ public interface UiHostTheme extends UiStyleSource {
     UiIcon icon(int row, boolean disabled);
 
     // 帮助浮层底板
-    // 页面层经主题消费；本包内暂无调用点
     void drawHelp(GuiGraphics graphics, UiRect rect);
 
     // 纯色底 + 1 像素描边（宿主外壳通用原语）

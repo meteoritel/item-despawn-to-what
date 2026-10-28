@@ -22,7 +22,7 @@ import net.minecraft.client.gui.GuiGraphics;
  */
 public final class UiFlatTheme extends AbstractHostTheme {
 
-    // 无状态主题，全局共用一个实例
+    // 不可变主题实例持有自己的调色板
     static final UiFlatTheme INSTANCE = new UiFlatTheme();
 
     // 次要控件：扁平面板控件的常态 / 悬停 / 按下 / 选中 / 禁用
@@ -72,7 +72,15 @@ public final class UiFlatTheme extends AbstractHostTheme {
             UiFlatPalette.PANEL_TEXT, UiFlatPalette.PANEL_TEXT, UiPalette.TEXT_DISABLED,
             UiFlatPalette.CANVAS_TEXT_DANGER, 6, 5, 4);
 
+    private final UiHostPalette palette = UiHostPalette.flatDefaults();
+
     private UiFlatTheme() {
+    }
+
+    /** 本主题拥有的不可变语义调色板。 */
+    @Override
+    public UiHostPalette palette() {
+        return palette;
     }
 
     @Override

@@ -1,6 +1,5 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlowLayout;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
@@ -20,7 +19,6 @@ import org.jetbrains.annotations.Nullable;
 
 /** 分区拥有的控件、表单和卡片；组合视图只消费当前分区的装配结果。 */
 final class EditorSectionContent {
-    private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
     private static final int HEADER_BAR_WIDTH = 2;
     private static final int HEADER_TITLE_GAP = 4;
     private static final int HEADER_DIVIDER_GAP = 5;
@@ -152,7 +150,7 @@ final class EditorSectionContent {
         return new UiRect(x + inset, y + inset, Math.max(0, width - inset * 2), RuleEditorPageSupport.CARD_HEADER_H);
     }
 
-    static void drawCardHeader(GuiGraphics graphics, Font font, UiRect headerRect, @Nullable UiIcon icon, Component title) {
+    static void drawCardHeader(UiHostTheme THEME, GuiGraphics graphics, Font font, UiRect headerRect, @Nullable UiIcon icon, Component title) {
         if (headerRect.width() <= 0) {
             return;
         }

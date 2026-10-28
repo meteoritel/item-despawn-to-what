@@ -29,7 +29,7 @@ final class SublistControl extends FormControl {
     private int measuredHeight = DEFAULT_HEIGHT;
 
     SublistControl(Font font, FormView owner, EditorField field, Runnable onChanged) {
-        super(field);
+        super(owner.theme(), field);
         this.font = font;
         this.owner = owner;
         this.subFields = field.subFields();

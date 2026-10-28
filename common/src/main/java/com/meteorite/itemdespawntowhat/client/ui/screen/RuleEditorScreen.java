@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.ui.shared.PreviewResources;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiConditionTreeSummary;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
@@ -13,10 +14,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlatText;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.shared.BlockPreviewIcons;
-import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine;
-import com.meteorite.itemdespawntowhat.client.ui.shared.EntityPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostPalette;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
@@ -47,7 +45,7 @@ import net.minecraft.client.Minecraft;
 public final class RuleEditorScreen extends Screen implements UiLayoutSource {
 
     // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
-    private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
+    private final UiHostTheme THEME = UiHostThemes.defaultTheme();
 
     // 布局常量（页自身的内边距由页声明）
     private static final int PAD = 4;
@@ -72,7 +70,7 @@ public final class RuleEditorScreen extends Screen implements UiLayoutSource {
         BuiltinEditorDescriptors.bootstrap();
         RuleEditorModel model = new RuleEditorModel(workspace);
         // 屏幕构造期 this.font 尚未注入，外壳与页面直接取客户端字体实例
-        this.shell = new EditorShell(workspace, model, new RuleListDisplayCache(model), Minecraft.getInstance().font);
+        this.shell = new EditorShell(THEME, UiHostThemes.flatTheme(), workspace, model, new RuleListDisplayCache(model), Minecraft.getInstance().font);
         this.input = new EditorInputRouter(shell, this::saveOverlay, () -> contentArea);
     }
     // 编辑器不做游戏内暂停
@@ -313,9 +311,7 @@ public final class RuleEditorScreen extends Screen implements UiLayoutSource {
     @Override
     public void removed() {
         shell.flushDrafts();
-        EntityPreviewIcons.clear();
-        CatalogPreviewIcons.clear();
-        BlockPreviewIcons.clear();
+        PreviewResources.release();
         super.removed();
     }
 
@@ -325,9 +321,7 @@ public final class RuleEditorScreen extends Screen implements UiLayoutSource {
         if (shell.saving()) {
             return;
         }
-        EntityPreviewIcons.clear();
-        CatalogPreviewIcons.clear();
-        BlockPreviewIcons.clear();
+        PreviewResources.release();
         shell.flushDrafts();
         super.onClose();
     }

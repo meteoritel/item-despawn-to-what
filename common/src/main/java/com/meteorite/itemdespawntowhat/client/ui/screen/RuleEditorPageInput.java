@@ -175,7 +175,7 @@ final class RuleEditorPageInput {
         UiListView<?> list = pages.resultsSection.effectList;
         UiRect rect = list == null ? null : list.visibleRowBounds(dragTo);
         if (rect != null) {
-            RuleEditorEditSections.THEME.drawSelection(graphics, rect);
+            pages.THEME.drawSelection(graphics, rect);
         }
     }
 

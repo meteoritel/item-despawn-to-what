@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.JsonSummary;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
@@ -14,8 +15,8 @@ final class RawJsonControl extends FormControl {
 
     private @Nullable RuleValue raw;
 
-    RawJsonControl(EditorField field) {
-        super(field);
+    RawJsonControl(UiHostTheme theme, EditorField field) {
+        super(theme, field);
     }
 
     @Override

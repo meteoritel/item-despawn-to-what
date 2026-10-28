@@ -3,7 +3,6 @@ package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
@@ -36,7 +35,6 @@ import org.jetbrains.annotations.Nullable;
 final class ItemCountsControl extends FormControl {
 
     // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
-    private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
     // 行间距（未配对）：与卡片表单其它行保持一致
     private static final int ROW_GAP = 6;
     // 配对布局：物品名独占一行，其下门槛与消耗两条滑条紧邻，不同物品之间用条目间距拉开
@@ -146,8 +144,8 @@ final class ItemCountsControl extends FormControl {
     private int lastRowHeight = ROW_HEIGHT;
     private @Nullable NumberControl pressed;
 
-    ItemCountsControl(Font font, EditorField field, Runnable onChanged) {
-        super(field);
+    ItemCountsControl(UiHostTheme theme, Font font, EditorField field, Runnable onChanged) {
+        super(theme, field);
         this.font = font;
         this.onChanged = onChanged;
         this.catalogType = FieldCatalogTypes.catalogTypeOf(field);
@@ -218,7 +216,7 @@ final class ItemCountsControl extends FormControl {
         int windowMin = Math.max(DEFAULT_COUNT, field.intMin(DEFAULT_COUNT));
         EditorField number = EditorField.integerSlider(field.name(), field.labelKey(),
                 field.intMin(DEFAULT_COUNT), field.intMax(Integer.MAX_VALUE), windowMin, INITIAL_SLIDER_MAX);
-        NumberControl control = Objects.requireNonNull(NumberControl.create(font, number, () -> {
+        NumberControl control = Objects.requireNonNull(NumberControl.create(THEME, font, number, () -> {
             markEdited();
             onChanged.run();
         }));

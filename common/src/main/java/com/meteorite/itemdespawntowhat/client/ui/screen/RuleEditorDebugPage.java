@@ -7,7 +7,6 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
@@ -51,7 +50,7 @@ final class RuleEditorDebugPage implements EditorPage {
         return Component.translatable(EDIT_UI + (shell.editable() ? "state.active" : "state.freezing")).getString();
     }
 
-    private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
+    private final UiHostTheme THEME;
     // 编辑器公共 i18n 前缀；调试页的文案挂在它下面的 debug. 命名空间
     private static final String EDIT_UI = TypeLabels.UI_PREFIX;
     private static final String UI = EDIT_UI + "debug.";
@@ -78,6 +77,7 @@ final class RuleEditorDebugPage implements EditorPage {
 
     RuleEditorDebugPage(EditorShell shell, RuleEditorModel model, Font font,
             UiModalStack modals) {
+        this.THEME = shell.theme();
         this.shell = shell;
         this.model = model;
         this.font = font;

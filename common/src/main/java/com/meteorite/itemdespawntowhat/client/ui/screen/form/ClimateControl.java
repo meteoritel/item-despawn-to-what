@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
@@ -47,8 +48,8 @@ final class ClimateControl extends FormControl {
     private String loadedMax = "";
     private final UiValueTextBinding<UiRangeValue, List<String>> binding;
 
-    ClimateControl(Font font, EditorField field, Runnable onChanged) {
-        super(field);
+    ClimateControl(UiHostTheme theme, Font font, EditorField field, Runnable onChanged) {
+        super(theme, field);
         numbers = Objects.requireNonNull(field.numbers(), "气候字段需要数值域声明");
         this.minInput = new UiTextInput(THEME, font,
                 Component.translatable(TypeLabels.UI_PREFIX + "field.climate.min"));

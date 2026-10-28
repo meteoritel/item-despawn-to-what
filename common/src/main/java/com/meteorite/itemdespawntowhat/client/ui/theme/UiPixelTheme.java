@@ -16,10 +16,18 @@ import net.minecraft.client.gui.GuiGraphics;
  */
 public final class UiPixelTheme extends AbstractHostTheme {
 
-    // 无状态主题，全局共用一个实例
+    // 不可变主题实例持有自己的调色板
     static final UiPixelTheme INSTANCE = new UiPixelTheme();
 
+    private final UiHostPalette palette = UiHostPalette.pixelDefaults();
+
     private UiPixelTheme() {
+    }
+
+    /** 本主题拥有的不可变语义调色板。 */
+    @Override
+    public UiHostPalette palette() {
+        return palette;
     }
 
     // 功能栏与工具列格子：常态与控件同底，悬停/按下/选中给出像素反馈

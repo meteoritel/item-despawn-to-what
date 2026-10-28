@@ -1,6 +1,5 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
@@ -46,7 +45,7 @@ import org.jetbrains.annotations.Nullable;
 final class RuleEditorEditSections {
 
     // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
-    static final UiHostTheme THEME = UiHostThemes.defaultTheme();
+    final UiHostTheme THEME;
 
     /** 页签 */
     enum EditSection {
@@ -109,6 +108,7 @@ final class RuleEditorEditSections {
     private final RuleEditorPageInput input;
 
     RuleEditorEditSections(EditorShell shell, RuleEditorModel model, Font font, UiFocusManager focus, ConditionEditingSupport conditionEditingSupport, Runnable finishEditing) {
+        this.THEME = shell.theme();
         this.shell = shell;
         this.font = font;
         this.focus = focus;
@@ -325,7 +325,7 @@ final class RuleEditorEditSections {
                 THEME.drawCard(graphics, card.bounds());
                 EditorSectionContent.CardHeader header = card.header();
                 if (header != null) {
-                    EditorSectionContent.drawCardHeader(graphics, font, card.headerRect(), header.icon(), header.title());
+                    EditorSectionContent.drawCardHeader(THEME, graphics, font, card.headerRect(), header.icon(), header.title());
                 }
             }
             switch (page) {

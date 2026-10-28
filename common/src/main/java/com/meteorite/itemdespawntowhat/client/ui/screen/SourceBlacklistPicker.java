@@ -4,7 +4,6 @@ import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCatalogGrid;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
@@ -30,7 +29,6 @@ import org.jetbrains.annotations.Nullable;
 final class SourceBlacklistPicker {
 
     // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
-    private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
 
     private static final String UI = TypeLabels.UI_PREFIX;
 
@@ -52,6 +50,7 @@ final class SourceBlacklistPicker {
 
     static UiModal modal(Font font, EditorShell shell, @Nullable RuleValue rule, int width, int height,
                          Consumer<List<String>> onPicked) {
+        UiHostTheme THEME = shell.theme();
         CatalogEntryPolicy policy = CatalogEntryPolicy.fixed(RuleCatalogType.ITEM);
         Pages pages = new Pages(sourceTags(rule), policy);
         UiCatalogGrid.Texts texts = RuleEditorPanelFactory.catalogTexts()
@@ -75,7 +74,7 @@ final class SourceBlacklistPicker {
         UiModal modal = UiModal.create(THEME, font).title(Component.translatable(UI + "rule.source.exclude"));
         modal.preferredWidth(RuleEditorPanelFactory.pickerWidth(width));
         modal.inlineFooter();
-        modal.contentWidget(grid, RuleEditorPanelFactory.pickerBodyHeight(height));
+        modal.contentWidget(grid, RuleEditorPanelFactory.pickerBodyHeight(THEME, height));
         modal.confirm(Component.translatable(UI + "button.confirm"), () -> {
             if (shell.editable()) onPicked.accept(grid.selection());
         });
