@@ -1,15 +1,19 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusState;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
+
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -24,7 +28,9 @@ import org.lwjgl.glfw.GLFW;
  */
 public final class UiListEditor implements UiWidget, UiFocusTarget {
 
-    /** 条目文本模式：{@code ID} 与 {@code TAG} 只允许资源 ID 字符集，{@code TAG} 额外接受 #标签；{@code TEXT} 接受任意文本。 */
+    /**
+     * 条目文本模式：{@code ID} 与 {@code TAG} 只允许资源 ID 字符集，{@code TAG} 额外接受 #标签；{@code TEXT} 接受任意文本。
+     */
     public enum Mode {
         // 资源 ID（命名空间:路径）
         ID,
@@ -54,11 +60,12 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
     private UiRect bounds = new UiRect(0, 0, 0, 0);
     private boolean enabled = true;
     private boolean visible = true;
-    private boolean focused;
+    private final UiFocusState focusState = new UiFocusState();
     private @Nullable Consumer<List<String>> onChanged;
 
     // 注入的宿主主题
     private final UiHostTheme theme;
+
     public UiListEditor(UiHostTheme theme, Font font, Mode mode, @Nullable String registryHint) {
         this.theme = UiHostThemes.require(theme);
         Objects.requireNonNull(font, "font");
@@ -110,7 +117,9 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
         this.offset = 0;
     }
 
-    public int editingIndex() { return editingIndex; }
+    public int editingIndex() {
+        return editingIndex;
+    }
 
     // 装载会话输入时保持追加/覆盖语义，不提交列表。
     public void restorePendingInput(String text, int index) {
@@ -340,20 +349,23 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
         if (enabled) {
             input.render(graphics, renderFont, mouseX, mouseY);
         }
-        if (focused) {
+        if (isFocusVisible()) {
             theme.drawFocusOutline(graphics, bounds);
         }
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mousePressed(UiInputContext context) {
+        double mouseX = context.pointerX();
+        double mouseY = context.pointerY();
+        int button = context.button();
         if (!visible || !enabled || button != 0) {
             return false;
         }
         if (input.bounds().contains(mouseX, mouseY)) {
             if (input.value().isBlank()) editingIndex = -1;
-            input.setFocused(true);
-            input.mouseClicked(mouseX, mouseY, button);
+            input.focusState().request();
+            input.mousePressed(context);
             return true;
         }
         UiRect area = listArea();
@@ -362,6 +374,7 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
         }
         int index = offset + (int) ((mouseY - area.y()) / ROW_HEIGHT);
         if (index >= 0 && index < items.size()) {
+            context.scope().pointerHit(this);
             selected = index;
             return true;
         }
@@ -369,13 +382,13 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
     }
 
     @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        return input.mouseReleased(mouseX, mouseY, button);
+    public boolean mouseReleased(UiInputContext context) {
+        return input.mouseReleased(context);
     }
 
     @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        return input.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
+        return input.mouseDragged(context, dragX, dragY);
     }
 
     @Override
@@ -426,7 +439,7 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
                 if (current != null) {
                     editingIndex = selected;
                     input.setValue(current);
-                    input.setFocused(true);
+                    input.focusState().request();
                     input.selectAll();
                 }
                 return true;
@@ -455,32 +468,36 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
     }
 
     @Override
+    public UiFocusState focusState() {
+        return focusState;
+    }
+
+    @Override
     public boolean canFocus() {
         return visible && enabled;
     }
 
     @Override
-    public void setFocused(boolean next) {
-        this.focused = next;
+    public void focusChanged(boolean next) {
         if (!next) {
-            input.setFocused(false);
+            input.focusState().clear();
         }
     }
 
     @Override
     public boolean isFocused() {
-        return focused || input.isFocused();
+        return focusState.isFocused() || input.isFocused();
     }
 
     @Override
     public boolean activate() {
         String current = selectedItem();
         if (current == null) {
-            input.setFocused(true);
+            input.focusState().request();
             return true;
         }
         input.setValue(current);
-        input.setFocused(true);
+        input.focusState().request();
         input.selectAll();
         return true;
     }

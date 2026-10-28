@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiAction;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
@@ -12,25 +13,17 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTarget;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiConditionGraphEditor;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
+
 import java.util.List;
+
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
-import org.lwjgl.glfw.GLFW;
 
 /**
- * kit 原语接入 {@link UiWidget} 分发的一层薄适配（约每个原语十行）。
- *
- * <p>kit 不允许反向依赖 widget 包，所以 {@link UiIconStrip} 走 kit 自己的
- * {@code UiInputTarget} 与 {@code UiFocusTarget} 契约，指针坐标与修饰键要由宿主装进
- * {@link UiInputContext}。条件树外壳只与本类交互：转发与上下文构造集中在这里，
- * 不在外壳各处散落 kit 调用，kit 签名调整时也只需改这一个文件。</p>
- *
- * <p>叶子参数表单由 {@link Inline} 适配成画布右侧的参数编辑框：
-     * 几何、动画与裁剪由画布负责，适配器只把 GUI 屏幕坐标下的事件转发给
- * {@link LeafPanel}。</p>
+ * 条件树工具栏与画布共享输入契约的宿主适配，负责排版与焦点目标转交。
+ * <p>原语直接接收事件上下文，宿主在入口采集修饰键与作用域。</p>
  */
 final class ConditionTreeChrome {
 
@@ -39,15 +32,11 @@ final class ConditionTreeChrome {
     }
 
     // 指针事件只带坐标与键号，修饰键从原版静态查询补齐成 kit 的显式上下文
-    private static UiInputContext pointer(double x, double y, int button) {
-        int modifiers = 0;
-        if (Screen.hasShiftDown()) modifiers |= GLFW.GLFW_MOD_SHIFT;
-        if (Screen.hasControlDown()) modifiers |= GLFW.GLFW_MOD_CONTROL;
-        if (Screen.hasAltDown()) modifiers |= GLFW.GLFW_MOD_ALT;
-        return UiInputContext.pointer(x, y, button, modifiers);
-    }
 
-    /** 图标条：水平功能栏与竖直工具列共用；方向键由 kit 自己处理，Enter/Space 走上层 activate。 */
+
+    /**
+     * 图标条：水平功能栏与竖直工具列共用；方向键由 kit 自己处理，Enter/Space 走上层 activate。
+     */
     static final class Strip implements UiWidget, UiFocusTarget, UiLayoutSource {
 
         private final UiIconStrip strip;
@@ -68,56 +57,92 @@ final class ConditionTreeChrome {
             return target == null || target.tooltip().isEmpty() ? null : target.tooltip().getFirst();
         }
 
-        @Override public UiRect bounds() { return strip.bounds(); }
+        @Override
+        public UiRect bounds() {
+            return strip.bounds();
+        }
 
-        @Override public void setBounds(int x, int y, int width, int height) {
+        @Override
+        public void setBounds(int x, int y, int width, int height) {
             strip.setBounds(x, y, width, height);
         }
 
-        @Override public void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        @Override
+        public void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
             strip.render(graphics, mouseX, mouseY);
         }
 
-        @Override public boolean mouseClicked(double x, double y, int button) {
-            return strip.mousePressed(pointer(x, y, button));
+        @Override
+        public boolean mousePressed(UiInputContext context) {
+            return strip.mousePressed(context);
         }
 
-        @Override public boolean mouseDragged(double x, double y, int button, double dragX, double dragY) {
-            return strip.mouseDragged(pointer(x, y, button));
+        @Override
+        public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
+            return strip.mouseDragged(context, dragX, dragY);
         }
 
-        @Override public boolean mouseReleased(double x, double y, int button) {
-            return strip.mouseReleased(pointer(x, y, button));
+        @Override
+        public boolean mouseReleased(UiInputContext context) {
+            return strip.mouseReleased(context);
         }
 
-        @Override public boolean mouseScrolled(double x, double y, double scrollX, double scrollY) {
-            return strip.mouseScrolled(pointer(x, y, -1), scrollY);
+        @Override
+        public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
+            return strip.mouseScrolled(context, scrollX, scrollY);
         }
 
-        @Override public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        @Override
+        public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
             return strip.keyPressed(keyCode, scanCode, modifiers);
         }
 
-        @Override public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
+        @Override
+        public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
             return strip.keyReleased(keyCode, scanCode, modifiers);
         }
 
-        @Override public boolean charTyped(char codePoint, int modifiers) {
+        @Override
+        public boolean charTyped(char codePoint, int modifiers) {
             return strip.charTyped(codePoint, modifiers);
         }
 
-        @Override public boolean canFocus() { return strip.canFocus(); }
+        public UiFocusState focusState() {
+            return strip.focusState();
+        }
 
-        @Override public void setFocused(boolean focused) { strip.setFocused(focused); }
+        @Override
+        public boolean canFocus() {
+            return strip.canFocus();
+        }
 
-        @Override public boolean isFocused() { return strip.isFocused(); }
+        @Override
+        public void focusChanged(boolean focused) {
+            strip.focusChanged(focused);
+        }
 
-        @Override public boolean activate() { return strip.activate(); }
+        @Override
+        public boolean isFocused() {
+            return strip.isFocused();
+        }
 
-        @Override public @Nullable Component accessibleName() { return strip.accessibleName(); }
+        @Override
+        public boolean activate() {
+            return strip.activate();
+        }
 
-        /** 转发图标条快照：适配层不重写几何与文案，两端始终一致。 */
-        @Override public List<UiLayoutNode> layoutNodes() { return strip.layoutNodes(); }
+        @Override
+        public @Nullable Component accessibleName() {
+            return strip.accessibleName();
+        }
+
+        /**
+         * 转发图标条快照：适配层不重写几何与文案，两端始终一致。
+         */
+        @Override
+        public List<UiLayoutNode> layoutNodes() {
+            return strip.layoutNodes();
+        }
     }
 
     /**
@@ -142,7 +167,9 @@ final class ConditionTreeChrome {
             this.form = form;
         }
 
-        /** 当前帧鼠标所在字段的提示；指针不在表单上或本帧未渲染时为 null。 */
+        /**
+         * 当前帧鼠标所在字段的提示；指针不在表单上或本帧未渲染时为 null。
+         */
         @Nullable Component hoverTooltip() {
             return hoverTooltip;
         }
@@ -155,46 +182,59 @@ final class ConditionTreeChrome {
             return panel.contentHeight();
         }
 
-        @Override public UiRect bounds() { return panel.bounds(); }
+        @Override
+        public UiRect bounds() {
+            return panel.bounds();
+        }
 
-        @Override public void setBounds(int x, int y, int width, int height) {
+        @Override
+        public void setBounds(int x, int y, int width, int height) {
             panel.setBounds(x, y, width, height);
         }
 
-        @Override public void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        @Override
+        public void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
             hoverTooltip = form.tooltipAt(mouseX, mouseY);
             panel.render(graphics, font, mouseX, mouseY);
         }
 
-        @Override public boolean mouseClicked(double x, double y, int button) {
-            return panel.mouseClicked(x, y, button);
+        @Override
+        public boolean mousePressed(UiInputContext context) {
+            return panel.mousePressed(context);
         }
 
-        @Override public boolean mouseDragged(double x, double y, int button, double dragX, double dragY) {
-            return panel.mouseDragged(x, y, button, dragX, dragY);
+        @Override
+        public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
+            return panel.mouseDragged(context, dragX, dragY);
         }
 
-        @Override public boolean mouseReleased(double x, double y, int button) {
-            return panel.mouseReleased(x, y, button);
+        @Override
+        public boolean mouseReleased(UiInputContext context) {
+            return panel.mouseReleased(context);
         }
 
-        @Override public boolean mouseScrolled(double x, double y, double scrollY) {
-            return panel.mouseScrolled(x, y, 0.0D, scrollY);
+        @Override
+        public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
+            return panel.mouseScrolled(context, scrollX, scrollY);
         }
 
-        @Override public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        @Override
+        public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
             return panel.keyPressed(keyCode, scanCode, modifiers);
         }
 
-        @Override public boolean charTyped(char codePoint, int modifiers) {
+        @Override
+        public boolean charTyped(char codePoint, int modifiers) {
             return panel.charTyped(codePoint, modifiers);
         }
 
-        @Override public boolean isVisible() {
+        @Override
+        public boolean isVisible() {
             return panel.isVisible();
         }
 
-        @Override public boolean capturesKeyboard() {
+        @Override
+        public boolean capturesKeyboard() {
             return panel.capturesKeyboard();
         }
 

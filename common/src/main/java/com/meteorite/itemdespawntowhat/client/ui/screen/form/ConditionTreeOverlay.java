@@ -1,7 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusState;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionTreeViewModel;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.edit.ConditionTreeClipboard;
 import com.meteorite.itemdespawntowhat.client.edit.ConditionTreeJsonCodec;
 import com.meteorite.itemdespawntowhat.client.edit.ConditionTreeNodes;
@@ -14,7 +15,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlatText;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIconStrip;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
@@ -32,9 +33,11 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.ConditionNode;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -98,10 +101,15 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
     private static final int READONLY_TITLE_COLOR = 0xFFFFFFFF;
     private static final int READONLY_HINT_COLOR = 0xFFB8B8B8;
 
-    /** 叶参数表单与承载面板；title 为宿主提供的条件名，内联框当前不绘制标题。 */
-    public record Parameters(FormView form, LeafPanel panel, Component title) { }
+    /**
+     * 叶参数表单与承载面板；title 为宿主提供的条件名，内联框当前不绘制标题。
+     */
+    public record Parameters(FormView form, LeafPanel panel, Component title) {
+    }
 
-    /** 参数面板工厂：按条件路径与叶子构造表单。 */
+    /**
+     * 参数面板工厂：按条件路径与叶子构造表单。
+     */
     @FunctionalInterface
     public interface ParameterFactory {
         Parameters create(String conditionPath, ConditionNode.Leaf leaf);
@@ -124,7 +132,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
     }
 
     // 外壳内的焦点区域：Tab / Shift+Tab 在可用区域之间环绕
-    private enum FocusSlot { FUNCTION_BAR, TOOL_COLUMN, CANVAS, JSON }
+    private enum FocusSlot {FUNCTION_BAR, TOOL_COLUMN, CANVAS, JSON}
 
     private final Font font;
     private final EditSession session;
@@ -163,8 +171,6 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
     private @Nullable String parameterPath;
     private @Nullable String parameterType;
     private @Nullable String selectedPath;
-    private @Nullable UiWidget pressed;
-    private int pressedButton = -1;
     private @Nullable Component decodeError;
     // 下一个待定位的问题下标：F8 或点击状态栏时递增并循环
     private int nextIssueIndex;
@@ -172,11 +178,9 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
     private @Nullable Runnable undoAction;
     private @Nullable Runnable redoAction;
     private long seenViewRevision = -1;
-    private FocusSlot focusSlot = FocusSlot.CANVAS;
-    private final UiFocusManager regions = new UiFocusManager();
     private boolean sourceView;
     private boolean helpOpen;
-    private boolean focused;
+    private final UiFocusState focusState = new UiFocusState();
     private long revision;
 
     /**
@@ -235,7 +239,8 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
             RuleValue next = editor.tree().encode(codec);
             session.apply(editor.undoOpKey(), edits -> {
                 if (change != null) ConditionTreeNodes.remapInputs(session, change, scope);
-                if (next == null) edits.removeAt(scope); else edits.setAt(scope, next);
+                if (next == null) edits.removeAt(scope);
+                else edits.setAt(scope, next);
             });
             revision = session.revision();
             refreshSource();
@@ -264,20 +269,20 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
         moveDownItem = addTool(UiHostTheme.ICON_MOVE_DOWN, UI + "button.down", false, () -> editor.moveSelection(1));
         wrapItem = addTool(UiHostTheme.ICON_WRAP_ALL, UI + "button.wrap", true, editor::beginWrapWithKind);
 
-        regions.setListener((previous, current) -> {
-            if (current == functionBar) focusSlot = FocusSlot.FUNCTION_BAR;
-            else if (current == toolColumn) focusSlot = FocusSlot.TOOL_COLUMN;
-            else if (current == source) focusSlot = FocusSlot.JSON;
-            else if (current == editor) focusSlot = FocusSlot.CANVAS;
-        });
         reloadExpression();
     }
 
-    public UiConditionGraphEditor editor() { return editor; }
+    public UiConditionGraphEditor editor() {
+        return editor;
+    }
 
-    public EditSession session() { return session; }
+    public EditSession session() {
+        return session;
+    }
 
-    public String scope() { return scope; }
+    public String scope() {
+        return scope;
+    }
 
     // 「新建分支」以工具格自身的屏幕矩形为锚弹出 ∧ / ∨ 菜单：菜单贴着按钮出现，不必先进入添加模式再点热区
     private void beginBranchMenu() {
@@ -383,13 +388,13 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
     // ---- 视图切换 ----
 
     private void toggleSource() {
-        editor.endInteractions(UiInputCapture.EndReason.FOCUS_SCOPE_CHANGED);
+        editor.endInteractions(UiInteractionSession.EndReason.SCOPE_CHANGED);
         finishParameters();
         // 只读 JSON 视图下画布不可见，内联框随之收起；切回树视图时按当前选中重建
         unmountParameters();
         editor.closePicker();
         sourceView = !sourceView;
-        source.setFocused(false);
+        source.focusState().clear();
         reloadExpression();
         layout();
         setFocusSlot(sourceView ? FocusSlot.JSON : FocusSlot.CANVAS);
@@ -404,7 +409,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
         helpOpen = !helpOpen;
         helpItem.setSelected(helpOpen);
         if (helpOpen) {
-            editor.endInteractions(UiInputCapture.EndReason.FOCUS_SCOPE_CHANGED);
+            editor.endInteractions(UiInteractionSession.EndReason.SCOPE_CHANGED);
         }
     }
 
@@ -418,7 +423,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
     }
 
     private void undo() {
-        editor.endInteractions(UiInputCapture.EndReason.CANCEL);
+        editor.endInteractions(UiInteractionSession.EndReason.CANCEL);
         finishParameters();
         Runnable action = undoAction;
         if (action != null) {
@@ -434,7 +439,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
     }
 
     private void redo() {
-        editor.endInteractions(UiInputCapture.EndReason.CANCEL);
+        editor.endInteractions(UiInteractionSession.EndReason.CANCEL);
         finishParameters();
         Runnable action = redoAction;
         if (action != null) {
@@ -511,27 +516,33 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
                 && !(leaf.condition() instanceof OpaqueCondition) ? leaf : null;
     }
 
-    /** 历史回填读取当前草稿，不把旧表单值重新提交为配置。 */
+    /**
+     * 历史回填读取当前草稿，不把旧表单值重新提交为配置。
+     */
     public void historyChanged() {
-        editor.endInteractions(UiInputCapture.EndReason.UNMOUNTED);
+        editor.endInteractions(UiInteractionSession.EndReason.UNMOUNTED);
         unmountParameters();
         reloadExpression();
         selectedPath = null;
         syncSelection();
     }
 
-    /** 返回或被卸载时完成合法字段，保留非法字段并结束捕获。 */
+    /**
+     * 返回或被卸载时完成合法字段，保留非法字段并结束捕获。
+     */
     public void unmount() {
         finishParameters();
         discardView();
     }
 
-    /** 历史使外层作用域失效时卸载旧视图并释放输入归属，不再提交该路径的控件值。 */
+    /**
+     * 历史使外层作用域失效时卸载旧视图并释放输入归属，不再提交该路径的控件值。
+     */
     public void discardView() {
-        editor.endInteractions(UiInputCapture.EndReason.UNMOUNTED);
+        editor.endInteractions(UiInteractionSession.EndReason.UNMOUNTED);
         unmountParameters();
         editor.closePicker();
-        setFocused(false);
+        focusState.clear();
     }
 
     /**
@@ -549,7 +560,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
      */
     public void reveal(String fieldPath) {
         sourceView = false;
-        source.setFocused(false);
+        source.focusState().clear();
         var address = ConditionTreeNodes.address(fieldPath, scope);
         if (address == null) {
             setFocusSlot(FocusSlot.CANVAS);
@@ -609,9 +620,13 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
 
     // ---- 布局 ----
 
-    @Override public UiRect bounds() { return bounds; }
+    @Override
+    public UiRect bounds() {
+        return bounds;
+    }
 
-    @Override public void setBounds(int x, int y, int width, int height) {
+    @Override
+    public void setBounds(int x, int y, int width, int height) {
         bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
         layout();
     }
@@ -630,7 +645,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
         statusRect = new UiRect(bounds.x(), bounds.y() + bounds.height() - statusHeight, bounds.width(), statusHeight);
         copyJsonRect = sourceView
                 ? new UiRect(Math.max(canvasRect.x(), canvasRect.right() - COPY_BUTTON_WIDTH - 2), canvasRect.y() + 2,
-                        Math.min(COPY_BUTTON_WIDTH, canvasRect.width()), COPY_BUTTON_HEIGHT)
+                Math.min(COPY_BUTTON_WIDTH, canvasRect.width()), COPY_BUTTON_HEIGHT)
                 : new UiRect(canvasRect.x(), canvasRect.y(), 0, 0);
 
         editor.setBounds(canvasRect.x(), canvasRect.y(), canvasRect.width(), canvasRect.height());
@@ -813,8 +828,8 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
      */
     private void drawGroupDividers(GuiGraphics graphics) {
         int color = CHROME_THEME.palette().chromeDivider();
-        drawVerticalDividers(graphics, functionItems, new int[] {2, 3}, color);
-        drawHorizontalDividers(graphics, toolItems, new int[] {2, 6}, color);
+        drawVerticalDividers(graphics, functionItems, new int[]{2, 3}, color);
+        drawHorizontalDividers(graphics, toolItems, new int[]{2, 6}, color);
     }
 
     // 组边界取该组首格的上/左边缘，短线两端各留 3 像素，避免与外壳描边粘连
@@ -989,14 +1004,19 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
                 helpEntry("close"));
     }
 
-    /** 帮助条目：动作标签取 {@code help.action.*}，说明取 {@code help.*}，两者按动作名配对。 */
+    /**
+     * 帮助条目：动作标签取 {@code help.action.*}，说明取 {@code help.*}，两者按动作名配对。
+     */
     private HelpEntry helpEntry(String action) {
         return new HelpEntry(Component.translatable(UI + "help.action." + action),
                 Component.translatable(UI + "help." + action));
     }
 
-    /** 帮助浮层的单个条目：左侧动作标签、右侧按宽度折行后的说明。 */
-    private record HelpEntry(Component label, Component text) { }
+    /**
+     * 帮助浮层的单个条目：左侧动作标签、右侧按宽度折行后的说明。
+     */
+    private record HelpEntry(Component label, Component text) {
+    }
 
     // F8 / 点击状态栏：按顺序定位下一个问题，到末尾后回到第一个
     private boolean nextIssue() {
@@ -1076,12 +1096,13 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
 
     // ---- 输入 ----
 
-    /** 其它按键不替换当前捕获；同键再次按下时重新登记，允许恢复遗漏的释放。 */
+    /**
+     * 其它按键不替换当前捕获；同键再次按下时重新登记，允许恢复遗漏的释放。
+     */
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (pressed != null && pressedButton != button) return true;
-        pressed = null;
-        pressedButton = -1;
+    public boolean mousePressed(UiInputContext context) {
+        double mouseX = context.pointerX();
+        double mouseY = context.pointerY();
         if (helpOpen) {
             // 帮助浮层是模态式的：任何点击先关闭它
             helpOpen = false;
@@ -1092,15 +1113,13 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
         }
         if (!sourceView && editor.hasPopup()) {
             setFocusSlot(FocusSlot.CANVAS);
-            if (editor.mouseClicked(mouseX, mouseY, button)) capturePress(editor, button);
+            editor.mousePressed(context);
             return true;
         }
         if (statusRect.contains(mouseX, mouseY) && !editor.issues().isEmpty()) {
             return nextIssue();
         }
-        if (functionBar.bounds().contains(mouseX, mouseY)) setFocusSlot(FocusSlot.FUNCTION_BAR);
-        if (functionBar.mouseClicked(mouseX, mouseY, button)) {
-            capturePress(functionBar, button);
+        if (functionBar.mousePressed(context)) {
             return true;
         }
         if (sourceView) {
@@ -1108,57 +1127,40 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
                 copySource();
                 return true;
             }
-            setFocusSlot(FocusSlot.JSON);
-            if (!source.mouseClicked(mouseX, mouseY, button)) {
-                return false;
-            }
-            capturePress(source, button);
+            return source.mousePressed(context);
+        }
+        if (toolColumn.mousePressed(context)) {
             return true;
         }
-        if (toolColumn.bounds().contains(mouseX, mouseY)) setFocusSlot(FocusSlot.TOOL_COLUMN);
-        if (toolColumn.mouseClicked(mouseX, mouseY, button)) {
-            capturePress(toolColumn, button);
-            return true;
-        }
-        if (canvasRect.contains(mouseX, mouseY)) setFocusSlot(FocusSlot.CANVAS);
-        if (editor.mouseClicked(mouseX, mouseY, button)) {
-            capturePress(editor, button);
+        if (editor.mousePressed(context)) {
             syncSelection();
             return true;
         }
         return false;
     }
 
-    /** 仅将与按下键配对的释放交给捕获目标。 */
+    /**
+     * 仅将与按下键配对的释放交给捕获目标。
+     */
     @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        if (pressedButton != button) return false;
-        UiWidget target = pressed;
-        pressed = null;
-        pressedButton = -1;
-        boolean consumed = target != null && target.mouseReleased(mouseX, mouseY, button);
-        if (target == toolColumn && (editor.isPickerOpen() || editor.isGroupKindMenuOpen()
-                || editor.isWrapKindMenuOpen() || editor.isDeleteConfirmOpen())) {
-            setFocusSlot(FocusSlot.CANVAS);
-        }
-        if (target == editor) syncSelection();
-        if (target != null) layout();
-        return consumed;
+    public boolean mouseReleased(UiInputContext context) {
+        return false;
     }
 
-    /** 拖动只派发给持有对应按键的目标。 */
+    /**
+     * 拖动只派发给持有对应按键的目标。
+     */
     @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        return pressed != null && pressedButton == button
-                && pressed.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
+        return false;
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+    public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
         if (sourceView) {
-            return source.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+            return source.mouseScrolled(context, scrollX, scrollY);
         }
-        return editor.isVisible() && editor.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+        return editor.isVisible() && editor.mouseScrolled(context, scrollX, scrollY);
     }
 
     @Override
@@ -1178,35 +1180,22 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
             }
             return handled;
         }
-        // 内联框打开时外壳快捷键让位：先给内联框（经画布），再给画布，最后才是外壳
-        boolean inlineOpen = !sourceView && editor.isInlineEditorOpen();
-        if (inlineOpen && editor.keyPressed(keyCode, scanCode, modifiers)) {
+        if (keyCode == GLFW.GLFW_KEY_F8) return nextIssue();
+        boolean inlineFocused = !sourceView && editor.isInlineEditorOpen() && parameters != null
+                && parameters.panel().focusTargets().stream().anyMatch(UiFocusTarget::isFocused);
+        if (inlineFocused) {
+            boolean handled = editor.keyPressed(keyCode, scanCode, modifiers);
+            if (handled) syncSelection();
+            return handled;
+        }
+        if (functionBar.isFocused()) return functionBar.keyPressed(keyCode, scanCode, modifiers);
+        if (toolColumn.isFocused()) return toolColumn.keyPressed(keyCode, scanCode, modifiers);
+        if (source.isFocused()) return source.keyPressed(keyCode, scanCode, modifiers);
+        if (editor.isVisible() && editor.isFocused() && editor.keyPressed(keyCode, scanCode, modifiers)) {
             syncSelection();
             return true;
         }
-        if (keyCode == GLFW.GLFW_KEY_F8) {
-            return nextIssue();
-        }
-        if (keyCode == GLFW.GLFW_KEY_TAB) {
-            cycleFocus((modifiers & GLFW.GLFW_MOD_SHIFT) != 0);
-            return true;
-        }
-        return switch (focusSlot) {
-            case FUNCTION_BAR -> activateOrNavigate(functionBar, keyCode, scanCode, modifiers);
-            case TOOL_COLUMN -> activateOrNavigate(toolColumn, keyCode, scanCode, modifiers);
-            case JSON -> source.keyPressed(keyCode, scanCode, modifiers);
-            case CANVAS -> {
-                // 内联框已经拿过本次按键，避免重复派发
-                if (inlineOpen) {
-                    yield false;
-                }
-                if (editor.isVisible() && editor.keyPressed(keyCode, scanCode, modifiers)) {
-                    syncSelection();
-                    yield true;
-                }
-                yield false;
-            }
-        };
+        return false;
     }
 
     @Override
@@ -1229,61 +1218,62 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
         return editor.isVisible() && editor.isFocused() && editor.charTyped(codePoint, modifiers);
     }
 
-    // 图标条：方向键由 kit 处理，Enter / Space 由外壳转发到 activate
-    private static boolean activateOrNavigate(UiWidget widget, int keyCode, int scanCode, int modifiers) {
-        if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER || keyCode == GLFW.GLFW_KEY_SPACE) {
-            return ((UiFocusTarget) widget).activate();
-        }
-        return widget.keyPressed(keyCode, scanCode, modifiers);
-    }
-
     // ---- 焦点 ----
 
-    @Override public boolean canFocus() { return true; }
-
-    @Override public boolean isFocused() { return focused; }
-
-    /** 失去整个浮层的焦点时释放输入归属，并将焦点变化传给内部控件。 */
-    @Override public void setFocused(boolean value) {
-        focused = value;
-        if (!value) {
-            pressed = null;
-            pressedButton = -1;
-        }
-        applyFocus();
+    @Override
+    public boolean canFocus() {
+        return true;
     }
 
-    @Override public boolean activate() { return false; }
+    @Override
+    public boolean isFocused() {
+        return focusState.containsFocus();
+    }
 
-    @Override public Component accessibleName() { return Component.translatable(UI + "title"); }
+    @Override
+    public UiFocusState focusState() {
+        return focusState;
+    }
+
+    @Override
+    public boolean activate() {
+        return false;
+    }
+
+    @Override
+    public Component accessibleName() {
+        return Component.translatable(UI + "title");
+    }
+
+    @Override
+    public void scopeExited(UiInteractionSession.EndReason reason) {
+        editor.scopeExited(reason);
+    }
 
     private void setFocusSlot(FocusSlot slot) {
-        focusSlot = slot;
-        applyFocus();
-    }
-
-    private void capturePress(UiWidget target, int button) {
-        pressed = target;
-        pressedButton = button;
-    }
-
-    private void applyFocus() {
-        if (!focused) { regions.clear(); return; }
-        regions.beginUpdate();
-        regions.add(functionBar);
-        if (sourceView) regions.add(source);
-        else { regions.add(toolColumn); if (editor.isVisible()) regions.add(editor); }
-        regions.endUpdate();
-        UiFocusTarget preferred = switch (focusSlot) {
-            case FUNCTION_BAR -> functionBar; case TOOL_COLUMN -> toolColumn;
-            case CANVAS -> editor; case JSON -> source;
+        if (focusState.scope() == null) return;
+        focusState.scope().refreshFocus();
+        UiFocusTarget preferred = switch (slot) {
+            case FUNCTION_BAR -> functionBar;
+            case TOOL_COLUMN -> toolColumn;
+            case CANVAS -> editor;
+            case JSON -> source;
         };
-        if (!regions.focusOn(preferred) && regions.focused() == null) regions.focusFirst();
+        preferred.focusState().request();
     }
 
-    private void cycleFocus(boolean backwards) {
-        applyFocus();
-        regions.moveFocus(backwards ? -1 : 1);
+    @Override
+    public List<UiFocusTarget> focusTargets() {
+        List<UiFocusTarget> targets = new ArrayList<>();
+        targets.add(functionBar);
+        if (sourceView) targets.add(source);
+        else {
+            targets.add(toolColumn);
+            if (editor.isVisible()) targets.add(editor);
+            if (parameters != null && editor.isInlineEditorOpen()) targets.addAll(parameters.panel().focusTargets());
+        }
+        return targets;
     }
+
 
 }

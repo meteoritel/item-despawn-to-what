@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -10,7 +11,7 @@ import net.minecraft.client.gui.GuiGraphics;
  * 控件返回 {@code true} 表示事件已消费，宿主不再继续分发。
  * <p>所有坐标均为 GUI 逻辑坐标，不使用缩放矩阵。
  */
-public interface UiWidget {
+public interface UiWidget extends UiInputTarget {
 
     // 控件矩形
     UiRect bounds();
@@ -25,38 +26,4 @@ public interface UiWidget {
         return true;
     }
 
-    // 鼠标按下
-    default boolean mouseClicked(double mouseX, double mouseY, int button) {
-        return false;
-    }
-
-    // 鼠标松开
-    default boolean mouseReleased(double mouseX, double mouseY, int button) {
-        return false;
-    }
-
-    // 鼠标拖拽
-    default boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        return false;
-    }
-
-    // 鼠标滚轮
-    default boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        return false;
-    }
-
-    // 键盘按下
-    default boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        return false;
-    }
-
-    // 键盘抬起（用于把按住的方向键重复合并成一次提交）
-    default boolean keyReleased(int keyCode, int scanCode, int modifiers) {
-        return false;
-    }
-
-    // 字符输入
-    default boolean charTyped(char codePoint, int modifiers) {
-        return false;
-    }
 }

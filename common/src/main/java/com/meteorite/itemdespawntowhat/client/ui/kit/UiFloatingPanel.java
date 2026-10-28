@@ -20,12 +20,16 @@ import java.util.Objects;
  * 的既有分工由调用方给出（{@link #setTitleColor(int)}），本类不另设颜色容器。
  * 折叠按钮是一个 {@link UiControl}，复用悬停/按下/命中/激活，字形按折叠状态实时绘制。</p>
  */
-public final class UiFloatingPanel implements UiInputTarget, UiFocusTarget {
+public final class UiFloatingPanel implements UiInteractionSession.Target, UiFocusTarget {
 
-    /** 停靠方式：自由拖动、吸附右上角、贴底抽屉。 */
-    public enum Dock { FREE, TOP_RIGHT, BOTTOM_SHEET }
+    /**
+     * 停靠方式：自由拖动、吸附右上角、贴底抽屉。
+     */
+    public enum Dock {FREE, TOP_RIGHT, BOTTOM_SHEET}
 
-    /** 内容契约：绘制与边界之外的输入方法全部来自 {@link UiInputTarget}。 */
+    /**
+     * 内容契约：绘制与边界之外的输入方法全部来自 {@link UiInputTarget}。
+     */
     public interface Content extends UiInputTarget {
         UiRect bounds();
 
@@ -33,14 +37,22 @@ public final class UiFloatingPanel implements UiInputTarget, UiFocusTarget {
 
         void render(GuiGraphics graphics, Font font, int mouseX, int mouseY);
 
-        default boolean isVisible() { return true; }
+        default boolean isVisible() {
+            return true;
+        }
     }
 
-    /** 标题文字与标题栏边缘的水平留白。 */
+    /**
+     * 标题文字与标题栏边缘的水平留白。
+     */
     private static final int TITLE_INSET = 4;
-    /** 标题栏在字体行高之外补的上下留白。 */
+    /**
+     * 标题栏在字体行高之外补的上下留白。
+     */
     private static final int TITLE_PADDING = 2;
-    /** 折叠按钮相对标题栏的内缩量。 */
+    /**
+     * 折叠按钮相对标题栏的内缩量。
+     */
     private static final int COLLAPSE_INSET = 2;
     private static final int DEFAULT_SNAP_MARGIN = 8;
     private static final int DEFAULT_TITLE_COLOR = 0xFFE6E6E6;
@@ -54,7 +66,8 @@ public final class UiFloatingPanel implements UiInputTarget, UiFocusTarget {
     private int titleColor = DEFAULT_TITLE_COLOR;
     private UiRect workArea = new UiRect(0, 0, 0, 0);
     private UiRect bounds = new UiRect(0, 0, 0, 0);
-    @Nullable private Content content;
+    @Nullable
+    private Content content;
     private Dock dock = Dock.FREE;
     private int panelX;
     private int panelY;
@@ -62,10 +75,10 @@ public final class UiFloatingPanel implements UiInputTarget, UiFocusTarget {
     private int panelHeight;
     private int snapMargin = DEFAULT_SNAP_MARGIN;
     private boolean collapsed;
-    private boolean dragging;
+    private @Nullable UiInteractionSession session;
     private double dragOffsetX;
     private double dragOffsetY;
-    private boolean focused;
+    private final UiFocusState focusState = new UiFocusState();
 
     public UiFloatingPanel(Font font, Component title) {
         this.font = Objects.requireNonNull(font);
@@ -81,14 +94,20 @@ public final class UiFloatingPanel implements UiInputTarget, UiFocusTarget {
         layoutContent();
     }
 
-    /** 结构色注入；默认暗色主题。 */
+    /**
+     * 结构色注入；默认暗色主题。
+     */
     public void setStyle(UiControlStyle style) {
         this.style = Objects.requireNonNull(style);
         collapseButton.setStyle(style);
     }
 
-    /** 标题与折叠字形颜色：{@code UiControlStyle} 只承载结构色，文字色由调用方给出。 */
-    public void setTitleColor(int color) { this.titleColor = color; }
+    /**
+     * 标题与折叠字形颜色：{@code UiControlStyle} 只承载结构色，文字色由调用方给出。
+     */
+    public void setTitleColor(int color) {
+        this.titleColor = color;
+    }
 
     public void setDock(Dock dock) {
         this.dock = Objects.requireNonNull(dock);
@@ -101,11 +120,17 @@ public final class UiFloatingPanel implements UiInputTarget, UiFocusTarget {
         rebuild();
     }
 
-    public boolean isCollapsed() { return collapsed; }
+    public boolean isCollapsed() {
+        return collapsed;
+    }
 
-    public void setSnapMargin(int pixels) { this.snapMargin = Math.max(0, pixels); }
+    public void setSnapMargin(int pixels) {
+        this.snapMargin = Math.max(0, pixels);
+    }
 
-    /** 拖动夹取、贴边吸附与停靠共用的可用区域；宽或高为 0 表示不限制。 */
+    /**
+     * 拖动夹取、贴边吸附与停靠共用的可用区域；宽或高为 0 表示不限制。
+     */
     public void setWorkArea(UiRect area) {
         this.workArea = Objects.requireNonNull(area);
         rebuild();
@@ -120,9 +145,13 @@ public final class UiFloatingPanel implements UiInputTarget, UiFocusTarget {
     }
 
     @Override
-    public UiRect bounds() { return bounds; }
+    public UiRect bounds() {
+        return bounds;
+    }
 
-    /** 绘制调板：背景、标题栏、描边、标题、折叠按钮，最后绘制内容。 */
+    /**
+     * 绘制调板：背景、标题栏、描边、标题、折叠按钮，最后绘制内容。
+     */
     public void render(GuiGraphics graphics, int mouseX, int mouseY) {
         graphics.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), style.background());
         UiRect bar = titleBar();
@@ -145,11 +174,12 @@ public final class UiFloatingPanel implements UiInputTarget, UiFocusTarget {
         double x = context.pointerX();
         double y = context.pointerY();
         if (collapseButton.isHittable() && collapseButton.bounds().contains(x, y)) {
-            collapseButton.setPressed(true);
-            return true;
+            return collapseButton.mousePressed(context);
         }
         if (titleBar().contains(x, y)) {
-            dragging = true;
+            context.scope().pointerHit(null);
+            session = context.scope().interaction();
+            session.begin(this, UiInteractionSession.Source.POINTER, context.button());
             dragOffsetX = x - bounds.x();
             dragOffsetY = y - bounds.y();
             // 从停靠状态拖动即转为自由摆放；当前坐标已经是停靠后的位置。
@@ -162,8 +192,8 @@ public final class UiFloatingPanel implements UiInputTarget, UiFocusTarget {
     }
 
     @Override
-    public boolean mouseDragged(UiInputContext context) {
-        if (dragging) {
+    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
+        if (session != null && session.owns(this)) {
             panelX = (int) Math.round(context.pointerX() - dragOffsetX);
             panelY = (int) Math.round(context.pointerY() - dragOffsetY);
             rebuild();
@@ -171,13 +201,12 @@ public final class UiFloatingPanel implements UiInputTarget, UiFocusTarget {
         }
         Content target = content;
         if (target == null || collapsed || !target.isVisible()) return false;
-        return target.mouseDragged(context);
+        return target.mouseDragged(context, dragX, dragY);
     }
 
     @Override
     public boolean mouseReleased(UiInputContext context) {
-        if (dragging) {
-            dragging = false;
+        if (session != null && session.owns(this)) {
             snapToEdges();
             return true;
         }
@@ -194,35 +223,40 @@ public final class UiFloatingPanel implements UiInputTarget, UiFocusTarget {
     }
 
     @Override
-    public boolean mouseScrolled(UiInputContext context, double scrollY) {
+    public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
         Content target = content;
         if (target == null || collapsed || !target.isVisible()) return false;
         if (!bounds.contains(context.pointerX(), context.pointerY())) return false;
-        return target.mouseScrolled(context, scrollY);
+        return target.mouseScrolled(context, scrollX, scrollY);
     }
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         Content target = content;
         if (target == null || collapsed) return false;
-        return focused && target.keyPressed(keyCode, scanCode, modifiers);
+        return isFocused() && target.keyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override
     public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
         Content target = content;
         if (target == null || collapsed) return false;
-        return focused && target.keyReleased(keyCode, scanCode, modifiers);
+        return isFocused() && target.keyReleased(keyCode, scanCode, modifiers);
     }
 
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
         Content target = content;
         if (target == null || collapsed) return false;
-        return focused && target.charTyped(codePoint, modifiers);
+        return isFocused() && target.charTyped(codePoint, modifiers);
     }
 
     // ---------- UiFocusTarget ----------
+
+    @Override
+    public UiFocusState focusState() {
+        return content instanceof UiFocusTarget target ? target.focusState() : focusState;
+    }
 
     @Override
     public boolean canFocus() {
@@ -231,23 +265,30 @@ public final class UiFloatingPanel implements UiInputTarget, UiFocusTarget {
     }
 
     @Override
-    public void setFocused(boolean focused) {
-        this.focused = focused && canFocus();
+    public void focusChanged(boolean focused) {
         Content target = content;
-        if (target instanceof UiFocusTarget focusTarget) focusTarget.setFocused(this.focused);
+        if (target instanceof UiFocusTarget focusTarget) focusTarget.focusChanged(focused);
     }
 
     @Override
-    public boolean isFocused() { return focused; }
+    public boolean isFocused() {
+        return focusState().isFocused();
+    }
 
     @Override
     public boolean activate() {
         Content target = content;
-        return focused && target instanceof UiFocusTarget focusTarget && focusTarget.activate();
+        return isFocused() && target instanceof UiFocusTarget focusTarget && focusTarget.activate();
     }
 
     @Override
-    public @Nullable Component accessibleName() { return title; }
+    public @Nullable Component accessibleName() {
+        return title;
+    }
+
+    @Override
+    public void interactionEnded(UiInteractionSession.EndReason reason) {
+    }
 
     // ---------- 内部 ----------
 
@@ -293,7 +334,9 @@ public final class UiFloatingPanel implements UiInputTarget, UiFocusTarget {
         rebuild();
     }
 
-    private boolean hasWorkArea() { return workArea.width() > 0 && workArea.height() > 0; }
+    private boolean hasWorkArea() {
+        return workArea.width() > 0 && workArea.height() > 0;
+    }
 
     private int clampX(int x, int width) {
         return Math.clamp(x, workArea.x(), Math.max(workArea.x(), workArea.right() - width));

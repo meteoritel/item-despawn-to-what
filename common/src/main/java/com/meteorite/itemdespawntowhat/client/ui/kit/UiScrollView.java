@@ -17,10 +17,14 @@ import net.minecraft.client.gui.GuiGraphics;
  * <p>本类只做几何与偏移，不持有任何业务状态、不负责输入分发；滚轮是否消费由宿主按
  * {@link #contains(double, double)} 决定。</p>
  */
-public final class UiScrollView {
-    /** 滚动条占用的宽度；宿主可据此在内容溢出时让出内容宽度。 */
+public final class UiScrollView implements UiInteractionSession.Target {
+    /**
+     * 滚动条占用的宽度；宿主可据此在内容溢出时让出内容宽度。
+     */
     public static final int SCROLLBAR_WIDTH = 4;
-    /** 滑块最小高度：内容再长也要留出可抓取区域。 */
+    /**
+     * 滑块最小高度：内容再长也要留出可抓取区域。
+     */
     private static final int MIN_THUMB_HEIGHT = 8;
 
     private UiRect viewport = new UiRect(0, 0, 1, 1);
@@ -28,8 +32,10 @@ public final class UiScrollView {
     private int offset;
     private int step = 20;
     private boolean scrollbarVisible;
-    private boolean dragging;
-    /** 按下时指针相对滑块顶部的距离；拖动期间保持不变，滑块才会跟着指针平移而不是跳到指针处。 */
+    private UiInteractionSession session;
+    /**
+     * 按下时指针相对滑块顶部的距离；拖动期间保持不变，滑块才会跟着指针平移而不是跳到指针处。
+     */
     private double dragGrab;
 
     // ---------- 几何与偏移 ----------
@@ -41,24 +47,38 @@ public final class UiScrollView {
         clampOffset();
     }
 
-    public UiRect viewport() { return viewport; }
+    public UiRect viewport() {
+        return viewport;
+    }
 
     public void setContentHeight(int contentHeight) {
         this.contentHeight = Math.max(0, contentHeight);
         clampOffset();
     }
 
-    public int contentHeight() { return contentHeight; }
+    public int contentHeight() {
+        return contentHeight;
+    }
 
-    public int offset() { return offset; }
+    public int offset() {
+        return offset;
+    }
 
-    public int maxOffset() { return Math.max(0, contentHeight - viewport.height()); }
+    public int maxOffset() {
+        return Math.max(0, contentHeight - viewport.height());
+    }
 
-    public void setOffset(int offset) { this.offset = Math.clamp(offset, 0, maxOffset()); }
+    public void setOffset(int offset) {
+        this.offset = Math.clamp(offset, 0, maxOffset());
+    }
 
-    public void setStep(int step) { this.step = Math.max(1, step); }
+    public void setStep(int step) {
+        this.step = Math.max(1, step);
+    }
 
-    public int step() { return step; }
+    public int step() {
+        return step;
+    }
 
     // 滚轮：正数朝内容顶部（偏移减小），与 GLFW / Screen 的纵向滚动符号一致；按 signum 走整步并钳制。
     public boolean scrollBy(double amount) {
@@ -69,8 +89,12 @@ public final class UiScrollView {
         return offset != previous;
     }
 
-    /** 指针是否落在视口内；宿主据此只消费自身区域的滚轮与命中。 */
-    public boolean contains(double x, double y) { return viewport.contains(x, y); }
+    /**
+     * 指针是否落在视口内；宿主据此只消费自身区域的滚轮与命中。
+     */
+    public boolean contains(double x, double y) {
+        return viewport.contains(x, y);
+    }
 
     // 最小滚动量让矩形完整可见：先贴上边界，再下推到底边界，最后统一钳制。
     public void ensureVisible(UiRect contentRect) {
@@ -80,11 +104,17 @@ public final class UiScrollView {
         offset = Math.clamp(next, 0, maxOffset());
     }
 
-    public double toContentX(double screenX) { return screenX - viewport.x(); }
+    public double toContentX(double screenX) {
+        return screenX - viewport.x();
+    }
 
-    public double toContentY(double screenY) { return screenY - viewport.y() + offset; }
+    public double toContentY(double screenY) {
+        return screenY - viewport.y() + offset;
+    }
 
-    public int toScreenY(double contentY) { return (int) Math.round(viewport.y() + contentY - offset); }
+    public int toScreenY(double contentY) {
+        return (int) Math.round(viewport.y() + contentY - offset);
+    }
 
     // ---------- 变换与裁剪 ----------
 
@@ -107,16 +137,20 @@ public final class UiScrollView {
     // 宿主只在内容溢出时打开；内容变短或钳制后没有可滚距离时一律不显示。
     public void setScrollbarVisible(boolean visible) {
         scrollbarVisible = visible;
-        if (!visible) dragging = false;
+        if (!visible) endInteraction(UiInteractionSession.EndReason.CANCEL);
     }
 
-    public boolean isScrollbarVisible() { return scrollbarVisible && maxOffset() > 0; }
+    public boolean isScrollbarVisible() {
+        return scrollbarVisible && maxOffset() > 0;
+    }
 
     public boolean hitScrollbar(double x, double y) {
         return isScrollbarVisible() && scrollbarTrack().contains(x, y);
     }
 
-    /** 指针是否落在当前滑块上：宿主据此决定悬停反馈，几何只在这里算一次。 */
+    /**
+     * 指针是否落在当前滑块上：宿主据此决定悬停反馈，几何只在这里算一次。
+     */
     public boolean hitThumb(double x, double y) {
         if (!isScrollbarVisible()) return false;
         UiRect track = scrollbarTrack();
@@ -124,15 +158,22 @@ public final class UiScrollView {
         return x >= track.x() && x < track.right() && y >= top && y < top + thumbHeight();
     }
 
-    /** 滑块拖动是否进行中：宿主据此在整个拖动期间消费输入，即使这一帧偏移没有变化。 */
-    public boolean isDragging() { return dragging; }
+    /**
+     * 滑块拖动是否进行中：宿主据此在整个拖动期间消费输入，即使这一帧偏移没有变化。
+     */
+    public boolean isDragging() {
+        return session != null && session.owns(this);
+    }
 
     // 所有内容命中（高亮、行 tooltip 等）共用此门禁；拖出轨道后仍保持独占。
     public boolean canHoverContent(double x, double y) {
-        return !dragging && contains(x, y) && !hitScrollbar(x, y);
+        return !isDragging() && contains(x, y) && !hitScrollbar(x, y);
     }
 
-    public boolean mousePressed(double x, double y, int button) {
+    public boolean mousePressed(UiInputContext context) {
+        double x = context.pointerX();
+        double y = context.pointerY();
+        int button = context.button();
         if (button != 0 || !hitScrollbar(x, y)) return false;
         // 点在滑块之外（轨道空白）时先把滑块中心对到指针：否则拖动时滑块带着一个很大的抓取偏移，跟不上手。
         if (y < thumbTop() || y >= thumbTop() + thumbHeight()) {
@@ -142,7 +183,9 @@ public final class UiScrollView {
                 offset = Math.clamp((int) Math.round(top * maxOffset() / (double) travel), 0, maxOffset());
             }
         }
-        dragging = true;
+        context.scope().pointerHit(null);
+        session = context.scope().interaction();
+        session.begin(this, UiInteractionSession.Source.POINTER, button);
         // 抓取偏移必须在跳转之后取样，而且要用**未取整**的滑块位置：
         // 取跳转前的值会让下一次 mouseDragged 把滑块拉回原处，取跳转后的整数像素又会让第一个 drag 事件产生不足 1 像素的对齐跳动。
         dragGrab = maxOffset() <= 0 ? 0.0 : y - viewport.y() - (double) thumbTravel() * offset / maxOffset();
@@ -151,7 +194,7 @@ public final class UiScrollView {
 
     // 拖动滑块：指针位移按「滑块可走距离 : 内容可滚距离」映射为偏移，返回偏移是否变化。
     public boolean mouseDragged(double y) {
-        if (!dragging || !isScrollbarVisible()) return false;
+        if (!isDragging() || !isScrollbarVisible()) return false;
         int travel = thumbTravel();
         if (travel <= 0) return false;
         double top = Math.clamp(y - dragGrab - viewport.y(), 0.0, travel);
@@ -161,7 +204,28 @@ public final class UiScrollView {
         return true;
     }
 
-    public void mouseReleased() { dragging = false; }
+    /**
+     * 结束滚动条拖动，保留当前视图偏移。
+     */
+    public void endInteraction(UiInteractionSession.EndReason reason) {
+        if (session != null) session.end(this, reason);
+    }
+
+    @Override
+    public boolean mouseReleased(UiInputContext context) {
+        return session != null && session.end(this, UiInteractionSession.EndReason.RELEASE);
+    }
+
+    @Override
+    public boolean mouseDragged(UiInputContext context, double dx, double dy) {
+        if (!isDragging()) return false;
+        mouseDragged(context.pointerY());
+        return true;
+    }
+
+    @Override
+    public void interactionEnded(UiInteractionSession.EndReason reason) {
+    }
 
     // 滚动条画在视口右侧；宿主在 pop() 之后调用，结构色取自传入样式。
     public void renderScrollbar(GuiGraphics graphics, UiControlStyle style) {
@@ -175,16 +239,26 @@ public final class UiScrollView {
 
     // ---------- 内部几何 ----------
 
-    private void clampOffset() { offset = Math.clamp(offset, 0, maxOffset()); }
+    private void clampOffset() {
+        offset = Math.clamp(offset, 0, maxOffset());
+    }
 
     // 滚动条始终贴着视口右边界；视口窄于滚动条时退化为整个视口宽。
-    private UiRect scrollbarTrack() { return UiScrollbarGeometry.track(viewport, SCROLLBAR_WIDTH); }
+    private UiRect scrollbarTrack() {
+        return UiScrollbarGeometry.track(viewport, SCROLLBAR_WIDTH);
+    }
 
     // 滑块高度按「视口/内容」比例缩放，并保底 MIN_THUMB_HEIGHT；没有可滚距离时占满轨道。
-    private int thumbHeight() { return UiScrollbarGeometry.thumbHeight(viewport.height(), contentHeight, MIN_THUMB_HEIGHT); }
+    private int thumbHeight() {
+        return UiScrollbarGeometry.thumbHeight(viewport.height(), contentHeight, MIN_THUMB_HEIGHT);
+    }
 
-    private int thumbTravel() { return Math.max(0, viewport.height() - thumbHeight()); }
+    private int thumbTravel() {
+        return Math.max(0, viewport.height() - thumbHeight());
+    }
 
     // 滑块位置按偏移占可滚距离的比例映射；无位移空间时停在轨道顶部。
-    private int thumbTop() { return UiScrollbarGeometry.thumbTop(viewport.y(), viewport.height(), contentHeight, offset, MIN_THUMB_HEIGHT); }
+    private int thumbTop() {
+        return UiScrollbarGeometry.thumbTop(viewport.y(), viewport.height(), contentHeight, offset, MIN_THUMB_HEIGHT);
+    }
 }

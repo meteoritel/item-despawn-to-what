@@ -1,5 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusState;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlatText;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
@@ -11,6 +14,7 @@ import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiMarkIcons;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiMarkIcons.Mark;
+
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -18,6 +22,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
 import java.util.function.Supplier;
+
 import net.minecraft.Util;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -46,7 +51,7 @@ import org.lwjgl.glfw.GLFW;
  * 因此页码、总数与可见条目始终一致。条目源通过 {@link #setEntrySource(Supplier)} 注入，
  * 宿主返回同一缓存实例时不会重建列表。</p>
  */
-public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHost {
+public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidget, UiFocusTarget, UiFooterHost {
 
     /**
      * 交互意图回调：页面只上报意图、不直接改宿主数据，默认实现全部留空，宿主按需覆写。
@@ -72,7 +77,9 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         }
     }
 
-    /** 条目范围：只列主分类条目、只列标签或两者同列；范围按钮在此三值间轮询并回写宿主策略。 */
+    /**
+     * 条目范围：只列主分类条目、只列标签或两者同列；范围按钮在此三值间轮询并回写宿主策略。
+     */
     public enum Scope {
         ITEM, TAG, BOTH
     }
@@ -244,7 +251,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
 
     private boolean enabled = true;
     private boolean visible = true;
-    private boolean focused;
+    private final UiFocusState focusState = new UiFocusState();
     private boolean loading;
     private boolean explicitLoading;
     private @Nullable Component error;
@@ -259,7 +266,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
     private int cursor = -1;
     private int hoveredIndex = -1;
     private int hoverScrollTicks;
-    private boolean draggingScrollbar;
+    private @Nullable UiInteractionSession interaction;
 
     // 宿主可显示标签分组的页名，普通目录继续使用数字页码。
     public void setPageLabel(@Nullable Component label) {
@@ -273,6 +280,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
 
     // 注入的宿主主题
     private final UiHostTheme theme;
+
     public UiCatalogGrid(UiHostTheme theme, Font font, boolean multiSelect, Texts texts, Listener listener) {
         this.theme = UiHostThemes.require(theme);
         this.font = Objects.requireNonNull(font, "font");
@@ -289,12 +297,12 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         });
         this.search.setOnCommit(value -> {
             searchActive = false;
-            search.setFocused(false);
+            search.focusState().clear();
             listener.onSearch(value == null ? "" : value.trim());
         });
         this.search.setOnCancel(() -> {
             searchActive = false;
-            search.setFocused(false);
+            search.focusState().clear();
             search.clear();
             listener.onSearch("");
         });
@@ -345,6 +353,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
 
     /**
      * 回填完整选择，跨页与过滤保留；程序化回填不触发编辑回调。
+     *
      * @param ids 当前字段引用，单选模式只采用第一项
      */
     public void setSelection(List<String> ids) {
@@ -358,6 +367,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
 
     /**
      * 注入不可新增选择的原因；已有冲突选择仍可取消，原因进入行尾标记与悬停提示。
+     *
      * @param reason 按条目 ID 查询原因，返回 null 表示可选
      */
     public void setUnavailableReason(Function<String, @Nullable Component> reason) {
@@ -426,10 +436,10 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
     public UiCatalogGrid setEnabled(boolean enabled) {
         this.enabled = enabled;
         if (!enabled) {
-            draggingScrollbar = false;
+            if (interaction != null) interaction.end(this, UiInteractionSession.EndReason.DISABLED);
             if (searchActive) {
                 searchActive = false;
-                search.setFocused(false);
+                search.focusState().clear();
             }
         }
         return this;
@@ -440,6 +450,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
     }
 
     public UiCatalogGrid setVisible(boolean visible) {
+        if (!visible && interaction != null) interaction.end(this, UiInteractionSession.EndReason.HIDDEN);
         search.setVisible(visible);
         this.visible = visible;
         return this;
@@ -783,7 +794,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
                     }
                     // 直接传整数坐标：可见格不再逐个分配矩形对象
                     drawRow(graphics, entries.get(index), cellsRect.x() + col * columnWidth, cellY,
-                            row, index == hoveredIndex, focused && index == cursor);
+                            row, index == hoveredIndex, isFocusVisible() && index == cursor);
                 }
             }
         }
@@ -1043,7 +1054,11 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
     // ---- 输入 ----
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mousePressed(UiInputContext context) {
+        if (canFocus() && bounds.contains(context.pointerX(), context.pointerY())) context.scope().pointerHit(this);
+        double mouseX = context.pointerX();
+        double mouseY = context.pointerY();
+        int button = context.button();
         if (!visible || !enabled || button != GLFW.GLFW_MOUSE_BUTTON_LEFT) {
             return false;
         }
@@ -1051,16 +1066,15 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
             onRetry.run();
             return true;
         }
-        if (searchRect.contains(mouseX, mouseY) || search.isFocused()) {
+        if (searchRect.contains(mouseX, mouseY)) {
             searchActive = true;
-            search.setFocused(true);
-            if (search.mouseClicked(mouseX, mouseY, button)) {
+            focusState.focusWithin(search);
+            if (search.mousePressed(context)) {
                 return true;
             }
         }
         if (policy != null && policy.scoped() && scopeRect.contains(mouseX, mouseY)) {
-            searchActive = false;
-            search.setFocused(false);
+            context.scope().pointerHit(null);
             policy.setScope(nextScope(policy.scope()));
             scrollRow = 0;
             cursor = -1;
@@ -1070,8 +1084,10 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         // 滚动条：点轨道即跳到该处，按住不放继续拖
         if (scrollbarHit(mouseX, mouseY)) {
             searchActive = false;
-            search.setFocused(false);
-            draggingScrollbar = true;
+            search.focusState().clear();
+            context.scope().pointerHit(null);
+            interaction = context.scope().interaction();
+            interaction.begin(this, UiInteractionSession.Source.POINTER, context.button());
             scrollToPointer(mouseY);
             return true;
         }
@@ -1082,20 +1098,20 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         }
         if (canPrev && prevRect.contains(mouseX, mouseY)) {
             searchActive = false;
-            search.setFocused(false);
+            search.focusState().clear();
             listener.onPageChange(-1);
             return true;
         }
         if (canNext && nextRect.contains(mouseX, mouseY)) {
             searchActive = false;
-            search.setFocused(false);
+            search.focusState().clear();
             listener.onPageChange(1);
             return true;
         }
         int hit = cellIndexAt(mouseX, mouseY);
         if (hit >= 0) {
             searchActive = false;
-            search.setFocused(false);
+            search.focusState().clear();
             cursor = hit;
             toggle(entries.get(hit).id());
             return true;
@@ -1104,25 +1120,27 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
     }
 
     @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        if (draggingScrollbar) {
-            draggingScrollbar = false;
+    public boolean mouseReleased(UiInputContext context) {
+        if (interaction != null && interaction.owns(this)) {
             return true;
         }
-        return search.mouseReleased(mouseX, mouseY, button);
+        return search.mouseReleased(context);
     }
 
     @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        if (draggingScrollbar) {
+    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
+        double mouseY = context.pointerY();
+        if (interaction != null && interaction.owns(this)) {
             scrollToPointer(mouseY);
             return true;
         }
-        return search.isFocused() && search.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+        return search.isFocused() && search.mouseDragged(context, dragX, dragY);
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+    public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
+        double mouseX = context.pointerX();
+        double mouseY = context.pointerY();
         if (!visible || !enabled || !bounds.contains(mouseX, mouseY)) {
             return false;
         }
@@ -1133,13 +1151,13 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (!visible || !enabled) {
+        if (!visible || !enabled || !isFocused()) {
             return false;
         }
         if (searchActive) {
             if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
                 searchActive = false;
-                search.setFocused(false);
+                search.focusState().clear();
                 search.clear();
                 listener.onSearch("");
                 return true;
@@ -1171,15 +1189,19 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
 
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
-        if (!visible || !enabled) {
+        if (!visible || !enabled || !isFocused()) {
             return false;
         }
         if (!searchActive) {
             searchActive = true;
-            search.setFocused(true);
+            focusState.focusWithin(search);
             search.clear();
         }
         return search.charTyped(codePoint, modifiers);
+    }
+
+    @Override
+    public void interactionEnded(UiInteractionSession.EndReason reason) {
     }
 
     private void moveCursor(int delta) {
@@ -1238,22 +1260,19 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
     }
 
     @Override
+    public UiFocusState focusState() {
+        return focusState;
+    }
+
+    @Override
     public boolean canFocus() {
         return visible && enabled;
     }
 
-    @Override
-    public void setFocused(boolean focused) {
-        this.focused = focused;
-        if (!focused && searchActive) {
-            searchActive = false;
-            search.setFocused(false);
-        }
-    }
 
     @Override
     public boolean isFocused() {
-        return focused;
+        return focusState.containsFocus();
     }
 
     @Override

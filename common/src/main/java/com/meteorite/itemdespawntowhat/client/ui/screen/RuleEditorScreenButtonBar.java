@@ -1,12 +1,15 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlowLayout;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
+
 import java.util.ArrayList;
 import java.util.List;
+
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import org.jetbrains.annotations.NotNull;
@@ -173,20 +176,20 @@ final class RuleEditorScreenButtonBar implements UiLayoutSource {
         return nodes;
     }
 
-    boolean mouseClicked(double mouseX, double mouseY, int button) {
+    boolean mousePressed(UiInputContext context) {
         for (UiButton candidate : buttons) {
-            if (candidate.isVisible() && candidate.mouseClicked(mouseX, mouseY, button)) {
+            if (candidate.isVisible() && candidate.mousePressed(context)) {
                 return true;
             }
         }
         return false;
     }
 
-    boolean mouseReleased(double mouseX, double mouseY, int button) {
+    boolean mouseReleased(UiInputContext context) {
         boolean consumed = false;
         for (UiButton candidate : buttons) {
             if (candidate.isVisible()) {
-                consumed |= candidate.mouseReleased(mouseX, mouseY, button);
+                consumed |= candidate.mouseReleased(context);
             }
         }
         return consumed;

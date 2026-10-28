@@ -1,147 +1,134 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit;
 
 import org.jetbrains.annotations.Nullable;
+import org.lwjgl.glfw.GLFW;
 
 /**
- * 输入路由顺序：作用域捕获目标 → 聚焦控件 → 容器导航，事件只消费一次。
- *
- * <p>宿主先自行解析顶层 modal 作用域（kit 不持有模态栈），把该作用域内指针命中的控件作为
- * {@code hitTarget} 传入。指针按下/拖动/滚轮先问捕获目标，再问命中控件；释放只交给捕获目标，
- * 保证一次拖动只提交一次、且指针离开矩形后仍能收到释放。键盘先给聚焦控件，被消费后不再做
- * 容器导航（PageUp/PageDown 等容器键必须在控件之后询问）。</p>
- *
- * <p>该类的存在是为了让「聚焦控件优先」成为可复用的显式顺序；宿主表单/屏幕若自行提前拦截
- * 容器键，需要改为通过本类路由。</p>
+ * 宿主选择活动作用域，路由器统一执行切换、交互收尾与输入派发。
  */
 public final class UiInputRouter {
+    private @Nullable UiInputScope active;
 
-    private UiInputRouter() {
-    }
-
-    /** 指针事件阶段：按下、拖动、释放与滚轮；{@link UiInputRouter} 按阶段路由到捕获目标或命中控件。 */
-    public enum PointerPhase {
-        PRESSED,
-        DRAGGED,
-        RELEASED,
-        SCROLLED
+    /**
+     * 同步宿主选定的作用域，身份未变时保留交互。
+     */
+    public void select(@Nullable UiInputScope next) {
+        if (active == next) return;
+        UiInputScope previous = active;
+        active = next;
+        if (previous != null) previous.deactivate(UiInteractionSession.EndReason.SCOPE_CHANGED);
+        if (next != null) next.activate();
     }
 
     /**
-     * 指针按下：捕获目标优先，其次命中控件。
-     *
-     * @param captureTarget 捕获目标，无捕获时为 null
-     * @param hitTarget 指针命中的控件，无命中时为 null
-     * @param context 指针事件上下文
-     * @return 事件是否已被消费
+     * 输入与 hover 门禁共用当前作用域。
      */
-    public static boolean pressed(@Nullable UiInputTarget captureTarget, @Nullable UiInputTarget hitTarget,
-                                  UiInputContext context) {
-        return routePointer(captureTarget, hitTarget, context, PointerPhase.PRESSED, 0.0D);
+    public @Nullable UiInputScope active() {
+        return active;
     }
 
     /**
-     * 指针拖动：捕获目标优先，保证指针拖出矩形后仍继续。
-     *
-     * @param captureTarget 捕获目标，无捕获时为 null
-     * @param hitTarget 指针命中的控件，无命中时为 null
-     * @param context 指针事件上下文
-     * @return 事件是否已被消费
+     * 正常命中报告焦点候选，不另行扫描焦点矩形。
      */
-    public static boolean dragged(@Nullable UiInputTarget captureTarget, @Nullable UiInputTarget hitTarget,
-                                  UiInputContext context) {
-        return routePointer(captureTarget, hitTarget, context, PointerPhase.DRAGGED, 0.0D);
+    public boolean mousePressed(UiInputContext context) {
+        UiInputScope scope = context.scope();
+        if (scope != active) return false;
+        scope.focus().setKeyboardMode(false);
+        scope.interaction().end(UiInteractionSession.EndReason.FOCUS_TRANSFER);
+        if (scope != active) return true;
+        scope.beginPointer();
+        boolean consumed = scope.content().mousePressed(context);
+        if (context.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT) scope.finishPointer();
+        return consumed;
     }
 
     /**
-     * 指针释放：只交给捕获目标；没有捕获时按普通命中派发，保证一次拖动只提交一次。
-     *
-     * @param captureTarget 捕获目标，无捕获时为 null
-     * @param hitTarget 指针命中的控件，无命中时为 null
-     * @param context 指针事件上下文
-     * @return 事件是否已被消费
+     * 拖出矩形后继续送达原会话目标。
      */
-    public static boolean released(@Nullable UiInputTarget captureTarget, @Nullable UiInputTarget hitTarget,
-                                   UiInputContext context) {
-        return routePointer(captureTarget, hitTarget, context, PointerPhase.RELEASED, 0.0D);
+    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
+        if (context.scope() != active) return false;
+        UiInteractionSession session = context.scope().interaction();
+        UiInteractionSession.Target target = session.target(UiInteractionSession.Source.POINTER, context.button());
+        return target != null && target.mouseDragged(context, dragX, dragY);
     }
 
     /**
-     * 滚轮：捕获目标优先，其次命中控件。
-     *
-     * @param captureTarget 捕获目标，无捕获时为 null
-     * @param hitTarget 指针命中的控件，无命中时为 null
-     * @param context 指针事件上下文
-     * @param scrollY 纵向滚动量
-     * @return 事件是否已被消费
+     * 迟到释放不会交给新作用域内容。
      */
-    public static boolean scrolled(@Nullable UiInputTarget captureTarget, @Nullable UiInputTarget hitTarget,
-                                   UiInputContext context, double scrollY) {
-        return routePointer(captureTarget, hitTarget, context, PointerPhase.SCROLLED, scrollY);
+    public boolean mouseReleased(UiInputContext context) {
+        if (context.scope() != active) return false;
+        UiInteractionSession session = context.scope().interaction();
+        UiInteractionSession.Target target = session.target(UiInteractionSession.Source.POINTER, context.button());
+        if (target == null) return false;
+        boolean consumed = target.mouseReleased(context);
+        session.end(target, UiInteractionSession.EndReason.RELEASE);
+        return consumed;
     }
 
     /**
-     * 键按下：聚焦控件优先，未被消费才交给容器导航。
-     *
-     * @param focused 聚焦控件，无焦点时为 null
-     * @param container 容器导航目标
-     * @param keyCode GLFW 键码
-     * @param scanCode 平台扫描码
-     * @param modifiers 修饰键位掩码
-     * @return 事件是否已被消费
+     * 正常命中派发双轴滚轮。
      */
-    public static boolean keyPressed(@Nullable UiInputTarget focused, @Nullable UiInputTarget container,
-                                     int keyCode, int scanCode, int modifiers) {
-        if (focused != null && focused.keyPressed(keyCode, scanCode, modifiers)) return true;
-        return container != null && container != focused && container.keyPressed(keyCode, scanCode, modifiers);
+    public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
+        if (context.scope() != active) return false;
+        return context.scope().content().mouseScrolled(context, scrollX, scrollY);
     }
 
     /**
-     * 键抬起：与 {@link #keyPressed} 同一顺序，用于把按住的方向键重复合并成一次提交。
-     *
-     * @param focused 聚焦控件，无焦点时为 null
-     * @param container 容器导航目标
-     * @param keyCode GLFW 键码
-     * @param scanCode 平台扫描码
-     * @param modifiers 修饰键位掩码
-     * @return 事件是否已被消费
+     * Tab 先完成交互；内容输入优先于宿主历史和焦点激活。
      */
-    public static boolean keyReleased(@Nullable UiInputTarget focused, @Nullable UiInputTarget container,
-                                      int keyCode, int scanCode, int modifiers) {
-        if (focused != null && focused.keyReleased(keyCode, scanCode, modifiers)) return true;
-        return container != null && container != focused && container.keyReleased(keyCode, scanCode, modifiers);
-    }
-
-    /**
-     * 字符输入：聚焦控件优先。
-     *
-     * @param focused 聚焦控件，无焦点时为 null
-     * @param container 容器导航目标
-     * @param codePoint 输入的字符
-     * @param modifiers 修饰键位掩码
-     * @return 事件是否已被消费
-     */
-    public static boolean charTyped(@Nullable UiInputTarget focused, @Nullable UiInputTarget container,
-                                    char codePoint, int modifiers) {
-        if (focused != null && focused.charTyped(codePoint, modifiers)) return true;
-        return container != null && container != focused && container.charTyped(codePoint, modifiers);
-    }
-
-    private static boolean routePointer(@Nullable UiInputTarget captureTarget, @Nullable UiInputTarget hitTarget,
-                                        UiInputContext context, PointerPhase phase, double scrollY) {
-        if (captureTarget != null) {
-            if (phase == PointerPhase.RELEASED) return dispatch(captureTarget, context, phase, scrollY);
-            if (dispatch(captureTarget, context, phase, scrollY)) return true;
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        UiInputScope scope = active;
+        if (scope == null) return false;
+        scope.focus().setKeyboardMode(true);
+        if (keyCode == GLFW.GLFW_KEY_TAB) {
+            scope.interaction().end(UiInteractionSession.EndReason.FOCUS_TRANSFER);
+            if (scope != active) return true;
+            return scope.focus().keyPressed(keyCode, scanCode, modifiers);
         }
-        if (hitTarget == null || hitTarget == captureTarget) return false;
-        return dispatch(hitTarget, context, phase, scrollY);
+        if (keyCode == GLFW.GLFW_KEY_ESCAPE && scope.interaction().end(UiInteractionSession.EndReason.CANCEL))
+            return true;
+        UiHistoryShortcut history = UiHistoryShortcut.fromKey(keyCode, modifiers);
+        boolean consumed = scope.content().keyPressed(keyCode, scanCode, modifiers);
+        if (history != null) {
+            if (!consumed && scope.history() != null) scope.history().accept(history);
+            return true;
+        }
+        if (consumed) return true;
+        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+            scope.escape();
+            return true;
+        }
+        return scope.focus().keyPressed(keyCode, scanCode, modifiers);
     }
 
-    private static boolean dispatch(UiInputTarget target, UiInputContext context, PointerPhase phase, double scrollY) {
-        return switch (phase) {
-            case PRESSED -> target.mousePressed(context);
-            case DRAGGED -> target.mouseDragged(context);
-            case RELEASED -> target.mouseReleased(context);
-            case SCROLLED -> target.mouseScrolled(context, scrollY);
-        };
+    /**
+     * 调整键释放匹配会话，其它释放用于内容修饰态处理。
+     */
+    public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
+        if (active == null) return false;
+        UiInteractionSession session = active.interaction();
+        UiInteractionSession.Target target = session.target(UiInteractionSession.Source.KEY, keyCode);
+        if (target != null) {
+            boolean consumed = target.keyReleased(keyCode, scanCode, modifiers);
+            session.end(target, UiInteractionSession.EndReason.RELEASE);
+            return consumed;
+        }
+        return active.content().keyReleased(keyCode, scanCode, modifiers);
+    }
+
+    /**
+     * 字符只送达逻辑焦点；复合控件负责内部编辑模式。
+     */
+    public boolean charTyped(char codePoint, int modifiers) {
+        return active != null && active.content().charTyped(codePoint, modifiers);
+    }
+
+    /**
+     * 关屏先取消未完成交互，再由宿主冲刷已提交草稿。
+     */
+    public void close() {
+        UiInputScope previous = active;
+        active = null;
+        if (previous != null) previous.deactivate(UiInteractionSession.EndReason.HOST_CLOSED);
     }
 }

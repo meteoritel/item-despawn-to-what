@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit;
 
 import java.util.Map;
+
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -8,6 +9,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 import java.util.Objects;
+
 import org.lwjgl.glfw.GLFW;
 
 /**
@@ -26,32 +28,52 @@ import org.lwjgl.glfw.GLFW;
  * <p>焦点由 {@link UiFocusManager} 按视觉顺序登记（关闭 → 上一张/下一张 → 缩小/放大/适应窗口），
  * Enter 与 Space 都用于激活焦点控件；ESC 与关闭按钮请求关闭，具体关闭动作由宿主传入的 {@code onClose} 执行。</p>
  */
-public final class UiLightbox {
+public final class UiLightbox implements UiInputTarget {
     private static final int MARGIN = 12;
-    /** 底部控制栏高度：内容视口在它上方，控制栏不会被内容覆盖。 */
+    /**
+     * 底部控制栏高度：内容视口在它上方，控制栏不会被内容覆盖。
+     */
     private static final int BAR_HEIGHT = 22;
     private static final int TEXT_GAP = 2;
     private static final int BUTTON = 16;
     private static final int BUTTON_GAP = 2;
-    /** 默认遮罩色：与既有浮层一致的半透明黑。 */
+    /**
+     * 默认遮罩色：与既有浮层一致的半透明黑。
+     */
     private static final int DEFAULT_MASK = 0xC0101010;
 
-    /** 默认结构样式：灯箱是暗底，控制栏按钮必须在暗底上可辨（暗底 + 近白字曾约 1.06:1）。 */
+    /**
+     * 默认结构样式：灯箱是暗底，控制栏按钮必须在暗底上可辨（暗底 + 近白字曾约 1.06:1）。
+     */
     private static final UiControlStyle DEFAULT_STYLE = UiControlStyle.DARK;
-    /** 反推文本色的两个候选：实际取与结构底色对比度更高的一档。 */
+    /**
+     * 反推文本色的两个候选：实际取与结构底色对比度更高的一档。
+     */
     private static final int TEXT_ON_DARK = 0xFFF0F0F0;
     private static final int TEXT_ON_LIGHT = 0xFF1A1A1A;
 
-    /** 宿主提供的本地化文案；kit 自身不持有任何文案 key。 */
+    /**
+     * 宿主提供的本地化文案；kit 自身不持有任何文案 key。
+     */
     public interface Labels {
         Component close();
+
         Component zoomIn();
+
         Component zoomOut();
+
         Component fit();
-        /** 图集导航按钮；无图集时不会调用。 */
+
+        /**
+         * 图集导航按钮；无图集时不会调用。
+         */
         Component previous();
+
         Component next();
-        /** 「当前 / 总数」；无图集时不会调用。 */
+
+        /**
+         * 「当前 / 总数」；无图集时不会调用。
+         */
         Component position(int index, int total);
 
         // 缩放读数格式；默认沿用既有画面（"100%"），宿主可覆盖以本地化读数。
@@ -61,11 +83,17 @@ public final class UiLightbox {
         }
     }
 
-    /** 图集：宿主持有图片列表与当前下标，灯箱只负责显示与请求切换。 */
+    /**
+     * 图集：宿主持有图片列表与当前下标，灯箱只负责显示与请求切换。
+     */
     public interface Gallery {
         int index();
+
         int total();
-        /** 宿主据此换掉内容（{@link #setContent(Content)}）并更新自己的下标。 */
+
+        /**
+         * 宿主据此换掉内容（{@link #setContent(Content)}）并更新自己的下标。
+         */
         void navigate(int delta);
     }
 
@@ -73,9 +101,12 @@ public final class UiLightbox {
      * 内容契约：视口由灯箱写入，绘制/命中/缩放/平移由实现方负责。
      * 所有坐标都是宿主 GUI 逻辑坐标；实现方必须把绘制严格裁剪在视口内。
      */
-    public interface Content {
-        /** 内容原始尺寸，用于 fit 与调试读数；**未知时返回 0，外壳会据此把 fit 延后到尺寸就绪那一帧**。 */
+    public interface Content extends UiInteractionSession.Target {
+        /**
+         * 内容原始尺寸，用于 fit 与调试读数；**未知时返回 0，外壳会据此把 fit 延后到尺寸就绪那一帧**。
+         */
         int contentWidth();
+
         int contentHeight();
 
         /**
@@ -84,37 +115,59 @@ public final class UiLightbox {
          */
         void setViewport(UiRect viewport);
 
-        /** 在视口内绘制内容。 */
+        /**
+         * 在视口内绘制内容。
+         */
         void render(GuiGraphics graphics, Font font, int mouseX, int mouseY);
 
-        /** 滚轮缩放，锚点为宿主 GUI 坐标；返回是否消费。 */
+        /**
+         * 滚轮缩放，锚点为宿主 GUI 坐标；返回是否消费。
+         */
         boolean zoom(double amount, double anchorX, double anchorY);
 
-        /** 以视口中心缩放：direction &lt; 0 缩小、&gt; 0 放大。 */
+        /**
+         * 以视口中心缩放：direction &lt; 0 缩小、&gt; 0 放大。
+         */
         boolean zoomBy(int direction);
 
-        /** 适应窗口（复位）。 */
+        /**
+         * 适应窗口（复位）。
+         */
         void fit();
 
-        /** 拖动平移，参数为屏幕像素增量。 */
+        /**
+         * 拖动平移，参数为屏幕像素增量。
+         */
         boolean panBy(double screenDx, double screenDy);
 
-        /** 主键按下（内容区域）：开始拖动。 */
-        boolean mousePressed(double x, double y, int button);
+        /**
+         * 主键按下（内容区域）：开始拖动。
+         */
+        boolean mousePressed(UiInputContext context);
 
-        /** 主键释放：结束拖动。 */
-        boolean mouseReleased(double x, double y, int button);
+        /**
+         * 主键释放：结束拖动。
+         */
+        boolean mouseReleased(UiInputContext context);
 
-        /** 当前缩放百分比，用于读数；不适用时返回 100。 */
+        /**
+         * 当前缩放百分比，用于读数；不适用时返回 100。
+         */
         int zoomPercent();
 
-        /** 内容的命中目标（例如树里的行）；没有可命中内容时返回 null。 */
+        /**
+         * 内容的命中目标（例如树里的行）；没有可命中内容时返回 null。
+         */
         @Nullable UiTarget hit(double x, double y);
 
-        /** 缺图/资源不可用时的占位文案；{@code null} 表示内容正常。 */
+        /**
+         * 缺图/资源不可用时的占位文案；{@code null} 表示内容正常。
+         */
         @Nullable Component placeholder();
 
-        /** 资源重载通知：丢弃尺寸与纹理派生缓存。 */
+        /**
+         * 资源重载通知：丢弃尺寸与纹理派生缓存。
+         */
         default void invalidateResources() {
         }
     }
@@ -122,22 +175,33 @@ public final class UiLightbox {
     private final Labels labels;
     private final Runnable onClose;
     private final UiControlGroup controls = new UiControlGroup();
-    private final UiFocusManager focus = new UiFocusManager();
+    private final UiInputScope inputScope = new UiInputScope(this);
+    private final UiFocusManager focus = inputScope.focus();
     private Content content;
-    @Nullable private UiNineSlice surface;
-    @Nullable private Component barHint;
+    @Nullable
+    private UiNineSlice surface;
+    @Nullable
+    private Component barHint;
     private Map<String, UiIcon> icons = Map.of();
-    @Nullable private Gallery gallery;
-    @Nullable private Font font;
-    @Nullable private Component title;
-    @Nullable private Component description;
-    /** 文本色：默认按默认结构底色的相对亮度反推；调用方 setTextColor 后固定，不再跟随样式。 */
+    @Nullable
+    private Gallery gallery;
+    @Nullable
+    private Font font;
+    @Nullable
+    private Component title;
+    @Nullable
+    private Component description;
+    /**
+     * 文本色：默认按默认结构底色的相对亮度反推；调用方 setTextColor 后固定，不再跟随样式。
+     */
     private int textColor = readableTextOn(DEFAULT_STYLE.background());
     private boolean textColorPinned;
     private int maskColor = DEFAULT_MASK;
     private boolean maskClickCloses;
     private boolean dirty = true;
-    /** 需要一次 fit：首次布局与换内容后为真，resize 不做 fit（保留用户缩放）。 */
+    /**
+     * 需要一次 fit：首次布局与换内容后为真，resize 不做 fit（保留用户缩放）。
+     */
     private boolean needFit = true;
     private int width = 1;
     private int height = 1;
@@ -147,10 +211,14 @@ public final class UiLightbox {
     private int panelHeight = 1;
     private UiRect viewport = new UiRect(0, 0, 0, 0);
     private int displayedZoom = Integer.MIN_VALUE;
-    /** 缩放读数：只在变化时重建字符串与宽度，避免逐帧拼接与测量。 */
+    /**
+     * 缩放读数：只在变化时重建字符串与宽度，避免逐帧拼接与测量。
+     */
     private String zoomText = "100%";
     private int zoomTextWidth;
-    /** 图集页码读数：同样只在 index/total 变化时重建。 */
+    /**
+     * 图集页码读数：同样只在 index/total 变化时重建。
+     */
     private int displayedIndex = Integer.MIN_VALUE;
     private int displayedTotal = Integer.MIN_VALUE;
     private Component positionText = Component.empty();
@@ -167,10 +235,20 @@ public final class UiLightbox {
         focus.setSpaceActivates(true);
     }
 
+    /**
+     * 供宿主选择的稳定输入作用域。
+     */
+    public UiInputScope inputScope() {
+        return inputScope;
+    }
+
     // ---------- 宿主配置 ----------
 
-    /** 换内容（切换图集或换内容类型）；视口尺寸不变，但会重新求 fit。 */
+    /**
+     * 换内容（切换图集或换内容类型）；视口尺寸不变，但会重新求 fit。
+     */
     public void setContent(Content content) {
+        inputScope.interaction().end(UiInteractionSession.EndReason.UNMOUNTED);
         this.content = Objects.requireNonNull(content);
         this.displayedZoom = Integer.MIN_VALUE;
         this.needFit = true;
@@ -184,7 +262,9 @@ public final class UiLightbox {
         this.dirty = true;
     }
 
-    /** 标题与描述由内容决定时可不设置；设置后显示在内容视口上方。 */
+    /**
+     * 标题与描述由内容决定时可不设置；设置后显示在内容视口上方。
+     */
     public void setText(@Nullable Component title, @Nullable Component description) {
         this.title = title == null ? null : title.copy();
         this.description = description == null ? null : description.copy();
@@ -201,7 +281,9 @@ public final class UiLightbox {
         if (!textColorPinned) applyTextColor(readableTextOn(next.background()));
     }
 
-    /** 固定文本色；此后 {@link #setStyle(UiControlStyle)} 不再改写它。 */
+    /**
+     * 固定文本色；此后 {@link #setStyle(UiControlStyle)} 不再改写它。
+     */
     public void setTextColor(int textColor) {
         this.textColorPinned = true;
         applyTextColor(textColor);
@@ -214,7 +296,9 @@ public final class UiLightbox {
         this.dirty = true;
     }
 
-    public void setMaskColor(int maskColor) { this.maskColor = maskColor; }
+    public void setMaskColor(int maskColor) {
+        this.maskColor = maskColor;
+    }
 
     public void setSurface(@Nullable UiNineSlice surface) {
         this.surface = surface;
@@ -226,12 +310,20 @@ public final class UiLightbox {
         this.dirty = true;
     }
 
-    public void setBarHint(@Nullable Component hint) { this.barHint = hint; }
+    public void setBarHint(@Nullable Component hint) {
+        this.barHint = hint;
+    }
 
-    /** 点遮罩是否关闭；默认 false，避免拖动图片时误触退出。 */
-    public void setMaskClickCloses(boolean maskClickCloses) { this.maskClickCloses = maskClickCloses; }
+    /**
+     * 点遮罩是否关闭；默认 false，避免拖动图片时误触退出。
+     */
+    public void setMaskClickCloses(boolean maskClickCloses) {
+        this.maskClickCloses = maskClickCloses;
+    }
 
-    public UiRect viewport() { return viewport; }
+    public UiRect viewport() {
+        return viewport;
+    }
 
     /**
      * 宿主可用区域（逻辑 GUI 坐标，左上角为原点）；由模态适配层在每次渲染前写入。
@@ -246,17 +338,20 @@ public final class UiLightbox {
         this.dirty = true;
     }
 
-    /** 资源重载：内容自行丢弃派生缓存并重新求 fit。 */
+    /**
+     * 资源重载：内容自行丢弃派生缓存并重新求 fit。
+     */
     public void invalidateResources() {
         content.invalidateResources();
         displayedZoom = Integer.MIN_VALUE;
         dirty = true;
     }
 
-    /** 浮层关闭回调：释放按压捕获、结束内容拖动并清焦点；宿主复用视图时不会残留拖动状态。 */
+    /**
+     * 浮层关闭回调：释放按压捕获、结束内容拖动并清焦点；宿主复用视图时不会残留拖动状态。
+     */
     public void onClosed() {
-        controls.mouseReleased(0);
-        content.mouseReleased(0.0, 0.0, 0);
+        inputScope.interaction().end(UiInteractionSession.EndReason.HOST_CLOSED);
         focus.clearFocus();
     }
 
@@ -351,7 +446,7 @@ public final class UiLightbox {
                 ? place(font, "previous", Component.literal("◀"), labels.previous(), panelX, barY) : null;
         UiControl next = withGallery
                 ? place(font, "next", Component.literal("▶"), labels.next(),
-                        panelX + BUTTON + BUTTON_GAP, barY) : null;
+                panelX + BUTTON + BUTTON_GAP, barY) : null;
         UiControl fit = place(font, "fit", Component.literal("↺"), labels.fit(),
                 right - BUTTON, barY);
         UiControl zoomIn = place(font, "zoom_in", Component.literal("+"), labels.zoomIn(),
@@ -434,31 +529,33 @@ public final class UiLightbox {
 
     // ---------- 输入 ----------
 
-    public boolean mouseClicked(double x, double y, int button) {
+    public boolean mousePressed(UiInputContext context) {
+        double x = context.pointerX();
+        double y = context.pointerY();
         layoutIfPossible();
-        // 鼠标点击不夺取焦点：按下就收掉键盘焦点，避免轮廓留在被点过的按钮上。
-        focus.clearFocus();
-        if (controls.mousePressed(x, y, button)) return true;
-        if (viewport.contains(x, y)) return content.mousePressed(x, y, button);
+        if (controls.mousePressed(context)) return true;
+        if (viewport.contains(x, y)) return content.mousePressed(context);
         if (maskClickCloses) onClose.run();
         return true;
     }
 
-    public boolean mouseDragged(double x, double y, int button, double dragX, double dragY) {
+    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
         layoutIfPossible();
         return content.panBy(dragX, dragY);
     }
 
-    public boolean mouseReleased(double x, double y, int button) {
+    public boolean mouseReleased(UiInputContext context) {
         layoutIfPossible();
-        controls.mouseReleased(button);
-        return content.mouseReleased(x, y, button);
+        return content.mouseReleased(context);
     }
 
-    public boolean mouseScrolled(double x, double y, double amount) {
+    @Override
+    public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
+        double x = context.pointerX();
+        double y = context.pointerY();
         layoutIfPossible();
         // 指针不在内容视口内不做缩放；输入仍由模态层吞掉，不会漏到下层。
-        return viewport.contains(x, y) && content.zoom(amount, x, y);
+        return viewport.contains(x, y) && content.zoom(scrollY, x, y);
     }
 
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
@@ -477,7 +574,7 @@ public final class UiLightbox {
                 return true;
             }
         }
-        return focus.keyPressed(keyCode, scanCode, modifiers);
+        return false;
     }
 
     public boolean charTyped(char codePoint, int modifiers) {

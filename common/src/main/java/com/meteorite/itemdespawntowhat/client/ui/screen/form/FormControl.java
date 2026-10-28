@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.FieldNumbers;
@@ -7,17 +9,18 @@ import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiNumbers;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTextValue;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
+
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -29,7 +32,7 @@ import org.jetbrains.annotations.Nullable;
  * <p>负责「JSON 值 &lt;-&gt; 控件值」的双向搬运与本地校验；
  * 写入草稿由 FormView 统一经由 EditSession 完成，控件本身不碰草稿。
  */
-abstract class FormControl {
+abstract class FormControl implements UiInputTarget {
 
     // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件；子类继承本字段取样式
     final UiHostTheme THEME;
@@ -147,7 +150,9 @@ abstract class FormControl {
         this.geometryListener = listener;
     }
 
-    /** 通知宿主行：本控件几何高度已变化，行测量与页面布局需要重算。 */
+    /**
+     * 通知宿主行：本控件几何高度已变化，行测量与页面布局需要重算。
+     */
     protected void notifyGeometryChanged() {
         if (geometryListener != null) {
             geometryListener.run();
@@ -213,7 +218,8 @@ abstract class FormControl {
         markEdited();
     }
 
-    void retainChildInputs() { }
+    void retainChildInputs() {
+    }
 
     // 长文本悬停时显示完整内容。
     @Nullable Component fullText() {
@@ -221,7 +227,9 @@ abstract class FormControl {
     }
 
     // 复合控件可按当前命中条目提供提示，注册名只在悬停时显示。
-    @Nullable Component tooltipAt(double x, double y) { return null; }
+    @Nullable Component tooltipAt(double x, double y) {
+        return null;
+    }
 
     // 本地校验问题清单
     List<FormIssue> issues(String path) {
@@ -229,14 +237,18 @@ abstract class FormControl {
     }
 
     // 复合控件可在字段行内部定位问题，并返回更准确的焦点目标。
-    @Nullable UiFocusTarget revealPath(String path, String basePath) { return null; }
+    @Nullable UiFocusTarget revealPath(String path, String basePath) {
+        return null;
+    }
 
     // 需要先知道宽度才能算出高度的控件（子列表）覆写
     void measure(int width) {
     }
 
     // 普通控件使用整行宽度，复选框等可选择内容宽度。
-    int preferredWidth(int available) { return available; }
+    int preferredWidth(int available) {
+        return available;
+    }
 
     // 覆盖本控件占用的行高（<=0 表示恢复自然高度）
     final void setHeightOverride(int height) {
@@ -254,7 +266,9 @@ abstract class FormControl {
     }
 
     // 复合控件不能用自然高度判断密度：条件树在紧凑表单里也可能很高。
-    final boolean usesCardSpacing() { return minimumHeight >= CARD_CONTROL_HEIGHT; }
+    final boolean usesCardSpacing() {
+        return minimumHeight >= CARD_CONTROL_HEIGHT;
+    }
 
     // 输入被上限拒绝时的即时提示出口
     final void setRejectedNotice(@Nullable Consumer<Component> rejectedNotice) {
@@ -268,32 +282,32 @@ abstract class FormControl {
         }
     }
 
-    boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mousePressed(UiInputContext context) {
         return false;
     }
 
-    boolean mouseReleased(double mouseX, double mouseY, int button) {
+    public boolean mouseReleased(UiInputContext context) {
         return false;
     }
 
-    boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
         return false;
     }
 
-    boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+    public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
         return false;
     }
 
-    boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         return false;
     }
 
     // 按键抬起：方向键重复在抬起时合并为一次提交
-    boolean keyReleased(int keyCode, int scanCode, int modifiers) {
+    public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
         return false;
     }
 
-    boolean charTyped(char codePoint, int modifiers) {
+    public boolean charTyped(char codePoint, int modifiers) {
         return false;
     }
 
@@ -304,26 +318,18 @@ abstract class FormControl {
     }
 
     // 统一结束入口：宿主隐藏/禁用/卸载/失焦作用域切换/关闭时回退未提交的交互
-    void endInteractions(UiInputCapture.EndReason reason) {
+    void endInteractions(UiInteractionSession.EndReason reason) {
     }
 
     /**
-     * 取消代收按下的子按钮残留的按下态。
-     *
-     * <p>复合控件把子按钮的按下事件转发给自己接收（{@link #mouseClicked} 返回 true 后，
-     * 宿主记录的按下归属是复合控件而不是子按钮），因此宿主走统一结束入口时子按钮可能永远等不到
-     * 释放事件。{@link UiButton} 没有对外的按下态复位方法，按下态只能经由「在按钮矩形外释放」
-     * 这条既有取消路径清除，这里据此补一次矩形外释放。</p>
-     *
-     * @param buttons 由本控件代收按下的子按钮
+     * 子树失效时取消其中仍持有作用域会话的按钮。
      */
     static void cancelButtonPresses(List<UiButton> buttons) {
         for (UiButton button : buttons) {
             if (!button.isPressed()) {
                 continue;
             }
-            UiRect bounds = button.bounds();
-            button.mouseReleased(bounds.x() - 1, bounds.y() - 1, 0);
+            button.cancelPress();
         }
     }
 

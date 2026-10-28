@@ -19,38 +19,47 @@ import java.util.Objects;
  *
  * <p>绘制只在文字或图标确实越出控件矩形时才设置裁剪，未越界时不提交绘制批次。</p>
  */
-public final class UiControl implements UiFocusTarget {
+public final class UiControl implements UiFocusTarget, UiInteractionSession.Target {
     private UiRect bounds = new UiRect(0, 0, 0, 0);
     private Component label = Component.empty();
     private FormattedCharSequence text = FormattedCharSequence.EMPTY;
     private int textWidth;
     private int color;
-    /** 上次测量所用的语言与字体：两者变化后视觉顺序文本与宽度都会变，渲染时按令牌重算。 */
+    /**
+     * 上次测量所用的语言与字体：两者变化后视觉顺序文本与宽度都会变，渲染时按令牌重算。
+     */
     private @Nullable Object measuredLanguage;
     private @Nullable Font measuredFont;
-    @Nullable private UiIcon icon;
+    @Nullable
+    private UiIcon icon;
     private List<Component> tooltip = List.of();
-    @Nullable private UiAction action;
-    @Nullable private Component accessibleName;
+    @Nullable
+    private UiAction action;
+    @Nullable
+    private Component accessibleName;
     private UiTarget target = new UiTarget(UiTarget.Kind.ROW, 0, null, bounds, List.of(), null);
-    /** 标签超宽时的滚动计时：只在悬停期间推进，离开即归零。 */
+    /**
+     * 标签超宽时的滚动计时：只在悬停期间推进，离开即归零。
+     */
     private int scrollTicks;
     private UiControlStyle style = UiControlStyle.PARCHMENT;
     private boolean enabled = true;
     private boolean visible = true;
     private boolean selected;
-    private boolean focused;
+    private final UiFocusState focusState = new UiFocusState();
     private boolean pressed;
+    private boolean focusable;
+    private @Nullable UiInteractionSession session;
 
     /**
      * 重配控件内容并重建命中目标；同一标签重复配置不打断标签滚动。
      *
-     * @param font 文本测量用字体
-     * @param label 标签文本
-     * @param color 文本颜色
-     * @param icon 图标，可为 null
+     * @param font    文本测量用字体
+     * @param label   标签文本
+     * @param color   文本颜色
+     * @param icon    图标，可为 null
      * @param tooltip 提示行
-     * @param action 激活动作；为 null 时同时取消焦点与按下态（纯标签不可激活）
+     * @param action  激活动作；为 null 时取消按下态，焦点能力由 setFocusable 声明
      */
     public void configure(Font font, Component label, int color, @Nullable UiIcon icon,
                           List<Component> tooltip, @Nullable UiAction action) {
@@ -65,9 +74,10 @@ public final class UiControl implements UiFocusTarget {
         this.icon = icon;
         this.tooltip = List.copyOf(tooltip);
         this.action = action;
-        // 动作被拿掉（标签化）时立刻取消焦点与按下态：两者都以「可激活」为前提。
+        // 动作被拿掉时结束按压，焦点资格仍由显式声明决定。
         if (action == null) {
-            this.focused = false;
+
+            endInteraction(UiInteractionSession.EndReason.DISABLED);
             this.pressed = false;
         }
         rebuildTarget();
@@ -82,78 +92,164 @@ public final class UiControl implements UiFocusTarget {
         rebuildTarget();
     }
 
-    public UiRect bounds() { return bounds; }
+    public UiRect bounds() {
+        return bounds;
+    }
 
-    public void setStyle(UiControlStyle style) { this.style = Objects.requireNonNull(style); }
-    public UiControlStyle style() { return style; }
+    public void setStyle(UiControlStyle style) {
+        this.style = Objects.requireNonNull(style);
+    }
+
+    public UiControlStyle style() {
+        return style;
+    }
 
     // 禁用控件仍照常绘制（走禁用底色与淡化文字），但不命中、不激活、不进焦点序列。
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
         if (!enabled) {
+            endInteraction(UiInteractionSession.EndReason.DISABLED);
             pressed = false;
-            focused = false;
+
+            focusState.clear();
         }
     }
-    public boolean isEnabled() { return enabled; }
+
+    public boolean isEnabled() {
+        return enabled;
+    }
 
     // 不可见控件完全不绘制、不命中、不参与焦点；浮层分页窗口用它隐藏窗口外的行。
     public void setVisible(boolean visible) {
         this.visible = visible;
         if (!visible) {
+            endInteraction(UiInteractionSession.EndReason.HIDDEN);
             pressed = false;
-            focused = false;
+
+            focusState.clear();
         }
     }
-    public boolean isVisible() { return visible; }
 
-    public void setSelected(boolean selected) { this.selected = selected; }
-    public boolean isSelected() { return selected; }
+    public boolean isVisible() {
+        return visible;
+    }
 
-    public void setFocused(boolean focused) { this.focused = focused && isFocusable(); }
-    @Override public boolean isFocused() { return focused; }
+    public void setSelected(boolean selected) {
+        this.selected = selected;
+    }
+
+    public boolean isSelected() {
+        return selected;
+    }
+
+
+    @Override
+    public boolean isFocused() {
+        return focusState.isFocused();
+    }
 
     // 按下态是「这个目标可被激活」的反馈：纯标签（无 action）按住时不应显示按钮底色。
-    public void setPressed(boolean pressed) { this.pressed = pressed && isFocusable(); }
-    public boolean isPressed() { return pressed; }
+    public void setPressed(boolean pressed) {
+        this.pressed = pressed && isHittable() && action != null;
+    }
 
-    /** 可命中与可参与悬停的条件：禁用或不可见的目标不参与命中。 */
-    public boolean isHittable() { return enabled && visible; }
+    public boolean isPressed() {
+        return pressed;
+    }
 
-    @Override public boolean canFocus() { return isFocusable(); }
+    /**
+     * 可命中与可参与悬停的条件：禁用或不可见的目标不参与命中。
+     */
+    public boolean isHittable() {
+        return enabled && visible;
+    }
 
-    /** 供焦点调试与旁白使用的可读名称；未显式设置时按标签、再按首行提示回退。 */
+    public UiFocusState focusState() {
+        return focusState;
+    }
+
+    @Override
+    public boolean canFocus() {
+        return isFocusable();
+    }
+
+    /**
+     * 供焦点调试与旁白使用的可读名称；未显式设置时按标签、再按首行提示回退。
+     */
     public void setAccessibleName(@Nullable Component name) {
         this.accessibleName = name == null ? null : name.copy();
     }
 
-    @Override public @Nullable Component accessibleName() {
+    @Override
+    public @Nullable Component accessibleName() {
         if (accessibleName != null) return accessibleName;
         // 图标/符号按钮的 label 常为空或不具名，真正的名称只在提示里：回退到首行提示。
         if (!label.getString().isEmpty()) return label;
         return tooltip.isEmpty() ? label : tooltip.getFirst();
     }
 
+    /** 可进入焦点序列的条件：显式声明可聚焦，并且当前可见、可用。 */
+    public boolean isFocusable() {
+        return focusable && isHittable();
+    }
+
     /**
-     * 可进入键盘焦点序列的条件：可命中**且确实有动作**。
-     * 纯标签（{@code action == null}）仍可命中、仍显示 tooltip，但不作为 Tab 停靠点——
-     * 否则焦点序列会被只读文本占满，而它们激活后没有任何效果。
+     * 显式声明是否参与焦点导航，独立于点击动作。
      */
-    public boolean isFocusable() { return isHittable() && action != null; }
+    public void setFocusable(boolean focusable) {
+        this.focusable = focusable;
+    }
+
+    /**
+     * 命中后登记实际焦点与按压；释放仍命中本控件才激活。
+     */
+    @Override
+    public boolean mousePressed(UiInputContext context) {
+        if (context.button() != 0 || hit(context.pointerX(), context.pointerY()) == null || action == null)
+            return false;
+        context.scope().pointerHit(this);
+        session = context.scope().interaction();
+        session.begin(this, UiInteractionSession.Source.POINTER, context.button());
+        setPressed(true);
+        return true;
+    }
+
+    @Override
+    public boolean mouseReleased(UiInputContext context) {
+        if (context.button() != 0 || !pressed) return false;
+        pressed = false;
+        if (hit(context.pointerX(), context.pointerY()) != null) activate();
+        return true;
+    }
+
+    /**
+     * 控件失效时取消其按压，不影响同作用域其它目标。
+     */
+    public void endInteraction(UiInteractionSession.EndReason reason) {
+        if (session != null) session.end(this, reason);
+    }
+
+    @Override
+    public void interactionEnded(UiInteractionSession.EndReason reason) {
+        pressed = false;
+    }
 
     private void rebuildTarget() {
         target = new UiTarget(icon == null ? UiTarget.Kind.ROW : UiTarget.Kind.ICON,
                 0, label, bounds, tooltip, action);
     }
 
-    @Nullable public UiTarget hit(double x, double y) {
+    @Nullable
+    public UiTarget hit(double x, double y) {
         if (!isHittable()) return null;
         return bounds.contains(x, y) ? target : null;
     }
 
-    /** 执行动作并把「是否消费」交还调用方；禁用、不可见或无动作时一律不消费。 */
+    /**
+     * 执行动作并把「是否消费」交还调用方；禁用、不可见或无动作时一律不消费。
+     */
     public boolean activate() {
-        if (!isFocusable() || action == null) return false;
+        if (!isHittable() || action == null) return false;
         action.run();
         return true;
     }
@@ -187,7 +283,7 @@ public final class UiControl implements UiFocusTarget {
         } finally {
             if (clip) UiTransform.disableScissor(graphics);
         }
-        if (focused) renderFocusOutline(graphics);
+        if (isFocusVisible()) renderFocusOutline(graphics);
     }
 
     // 语言或字体实例变化后标签文本与宽度都会变：这里按令牌廉价重算，宿主不必为语言热切换逐帧重配。
@@ -226,7 +322,7 @@ public final class UiControl implements UiFocusTarget {
     }
 
     // 焦点轮廓画在矩形内侧：不侵入相邻控件，也不会被控件自身的裁剪吃掉。
-    private void renderFocusOutline(GuiGraphics graphics) {
+    public void renderFocusOutline(GuiGraphics graphics) {
         int outline = style.focusOutline();
         graphics.fill(bounds.x(), bounds.y(), bounds.right(), bounds.y() + 1, outline);
         graphics.fill(bounds.x(), bounds.bottom() - 1, bounds.right(), bounds.bottom(), outline);

@@ -1,6 +1,10 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputScope;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
+
 import java.util.Objects;
+
 import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.client.edit.RuleCategorySkeleton;
 import com.meteorite.itemdespawntowhat.client.edit.RulePackExporter;
@@ -8,7 +12,6 @@ import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine;
@@ -27,6 +30,7 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiTreeNode;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTreeView;
 import com.meteorite.itemdespawntowhat.core.api.DevelopmentDiagnostics;
 import com.meteorite.itemdespawntowhat.core.service.edit.RuleSnapshotEntry;
+
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
@@ -36,6 +40,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletionException;
+
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -53,6 +58,13 @@ import org.jetbrains.annotations.Nullable;
  * 页面切换与保存入口由 {@link EditorShell} 路由，编辑页负责本地保存编排。</p>
  */
 final class RuleEditorListPage implements EditorPage {
+    private final UiInputScope inputScope = new UiInputScope(this);
+
+    @Override
+    public UiInputScope inputScope() {
+        return inputScope;
+    }
+
 
     // ---- 页面度量与标题状态：屏幕按这些声明统一排版，页不自己算窗口几何 ----
 
@@ -82,7 +94,9 @@ final class RuleEditorListPage implements EditorPage {
     // i18n 前缀
     private static final String UI = TypeLabels.UI_PREFIX;
 
-    /** 状态筛选的轮询顺序：全部 → 启用 → 停用。 */
+    /**
+     * 状态筛选的轮询顺序：全部 → 启用 → 停用。
+     */
     private enum StatusFilter {
         ALL("all"),
         ENABLED("enabled"),
@@ -112,7 +126,9 @@ final class RuleEditorListPage implements EditorPage {
         }
     }
 
-    /** 来源筛选的轮询顺序：全部 → 覆盖层 → 数据包；混合条目同时命中两边。 */
+    /**
+     * 来源筛选的轮询顺序：全部 → 覆盖层 → 数据包；混合条目同时命中两边。
+     */
     private enum SourceFilter {
         ALL("all"),
         OVERLAY("overlay"),
@@ -182,7 +198,7 @@ final class RuleEditorListPage implements EditorPage {
     private boolean firstReadyLogged;
 
     RuleEditorListPage(EditorShell shell, RuleEditorModel model, RuleListDisplayCache display, Font font,
-            UiModalStack modals) {
+                       UiModalStack modals) {
         this.THEME = shell.theme();
         this.shell = shell;
         this.model = model;
@@ -227,6 +243,8 @@ final class RuleEditorListPage implements EditorPage {
         statusButton = button(UI + "filter.status_label", UiButtonVariant.SECONDARY, this::cycleStatusFilter);
         sourceButton = button(UI + "filter.source_label", UiButtonVariant.SECONDARY, this::cycleSourceFilter);
         filterButtons.clear();
+        statusButton.setFocusable(false);
+        sourceButton.setFocusable(false);
         filterButtons.addAll(List.of(statusButton, sourceButton));
         filterBar.set(filterButtons);
         refreshFilterLabels();
@@ -280,7 +298,7 @@ final class RuleEditorListPage implements EditorPage {
         listButtons.addAll(List.of(create, editButton, toggleButton, copy, deleteButton, exportButton, applyButton, changes));
         // 重建按钮时不丢在途导出的禁用态（列表刷新可能在导出期间发生）
         if (exporting) {
-    exportButton.setEnabled(false);
+            exportButton.setEnabled(false);
         }
     }
 
@@ -288,11 +306,17 @@ final class RuleEditorListPage implements EditorPage {
         return new UiButton(THEME, font, Component.translatable(labelKey), variant, action::run).setChipStyle(true);
     }
 
-    /** 导出范围选项：标签、是否含数据包条目与当前可导出的条数。 */
-    private record ExportScope(String scope, String labelKey, String countKey, boolean includeDatapack, int count) { }
+    /**
+     * 导出范围选项：标签、是否含数据包条目与当前可导出的条数。
+     */
+    private record ExportScope(String scope, String labelKey, String countKey, boolean includeDatapack, int count) {
+    }
 
-    /** 分类行标题的测量结果：行宽决定裁剪点，行宽变化时重测。 */
-    private record CategoryTitle(int width, String text) { }
+    /**
+     * 分类行标题的测量结果：行宽决定裁剪点，行宽变化时重测。
+     */
+    private record CategoryTitle(int width, String text) {
+    }
 
     // 导出弹窗：两个范围选项直接显示各自可导出的条数，避免导出后才发现选错范围
     private void openExport() {
@@ -352,17 +376,17 @@ final class RuleEditorListPage implements EditorPage {
             }
         }
         if (entries.isEmpty()) {
-            shell.setNotice(Component.translatable(UI + "export.empty"),EditorShell.NoticeLevel.WARNING);
+            shell.setNotice(Component.translatable(UI + "export.empty"), EditorShell.NoticeLevel.WARNING);
             return;
         }
         exporting = true;
         if (exportButton != null) {
-    exportButton.setEnabled(false);
+            exportButton.setEnabled(false);
         }
         RulePackExporter.exportAsync(option.scope(), entries)
                 .thenAccept(result -> deliverExport(() -> shell.setNotice(
                         Component.translatable(UI + "export.done", result.count(), result.displayPath()),
-EditorShell.NoticeLevel.SUCCESS)))
+                        EditorShell.NoticeLevel.SUCCESS)))
                 .exceptionally(error -> {
                     deliverExport(() -> reportExportFailure(error));
                     return null;
@@ -375,7 +399,7 @@ EditorShell.NoticeLevel.SUCCESS)))
         Minecraft.getInstance().execute(() -> {
             exporting = false;
             if (exportButton != null) {
-    exportButton.setEnabled(shell.editable());
+                exportButton.setEnabled(shell.editable());
             }
             notice.run();
         });
@@ -386,11 +410,11 @@ EditorShell.NoticeLevel.SUCCESS)))
         Throwable cause = error instanceof CompletionException && error.getCause() != null ? error.getCause() : error;
         if (cause instanceof RulePackExporter.ExportRejectedException rejected) {
             shell.setNotice(Component.translatable(UI + "export.invalid", rejected.ids().size(),
-                    describeIds(rejected.ids())),EditorShell.NoticeLevel.DANGER);
+                    describeIds(rejected.ids())), EditorShell.NoticeLevel.DANGER);
             return;
         }
         String reason = cause.getMessage() == null ? "" : cause.getMessage();
-        shell.setNotice(Component.translatable(UI + "export.failed", reason),EditorShell.NoticeLevel.DANGER);
+        shell.setNotice(Component.translatable(UI + "export.failed", reason), EditorShell.NoticeLevel.DANGER);
     }
 
     // 提示行空间有限：只列前几条，其余以省略号概括
@@ -414,16 +438,16 @@ EditorShell.NoticeLevel.SUCCESS)))
         boolean selected = id != null;
         boolean contentReadOnly = selected && model.isReadOnly(id);
         for (UiButton button : selectedButtons) {
-    button.setEnabled(active && selected);
+            button.setEnabled(active && selected);
         }
         if (toggleButton != null) {
-    toggleButton.setEnabled(active && selected);
+            toggleButton.setEnabled(active && selected);
             // 按生效状态决定下一步动作：本服覆盖与未应用意图都算在内
             boolean enabled = selected && model.effectiveEnabled(id);
             toggleButton.setLabel(Component.translatable(UI + (enabled ? "button.disable" : "button.enable")));
         }
         if (deleteButton != null) {
-    deleteButton.setEnabled(active && selected && !contentReadOnly);
+            deleteButton.setEnabled(active && selected && !contentReadOnly);
         }
         if (editButton != null) {
             editButton.setLabel(Component.translatable(UI + "button.edit"));
@@ -437,7 +461,7 @@ EditorShell.NoticeLevel.SUCCESS)))
             return;
         }
         boolean dirty = model.hasDirty();
-    applyButton.setEnabled(shell.editable() && dirty);
+        applyButton.setEnabled(shell.editable() && dirty);
         applyButton.setLabel(dirty
                 ? Component.translatable(UI + "button.apply_changes", model.dirtyRuleIds().size())
                 : Component.translatable(UI + "button.no_changes"));
@@ -451,29 +475,29 @@ EditorShell.NoticeLevel.SUCCESS)))
 
     public void renderFooter(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY, UiRect footer) {
         listBar.layout(footer.y(), footer.width());
-    listBar.render(graphics, renderFont, mouseX, mouseY);
+        listBar.render(graphics, renderFont, mouseX, mouseY);
     }
 
     // 管理页布局：工具排、搜索框与筛选、规则树
     public void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY, UiRect area) {
-    updateButtons();
+        updateButtons();
         int headerHeight = globalBar.preferredHeight(area.width());
         globalBar.layout(area.y(), area.width());
-    globalBar.render(graphics, renderFont, mouseX, mouseY);
+        globalBar.render(graphics, renderFont, mouseX, mouseY);
         int searchY = area.y() + headerHeight + RuleEditorPageSupport.PAD;
         int searchWidth = Math.clamp(area.width() / 3, SEARCH_MIN_WIDTH, SEARCH_MAX_WIDTH);
         if (searchField != null) {
             searchField.setBounds(area.x(), searchY, searchWidth, ROW_H);
-    searchField.render(graphics, renderFont, mouseX, mouseY);
+            searchField.render(graphics, renderFont, mouseX, mouseY);
         }
         int filterWidth = Math.max(0, area.width() - searchWidth - 2);
         filterBar.layout(area.x() + searchWidth + 2, searchY, filterWidth);
-    filterBar.render(graphics, renderFont, mouseX, mouseY);
+        filterBar.render(graphics, renderFont, mouseX, mouseY);
         int listY = searchY + Math.max(ROW_H, filterBar.preferredHeight(filterWidth)) + RuleEditorPageSupport.PAD;
         int available = Math.max(0, area.bottom() - listY);
         if (ruleList != null) {
             ruleList.setBounds(area.x(), listY, area.width(), available);
-    ruleList.render(graphics, renderFont, mouseX, mouseY);
+            ruleList.render(graphics, renderFont, mouseX, mouseY);
         }
     }
 
@@ -775,31 +799,26 @@ EditorShell.NoticeLevel.SUCCESS)))
 
     // ---- 指针与键盘委托 ----
 
-    public void onScopeChanged() {
-        if (searchField != null) {
-            searchField.endInteraction(UiInputCapture.EndReason.FOCUS_SCOPE_CHANGED);
-        }
-        if (ruleList != null) {
-    ruleList.mouseReleased(-1, -1, 0);
-        }
-    }
 
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mousePressed(UiInputContext context) {
+        double mouseX = context.pointerX();
+        double mouseY = context.pointerY();
+        int button = context.button();
         // 配方标签在整行命中之前优先：标签框很窄，先给树会吃掉这次点击
         if (button == 0 && openTagDetails(mouseX, mouseY)) {
             return true;
         }
-        if (searchField != null && searchField.mouseClicked(mouseX, mouseY, button)) {
+        if (searchField != null && searchField.mousePressed(context)) {
             return true;
         }
-        if (filterBar.mouseClicked(mouseX, mouseY, button)) {
+        if (filterBar.mousePressed(context)) {
             return true;
         }
-        if (ruleList != null && ruleList.mouseClicked(mouseX, mouseY, button)) {
+        if (ruleList != null && ruleList.mousePressed(context)) {
             return true;
         }
-    return globalBar.mouseClicked(mouseX, mouseY, button)
-                || listBar.mouseClicked(mouseX, mouseY, button);
+        return globalBar.mousePressed(context)
+                || listBar.mousePressed(context);
     }
 
     // 点击配方标签：打开标签轮播弹窗；未命中标签时返回 false 继续本页命中测试。
@@ -832,34 +851,31 @@ EditorShell.NoticeLevel.SUCCESS)))
         return display.snapshot(node.value()).preview().tagAt(font, row, mouseX, mouseY);
     }
 
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        boolean consumed = ruleList != null && ruleList.mouseReleased(mouseX, mouseY, button);
-        consumed |= searchField != null && searchField.mouseReleased(mouseX, mouseY, button);
-        consumed |= filterBar.mouseReleased(mouseX, mouseY, button);
-        consumed |= globalBar.mouseReleased(mouseX, mouseY, button);
-        consumed |= listBar.mouseReleased(mouseX, mouseY, button);
+    public boolean mouseReleased(UiInputContext context) {
+        boolean consumed = ruleList != null && ruleList.mouseReleased(context);
+        consumed |= searchField != null && searchField.mouseReleased(context);
+        consumed |= filterBar.mouseReleased(context);
+        consumed |= globalBar.mouseReleased(context);
+        consumed |= listBar.mouseReleased(context);
         return consumed;
     }
 
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        if (searchField != null && searchField.mouseDragged(mouseX, mouseY, button, dragX, dragY)) {
+    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
+        if (searchField != null && searchField.mouseDragged(context, dragX, dragY)) {
             return true;
         }
-        return ruleList != null && ruleList.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+        return ruleList != null && ruleList.mouseDragged(context, dragX, dragY);
     }
 
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        return ruleList != null && ruleList.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+    public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
+        return ruleList != null && ruleList.mouseScrolled(context, scrollX, scrollY);
     }
 
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         // 搜索框优先消费输入，其余按键交给规则树
-        return searchKeyPressed(keyCode, scanCode, modifiers) || listKeyPressed(keyCode, scanCode, modifiers);
+        return listKeyPressed(keyCode, scanCode, modifiers);
     }
 
-    private boolean searchKeyPressed(int keyCode, int scanCode, int modifiers) {
-        return searchField != null && searchField.isFocused() && searchField.keyPressed(keyCode, scanCode, modifiers);
-    }
 
     private boolean listKeyPressed(int keyCode, int scanCode, int modifiers) {
         if (searchField != null && searchField.isFocused()
@@ -912,7 +928,7 @@ EditorShell.NoticeLevel.SUCCESS)))
         if (tag == null) {
             tooltip.setMaxLines(TOOLTIP_MAX_LINES, Component.translatable(UI + "recipe.condition_tree_more"));
         }
-    tooltip.render(graphics, new UiRect(0, 0, shell.screenWidth(), shell.screenHeight()), lines, mouseX, mouseY);
+        tooltip.render(graphics, new UiRect(0, 0, shell.screenWidth(), shell.screenHeight()), lines, mouseX, mouseY);
         return true;
     }
 

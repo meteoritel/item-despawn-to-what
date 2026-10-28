@@ -1,12 +1,16 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusState;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiJsonText;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
+
 import java.util.ArrayList;
 import java.util.List;
+
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -29,9 +33,9 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
     /**
      * 一个代码块。
      *
-     * @param title   标题，为空时不占行；用于层名与数据包
-     * @param detail  副标题，为空时不占行；用于文件路径
-     * @param body    正文，按行绘制 JSON 语法色
+     * @param title  标题，为空时不占行；用于层名与数据包
+     * @param detail 副标题，为空时不占行；用于文件路径
+     * @param body   正文，按行绘制 JSON 语法色
      */
     public record Section(@Nullable Component title, @Nullable Component detail, String body) {
 
@@ -101,7 +105,7 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
     private int scrollOffset;
     private boolean lineNumbers = true;
     private boolean visible = true;
-    private boolean focused;
+    private final UiFocusState focusState = new UiFocusState();
 
     /**
      * 创建只读代码视图。
@@ -122,7 +126,9 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
 
     // ---- 配置 ----
 
-    /** 替换全部代码块：重新分类正文并把滚动位置退回顶部。 */
+    /**
+     * 替换全部代码块：重新分类正文并把滚动位置退回顶部。
+     */
     public UiCodeView setSections(List<Section> sections) {
         this.sections = List.copyOf(sections);
         List<byte[]> next = new ArrayList<>(this.sections.size());
@@ -158,7 +164,9 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
         return this;
     }
 
-    /** 全部正文按行拼接，供整段复制使用。 */
+    /**
+     * 全部正文按行拼接，供整段复制使用。
+     */
     public String text() {
         StringBuilder text = new StringBuilder();
         for (Section section : sections) {
@@ -321,7 +329,7 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
             graphics.disableScissor();
         }
         renderScrollbar(graphics, innerY, innerHeight);
-        if (focused) {
+        if (isFocusVisible()) {
             theme.drawFocusOutline(graphics, bounds);
         }
     }
@@ -380,16 +388,20 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
     // ---- 输入 ----
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mousePressed(UiInputContext context) {
+        double mouseX = context.pointerX();
+        double mouseY = context.pointerY();
         if (!visible || !bounds.contains(mouseX, mouseY)) {
             return false;
         }
-        setFocused(true);
+        context.scope().pointerHit(this);
         return true;
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+    public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
+        double mouseX = context.pointerX();
+        double mouseY = context.pointerY();
         if (!visible || !bounds.contains(mouseX, mouseY)) {
             return false;
         }
@@ -404,7 +416,7 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (!visible || !focused) {
+        if (!visible || !isFocused()) {
             return false;
         }
         int maxScroll = maxScroll();
@@ -427,18 +439,19 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
     // ---- 焦点 ----
 
     @Override
+    public UiFocusState focusState() {
+        return focusState;
+    }
+
+    @Override
     public boolean canFocus() {
         return visible;
     }
 
-    @Override
-    public void setFocused(boolean focused) {
-        this.focused = focused;
-    }
 
     @Override
     public boolean isFocused() {
-        return focused;
+        return focusState.isFocused();
     }
 
     @Override

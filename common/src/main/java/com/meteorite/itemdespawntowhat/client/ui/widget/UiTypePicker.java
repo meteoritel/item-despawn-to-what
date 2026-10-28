@@ -1,12 +1,17 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputScope;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
+
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.BORDER;
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.CARD_PADDING_X;
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.CARD_PADDING_Y;
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphRenderer.drawBorder;
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphSidePanel.SIDE_PANEL_HEADER;
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphSidePanel.SIDE_PANEL_PADDING;
+
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiControlRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
@@ -14,25 +19,31 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollView;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.function.Consumer;
+
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import org.lwjgl.glfw.GLFW;
 
-/** 条件与行为共用的右侧类型选择面板：统一搜索、键盘选择、滚动与滑入外观。 */
+/**
+ * 条件与行为共用的右侧类型选择面板：统一搜索、键盘选择、滚动与滑入外观。
+ */
 public final class UiTypePicker implements UiWidget, UiLayoutSource {
     /**
      * 一条可选择的类型。
      *
-     * @param id 类型注册名，用于搜索与确认回调
+     * @param id    类型注册名，用于搜索与确认回调
      * @param label 玩家可读的本地化名称
      */
-    public record Option(ResourceLocation id, Component label) { }
+    public record Option(ResourceLocation id, Component label) {
+    }
+
     private static final int PICKER_SEARCH_ROW = 14;
     private static final int PICKER_ROW_HEIGHT = 18;
     private static final int PICKER_FILTER_MAX = 32;
@@ -62,9 +73,9 @@ public final class UiTypePicker implements UiWidget, UiLayoutSource {
     /**
      * 创建共用类型选择面板。
      *
-     * @param theme 面板配色与控件主题
-     * @param font 文本测量与绘制字体
-     * @param title 面板标题
+     * @param theme     面板配色与控件主题
+     * @param font      文本测量与绘制字体
+     * @param title     面板标题
      * @param onConfirm 用户确认类型后的回调
      */
     public UiTypePicker(UiHostTheme theme, Font font, Component title, Consumer<ResourceLocation> onConfirm) {
@@ -75,17 +86,39 @@ public final class UiTypePicker implements UiWidget, UiLayoutSource {
         panel = new ConditionGraphSidePanel(theme, font);
     }
 
-    /** @return 选择面板是否正在接收输入 */
-    public boolean isOpen() { return open; }
-    void setOptions(List<Option> options) { this.typeOptions = options; }
-    void setBounds(UiRect bounds) { this.bounds = bounds; }
-    void cancelCapture() { scroll.mouseReleased(); }
+    /**
+     * @return 选择面板是否正在接收输入
+     */
+    public boolean isOpen() {
+        return open;
+    }
+
+    private final UiInputScope inputScope = new UiInputScope(this);
+
+    /**
+     * 类型选择面板的稳定输入作用域。
+     */
+    public UiInputScope inputScope() {
+        return inputScope;
+    }
+
+    void setOptions(List<Option> options) {
+        this.typeOptions = options;
+    }
+
+    void setBounds(UiRect bounds) {
+        this.bounds = bounds;
+    }
+
+    void cancelCapture() {
+        scroll.endInteraction(UiInteractionSession.EndReason.CANCEL);
+    }
 
     /**
      * 在宿主可视区域右缘打开选择面板，并清空上次搜索与选择。
      *
      * @param options 可选择的类型列表
-     * @param bounds 宿主可视区域
+     * @param bounds  宿主可视区域
      */
     public void open(List<Option> options, UiRect bounds) {
         this.typeOptions = options;
@@ -103,10 +136,9 @@ public final class UiTypePicker implements UiWidget, UiLayoutSource {
 
     /**
      * 按宿主边界绘制滑入面板。
-     * @param graphics 绘制上下文
+     *
+     * @param graphics   绘制上下文
      * @param renderFont 内容字体
-     * @param mouseX 鼠标屏幕 X 坐标
-     * @param mouseY 鼠标屏幕 Y 坐标
      */
     @Override
     public void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
@@ -121,15 +153,14 @@ public final class UiTypePicker implements UiWidget, UiLayoutSource {
 
     /**
      * 捕获面板打开时的点击；单击条目确认，点击面板外关闭。
-     * @param mouseX 鼠标屏幕 X 坐标
-     * @param mouseY 鼠标屏幕 Y 坐标
-     * @param button 鼠标按钮
+     *
      * @return 面板是否消费本次点击
      */
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mousePressed(UiInputContext context) {
+        int button = context.button();
         if (!open) return false;
-        if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT) handleClick(mouseX, mouseY);
+        if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT) handleClick(context);
         return true;
     }
 
@@ -138,7 +169,7 @@ public final class UiTypePicker implements UiWidget, UiLayoutSource {
     }
 
     void mouseReleased(int button) {
-        if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT) scroll.mouseReleased();
+        if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT) scroll.endInteraction(UiInteractionSession.EndReason.CANCEL);
     }
 
     void mouseScrolled(double mouseX, double mouseY, double scrollY) {
@@ -162,14 +193,16 @@ public final class UiTypePicker implements UiWidget, UiLayoutSource {
         onConfirm.accept(type);
     }
 
-    /** 关闭面板并释放滚动条捕获；不提交类型。 */
+    /**
+     * 关闭面板并释放滚动条捕获；不提交类型。
+     */
     public void close() {
         open = false;
         filterText.setLength(0);
         filteredOptions = List.of();
         cursor = 0;
         scroll.setOffset(0);
-        scroll.mouseReleased();
+        scroll.endInteraction(UiInteractionSession.EndReason.CANCEL);
         panel.reset();
         pointerKnown = false;
     }
@@ -197,7 +230,7 @@ public final class UiTypePicker implements UiWidget, UiLayoutSource {
                 Math.max(0, searchRect.width() - SEARCH_PADDING * 2), true, true, List.of()));
         if (filteredOptions.isEmpty()) {
             nodes.add(row(new UiRect(listRect.x(), listRect.y(), listRect.width(),
-                    Math.min(PICKER_ROW_HEIGHT, listRect.height())),
+                            Math.min(PICKER_ROW_HEIGHT, listRect.height())),
                     Component.translatable(TypeLabels.UI_PREFIX + "picker.empty")));
             return nodes;
         }
@@ -232,7 +265,7 @@ public final class UiTypePicker implements UiWidget, UiLayoutSource {
                 .toList();
         cursor = Math.clamp(cursor, 0, Math.max(0, filteredOptions.size() - 1));
         scroll.setOffset(0);
-        scroll.mouseReleased();
+        scroll.endInteraction(UiInteractionSession.EndReason.CANCEL);
         updateBounds();
         if (open) revealCursor();
     }
@@ -333,9 +366,11 @@ public final class UiTypePicker implements UiWidget, UiLayoutSource {
         scroll.renderScrollbar(graphics, theme.controlStyle(UiControlRole.SECONDARY));
     }
 
-    private void handleClick(double mouseX, double mouseY) {
+    private void handleClick(UiInputContext context) {
+        double mouseX = context.pointerX();
+        double mouseY = context.pointerY();
         if (bounds.contains(mouseX, mouseY)
-                && scroll.mousePressed(mouseX, mouseY, GLFW.GLFW_MOUSE_BUTTON_LEFT)) return;
+                && scroll.mousePressed(context)) return;
         int index = indexAt(mouseX, mouseY);
         if (index >= 0) {
             cursor = index;
@@ -384,34 +419,45 @@ public final class UiTypePicker implements UiWidget, UiLayoutSource {
         }
     }
 
-    /** @return 宿主可视区域 */
-    @Override public UiRect bounds() { return bounds; }
+    /**
+     * @return 宿主可视区域
+     */
+    @Override
+    public UiRect bounds() {
+        return bounds;
+    }
 
     /**
      * 更新宿主区域，面板始终沿右缘定位。
-     * @param x 可视区域左缘
-     * @param y 可视区域顶缘
-     * @param width 可视区域宽度
+     *
+     * @param width  可视区域宽度
      * @param height 可视区域高度
      */
-    @Override public void setBounds(int x, int y, int width, int height) {
+    @Override
+    public void setBounds(int x, int y, int width, int height) {
         bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
         if (open) updateBounds();
     }
 
-    /** @return 是否显示选择面板 */
-    @Override public boolean isVisible() { return open; }
+    /**
+     * @return 是否显示选择面板
+     */
+    @Override
+    public boolean isVisible() {
+        return open;
+    }
 
     /**
      * 转发滚动条拖动，阻止底层控件接收同一事件。
-     * @param x 鼠标屏幕 X 坐标
-     * @param y 鼠标屏幕 Y 坐标
-     * @param button 鼠标按钮
+     *
      * @param dragX 水平移动量
      * @param dragY 垂直移动量
      * @return 面板是否消费本次拖动
      */
-    @Override public boolean mouseDragged(double x, double y, int button, double dragX, double dragY) {
+    @Override
+    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
+        double y = context.pointerY();
+        int button = context.button();
         if (!open) return false;
         mouseDragged(y, button);
         return true;
@@ -419,12 +465,12 @@ public final class UiTypePicker implements UiWidget, UiLayoutSource {
 
     /**
      * 释放选择面板的滚动条捕获。
-     * @param x 鼠标屏幕 X 坐标
-     * @param y 鼠标屏幕 Y 坐标
-     * @param button 鼠标按钮
+     *
      * @return 面板是否消费本次释放
      */
-    @Override public boolean mouseReleased(double x, double y, int button) {
+    @Override
+    public boolean mouseReleased(UiInputContext context) {
+        int button = context.button();
         if (!open) return false;
         mouseReleased(button);
         return true;
@@ -432,13 +478,15 @@ public final class UiTypePicker implements UiWidget, UiLayoutSource {
 
     /**
      * 在类型列表上滚动，面板外的滚轮不传到底层页面。
-     * @param x 鼠标屏幕 X 坐标
-     * @param y 鼠标屏幕 Y 坐标
+     *
      * @param scrollX 水平滚动量
      * @param scrollY 垂直滚动量
      * @return 面板是否消费本次滚动
      */
-    @Override public boolean mouseScrolled(double x, double y, double scrollX, double scrollY) {
+    @Override
+    public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
+        double x = context.pointerX();
+        double y = context.pointerY();
         if (!open) return false;
         mouseScrolled(x, y, scrollY);
         return true;
@@ -446,12 +494,14 @@ public final class UiTypePicker implements UiWidget, UiLayoutSource {
 
     /**
      * 搜索、方向键与确认均由同一个选择器处理。
-     * @param keyCode GLFW 按键码
-     * @param scanCode 键盘扫描码
+     *
+     * @param keyCode   GLFW 按键码
+     * @param scanCode  键盘扫描码
      * @param modifiers 修饰键标记
      * @return 面板是否消费本次按键
      */
-    @Override public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         if (!open) return false;
         keyPressed(keyCode);
         return true;
@@ -459,20 +509,26 @@ public final class UiTypePicker implements UiWidget, UiLayoutSource {
 
     /**
      * 捕获面板打开时的按键释放。
-     * @param keyCode GLFW 按键码
-     * @param scanCode 键盘扫描码
+     *
+     * @param keyCode   GLFW 按键码
+     * @param scanCode  键盘扫描码
      * @param modifiers 修饰键标记
      * @return 面板是否消费本次释放
      */
-    @Override public boolean keyReleased(int keyCode, int scanCode, int modifiers) { return open; }
+    @Override
+    public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
+        return open;
+    }
 
     /**
      * 把输入字符追加到类型搜索词。
+     *
      * @param codePoint 输入字符
      * @param modifiers 修饰键标记
      * @return 面板是否消费本次字符输入
      */
-    @Override public boolean charTyped(char codePoint, int modifiers) {
+    @Override
+    public boolean charTyped(char codePoint, int modifiers) {
         return open && charTyped(codePoint);
     }
 

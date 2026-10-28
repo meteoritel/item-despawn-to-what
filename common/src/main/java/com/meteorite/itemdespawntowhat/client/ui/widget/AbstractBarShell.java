@@ -1,8 +1,9 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeEnd;
@@ -10,11 +11,12 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiValueTextBinding;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
+
 import java.util.Objects;
 import java.util.function.Consumer;
+
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
@@ -23,11 +25,11 @@ import org.lwjgl.glfw.GLFW;
  * 两个区间宿主控件（{@link UiCyclicTimeBar}、{@link UiRangeBar}）共用的外壳：标签行与轨道行的几何、
  * 独立提示行、精确输入行、焦点与捕获生命周期，以及指针与键盘的统一分发。
  * <p>外壳只依赖两个 kit 核心（{@code UiCyclicRange}、{@code UiRangeSlider}）共同实现的输入契约
- * {@link UiInputTarget} 与 {@link UiInputCapture.Target}；两者尚无共同类型接口，其余核心能力
+ * {@link UiInputTarget} 与 {@link UiInteractionSession.Target}；两者尚无共同类型接口，其余核心能力
  * （拖动查询、边界与可见性写入、结束交互、选中端）经 protected 适配钩子由子类提供，
  * 外壳因此既不需要按类型分支，也不需要两侧各写一套调用。</p>
  */
-abstract class AbstractBarShell<C extends UiInputTarget & UiInputCapture.Target>
+abstract class AbstractBarShell<C extends UiInteractionSession.Target & UiFocusTarget>
         implements UiWidget, UiFocusTarget {
 
     // 标签行高度
@@ -53,17 +55,16 @@ abstract class AbstractBarShell<C extends UiInputTarget & UiInputCapture.Target>
     protected @Nullable UiRect hintRow;
     protected boolean enabled = true;
     protected boolean visible = true;
-    protected boolean focused;
     protected boolean preciseActive;
 
     /**
      * 装配公共外壳与精确输入行；核心由子类构造，主题只经宿主主题注入。
      *
-     * @param theme 宿主主题
-     * @param font 文本测量与绘制字体
-     * @param preciseHint 精确输入行的提示文案
+     * @param theme            宿主主题
+     * @param font             文本测量与绘制字体
+     * @param preciseHint      精确输入行的提示文案
      * @param preciseMaxLength 精确输入允许的最大字符数
-     * @param core kit 侧交互核心
+     * @param core             kit 侧交互核心
      */
     AbstractBarShell(UiHostTheme theme, Font font, Component preciseHint, int preciseMaxLength, C core) {
         this.theme = UiHostThemes.require(theme);
@@ -73,9 +74,15 @@ abstract class AbstractBarShell<C extends UiInputTarget & UiInputCapture.Target>
         this.precise.setMaxLength(preciseMaxLength);
         this.precise.setVisible(false);
         this.precise.setOnCommit(this::commitPrecise);
+        this.precise.setOnValueChanged(() -> {
+        });
+        this.precise.setOnInteractionEnd(reason -> {
+            if (reason.cancels()) preciseBinding().cancelText();
+            else preciseBinding().commitText(precise.value());
+        });
         this.precise.setOnCancel(() -> {
             closePrecise();
-            coreEndInteraction(UiInputCapture.EndReason.CANCEL);
+            coreEndInteraction(UiInteractionSession.EndReason.CANCEL);
         });
     }
 
@@ -143,32 +150,25 @@ abstract class AbstractBarShell<C extends UiInputTarget & UiInputCapture.Target>
     }
 
     @Override
+    public UiFocusState focusState() {
+        return core.focusState();
+    }
+
+    @Override
     public final boolean canFocus() {
         return visible && enabled;
     }
 
     @Override
     public final boolean isFocused() {
-        return focused;
+        return focusState().containsFocus();
     }
 
     @Override
-    public final void setFocused(boolean focused) {
-        if (this.focused && !focused) {
-            onFocusLost();
-        }
-        this.focused = focused;
-        if (!focused) {
-            closePrecise();
-        }
+    public final void focusChanged(boolean focused) {
+        core.focusChanged(focused);
     }
 
-    /**
-     * 失焦钩子：区间条把失焦视为焦点作用域切换并结束核心交互，周期条不通知核心。
-     * <p>两侧语义不同源于各自核心的交互收尾方式，经本钩子表达而不在外壳里按类型分支。</p>
-     */
-    protected void onFocusLost() {
-    }
 
     @Override
     public final boolean activate() {
@@ -178,21 +178,24 @@ abstract class AbstractBarShell<C extends UiInputTarget & UiInputCapture.Target>
     // ---- 输入分发 ----
 
     @Override
-    public final boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public final boolean mousePressed(UiInputContext context) {
+        double mouseX = context.pointerX();
+        double mouseY = context.pointerY();
+        int button = context.button();
         if (!visible || !enabled || !acceptsClick(button)) {
             return false;
         }
-        if (preciseActive && precise.mouseClicked(mouseX, mouseY, button)) {
+        if (preciseActive && precise.mousePressed(context)) {
             return true;
         }
-        if (handleShellClick(mouseX, mouseY, button)) {
+        if (handleShellClick(context)) {
             return true;
         }
         if (!bounds.contains(mouseX, mouseY)) {
             return false;
         }
         closePrecise();
-        return core.mousePressed(context(mouseX, mouseY, button));
+        return core.mousePressed(context);
     }
 
     // 只响应特定按键的控件覆盖本方法（周期条只接受左键）
@@ -201,24 +204,24 @@ abstract class AbstractBarShell<C extends UiInputTarget & UiInputCapture.Target>
     }
 
     // 外壳在边界判定前处理的点击（周期条的预设按钮）；返回 true 表示本次已消费
-    protected boolean handleShellClick(double mouseX, double mouseY, int button) {
+    protected boolean handleShellClick(UiInputContext context) {
         return false;
     }
 
     @Override
-    public final boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+    public final boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
         if (coreDragging()) {
-            return core.mouseDragged(context(mouseX, mouseY, button));
+            return core.mouseDragged(context, dragX, dragY);
         }
-        return preciseActive && precise.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+        return preciseActive && precise.mouseDragged(context, dragX, dragY);
     }
 
     @Override
-    public final boolean mouseReleased(double mouseX, double mouseY, int button) {
+    public final boolean mouseReleased(UiInputContext context) {
         if (coreDragging()) {
-            return core.mouseReleased(context(mouseX, mouseY, button));
+            return core.mouseReleased(context);
         }
-        return preciseActive && precise.mouseReleased(mouseX, mouseY, button);
+        return preciseActive && precise.mouseReleased(context);
     }
 
     @Override
@@ -273,7 +276,7 @@ abstract class AbstractBarShell<C extends UiInputTarget & UiInputCapture.Target>
         }
         preciseActive = true;
         precise.setVisible(true);
-        precise.setFocused(true);
+        focusState().focusWithin(precise);
         preciseBinding().acceptText();
         preciseBinding().previewValue();
         precise.selectAll();
@@ -288,7 +291,7 @@ abstract class AbstractBarShell<C extends UiInputTarget & UiInputCapture.Target>
     protected final void closePrecise() {
         preciseActive = false;
         precise.setVisible(false);
-        precise.setFocused(false);
+        if (focusState().containsFocus()) focusState().request();
     }
 
     // ---- 提示行绘制：两控件的提示内容不同，占位与裁剪规则相同 ----
@@ -307,7 +310,7 @@ abstract class AbstractBarShell<C extends UiInputTarget & UiInputCapture.Target>
     // 聚焦且宿主给足高度时的独立提示行
     protected final void drawHintRow(GuiGraphics graphics, Component hint) {
         UiRect row = hintRow;
-        if (!focused || row == null) {
+        if (!isFocused() || row == null) {
             return;
         }
         String text = TextScroll.trimToWidth(font, hint.getString(), Math.max(1, row.width()));
@@ -316,25 +319,12 @@ abstract class AbstractBarShell<C extends UiInputTarget & UiInputCapture.Target>
 
     // ---- 捕获与宿主生命周期：两侧顺序一致，统一结束精确输入 ----
 
-    public final void endInteraction(UiInputCapture.EndReason reason) {
+    public final void endInteraction(UiInteractionSession.EndReason reason) {
         coreEndInteraction(reason);
+        precise.endInteraction(reason);
         closePrecise();
     }
 
-    public final void unmount() {
-        coreUnmount();
-        closePrecise();
-    }
-
-    public final void onFocusScopeChanged() {
-        coreOnFocusScopeChanged();
-        closePrecise();
-    }
-
-    public final void onHostClosed() {
-        coreOnHostClosed();
-        closePrecise();
-    }
 
     // ---- 子类实现 ----
 
@@ -360,27 +350,10 @@ abstract class AbstractBarShell<C extends UiInputTarget & UiInputCapture.Target>
 
     protected abstract void coreSetVisible(boolean visible);
 
-    protected abstract void coreEndInteraction(UiInputCapture.EndReason reason);
+    protected abstract void coreEndInteraction(UiInteractionSession.EndReason reason);
 
-    protected abstract void coreUnmount();
-
-    protected abstract void coreOnFocusScopeChanged();
-
-    protected abstract void coreOnHostClosed();
 
     protected abstract UiRangeEnd coreSelectedEnd();
 
-    private static UiInputContext context(double mouseX, double mouseY, int button) {
-        int modifiers = 0;
-        if (Screen.hasShiftDown()) {
-            modifiers |= GLFW.GLFW_MOD_SHIFT;
-        }
-        if (Screen.hasControlDown()) {
-            modifiers |= GLFW.GLFW_MOD_CONTROL;
-        }
-        if (Screen.hasAltDown()) {
-            modifiers |= GLFW.GLFW_MOD_ALT;
-        }
-        return UiInputContext.pointer(mouseX, mouseY, button, modifiers);
-    }
+
 }

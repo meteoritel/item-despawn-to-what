@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputScope;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.ClientTypeRegistries;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorRegistries;
@@ -31,10 +33,12 @@ import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.service.edit.RuleIssue;
 import com.meteorite.itemdespawntowhat.core.service.edit.RuleSaveStatus;
 import com.meteorite.itemdespawntowhat.core.service.edit.RuleSourceView;
+
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -52,6 +56,13 @@ import org.jetbrains.annotations.Nullable;
  * 页切换由 {@link EditorShell} 负责；屏幕只驱动页面生命周期与输入派发。</p>
  */
 final class RuleEditorEditPage implements EditorPage {
+    private final UiInputScope inputScope = new UiInputScope(this);
+
+    @Override
+    public UiInputScope inputScope() {
+        return inputScope;
+    }
+
 
     private final UiHostTheme THEME;
     // 布局常量
@@ -77,8 +88,11 @@ final class RuleEditorEditPage implements EditorPage {
     private @Nullable RuleEditorEditSections pages;
     private @Nullable EditSession boundSession;
 
-    /** 页面收尾只区分保留、完成编辑和两种真实释放方式。 */
-    enum Finish { RETAIN, EDIT, UNMOUNT, CLOSE }
+    /**
+     * 页面收尾只区分保留、完成编辑和两种真实释放方式。
+     */
+    enum Finish {RETAIN, EDIT, UNMOUNT, CLOSE}
+
     private @Nullable UiSegmentedControl tabControl;
     private final List<UiButton> footerButtons = new ArrayList<>();
     private final RuleEditorScreenButtonBar footerBar = new RuleEditorScreenButtonBar(22, 4, true);
@@ -94,14 +108,14 @@ final class RuleEditorEditPage implements EditorPage {
     // 页面宿主适配：把屏幕能力（会话 / 焦点 / 弹窗 / 提示 / 冻结 / 尺寸）暴露给四页编辑流程
 
     RuleEditorEditPage(EditorShell shell, RuleEditorModel model, RuleEditClientWorkspace workspace, Font font,
-            UiModalStack modals, UiFocusManager focus) {
+                       UiModalStack modals) {
         this.THEME = shell.theme();
         this.shell = shell;
         this.model = model;
         this.workspace = workspace;
         this.font = font;
         this.modals = modals;
-        this.focus = focus;
+        this.focus = inputScope.focus();
         this.validation = new RuleEditorValidation(shell, model, () -> pages);
         this.seenResultSeq = workspace.saving().outcome().sequence();
     }
@@ -206,7 +220,7 @@ final class RuleEditorEditPage implements EditorPage {
         RuleEditClientWorkspace workspace = this.workspace;
         RuleSourceView view = workspace.sourceView(id).value();
         UiModal modal = UiModal.create(THEME, font)
-    .title(Component.translatable(UI + "source.title"));
+                .title(Component.translatable(UI + "source.title"));
         if (view != null) {
             modal.contentWidget(sourceView(view),
                     Math.clamp(shell.screenHeight() - 100, SOURCE_MODAL_MIN_HEIGHT, SOURCE_MODAL_MAX_HEIGHT));
@@ -215,7 +229,7 @@ final class RuleEditorEditPage implements EditorPage {
             modal.message(Component.translatable(UI + "source.failed"));
             modal.confirm(Component.translatable(UI + "source.retry"), () -> {
                 workspace.retrySourceView(id);
-                shell.setNotice(Component.translatable(UI + "source.retry_sent"),EditorShell.NoticeLevel.INFO);
+                shell.setNotice(Component.translatable(UI + "source.retry_sent"), EditorShell.NoticeLevel.INFO);
             });
             modal.cancel(Component.translatable(UI + "button.close"));
         } else {
@@ -262,7 +276,7 @@ final class RuleEditorEditPage implements EditorPage {
             return y;
         }
         tabControl.setBounds(pagePad, y, Math.max(0, shell.screenWidth() - pagePad * 2), TAB_H);
-    tabControl.render(graphics, renderFont, mouseX, mouseY);
+        tabControl.render(graphics, renderFont, mouseX, mouseY);
         return y + TAB_H + EDIT_PAD;
     }
 
@@ -311,16 +325,13 @@ final class RuleEditorEditPage implements EditorPage {
     public void renderFooter(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY, UiRect footer) {
         THEME.drawDivider(graphics, footer.x(), footer.y() - RuleEditorPageSupport.PAD, footer.width());
         footerBar.layout(footer.x(), footer.y(), footer.width());
-    footerBar.render(graphics, renderFont, mouseX, mouseY);
+        footerBar.render(graphics, renderFont, mouseX, mouseY);
     }
 
     public boolean renderDescriptionTooltip(GuiGraphics graphics, int mouseX, int mouseY) {
         return pages != null && pages.renderDescriptionTooltip(graphics, mouseX, mouseY);
     }
 
-    public void onScopeChanged() {
-        endInteractions();
-    }
 
     public @Nullable UiTypePicker overlay() {
         return activeTypePicker();
@@ -359,7 +370,9 @@ final class RuleEditorEditPage implements EditorPage {
         syncEditableState();
     }
 
-    /** 按当前会话身份收尾；旧页面只释放，不向重绑后的会话回写。 */
+    /**
+     * 按当前会话身份收尾；旧页面只释放，不向重绑后的会话回写。
+     */
     void finish(Finish reason) {
         if (pages == null) return;
         if (reason == Finish.RETAIN) {
@@ -372,7 +385,7 @@ final class RuleEditorEditPage implements EditorPage {
             pages.endInteractions();
         }
         if (reason == Finish.UNMOUNT || reason == Finish.CLOSE) {
-            if (reason == Finish.CLOSE) pages.onHostClosed(); else pages.unmount();
+            pages.unmount();
             pages = null;
             boundSession = null;
         }
@@ -421,11 +434,6 @@ final class RuleEditorEditPage implements EditorPage {
         }
     }
 
-    // 编辑页控件是否属于页面焦点目标（鼠标命中时用于裁剪区域判断）
-    public boolean ownsFocusTarget(UiFocusTarget target) {
-        return pages != null && pages.focusTargets().contains(target);
-    }
-
     private void syncEditableState() {
         if (pages != null) {
             pages.syncEditableState();
@@ -435,7 +443,7 @@ final class RuleEditorEditPage implements EditorPage {
 
     public void tick() {
         if (shell.isEditing() && pages != null) {
-    pages.tick();
+            pages.tick();
             // 内容里的「默认启用」可能被改：本服开关显示的是生效状态，需要跟着刷新
             pages.refreshServerState();
         }
@@ -457,37 +465,35 @@ final class RuleEditorEditPage implements EditorPage {
 
     // ---- 输入委托 ----
 
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (tabControl != null && tabControl.mouseClicked(mouseX, mouseY, button)) {
+    public boolean mousePressed(UiInputContext context) {
+        if (tabControl != null && tabControl.mousePressed(context)) {
             return true;
         }
-        if (pages != null && pages.mouseClicked(mouseX, mouseY, button)) {
+        if (pages != null && pages.mousePressed(context)) {
             return true;
         }
-        return footerMouseClicked(mouseX, mouseY, button);
+        return footerBar.mousePressed(context);
     }
 
     // 底排按钮命中（页签 / 页面控件未消费时）
-    boolean footerMouseClicked(double mouseX, double mouseY, int button) {
-    return footerBar.mouseClicked(mouseX, mouseY, button);
-    }
 
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        boolean consumed = pages != null && pages.mouseReleased(mouseX, mouseY, button);
-        consumed |= footerMouseReleased(mouseX, mouseY, button);
+    public boolean mouseReleased(UiInputContext context) {
+        boolean consumed = pages != null && pages.mouseReleased(context);
+        consumed |= footerBar.mouseReleased(context);
         return consumed;
     }
 
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        return pages != null && pages.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
+        return pages != null && pages.mouseDragged(context, dragX, dragY);
     }
 
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        return pages != null && pages.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+    public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
+        return pages != null && pages.mouseScrolled(context, scrollX, scrollY);
     }
 
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        return pages != null && pages.keyPressed(keyCode, scanCode, modifiers);
+        return tabControl != null && tabControl.isFocused() && tabControl.keyPressed(keyCode, scanCode, modifiers)
+                || pages != null && pages.keyPressed(keyCode, scanCode, modifiers);
     }
 
     public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
@@ -498,9 +504,6 @@ final class RuleEditorEditPage implements EditorPage {
         return pages != null && pages.charTyped(codePoint, modifiers);
     }
 
-    private boolean footerMouseReleased(double mouseX, double mouseY, int button) {
-    return footerBar.mouseReleased(mouseX, mouseY, button);
-    }
 
     // ---- 保存 / 撤销 ----
 
@@ -522,7 +525,7 @@ final class RuleEditorEditPage implements EditorPage {
             Component notice = blocker.label() == blocker.message()
                     ? blocker.message()
                     : Component.translatable(UI + "notice.issue", blocker.label(), blocker.message());
-            shell.setNotice(notice,EditorShell.NoticeLevel.DANGER);
+            shell.setNotice(notice, EditorShell.NoticeLevel.DANGER);
             String issueRuleId = validation.issueRuleId();
             if (issueRuleId != null && !issueRuleId.equals(shell.editingId())) {
                 shell.openEditor(issueRuleId);
@@ -532,21 +535,21 @@ final class RuleEditorEditPage implements EditorPage {
         }
         String json = model.buildChangeSetJson();
         if (json == null) {
-            shell.setNotice(Component.translatable(UI + "notice.no_changes"),EditorShell.NoticeLevel.INFO);
+            shell.setNotice(Component.translatable(UI + "notice.no_changes"), EditorShell.NoticeLevel.INFO);
             return;
         }
         if (!shell.editable()) {
-            shell.setNotice(Component.translatable(UI + "notice.frozen"),EditorShell.NoticeLevel.WARNING);
+            shell.setNotice(Component.translatable(UI + "notice.frozen"), EditorShell.NoticeLevel.WARNING);
             return;
         }
         if (workspace.save(RuleEditClientWorkspace.newOperationId(), json)) {
-            shell.setNotice(Component.translatable(UI + "notice.applying"),EditorShell.NoticeLevel.INFO);
+            shell.setNotice(Component.translatable(UI + "notice.applying"), EditorShell.NoticeLevel.INFO);
             if (!issues.isEmpty()) {
                 // 提醒项不阻塞保存，但把玩家带到第一条上（例如未注册的第三方条件类型）
                 revealIssue(issues.getFirst());
             }
         } else {
-            shell.setNotice(Component.translatable(UI + "notice.save_rejected"),EditorShell.NoticeLevel.DANGER);
+            shell.setNotice(Component.translatable(UI + "notice.save_rejected"), EditorShell.NoticeLevel.DANGER);
         }
     }
 
@@ -555,7 +558,8 @@ final class RuleEditorEditPage implements EditorPage {
         EditSession session = shell.editingSession();
         if (session == null) return false;
         long revision = session.revision();
-        if (shortcut == UiHistoryShortcut.UNDO) undo(); else redo();
+        if (shortcut == UiHistoryShortcut.UNDO) undo();
+        else redo();
         return session.revision() != revision;
     }
 
@@ -623,7 +627,7 @@ final class RuleEditorEditPage implements EditorPage {
                     ? Component.literal(issue.fallbackMessage())
                     : Component.translatable(issue.messageCode(), issue.messageArgs().toArray());
             revealIssue(FormIssue.error(path, message, message));
-            shell.setNotice(Component.translatable(UI + "notice.validation_located", message),EditorShell.NoticeLevel.DANGER);
+            shell.setNotice(Component.translatable(UI + "notice.validation_located", message), EditorShell.NoticeLevel.DANGER);
             return;
         }
     }
@@ -644,7 +648,7 @@ final class RuleEditorEditPage implements EditorPage {
     private void openConflictModal(DraftConflict conflict) {
         String id = conflict.targetId();
         UiModal modal = UiModal.create(THEME, font);
-    modal.title(Component.translatable(UI + "conflict.title"));
+        modal.title(Component.translatable(UI + "conflict.title"));
         modal.message(Component.translatable(UI + "conflict.message." + conflict.messageSuffix(), id));
         modal.confirm(Component.translatable(UI + "conflict.keep"), () -> {
             model.resolveConflict(id, true);
@@ -652,17 +656,17 @@ final class RuleEditorEditPage implements EditorPage {
             shell.refreshList();
             rebuildEdit();
             shell.rebuildFocus();
-            shell.setNotice(Component.translatable(UI + "notice.conflict_kept"),EditorShell.NoticeLevel.INFO);
+            shell.setNotice(Component.translatable(UI + "notice.conflict_kept"), EditorShell.NoticeLevel.INFO);
         });
         modal.addButton(new UiButton(THEME, font, Component.translatable(UI + "conflict.use_server"),
                 UiButtonVariant.DANGER, () -> {
-                    model.resolveConflict(id, false);
-                    promptedConflicts.remove(id);
-                    shell.refreshList();
-                    rebuildEdit();
-                    shell.rebuildFocus();
-                    shell.setNotice(Component.translatable(UI + "notice.conflict_discarded"),EditorShell.NoticeLevel.WARNING);
-                }));
+            model.resolveConflict(id, false);
+            promptedConflicts.remove(id);
+            shell.refreshList();
+            rebuildEdit();
+            shell.rebuildFocus();
+            shell.setNotice(Component.translatable(UI + "notice.conflict_discarded"), EditorShell.NoticeLevel.WARNING);
+        }));
         modal.cancel(Component.translatable(UI + "conflict.later"));
         modal.layoutCentered(shell.screenWidth(), shell.screenHeight());
         modals.push(modal);
@@ -677,12 +681,12 @@ final class RuleEditorEditPage implements EditorPage {
             shell.refreshSnapshot();
             if (status == RuleSaveStatus.SUCCESS || status == RuleSaveStatus.NO_CHANGES) {
                 model.acceptSaved();
-                shell.setNotice(Component.translatable(com.meteorite.itemdespawntowhat.core.network.transport.RuleEditMessages.key(status)),EditorShell.NoticeLevel.SUCCESS);
+                shell.setNotice(Component.translatable(com.meteorite.itemdespawntowhat.core.network.transport.RuleEditMessages.key(status)), EditorShell.NoticeLevel.SUCCESS);
             } else if (status == RuleSaveStatus.CANCELLED) {
-                shell.setNotice(Component.translatable(com.meteorite.itemdespawntowhat.core.network.transport.RuleEditMessages.key(status)),EditorShell.NoticeLevel.INFO);
+                shell.setNotice(Component.translatable(com.meteorite.itemdespawntowhat.core.network.transport.RuleEditMessages.key(status)), EditorShell.NoticeLevel.INFO);
             } else if (status == RuleSaveStatus.SAVED_NOT_RELOADED) {
                 model.acceptSaved();
-                shell.setNotice(Component.translatable(com.meteorite.itemdespawntowhat.core.network.transport.RuleEditMessages.key(status)),EditorShell.NoticeLevel.WARNING);
+                shell.setNotice(Component.translatable(com.meteorite.itemdespawntowhat.core.network.transport.RuleEditMessages.key(status)), EditorShell.NoticeLevel.WARNING);
             } else if (isSessionLost(status)) {
                 // 失权/断线：取消未完成预览、停用写入、保留草稿；不从 GUI 重开会话，也不写盘
                 cancelPreviews();
@@ -690,7 +694,7 @@ final class RuleEditorEditPage implements EditorPage {
                 shell.setNotice(reason.copy().append(" ").append(Component.translatable(UI + "notice.session_reopen")),
                         EditorShell.NoticeLevel.DANGER);
             } else if (status == RuleSaveStatus.VALIDATION_FAILED) {
-                shell.setNotice(Component.translatable(com.meteorite.itemdespawntowhat.core.network.transport.RuleEditMessages.key(status)),EditorShell.NoticeLevel.DANGER);
+                shell.setNotice(Component.translatable(com.meteorite.itemdespawntowhat.core.network.transport.RuleEditMessages.key(status)), EditorShell.NoticeLevel.DANGER);
                 locateValidationIssues();
             } else if (status != null) {
                 shell.setNotice(Component.translatable(com.meteorite.itemdespawntowhat.core.network.transport.RuleEditMessages.key(status), workspace.saving().outcome().messageArgs().toArray()),

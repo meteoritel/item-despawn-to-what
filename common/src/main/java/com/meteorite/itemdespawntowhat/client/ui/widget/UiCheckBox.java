@@ -1,12 +1,16 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusState;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
+
 import java.util.Objects;
 import java.util.function.Consumer;
+
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -32,11 +36,12 @@ public final class UiCheckBox implements UiWidget, UiFocusTarget {
     private boolean checked;
     private boolean enabled = true;
     private boolean visible = true;
-    private boolean focused;
+    private final UiFocusState focusState = new UiFocusState();
     private @Nullable Consumer<Boolean> onChanged;
 
     // 注入的宿主主题
     private final UiHostTheme theme;
+
     public UiCheckBox(UiHostTheme theme, Font font, Component label, boolean checked) {
         this.theme = UiHostThemes.require(theme);
         this.font = Objects.requireNonNull(font, "font");
@@ -138,10 +143,14 @@ public final class UiCheckBox implements UiWidget, UiFocusTarget {
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mousePressed(UiInputContext context) {
+        double mouseX = context.pointerX();
+        double mouseY = context.pointerY();
+        int button = context.button();
         if (!visible || !enabled || button != 0 || !bounds.centeredSquare(BOX_SIZE).contains(mouseX, mouseY)) {
             return false;
         }
+        context.scope().pointerHit(this);
         return toggle();
     }
 
@@ -157,18 +166,19 @@ public final class UiCheckBox implements UiWidget, UiFocusTarget {
     }
 
     @Override
+    public UiFocusState focusState() {
+        return focusState;
+    }
+
+    @Override
     public boolean canFocus() {
         return visible && enabled;
     }
 
-    @Override
-    public void setFocused(boolean next) {
-        this.focused = next;
-    }
 
     @Override
     public boolean isFocused() {
-        return focused;
+        return focusState.isFocused();
     }
 
     @Override

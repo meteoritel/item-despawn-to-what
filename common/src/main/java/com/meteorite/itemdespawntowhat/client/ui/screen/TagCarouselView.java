@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusState;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlatText;
@@ -38,7 +40,9 @@ public final class TagCarouselView implements UiWidget, UiFocusTarget {
     private final UiListView<TagPreviewIcons.Member> list;
     private UiRect bounds = new UiRect(0, 0, 0, 0);
 
-    /** 以宿主主题装配标签成员预览和列表，两者共享同一字体与视觉。 */
+    /**
+     * 以宿主主题装配标签成员预览和列表，两者共享同一字体与视觉。
+     */
     public TagCarouselView(UiHostTheme theme, Font font, TagPreviewIcons.Tag tag) {
         this.THEME = UiHostThemes.require(theme);
         this.tag = tag;
@@ -60,13 +64,19 @@ public final class TagCarouselView implements UiWidget, UiFocusTarget {
         });
     }
 
-    @Override public UiRect bounds() { return bounds; }
-    @Override public void setBounds(int x, int y, int width, int height) {
+    @Override
+    public UiRect bounds() {
+        return bounds;
+    }
+
+    @Override
+    public void setBounds(int x, int y, int width, int height) {
         bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
         list.setBounds(x, y + LIST_TOP, width, Math.max(0, height - LIST_TOP));
     }
 
-    @Override public void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+    @Override
+    public void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
         THEME.drawInset(graphics, new UiRect(bounds.x(), bounds.y(), bounds.width(), HEADER_HEIGHT));
         tag.carousel().render(graphics,
                 new UiRect(bounds.x() + (bounds.width() - PREVIEW_SIZE) / 2, bounds.y() + 2, PREVIEW_SIZE, PREVIEW_SIZE),
@@ -100,23 +110,64 @@ public final class TagCarouselView implements UiWidget, UiFocusTarget {
         }
     }
 
-    @Override public boolean mouseClicked(double x, double y, int button) {
+    @Override
+    public boolean mousePressed(UiInputContext context) {
+        double x = context.pointerX();
+        double y = context.pointerY();
+        int button = context.button();
         if (button == 0 && bounds.contains(x, y) && !list.bounds().contains(x, y)) {
             // 点击预览区视为取消选中并恢复轮播
             clearSelection();
         }
-        return list.mouseClicked(x, y, button);
+        return list.mousePressed(context);
     }
-    @Override public boolean mouseDragged(double x, double y, int button, double dx, double dy) { return list.mouseDragged(x, y, button, dx, dy); }
-    @Override public boolean mouseReleased(double x, double y, int button) { return list.mouseReleased(x, y, button); }
-    @Override public boolean mouseScrolled(double x, double y, double sx, double sy) { return list.mouseScrolled(x, y, sx, sy); }
-    @Override public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+
+    @Override
+    public boolean mouseDragged(UiInputContext context, double dx, double dy) {
+        return list.mouseDragged(context, dx, dy);
+    }
+
+    @Override
+    public boolean mouseReleased(UiInputContext context) {
+        return list.mouseReleased(context);
+    }
+
+    @Override
+    public boolean mouseScrolled(UiInputContext context, double sx, double sy) {
+        return list.mouseScrolled(context, sx, sy);
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         return list.keyPressed(keyCode, scanCode, modifiers);
     }
 
-    @Override public boolean canFocus() { return list.canFocus(); }
-    @Override public void setFocused(boolean focused) { list.setFocused(focused); }
-    @Override public boolean isFocused() { return list.isFocused(); }
-    @Override public boolean activate() { return list.activate(); }
-    @Override public Component accessibleName() { return tag.label(); }
+    public UiFocusState focusState() {
+        return list.focusState();
+    }
+
+    @Override
+    public boolean canFocus() {
+        return list.canFocus();
+    }
+
+    @Override
+    public void focusChanged(boolean focused) {
+        list.focusChanged(focused);
+    }
+
+    @Override
+    public boolean isFocused() {
+        return list.isFocused();
+    }
+
+    @Override
+    public boolean activate() {
+        return list.activate();
+    }
+
+    @Override
+    public Component accessibleName() {
+        return tag.label();
+    }
 }

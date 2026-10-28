@@ -1,24 +1,26 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusState;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlowLayout;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCyclicTimeBar;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiNarration;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiRangeBar;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Supplier;
+
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
-import org.lwjgl.glfw.GLFW;
 
 /**
  * 叶子面板：附加区间控件 + 目录按钮 + 表单，纵向排列。
@@ -56,9 +58,8 @@ public final class LeafPanel implements UiWidget, UiFocusTarget {
     // 说明行行高：比正文字高多 1 像素，避免与表单末行贴死
     private final int noteLineHeight;
     private UiRect bounds = new UiRect(0, 0, 0, 0);
-    private boolean focused;
+    private final UiFocusState focusState = new UiFocusState();
     private boolean enabled = true;
-    private int focusIndex;
 
     public LeafPanel(Font font, FormView form, List<UiWidget> extras, List<UiButton> buttons, List<Runnable> reloadValues) {
         this.font = font;
@@ -70,7 +71,9 @@ public final class LeafPanel implements UiWidget, UiFocusTarget {
         this.reloadValues = reloadValues;
     }
 
-    /** 历史恢复后回填已接受的字段与区间值，未完成文本由表单保留。 */
+    /**
+     * 历史恢复后回填已接受的字段与区间值，未完成文本由表单保留。
+     */
     public void reload() {
         form.reload();
         reloadValues.forEach(Runnable::run);
@@ -151,39 +154,18 @@ public final class LeafPanel implements UiWidget, UiFocusTarget {
         return cursorY + flow.height() + BUTTON_GAP;
     }
 
-    // 结束所有未完成交互（切页/关闭/失权）
-    public void endInteractions() {
-        for (UiWidget extra : extras) {
-            if (extra instanceof UiRangeBar bar) {
-                bar.endInteraction(UiInputCapture.EndReason.FOCUS_SCOPE_CHANGED);
-            } else if (extra instanceof UiCyclicTimeBar bar) {
-                bar.endInteraction(UiInputCapture.EndReason.FOCUS_SCOPE_CHANGED);
-            }
-        }
-        form.onFocusScopeChanged();
-    }
 
     public void unmount() {
         for (UiWidget extra : extras) {
             if (extra instanceof UiRangeBar bar) {
-                bar.unmount();
+                bar.endInteraction(UiInteractionSession.EndReason.UNMOUNTED);
             } else if (extra instanceof UiCyclicTimeBar bar) {
-                bar.unmount();
+                bar.endInteraction(UiInteractionSession.EndReason.UNMOUNTED);
             }
         }
         form.unmount();
     }
 
-    public void onHostClosed() {
-        for (UiWidget extra : extras) {
-            if (extra instanceof UiRangeBar bar) {
-                bar.onHostClosed();
-            } else if (extra instanceof UiCyclicTimeBar bar) {
-                bar.onHostClosed();
-            }
-        }
-        form.onHostClosed();
-    }
 
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
@@ -234,60 +216,50 @@ public final class LeafPanel implements UiWidget, UiFocusTarget {
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mousePressed(UiInputContext context) {
+        double mouseX = context.pointerX();
+        double mouseY = context.pointerY();
         if (!enabled || !bounds.contains(mouseX, mouseY)) {
             return false;
         }
-        List<UiFocusTarget> targets = focusTargets();
-        if (button == 0) {
-            for (int index = 0; index < targets.size(); index++) {
-                UiFocusTarget target = targets.get(index);
-                boolean hit = target.canFocus() && target.bounds().contains(mouseX, mouseY);
-                target.setFocused(hit);
-                if (hit) {
-                    focusIndex = index;
-                }
-            }
-        }
+
         for (UiButton candidate : buttons) {
-            if (candidate.isVisible() && candidate.mouseClicked(mouseX, mouseY, button)) {
-                return true;
-            }
+            if (candidate.mousePressed(context)) return true;
         }
         for (UiWidget extra : extras) {
-            if (extra.mouseClicked(mouseX, mouseY, button)) {
+            if (extra.mousePressed(context)) {
                 return true;
             }
         }
-        return form.mouseClicked(mouseX, mouseY, button);
+        return form.mousePressed(context);
     }
 
     @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+    public boolean mouseReleased(UiInputContext context) {
         boolean consumed = false;
         for (UiWidget extra : extras) {
-            consumed |= extra.mouseReleased(mouseX, mouseY, button);
+            consumed |= extra.mouseReleased(context);
         }
-        consumed |= form.mouseReleased(mouseX, mouseY, button);
+        consumed |= form.mouseReleased(context);
         for (UiButton candidate : buttons) {
-            consumed |= candidate.mouseReleased(mouseX, mouseY, button);
+            consumed |= candidate.mouseReleased(context);
         }
         return consumed;
     }
 
     @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
         boolean consumed = false;
         for (UiWidget extra : extras) {
-            consumed |= extra.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+            consumed |= extra.mouseDragged(context, dragX, dragY);
         }
-        consumed |= form.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+        consumed |= form.mouseDragged(context, dragX, dragY);
         return consumed;
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        return form.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+    public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
+        return form.mouseScrolled(context, scrollX, scrollY);
     }
 
     // 参数框内正在输入文本：画布快捷键让位，避免输入字母时触发复制/缩放
@@ -297,10 +269,7 @@ public final class LeafPanel implements UiWidget, UiFocusTarget {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (keyCode == GLFW.GLFW_KEY_TAB) {
-            moveFocus((modifiers & GLFW.GLFW_MOD_SHIFT) != 0 ? -1 : 1);
-            return true;
-        }
+
         for (UiWidget extra : extras) {
             if (extra instanceof UiFocusTarget target && target.isFocused()
                     && extra.keyPressed(keyCode, scanCode, modifiers)) {
@@ -339,30 +308,9 @@ public final class LeafPanel implements UiWidget, UiFocusTarget {
     // 参数校验失败时，内部焦点与字段滚动保持一致。
     public void focusField(String path) {
         UiFocusTarget target = form.revealPath(path);
-        List<UiFocusTarget> targets = focusTargets();
-        for (int index = 0; index < targets.size(); index++) {
-            boolean selected = targets.get(index) == target;
-            targets.get(index).setFocused(selected);
-            if (selected) {
-                focusIndex = index;
-            }
-        }
+        if (target != null) target.focusState().request();
     }
 
-    private void moveFocus(int delta) {
-        List<UiFocusTarget> targets = focusTargets();
-        if (targets.isEmpty()) {
-            return;
-        }
-        int count = targets.size();
-        focusIndex = ((focusIndex + delta) % count + count) % count;
-        for (int index = 0; index < count; index++) {
-            targets.get(index).setFocused(index == focusIndex);
-        }
-        focused = true;
-        // 面板内部焦点切换同样播报（屏幕的焦点管理器看不到面板内部顺序）
-        UiNarration.focus(targets.get(focusIndex));
-    }
 
     @Override
     public boolean canFocus() {
@@ -370,35 +318,18 @@ public final class LeafPanel implements UiWidget, UiFocusTarget {
     }
 
     @Override
-    public void setFocused(boolean focused) {
-        this.focused = focused;
-        List<UiFocusTarget> targets = focusTargets();
-        if (!focused) {
-            for (UiFocusTarget target : targets) {
-                target.setFocused(false);
-            }
-            return;
-        }
-        if (targets.isEmpty()) {
-            return;
-        }
-        focusIndex = Math.clamp(focusIndex, 0, targets.size() - 1);
-        targets.get(focusIndex).setFocused(true);
+    public UiFocusState focusState() {
+        return focusState;
     }
 
     @Override
     public boolean isFocused() {
-        return focused;
+        return focusState.containsFocus();
     }
 
     @Override
     public boolean activate() {
-        List<UiFocusTarget> targets = focusTargets();
-        if (targets.isEmpty()) {
-            return false;
-        }
-        focusIndex = Math.clamp(focusIndex, 0, targets.size() - 1);
-        return targets.get(focusIndex).activate();
+        return false;
     }
 
     @Override

@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusState;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
@@ -14,7 +16,9 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FormattedCharSequence;
 import org.jetbrains.annotations.Nullable;
 
-/** 规则名字输入区：解析 `<namespace>:<path>` 或单独的 `<path>`，并展示名称限制与校验错误位。 */
+/**
+ * 规则名字输入区：解析 `<namespace>:<path>` 或单独的 `<path>`，并展示名称限制与校验错误位。
+ */
 final class RuleNameInput implements UiWidget, UiFocusTarget {
 
     // 宿主默认主题：屏幕按主题取色与绘制原语
@@ -120,18 +124,18 @@ final class RuleNameInput implements UiWidget, UiFocusTarget {
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        return input.mouseClicked(mouseX, mouseY, button);
+    public boolean mousePressed(UiInputContext context) {
+        return input.mousePressed(context);
     }
 
     @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        return input.mouseReleased(mouseX, mouseY, button);
+    public boolean mouseReleased(UiInputContext context) {
+        return input.mouseReleased(context);
     }
 
     @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        return input.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
+        return input.mouseDragged(context, dragX, dragY);
     }
 
     @Override
@@ -145,13 +149,18 @@ final class RuleNameInput implements UiWidget, UiFocusTarget {
     }
 
     @Override
+    public UiFocusState focusState() {
+        return input.focusState();
+    }
+
+    @Override
     public boolean canFocus() {
         return input.canFocus();
     }
 
     @Override
-    public void setFocused(boolean focused) {
-        input.setFocused(focused);
+    public void focusChanged(boolean focused) {
+        input.focusChanged(focused);
     }
 
     @Override

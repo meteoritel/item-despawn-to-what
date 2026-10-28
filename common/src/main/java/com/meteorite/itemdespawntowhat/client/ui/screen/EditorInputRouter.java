@@ -1,174 +1,109 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiListView;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputRouter;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputScope;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTypePicker;
-import java.util.function.Supplier;
+
 import java.util.Objects;
-import org.jetbrains.annotations.Nullable;
+import java.util.function.Supplier;
+
+import net.minecraft.client.gui.screens.Screen;
 import org.lwjgl.glfw.GLFW;
 
-/** 屏幕独占输入作用域；控件内部捕获与焦点派发仍由各页和 kit 负责。 */
+/**
+ * 宿主只选择保存、模态、类型选择器或页面，通用派发由 kit 持有。
+ */
 final class EditorInputRouter {
-    private enum Scope { SAVING, MODAL, OVERLAY, PAGE }
     private final EditorShell shell;
     private final Supplier<RuleSaveOverlay> savingOverlay;
-    private final Supplier<UiRect> contentArea;
-    private @Nullable Object activeScope;
-    private @Nullable Object pressedScope;
-    private int pressedButton = -1;
-    private EditorPage page;
-    private @Nullable UiTypePicker picker;
-    private Object scopeIdentity;
+    private final UiInputRouter router = new UiInputRouter();
 
-    EditorInputRouter(EditorShell shell, Supplier<RuleSaveOverlay> savingOverlay, Supplier<UiRect> contentArea) {
+    EditorInputRouter(EditorShell shell, Supplier<RuleSaveOverlay> savingOverlay) {
         this.shell = shell;
         this.savingOverlay = savingOverlay;
-        this.contentArea = contentArea;
-        this.page = shell.activePage();
-        this.scopeIdentity = page;
+        shell.modals().setOnScopeChanged(this::synchronize);
+        shell.setInputChanged(this::synchronize);
+        shell.setCloseInput(router::close);
     }
 
-    private Scope select() {
-        page = shell.activePage();
-        picker = page.overlay();
-        Scope scope;
+    void synchronize() {
+        UiInputScope next;
         if (shell.saving()) {
-            scope = Scope.SAVING;
-            scopeIdentity = savingOverlay.get();
+            RuleSaveOverlay current = savingOverlay.get();
+            next = current.inputScope();
         } else if (shell.modals().isVisible()) {
-            scope = Scope.MODAL;
-            scopeIdentity = shell.modals().top();
-        } else if (picker != null) {
-            scope = Scope.OVERLAY;
-            scopeIdentity = picker;
+            next = Objects.requireNonNull(shell.modals().top()).inputScope();
         } else {
-            scope = Scope.PAGE;
-            scopeIdentity = page;
+            UiTypePicker current = shell.activePage().overlay();
+            if (current != null) {
+                next = current.inputScope();
+            } else next = shell.activePage().inputScope();
         }
-        if (activeScope != scopeIdentity) {
-            if (activeScope != null) shell.leaveInteractions();
-            activeScope = scopeIdentity;
-            pressedScope = null;
-            pressedButton = -1;
-        }
-        return scope;
+        next.refreshFocus();
+        router.select(next);
     }
 
-    private UiTypePicker overlay() {
-        return Objects.requireNonNull(picker, "OVERLAY scope requires a type picker");
+    boolean pageActive() {
+        synchronize();
+        return router.active() == shell.activePage().inputScope();
+    }
+
+    private UiInputContext pointer(double x, double y, int button) {
+        synchronize();
+        return UiInputContext.of(router.active(), x, y, button, Screen.hasShiftDown(), Screen.hasControlDown(), Screen.hasAltDown());
+    }
+
+    private boolean finish(boolean consumed, UiInputScope scope) {
+        synchronize();
+        return consumed || scope != shell.activePage().inputScope();
     }
 
     boolean mouseClicked(double x, double y, int button) {
-        Scope scope = select();
-        pressedScope = scopeIdentity;
-        pressedButton = button;
-        return switch (scope) {
-            case SAVING -> { savingOverlay.get().mouseClicked(x, y, button); yield true; }
-            case MODAL -> { shell.modals().mouseClicked(x, y, button); yield true; }
-            case OVERLAY -> { overlay().mouseClicked(x, y, button); yield true; }
-            case PAGE -> {
-                if (button == 0) focusClicked(x, y);
-                yield page.mouseClicked(x, y, button);
-            }
-        };
+        UiInputContext context = pointer(x, y, button);
+        return finish(router.mousePressed(context), context.scope());
     }
 
     boolean mouseReleased(double x, double y, int button) {
-        Scope scope = select();
-        if (pressedScope != scopeIdentity || pressedButton != button) return true;
-        pressedScope = null;
-        pressedButton = -1;
-        return switch (scope) {
-            case SAVING -> { savingOverlay.get().mouseReleased(x, y, button); yield true; }
-            case MODAL -> { shell.modals().mouseReleased(x, y, button); yield true; }
-            case OVERLAY -> { overlay().mouseReleased(x, y, button); yield true; }
-            case PAGE -> page.mouseReleased(x, y, button);
-        };
+        UiInputContext context = pointer(x, y, button);
+        return finish(router.mouseReleased(context), context.scope());
     }
 
     boolean mouseDragged(double x, double y, int button, double dx, double dy) {
-        Scope scope = select();
-        if (pressedScope != scopeIdentity || pressedButton != button) return true;
-        return switch (scope) {
-            case SAVING -> true;
-            case MODAL -> { shell.modals().mouseDragged(x, y, button, dx, dy); yield true; }
-            case OVERLAY -> { overlay().mouseDragged(x, y, button, dx, dy); yield true; }
-            case PAGE -> page.mouseDragged(x, y, button, dx, dy);
-        };
+        UiInputContext context = pointer(x, y, button);
+        return finish(router.mouseDragged(context, dx, dy), context.scope());
     }
 
     boolean mouseScrolled(double x, double y, double sx, double sy) {
-        return switch (select()) {
-            case SAVING -> true;
-            case MODAL -> { shell.modals().mouseScrolled(x, y, sx, sy); yield true; }
-            case OVERLAY -> { overlay().mouseScrolled(x, y, sx, sy); yield true; }
-            case PAGE -> page.mouseScrolled(x, y, sx, sy);
-        };
+        UiInputContext context = pointer(x, y, -1);
+        return finish(router.mouseScrolled(context, sx, sy), context.scope());
     }
 
     boolean keyPressed(int key, int scan, int modifiers) {
         if (key == GLFW.GLFW_KEY_F8 && (modifiers & GLFW.GLFW_MOD_CONTROL) != 0 && shell.canEnterDebug()) {
             shell.enterDebug();
+            synchronize();
             return false;
         }
-        // 原版功能键需要保持放行，覆盖保存遮罩与所有弹层。
         if (key >= GLFW.GLFW_KEY_F1 && key <= GLFW.GLFW_KEY_F12) return false;
-        return switch (select()) {
-            case SAVING -> { savingOverlay.get().keyPressed(key, scan, modifiers); yield true; }
-            case MODAL -> { shell.modals().keyPressed(key, scan, modifiers); yield true; }
-            case OVERLAY -> { overlay().keyPressed(key, scan, modifiers); yield true; }
-            case PAGE -> pageKeyPressed(key, scan, modifiers);
-        };
-    }
-
-    private boolean pageKeyPressed(int key, int scan, int modifiers) {
-        if (shell.dispatchHistory(key, scan, modifiers, (k, s, m) ->
-                page.keyPressed(k, s, m) || shell.focus().keyPressed(k, s, m))) return true;
-        if (key == GLFW.GLFW_KEY_ESCAPE) {
-            if (shell.focus().keyPressed(key, scan, modifiers) || page.keyPressed(key, scan, modifiers)) return true;
-            shell.escape();
-            return true;
-        }
-        if (key == GLFW.GLFW_KEY_TAB && shell.focus().keyPressed(key, scan, modifiers)) return true;
-        return page.keyPressed(key, scan, modifiers) || shell.focus().keyPressed(key, scan, modifiers);
+        synchronize();
+        UiInputScope scope = router.active();
+        return finish(router.keyPressed(key, scan, modifiers), scope);
     }
 
     boolean keyReleased(int key, int scan, int modifiers) {
-        return switch (select()) {
-            case SAVING -> true;
-            case MODAL -> { shell.modals().keyReleased(key, scan, modifiers); yield true; }
-            case OVERLAY -> overlay().keyReleased(key, scan, modifiers);
-            case PAGE -> page.keyReleased(key, scan, modifiers);
-        };
+        synchronize();
+        UiInputScope scope = router.active();
+        return finish(router.keyReleased(key, scan, modifiers), scope);
     }
 
     boolean charTyped(char value, int modifiers) {
-        return switch (select()) {
-            case SAVING -> true;
-            case MODAL -> { shell.modals().charTyped(value, modifiers); yield true; }
-            case OVERLAY -> { overlay().charTyped(value, modifiers); yield true; }
-            case PAGE -> page.charTyped(value, modifiers);
-        };
+        synchronize();
+        UiInputScope scope = router.active();
+        return finish(router.charTyped(value, modifiers), scope);
     }
 
-    // 鼠标和键盘共用唯一焦点，裁剪区域外的控件不能夺取输入。
-    private void focusClicked(double mouseX, double mouseY) {
-        for (UiFocusTarget target : shell.focus().targets()) {
-            if (!target.canFocus() || !target.bounds().contains(mouseX, mouseY)) {
-                continue;
-            }
-            if (target instanceof UiListView<?> list && !list.acceptsFocusAt(mouseX, mouseY)) {
-                continue;
-            }
-            if (shell.activePage().ownsFocusTarget(target) && !contentArea.get().contains(mouseX, mouseY)) {
-                continue;
-            }
-            shell.focus().focusOn(target);
-            return;
-        }
-        shell.focus().clearFocus();
+    void close() {
+        router.close();
     }
-
 }

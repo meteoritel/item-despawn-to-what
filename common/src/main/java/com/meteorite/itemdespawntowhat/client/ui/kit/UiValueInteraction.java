@@ -14,7 +14,9 @@ import org.jetbrains.annotations.Nullable;
  */
 public final class UiValueInteraction {
 
-    /** 生命周期回调；接口方法都有默认空实现，宿主只覆写关心的部分。 */
+    /**
+     * 生命周期回调；接口方法都有默认空实现，宿主只覆写关心的部分。
+     */
     public interface Listener {
         // 操作开始，startValue 为交互起点值
         default void began(double startValue) {
@@ -28,19 +30,28 @@ public final class UiValueInteraction {
         default void committed(double startValue, double currentValue) {
         }
 
+        /**
+         * 操作结清，无净变化时也通知宿主收束文本快照。
+         */
+        default void finished() {
+        }
+
         // 取消并回退到起点值；恢复值等于起点值时也会调用
         default void cancelled(double startValue, double restoredValue) {
         }
     }
 
-    /** 无回调的监听器，用于纯展示或在桥接层改接旧回调。 */
+    /**
+     * 无回调的监听器，用于纯展示或在桥接层改接旧回调。
+     */
     public static final Listener NONE = new Listener() {
     };
 
     private boolean active;
     private double startValue;
     private double currentValue;
-    @Nullable private Listener listener;
+    @Nullable
+    private Listener listener;
 
     /**
      * 开始一次操作；已有操作在进行中时返回 false，调用方应先结束旧操作
@@ -93,7 +104,10 @@ public final class UiValueInteraction {
         boolean changed = committed != startValue;
         Listener current = listener;
         reset();
-        if (changed && current != null) current.committed(startValue, committed);
+        if (current != null) {
+            if (changed) current.committed(startValue, committed);
+            current.finished();
+        }
         return changed;
     }
 
@@ -105,7 +119,10 @@ public final class UiValueInteraction {
         double restored = startValue;
         Listener current = listener;
         reset();
-        if (current != null) current.cancelled(startValue, restored);
+        if (current != null) {
+            current.cancelled(startValue, restored);
+            current.finished();
+        }
         return true;
     }
 

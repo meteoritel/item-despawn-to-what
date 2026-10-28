@@ -1,8 +1,11 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
+
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphSidePanel.SIDE_PANEL_HEADER;
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphSidePanel.SIDE_PANEL_PADDING;
+
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTransform;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreePath;
@@ -15,13 +18,14 @@ import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
-/** 条件叶参数面板：按路径维护锚点，负责动画、表单几何与输入捕获。 */
+/**
+ * 条件叶参数面板：按路径维护锚点，负责动画、表单几何与输入捕获。
+ */
 final class ConditionGraphInlinePanel {
     // 参数框锚点用于校验所属叶；面板几何只依赖画布边界与滑入进度。
     private @Nullable InlineEditor form;
     private @Nullable UiTreePath anchor;
     private boolean closing;
-    private boolean captured;
     private final ConditionGraphSidePanel panel;
     private UiRect panelRect = new UiRect(0, 0, 0, 0);
     private Component title = Component.translatable(TypeLabels.UI_PREFIX + "diagram.leaf");
@@ -34,26 +38,16 @@ final class ConditionGraphInlinePanel {
         panel = new ConditionGraphSidePanel(theme, font);
     }
 
-    void setBounds(UiRect bounds) { this.bounds = bounds; }
-    void cancelCapture() { captured = false; }
-    boolean hasCapture() { return captured; }
-
-    void mouseClicked(double x, double y, int button) {
-        captured = !closing;
-        if (form != null && !closing) form.mouseClicked(x, y, button);
+    void setBounds(UiRect bounds) {
+        this.bounds = bounds;
     }
 
-    void mouseDragged(double x, double y, int button, double dx, double dy) {
-        if (form != null) form.mouseDragged(x, y, button, dx, dy);
+    void mousePressed(UiInputContext context) {
+        if (form != null && !closing) form.mousePressed(context);
     }
 
-    boolean mouseReleased(double x, double y, int button) {
-        captured = false;
-        return form == null || form.mouseReleased(x, y, button);
-    }
-
-    void mouseScrolled(double x, double y, double scrollY) {
-        if (form != null && !closing) form.mouseScrolled(x, y, scrollY);
+    void mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
+        if (form != null && !closing) form.mouseScrolled(context, scrollX, scrollY);
     }
 
     boolean keyPressed(int keyCode, int scanCode, int modifiers) {
@@ -83,7 +77,6 @@ final class ConditionGraphInlinePanel {
         form = editor;
         anchor = anchorPath;
         closing = false;
-        captured = false;
         if (restart) {
             panel.reset();
         }
@@ -100,7 +93,6 @@ final class ConditionGraphInlinePanel {
             return;
         }
         closing = true;
-        captured = false;
         panel.start(0.0F);
     }
 
@@ -128,7 +120,6 @@ final class ConditionGraphInlinePanel {
         form = null;
         anchor = null;
         closing = false;
-        captured = false;
         panel.reset();
         panelRect = new UiRect(0, 0, 0, 0);
     }

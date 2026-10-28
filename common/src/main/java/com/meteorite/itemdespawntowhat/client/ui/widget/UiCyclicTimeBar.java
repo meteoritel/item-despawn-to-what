@@ -1,17 +1,21 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
+
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiCyclicRange;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiNumbers;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeEnd;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiValueTextBinding;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Function;
+
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -27,17 +31,23 @@ import org.lwjgl.glfw.GLFW;
  */
 public final class UiCyclicTimeBar extends AbstractBarShell<UiCyclicRange> {
 
-    /** 区间提交回调：拖动释放、方向键抬起、精确输入提交与预设点击时回调一次最终刻域，预览过程不回调。 */
+    /**
+     * 区间提交回调：拖动释放、方向键抬起、精确输入提交与预设点击时回调一次最终刻域，预览过程不回调。
+     */
     public interface Listener {
 
         void onCommitted(double fromTick, double toTick);
     }
 
-    /** 时间条提示文案：单点区间、跨零点与精确输入提示，由宿主提供本地化文本。 */
+    /**
+     * 时间条提示文案：单点区间、跨零点与精确输入提示，由宿主提供本地化文本。
+     */
     public record Texts(Component singlePoint, Component wrapHint, Component preciseHint) {
     }
 
-    /** 宿主注入的预设区间：点击即按该区间提交一次，不经过拖动预览。 */
+    /**
+     * 宿主注入的预设区间：点击即按该区间提交一次，不经过拖动预览。
+     */
     public record Preset(Component label, double fromTick, double toTick) {
     }
 
@@ -63,9 +73,9 @@ public final class UiCyclicTimeBar extends AbstractBarShell<UiCyclicRange> {
     /**
      * 装配世界时间条与精确文本绑定；世界时间刻域和主题由宿主定义。
      *
-     * @param theme 宿主主题
-     * @param font 文本测量与绘制字体
-     * @param texts 本地化提示
+     * @param theme    宿主主题
+     * @param font     文本测量与绘制字体
+     * @param texts    本地化提示
      * @param listener 可选的宿主提交监听器
      */
     public UiCyclicTimeBar(UiHostTheme theme, Font font, Texts texts, @Nullable Listener listener) {
@@ -87,7 +97,8 @@ public final class UiCyclicTimeBar extends AbstractBarShell<UiCyclicRange> {
         });
         this.preciseBinding = new UiValueTextBinding<>(core::selectedTick,
                 core::setSelectedTick, precise::value, precise::setValue, UiCyclicTimeBar::parsePrecise,
-                value -> Integer.toString((int) Math.round(value)), () -> {});
+                value -> Integer.toString((int) Math.round(value)), () -> {
+        });
     }
 
     // 回填区间：不吸附、不回调、不产生历史
@@ -169,7 +180,7 @@ public final class UiCyclicTimeBar extends AbstractBarShell<UiCyclicRange> {
             return;
         }
         // 没有独立提示行时，聚焦提示挤进标签行的空白处，避免压住预设按钮
-        drawLabelRow(graphics, hintRow == null && focused && !preciseActive);
+        drawLabelRow(graphics, hintRow == null && isFocused() && !preciseActive);
         drawTrack(graphics);
         drawPresets(graphics, mouseX, mouseY);
         if (preciseActive) {
@@ -285,7 +296,9 @@ public final class UiCyclicTimeBar extends AbstractBarShell<UiCyclicRange> {
 
     // 预设按钮在边界判定之前命中，一次点击即一次提交
     @Override
-    protected boolean handleShellClick(double mouseX, double mouseY, int button) {
+    protected boolean handleShellClick(UiInputContext context) {
+        double mouseX = context.pointerX();
+        double mouseY = context.pointerY();
         Preset preset = presetAt(mouseX, mouseY);
         if (preset == null) {
             return false;
@@ -339,8 +352,8 @@ public final class UiCyclicTimeBar extends AbstractBarShell<UiCyclicRange> {
     }
 
     // 捕获结束只收尾 kit 核心；精确输入行由生命周期入口统一关闭，不在此重复处理
-    public void captureEnded(UiInputCapture.EndReason reason) {
-        core.captureEnded(reason);
+    public void interactionEnded(UiInteractionSession.EndReason reason) {
+        core.interactionEnded(reason);
     }
 
     // ---- kit 核心适配 ----
@@ -366,24 +379,10 @@ public final class UiCyclicTimeBar extends AbstractBarShell<UiCyclicRange> {
     }
 
     @Override
-    protected void coreEndInteraction(UiInputCapture.EndReason reason) {
+    protected void coreEndInteraction(UiInteractionSession.EndReason reason) {
         core.endInteraction(reason);
     }
 
-    @Override
-    protected void coreUnmount() {
-        core.unmount();
-    }
-
-    @Override
-    protected void coreOnFocusScopeChanged() {
-        core.onFocusScopeChanged();
-    }
-
-    @Override
-    protected void coreOnHostClosed() {
-        core.onHostClosed();
-    }
 
     @Override
     protected UiRangeEnd coreSelectedEnd() {

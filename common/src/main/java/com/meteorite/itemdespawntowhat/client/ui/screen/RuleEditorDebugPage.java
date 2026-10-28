@@ -1,9 +1,10 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputScope;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.DebugTestRules;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
@@ -13,8 +14,10 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModalStack;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
+
 import java.util.ArrayList;
 import java.util.List;
+
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -31,6 +34,13 @@ import org.jetbrains.annotations.Nullable;
  * debug 模式下按 Ctrl+F8 从管理页进入，控件与视图状态全部留在本类。</p>
  */
 final class RuleEditorDebugPage implements EditorPage {
+    private final UiInputScope inputScope = new UiInputScope(this);
+
+    @Override
+    public UiInputScope inputScope() {
+        return inputScope;
+    }
+
 
     // ---- 页面度量与标题状态：屏幕按这些声明统一排版，页不自己算窗口几何 ----
 
@@ -76,7 +86,7 @@ final class RuleEditorDebugPage implements EditorPage {
     private @Nullable UiButton deleteButton;
 
     RuleEditorDebugPage(EditorShell shell, RuleEditorModel model, Font font,
-            UiModalStack modals) {
+                        UiModalStack modals) {
         this.THEME = shell.theme();
         this.shell = shell;
         this.model = model;
@@ -101,7 +111,7 @@ final class RuleEditorDebugPage implements EditorPage {
         bottomBar.set(List.of(fillButton, deleteButton, back));
         buttons.clear();
         buttons.addAll(List.of(fillButton, deleteButton, back));
-    updateButtons();
+        updateButtons();
     }
 
     private UiButton button(String labelKey, UiButtonVariant variant, Runnable action) {
@@ -133,16 +143,16 @@ final class RuleEditorDebugPage implements EditorPage {
         int count = requestedCount();
         if (count == INVALID_COUNT) {
             shell.setNotice(Component.translatable(UI + "notice.count_invalid",
-                    DebugTestRules.MIN_COUNT, DebugTestRules.MAX_COUNT),EditorShell.NoticeLevel.WARNING);
+                    DebugTestRules.MIN_COUNT, DebugTestRules.MAX_COUNT), EditorShell.NoticeLevel.WARNING);
             return;
         }
         int created = model.createTestRules(count);
         shell.refreshList();
-    updateButtons();
+        updateButtons();
         shell.setNotice(created > 0
-                ? Component.translatable(UI + "notice.filled", created, model.testRuleCount())
-                : Component.translatable(UI + "notice.fill_noop", count),
-created > 0
+                        ? Component.translatable(UI + "notice.filled", created, model.testRuleCount())
+                        : Component.translatable(UI + "notice.fill_noop", count),
+                created > 0
                         ? EditorShell.NoticeLevel.INFO : EditorShell.NoticeLevel.WARNING);
     }
 
@@ -151,11 +161,11 @@ created > 0
         int total = model.testRuleCount();
         if (total <= 0) {
             shell.setNotice(Component.translatable(UI + "notice.delete_noop"),
-EditorShell.NoticeLevel.WARNING);
+                    EditorShell.NoticeLevel.WARNING);
             return;
         }
         UiModal modal = UiModal.create(THEME, font)
-    .title(Component.translatable(UI + "delete.title"))
+                .title(Component.translatable(UI + "delete.title"))
                 .message(Component.translatable(UI + "delete.message", total))
                 .confirm(Component.translatable(EDIT_UI + "button.confirm"), this::deleteTestRules)
                 .cancel(Component.translatable(EDIT_UI + "button.cancel"));
@@ -168,9 +178,9 @@ EditorShell.NoticeLevel.WARNING);
     private void deleteTestRules() {
         int affected = model.deleteTestRules();
         shell.refreshList();
-    updateButtons();
+        updateButtons();
         shell.setNotice(Component.translatable(UI + "notice.deleted", affected, model.testRuleCount()),
-EditorShell.NoticeLevel.INFO);
+                EditorShell.NoticeLevel.INFO);
     }
 
     // ---- 渲染 ----
@@ -195,12 +205,12 @@ EditorShell.NoticeLevel.INFO);
 
     public void renderFooter(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY, UiRect footer) {
         bottomBar.layout(footer.x(), footer.y(), footer.width());
-    bottomBar.render(graphics, renderFont, mouseX, mouseY);
+        bottomBar.render(graphics, renderFont, mouseX, mouseY);
     }
 
     // 调试页布局：数量摘要、数量输入与只写草稿的说明
     public void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY, UiRect area) {
-    updateButtons();
+        updateButtons();
         int y = area.y();
         graphics.drawString(renderFont, summary(), area.x(), y, THEME.palette().textPrimary(), false);
         y += renderFont.lineHeight + RuleEditorPageSupport.PAD;
@@ -211,7 +221,7 @@ EditorShell.NoticeLevel.INFO);
         int fieldWidth = Math.clamp(area.width() - labelWidth - RuleEditorPageSupport.PAD, 0, COUNT_FIELD_MAX_WIDTH);
         if (countField != null) {
             countField.setBounds(area.x() + labelWidth + RuleEditorPageSupport.PAD, y, fieldWidth, INPUT_H);
-    countField.render(graphics, renderFont, mouseX, mouseY);
+            countField.render(graphics, renderFont, mouseX, mouseY);
         }
         y += INPUT_H + RuleEditorPageSupport.PAD;
         int hintColor = THEME.palette().textSecondary();
@@ -233,27 +243,22 @@ EditorShell.NoticeLevel.INFO);
 
     // ---- 指针与键盘委托 ----
 
-    public void onScopeChanged() {
-        if (countField != null) {
-            countField.endInteraction(UiInputCapture.EndReason.FOCUS_SCOPE_CHANGED);
-        }
-    }
 
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (countField != null && countField.mouseClicked(mouseX, mouseY, button)) {
+    public boolean mousePressed(UiInputContext context) {
+        if (countField != null && countField.mousePressed(context)) {
             return true;
         }
-    return bottomBar.mouseClicked(mouseX, mouseY, button);
+        return bottomBar.mousePressed(context);
     }
 
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        boolean consumed = countField != null && countField.mouseReleased(mouseX, mouseY, button);
-        consumed |= bottomBar.mouseReleased(mouseX, mouseY, button);
+    public boolean mouseReleased(UiInputContext context) {
+        boolean consumed = countField != null && countField.mouseReleased(context);
+        consumed |= bottomBar.mouseReleased(context);
         return consumed;
     }
 
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        return countField != null && countField.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
+        return countField != null && countField.mouseDragged(context, dragX, dragY);
     }
 
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
@@ -272,10 +277,10 @@ EditorShell.NoticeLevel.INFO);
         buttons.forEach(button -> button.setEnabled(editable));
         boolean hasTestRules = model.testRuleCount() > 0;
         if (fillButton != null) {
-    fillButton.setEnabled(editable);
+            fillButton.setEnabled(editable);
         }
         if (deleteButton != null) {
-    deleteButton.setEnabled(editable && hasTestRules);
+            deleteButton.setEnabled(editable && hasTestRules);
         }
     }
 

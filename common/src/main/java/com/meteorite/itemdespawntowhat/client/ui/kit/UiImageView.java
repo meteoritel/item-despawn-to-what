@@ -23,32 +23,43 @@ import java.util.Objects;
  * 内容变更与 {@link #invalidateResources()} 时各判定一次。</p>
  */
 public final class UiImageView implements UiLightbox.Content {
-    /** 缩放步进（有限步进）：每次滚轮/按钮改变一档。 */
+    /**
+     * 缩放步进（有限步进）：每次滚轮/按钮改变一档。
+     */
     private static final double STEP = 1.25;
     private static final double MIN_SCALE = 0.05;
     private static final double MAX_SCALE = 8.0;
 
-    /** 缺图重查间隔（帧）：20 帧，60 FPS 下约 0.33 秒。 */
+    /**
+     * 缺图重查间隔（帧）：20 帧，60 FPS 下约 0.33 秒。
+     */
     private static final int RECHECK_INTERVAL = 20;
 
     private final LightboxImage image;
-    @Nullable private final Component missingText;
+    @Nullable
+    private final Component missingText;
     private UiRect viewport = new UiRect(0, 0, 0, 0);
     private double scale = 1.0;
     private double offsetX;
     private double offsetY;
-    /** 小图默认不主动放大；true 时 fit 允许放大到视口。 */
+    /**
+     * 小图默认不主动放大；true 时 fit 允许放大到视口。
+     */
     private final boolean allowUpscale;
     private boolean available;
-    private boolean dragging;
-    /** 缺图时的重查计时：约每 20 帧重查一次，避免逐帧 IO，又能在资源补齐后自愈。 */
+    private @Nullable UiInteractionSession session;
+    /**
+     * 缺图时的重查计时：约每 20 帧重查一次，避免逐帧 IO，又能在资源补齐后自愈。
+     */
     private int recheckTicks;
 
     public UiImageView(LightboxImage image, @Nullable Component missingText) {
         this(image, missingText, false);
     }
 
-    /** 便捷重载：不显示占位文案。 */
+    /**
+     * 便捷重载：不显示占位文案。
+     */
     public UiImageView(LightboxImage image) {
         this(image, null, false);
     }
@@ -66,10 +77,14 @@ public final class UiImageView implements UiLightbox.Content {
     // ---------- 内容契约 ----------
 
     @Override
-    public int contentWidth() { return image.width(); }
+    public int contentWidth() {
+        return image.width();
+    }
 
     @Override
-    public int contentHeight() { return image.height(); }
+    public int contentHeight() {
+        return image.height();
+    }
 
     @Override
     public void setViewport(UiRect viewport) {
@@ -126,7 +141,8 @@ public final class UiImageView implements UiLightbox.Content {
     @Override
     public boolean panBy(double screenDx, double screenDy) {
         // 只有从视口内按下的拖动才平移；在遮罩/控制栏上拖动不该带着图片跑。
-        if (!dragging || !Double.isFinite(screenDx) || !Double.isFinite(screenDy)) return false;
+        if (session == null || !session.owns(this) || !Double.isFinite(screenDx) || !Double.isFinite(screenDy))
+            return false;
         double previousOffsetX = offsetX;
         double previousOffsetY = offsetY;
         offsetX += screenDx;
@@ -136,25 +152,39 @@ public final class UiImageView implements UiLightbox.Content {
     }
 
     @Override
-    public boolean mousePressed(double x, double y, int button) {
-        if (button != 0) return false;
-        dragging = true;
+    public boolean mousePressed(UiInputContext context) {
+        if (context.button() != 0 || !viewport.contains(context.pointerX(), context.pointerY())) return false;
+        context.scope().pointerHit(null);
+        session = context.scope().interaction();
+        session.begin(this, UiInteractionSession.Source.POINTER, context.button());
         return true;
     }
 
     @Override
-    public boolean mouseReleased(double x, double y, int button) {
+    public boolean mouseReleased(UiInputContext context) {
+        int button = context.button();
         if (button != 0) return false;
-        boolean wasDragging = dragging;
-        dragging = false;
-        return wasDragging;
+        return session != null && session.owns(this);
     }
 
     @Override
-    public int zoomPercent() { return (int) Math.round(scale * 100.0); }
+    public void interactionEnded(UiInteractionSession.EndReason reason) {
+    }
 
     @Override
-    public @Nullable UiTarget hit(double x, double y) { return null; }
+    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
+        return panBy(dragX, dragY);
+    }
+
+    @Override
+    public int zoomPercent() {
+        return (int) Math.round(scale * 100.0);
+    }
+
+    @Override
+    public @Nullable UiTarget hit(double x, double y) {
+        return null;
+    }
 
     @Override
     public @Nullable Component placeholder() {

@@ -1,8 +1,9 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTextValue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTextAcceptance;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
@@ -13,9 +14,11 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiRenderLayers;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTextHistory;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
+
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
+
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
@@ -30,7 +33,7 @@ import org.lwjgl.glfw.GLFW;
  * 支持占位提示、长度限制、输入过滤、提交（Enter）与取消（Esc）。
  * <p>点击输入框可定位光标并拖动选择；焦点顺序由宿主的 {@code UiFocusManager} 统一维护。
  */
-public final class UiTextInput implements UiWidget, UiTextValue, UiLayoutSource {
+public final class UiTextInput implements UiWidget, UiTextValue, UiLayoutSource, UiInteractionSession.Target {
 
     // 左右内边距
     private static final int PADDING_X = TextInputSupport.PADDING_X;
@@ -41,6 +44,7 @@ public final class UiTextInput implements UiWidget, UiTextValue, UiLayoutSource 
 
     // 原版输入框
     private final TrackedEditBox editBox;
+    private final UiFocusState focusState = new UiFocusState();
     private final UiTextHistory textHistory = new UiTextHistory();
     private final UiTextSelection selection;
     private final UiTextAcceptance acceptance = new UiTextAcceptance(256);
@@ -51,6 +55,7 @@ public final class UiTextInput implements UiWidget, UiTextValue, UiLayoutSource 
     private Consumer<String> onCommit;
     // 取消回调（Esc）
     private Runnable onCancel;
+    private @Nullable Consumer<UiInteractionSession.EndReason> onInteractionEnd;
     // 无障碍名称
     private Component accessibleName;
     private boolean visible = true;
@@ -77,11 +82,20 @@ public final class UiTextInput implements UiWidget, UiTextValue, UiLayoutSource 
         this.accessibleName = hint;
         selection = new UiTextSelection(new UiTextSelection.Target() {
             @Override
-            public int cursor() { return editBox.getCursorPosition(); }
+            public int cursor() {
+                return editBox.getCursorPosition();
+            }
+
             @Override
-            public int anchor() { return editBox.anchor(); }
+            public int anchor() {
+                return editBox.anchor();
+            }
+
             @Override
-            public void seek(double pointerX, double pointerY) { seekCursor(pointerX, pointerY); }
+            public void seek(double pointerX, double pointerY) {
+                seekCursor(pointerX, pointerY);
+            }
+
             @Override
             public void select(int anchor, int cursor) {
                 editBox.setHighlightPos(anchor);
@@ -90,20 +104,26 @@ public final class UiTextInput implements UiWidget, UiTextValue, UiLayoutSource 
         });
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String value() {
         return editBox.getValue();
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public UiTextInput setValue(String value) {
         backfill(value == null ? "" : value);
         return this;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public UiTextInput clear() {
         backfill("");
@@ -111,7 +131,10 @@ public final class UiTextInput implements UiWidget, UiTextValue, UiLayoutSource 
     }
 
     // 设置长度上限（Unicode 码点）：超出上限的输入整体被拒绝，不截断，并触发 onOverflow
-    /** {@inheritDoc} */
+
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public UiTextInput setMaxLength(int maxLength) {
         acceptance.setMaximum(Math.max(1, maxLength));
@@ -136,24 +159,35 @@ public final class UiTextInput implements UiWidget, UiTextValue, UiLayoutSource 
         acceptance.changed(editBox.getValue(), editBox::setValue);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public UiTextInput setOnOverflow(@Nullable Runnable onOverflow) {
         acceptance.setOnOverflow(onOverflow);
         return this;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public UiTextInput setOnValueChanged(@Nullable Runnable onValueChanged) {
-        acceptance.setOnChanged(onValueChanged);
+        acceptance.setOnChanged(() -> {
+            if (onInteractionEnd != null && isFocused() && focusState.scope() != null) {
+                focusState.scope().interaction().begin(this, UiInteractionSession.Source.TEXT, 0);
+            }
+            if (onValueChanged != null) onValueChanged.run();
+        });
         return this;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public UiTextInput setEditable(boolean editable) {
-        if (!editable) endInteraction(UiInputCapture.EndReason.DISABLED);
+        if (!editable) endInteraction(UiInteractionSession.EndReason.DISABLED);
         this.editable = editable;
         editBox.setEditable(editable);
         return this;
@@ -179,6 +213,19 @@ public final class UiTextInput implements UiWidget, UiTextValue, UiLayoutSource 
         return hint.copy().withStyle(hint.getStyle().withColor(TextColor.fromRgb(theme.palette().textDisabled())));
     }
 
+    /**
+     * 数值编辑绑定通过作用域会话统一接收完成或取消通知。
+     */
+    public UiTextInput setOnInteractionEnd(@Nullable Consumer<UiInteractionSession.EndReason> handler) {
+        onInteractionEnd = handler;
+        return this;
+    }
+
+    @Override
+    public void interactionEnded(UiInteractionSession.EndReason reason) {
+        if (onInteractionEnd != null) onInteractionEnd.accept(reason);
+    }
+
     public UiTextInput setOnCommit(Consumer<String> onCommit) {
         this.onCommit = onCommit;
         return this;
@@ -190,6 +237,7 @@ public final class UiTextInput implements UiWidget, UiTextValue, UiLayoutSource 
     }
 
     public UiTextInput setVisible(boolean visible) {
+        if (!visible) endInteraction(UiInteractionSession.EndReason.HIDDEN);
         selection.setVisible(visible);
         this.visible = visible;
         editBox.setVisible(visible);
@@ -197,7 +245,10 @@ public final class UiTextInput implements UiWidget, UiTextValue, UiLayoutSource 
     }
 
     // 全选当前文本
-    /** {@inheritDoc} */
+
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public UiTextInput selectAll() {
         editBox.setHighlightPos(0);
@@ -206,7 +257,10 @@ public final class UiTextInput implements UiWidget, UiTextValue, UiLayoutSource 
     }
 
     // 把光标与水平滚动复位到开头；回填后调用一次，编辑期间不调用
-    /** {@inheritDoc} */
+
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public UiTextInput moveCursorToStart() {
         editBox.moveCursorToStart(false);
@@ -272,39 +326,39 @@ public final class UiTextInput implements UiWidget, UiTextValue, UiLayoutSource 
         graphics.fill(bounds.x() + 1, bounds.y() + 1, bounds.right() - 1, bounds.bottom() - 1, theme.palette().slotInner());
         UiRenderLayers.draw(graphics, UiRenderLayers.FOREGROUND,
                 () -> editBox.renderWidget(graphics, mouseX, mouseY, 0.0F));
-        if (editBox.isFocused()) {
+        if (isFocusVisible()) {
             theme.drawFocusOutline(graphics, bounds);
         }
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mousePressed(UiInputContext context) {
         selection.setBounds(bounds);
         selection.setEnabled(canFocus());
-        if (!selection.mousePressed(pointerContext(mouseX, mouseY, button))) return false;
-        setFocused(true);
+        if (!selection.mousePressed(context)) return false;
+        context.scope().pointerHit(this);
         return true;
     }
 
     @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        return selection.mouseReleased(pointerContext(mouseX, mouseY, button));
+    public boolean mouseReleased(UiInputContext context) {
+        return selection.mouseReleased(context);
     }
 
     @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        return selection.mouseDragged(pointerContext(mouseX, mouseY, button));
+    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
+        return selection.mouseDragged(context, dragX, dragY);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
-    public void endInteraction(UiInputCapture.EndReason reason) {
+    public void endInteraction(UiInteractionSession.EndReason reason) {
         selection.endInteraction(reason);
+        if (focusState.scope() != null) focusState.scope().interaction().end(this, reason);
     }
 
-    private static UiInputContext pointerContext(double mouseX, double mouseY, int button) {
-        return TextInputSupport.pointer(mouseX, mouseY, button);
-    }
 
     private void seekCursor(double mouseX, double mouseY) {
         editBox.onClick(mouseX, mouseY);
@@ -320,7 +374,7 @@ public final class UiTextInput implements UiWidget, UiTextValue, UiLayoutSource 
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        endInteraction(UiInputCapture.EndReason.RELEASE);
+        selection.endInteraction(UiInteractionSession.EndReason.RELEASE);
         if (!visible || !editBox.isFocused()) {
             return false;
         }
@@ -330,8 +384,8 @@ public final class UiTextInput implements UiWidget, UiTextValue, UiLayoutSource 
             return true;
         }
         if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
-            if (onCommit != null) {
-                onCommit.accept(editBox.getValue());
+            if (focusState.scope() == null || !focusState.scope().interaction().end(this, UiInteractionSession.EndReason.RELEASE)) {
+                if (onCommit != null) onCommit.accept(editBox.getValue());
             }
             return true;
         }
@@ -350,7 +404,7 @@ public final class UiTextInput implements UiWidget, UiTextValue, UiLayoutSource 
 
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
-        endInteraction(UiInputCapture.EndReason.RELEASE);
+        selection.endInteraction(UiInteractionSession.EndReason.RELEASE);
         if (!visible) {
             return false;
         }
@@ -361,13 +415,17 @@ public final class UiTextInput implements UiWidget, UiTextValue, UiLayoutSource 
     }
 
     @Override
+    public UiFocusState focusState() {
+        return focusState;
+    }
+
+    @Override
     public boolean canFocus() {
         return visible && editable;
     }
 
     @Override
-    public void setFocused(boolean focused) {
-        if (!focused) endInteraction(UiInputCapture.EndReason.FOCUS_SCOPE_CHANGED);
+    public void focusChanged(boolean focused) {
         editBox.setFocused(focused);
     }
 
@@ -392,7 +450,7 @@ public final class UiTextInput implements UiWidget, UiTextValue, UiLayoutSource 
 
     // 程序回填不通知宿主，不产生局部历史；不同内容成为新的装载基线。
     private void backfill(String value) {
-        endInteraction(UiInputCapture.EndReason.UNMOUNTED);
+        selection.endInteraction(UiInteractionSession.EndReason.UNMOUNTED);
         boolean changed = !value.equals(editBox.getValue());
         acceptance.silently(() -> editBox.setValue(value));
         acceptance.reset(editBox.getValue());

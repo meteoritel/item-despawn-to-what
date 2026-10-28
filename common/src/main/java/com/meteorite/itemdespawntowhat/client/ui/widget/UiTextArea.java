@@ -1,10 +1,11 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlatText;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollbarGeometry;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTextValue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTextAcceptance;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
@@ -14,8 +15,10 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTextHistory;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
+
 import java.util.ArrayList;
 import java.util.List;
+
 import net.minecraft.Util;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -72,7 +75,7 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
     private boolean visible = true;
     private boolean editable = true;
     private boolean selectableWhenReadOnly;
-    private boolean focused;
+    private final UiFocusState focusState = new UiFocusState();
     // 程序化写入期间不触发变化回调与长度回退
     private final UiTextAcceptance acceptance = new UiTextAcceptance(1024);
     // 获得焦点的时刻，用于光标闪烁
@@ -80,6 +83,7 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
 
     // 注入的宿主主题
     private final UiHostTheme theme;
+
     public UiTextArea(UiHostTheme theme, Font font, @Nullable Component hint) {
         this.theme = UiHostThemes.require(theme);
         this.font = font;
@@ -89,14 +93,21 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
         this.bounds = new UiRect(0, 0, MIN_WIDTH, height());
         selection = new UiTextSelection(new UiTextSelection.Target() {
             @Override
-            public int cursor() { return textField.cursor(); }
+            public int cursor() {
+                return textField.cursor();
+            }
+
             @Override
-            public int anchor() { return textField.anchor(); }
+            public int anchor() {
+                return textField.anchor();
+            }
+
             @Override
             public void seek(double pointerX, double pointerY) {
                 textField.setSelecting(false);
                 seekCursor(pointerX, pointerY);
             }
+
             @Override
             public void select(int anchor, int cursor) {
                 textField.setSelecting(false);
@@ -116,17 +127,22 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
         return field;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String value() {
         return textField.value();
     }
 
     // 程序化设置文本：光标留在末尾，回填路径随后调用 moveCursorToStart()
-    /** {@inheritDoc} */
+
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public UiTextArea setValue(String value) {
-        endInteraction(UiInputCapture.EndReason.UNMOUNTED);
+        endInteraction(UiInteractionSession.EndReason.UNMOUNTED);
         String next = value == null ? "" : value;
         boolean changed = !next.equals(textField.value());
         acceptance.silently(() -> textField.setValue(next));
@@ -138,7 +154,9 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
         return this;
     }
 
-    /** 全选原版文本模型并将选择末端滚动进视口。 */
+    /**
+     * 全选原版文本模型并将选择末端滚动进视口。
+     */
     @Override
     public UiTextArea selectAll() {
         textField.setSelecting(false);
@@ -151,24 +169,31 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
     }
 
     // 设置长度上限（Unicode 码点）
-    /** {@inheritDoc} */
+
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public UiTextArea setMaxLength(int maxLength) {
         acceptance.setMaximum(maxLength);
         return this;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public UiTextArea setEditable(boolean editable) {
-        if (!editable && !selectableWhenReadOnly) endInteraction(UiInputCapture.EndReason.DISABLED);
+        if (!editable && !selectableWhenReadOnly) endInteraction(UiInteractionSession.EndReason.DISABLED);
         this.editable = editable;
         return this;
     }
 
-    /** 允许只读文本获得焦点、选择和复制；不启用修改或文本局部历史。 */
+    /**
+     * 允许只读文本获得焦点、选择和复制；不启用修改或文本局部历史。
+     */
     public void setSelectableWhenReadOnly(boolean selectable) {
-        if (!selectable && !editable) endInteraction(UiInputCapture.EndReason.DISABLED);
+        if (!selectable && !editable) endInteraction(UiInteractionSession.EndReason.DISABLED);
         this.selectableWhenReadOnly = selectable;
     }
 
@@ -176,14 +201,18 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
         this.hint = hint;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public UiTextArea setOnValueChanged(@Nullable Runnable onChanged) {
         acceptance.setOnChanged(onChanged);
         return this;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public UiTextArea setOnOverflow(@Nullable Runnable onOverflow) {
         acceptance.setOnOverflow(onOverflow);
@@ -209,7 +238,10 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
     }
 
     // 回填后把光标与垂直滚动复位到开头；编辑期间不调用，避免抢走用户光标
-    /** {@inheritDoc} */
+
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public UiTextArea moveCursorToStart() {
         textField.seekCursor(Whence.ABSOLUTE, 0);
@@ -274,7 +306,7 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
         int innerHeight = innerHeight();
         graphics.enableScissor(innerX, innerY, innerX + innerWidth + SCROLLBAR_WIDTH, innerY + innerHeight);
         try {
-            if (textField.value().isEmpty() && !focused && hint != null) {
+            if (textField.value().isEmpty() && !isFocused() && hint != null) {
                 UiFlatText.drawWrapped(graphics, renderFont, hint, innerX, innerY, innerWidth, theme.palette().textDisabled());
             } else {
                 renderLines(graphics, renderFont, innerX, innerY, innerHeight);
@@ -283,7 +315,7 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
             graphics.disableScissor();
         }
         renderScrollbar(graphics, innerY, innerHeight);
-        if (focused) {
+        if (isFocusVisible()) {
             theme.drawFocusOutline(graphics, bounds);
         }
     }
@@ -293,7 +325,7 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
         String text = textField.value();
         int cursor = textField.cursor();
         int[] selection = selectionRange();
-        boolean blink = focused && (Util.getMillis() - focusedTime) / BLINK_INTERVAL % 2L == 0L;
+        boolean blink = isFocused() && (Util.getMillis() - focusedTime) / BLINK_INTERVAL % 2L == 0L;
         int lineHeight = font.lineHeight;
         List<int[]> lines = displayLines();
         for (int index = 0; index < lines.size(); index++) {
@@ -366,36 +398,37 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mousePressed(UiInputContext context) {
         selection.setBounds(bounds);
         selection.setEnabled(canFocus());
-        if (!selection.mousePressed(pointerContext(mouseX, mouseY, button))) return false;
-        setFocused(true);
+        if (!selection.mousePressed(context)) return false;
+        context.scope().pointerHit(this);
         return true;
     }
 
     @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        return selection.mouseReleased(pointerContext(mouseX, mouseY, button));
+    public boolean mouseReleased(UiInputContext context) {
+        return selection.mouseReleased(context);
     }
 
     @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        return selection.mouseDragged(pointerContext(mouseX, mouseY, button));
+    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
+        return selection.mouseDragged(context, dragX, dragY);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
-    public void endInteraction(UiInputCapture.EndReason reason) {
+    public void endInteraction(UiInteractionSession.EndReason reason) {
         selection.endInteraction(reason);
     }
 
-    private static UiInputContext pointerContext(double mouseX, double mouseY, int button) {
-        return TextInputSupport.pointer(mouseX, mouseY, button);
-    }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+    public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
+        double mouseX = context.pointerX();
+        double mouseY = context.pointerY();
         if (!visible || !bounds.contains(mouseX, mouseY)) {
             return false;
         }
@@ -409,8 +442,8 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        endInteraction(UiInputCapture.EndReason.RELEASE);
-        if (!visible || !focused || (!editable && !selectableWhenReadOnly)) {
+        endInteraction(UiInteractionSession.EndReason.RELEASE);
+        if (!visible || !isFocused() || (!editable && !selectableWhenReadOnly)) {
             return false;
         }
         UiHistoryShortcut shortcut = UiHistoryShortcut.fromKey(keyCode, modifiers);
@@ -437,8 +470,8 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
 
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
-        endInteraction(UiInputCapture.EndReason.RELEASE);
-        if (!visible || !editable || !focused) {
+        endInteraction(UiInteractionSession.EndReason.RELEASE);
+        if (!visible || !editable || !isFocused()) {
             return false;
         }
         if (!StringUtil.isAllowedChatCharacter(codePoint)) {
@@ -448,6 +481,11 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
         textField.insertText(Character.toString(codePoint));
         textHistory.record(before, snapshot());
         return true;
+    }
+
+    @Override
+    public UiFocusState focusState() {
+        return focusState;
     }
 
     @Override
@@ -461,15 +499,13 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
                 && (keyCode == GLFW.GLFW_KEY_A || keyCode == GLFW.GLFW_KEY_C)) return true;
         return switch (keyCode) {
             case GLFW.GLFW_KEY_LEFT, GLFW.GLFW_KEY_RIGHT, GLFW.GLFW_KEY_UP, GLFW.GLFW_KEY_DOWN,
-                    GLFW.GLFW_KEY_HOME, GLFW.GLFW_KEY_END, GLFW.GLFW_KEY_PAGE_UP, GLFW.GLFW_KEY_PAGE_DOWN -> true;
+                 GLFW.GLFW_KEY_HOME, GLFW.GLFW_KEY_END, GLFW.GLFW_KEY_PAGE_UP, GLFW.GLFW_KEY_PAGE_DOWN -> true;
             default -> false;
         };
     }
 
     @Override
-    public void setFocused(boolean focused) {
-        if (!focused) endInteraction(UiInputCapture.EndReason.FOCUS_SCOPE_CHANGED);
-        this.focused = focused;
+    public void focusChanged(boolean focused) {
         if (focused) {
             this.focusedTime = Util.getMillis();
         }
@@ -477,7 +513,7 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
 
     @Override
     public boolean isFocused() {
-        return focused;
+        return focusState.isFocused();
     }
 
     @Override

@@ -1,11 +1,14 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInteractionSession;
+
 import java.util.List;
+
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -66,37 +69,37 @@ final class NestedObjectControl extends FormControl {
     }
 
     @Override
-    boolean mouseClicked(double mouseX, double mouseY, int button) {
-        return child.mouseClicked(mouseX, mouseY, button);
+    public boolean mousePressed(UiInputContext context) {
+        return child.mousePressed(context);
     }
 
     @Override
-    boolean mouseReleased(double mouseX, double mouseY, int button) {
-        return child.mouseReleased(mouseX, mouseY, button);
+    public boolean mouseReleased(UiInputContext context) {
+        return child.mouseReleased(context);
     }
 
     @Override
-    boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        return child.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
+        return child.mouseDragged(context, dragX, dragY);
     }
 
     @Override
-    boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        return child.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+    public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
+        return child.mouseScrolled(context, scrollX, scrollY);
     }
 
     @Override
-    boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         return child.keyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override
-    boolean keyReleased(int keyCode, int scanCode, int modifiers) {
+    public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
         return child.keyReleased(keyCode, scanCode, modifiers);
     }
 
     @Override
-    boolean charTyped(char codePoint, int modifiers) {
+    public boolean charTyped(char codePoint, int modifiers) {
         return child.charTyped(codePoint, modifiers);
     }
 
@@ -149,7 +152,7 @@ final class NestedObjectControl extends FormControl {
     }
 
     @Override
-    void endInteractions(UiInputCapture.EndReason reason) {
+    void endInteractions(UiInteractionSession.EndReason reason) {
         child.endInteractions(reason);
     }
 

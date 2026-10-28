@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
@@ -9,13 +10,14 @@ import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.shared.FieldCatalogTypes;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
@@ -64,14 +66,17 @@ public final class FormView implements UiWidget, UiLayoutSource {
     private final Map<String, FormField> fields = new HashMap<>();
     private final List<FormField> fieldHandles = new ArrayList<>();
 
-    /** 字段目录入口由页面提供，表单传递确切字段路径与当前选择，不访问网络。 */
+    /**
+     * 字段目录入口由页面提供，表单传递确切字段路径与当前选择，不访问网络。
+     */
     @FunctionalInterface
     public interface SelectionCatalogOpener {
         /**
          * 打开目录，确认后返回完整选择快照。
-         * @param field 字段描述符
-         * @param path 字段在草稿中的确切路径
-         * @param tags 是否只浏览标签
+         *
+         * @param field    字段描述符
+         * @param path     字段在草稿中的确切路径
+         * @param tags     是否只浏览标签
          * @param selected 当前字段中的引用
          * @param onPicked 确认后的完整选择回调
          */
@@ -80,11 +85,15 @@ public final class FormView implements UiWidget, UiLayoutSource {
 
     /**
      * 设置返回完整选择快照的目录入口。
+     *
      * @param opener 目录入口，null 表示移除入口
      */
     public void setSelectionCatalogOpener(@Nullable SelectionCatalogOpener opener) {
         catalogOpener = opener;
-        for (FormRow row : rows) { row.pickers.clear(); addPickers(row); }
+        for (FormRow row : rows) {
+            row.pickers.clear();
+            addPickers(row);
+        }
     }
 
     private @Nullable ConditionEditingSupport conditionEditingSupport;
@@ -92,22 +101,27 @@ public final class FormView implements UiWidget, UiLayoutSource {
     private @Nullable Runnable changeListener;
     @Nullable FieldWritten fieldWritten;
 
-    /** 字段与关联更新共享当前编辑回调，不允许异步保留草稿。 */
+    /**
+     * 字段与关联更新共享当前编辑回调，不允许异步保留草稿。
+     */
     @FunctionalInterface
     public interface FieldWritten {
-        /** 在同一次历史操作中同步关联字段。 */
+        /**
+         * 在同一次历史操作中同步关联字段。
+         */
         void written(com.meteorite.itemdespawntowhat.client.edit.RuleDraft draft, String path, @Nullable RuleValue before);
     }
 
-    /** 关联字段在同一次撤销操作内同步，回调接收当前草稿、路径与写入前值。 */
+    /**
+     * 关联字段在同一次撤销操作内同步，回调接收当前草稿、路径与写入前值。
+     */
     public void setOnFieldWritten(FieldWritten listener) {
         fieldWritten = listener;
     }
+
     // 输入被上限拒绝时的即时提示出口（页面显示 notice）
     private @Nullable Consumer<Component> rejectedNoticeHandler;
     // 本次按下命中的控件：释放与拖动只派发给它，避免无关控件吞掉释放或残留按下态
-    @Nullable UiWidget pressedWidget;
-    @Nullable FormControl pressedControl;
 
     private int labelWidth = 88;
     private int rowGap = ROW_GAP;
@@ -138,12 +152,16 @@ public final class FormView implements UiWidget, UiLayoutSource {
     // 高亮框缓存：随同步一起重算，渲染帧不再分配矩形。
     private @Nullable UiRect highlightBounds;
 
-    /** 独立表单入口使用默认主题。 */
+    /**
+     * 独立表单入口使用默认主题。
+     */
     public FormView(Font font, EditSession session, String basePath) {
         this(UiHostThemes.defaultTheme(), font, session, basePath);
     }
 
-    /** 页面装配时显式注入主题，子表单和字段继承同一实例。 */
+    /**
+     * 页面装配时显式注入主题，子表单和字段继承同一实例。
+     */
     public FormView(UiHostTheme theme, Font font, EditSession session, String basePath) {
         this.THEME = UiHostThemes.require(theme);
         this.font = font;
@@ -151,10 +169,16 @@ public final class FormView implements UiWidget, UiLayoutSource {
         this.basePath = basePath == null ? "" : basePath;
     }
 
-    /** 当前表单及其字段使用的主题。 */
-    public UiHostTheme theme() { return THEME; }
+    /**
+     * 当前表单及其字段使用的主题。
+     */
+    public UiHostTheme theme() {
+        return THEME;
+    }
 
-    /** 用描述符整体替换字段列表 */
+    /**
+     * 用描述符整体替换字段列表
+     */
     public List<FormField> setDescriptor(TypeEditorDescriptor descriptor) {
         unmount();
         rows.clear();
@@ -167,7 +191,9 @@ public final class FormView implements UiWidget, UiLayoutSource {
         return List.copyOf(handles);
     }
 
-    /** 追加一个字段 */
+    /**
+     * 追加一个字段
+     */
     public FormField addField(EditorField field) {
         var catalogType = FieldCatalogTypes.catalogTypeOf(field);
         boolean iconSelection = catalogSelections && catalogType != null && field.isCatalogReference();
@@ -201,14 +227,18 @@ public final class FormView implements UiWidget, UiLayoutSource {
         }
     }
 
-    /** 装配时取得必需字段；描述符不匹配时立即报告，而非忽略行配置。 */
+    /**
+     * 装配时取得必需字段；描述符不匹配时立即报告，而非忽略行配置。
+     */
     public FormField field(String name) {
         FormField field = fields.get(name);
         if (field == null) throw new IllegalArgumentException("Missing form field: " + name + " in " + basePath);
         return field;
     }
 
-    /** 描述符字段的有序句柄，用于按字段元数据装配。 */
+    /**
+     * 描述符字段的有序句柄，用于按字段元数据装配。
+     */
     public List<FormField> fields() {
         return List.copyOf(fieldHandles);
     }
@@ -217,31 +247,34 @@ public final class FormView implements UiWidget, UiLayoutSource {
         if (row.visible == visible) return;
         row.visible = visible;
         if (!visible) {
-            row.control.endInteractions(UiInputCapture.EndReason.HIDDEN);
+            row.control.endInteractions(UiInteractionSession.EndReason.HIDDEN);
             List<UiFocusTarget> targets = new ArrayList<>();
             row.control.addFocusTargets(targets);
-            targets.forEach(target -> target.setFocused(false));
+            targets.forEach(target -> target.focusState().clear());
         }
         invalidateMeasure();
     }
 
     void refreshRowVisibility() {
         boolean changed = false;
-        for (FormRow row : rows) if (row.visibility != null) {
-            boolean next = row.visibility.getAsBoolean();
-            if (row.visible != next) {
-                setRowVisible(row, next);
-                row.wasEditing = false;
-                changed = true;
+        for (FormRow row : rows)
+            if (row.visibility != null) {
+                boolean next = row.visibility.getAsBoolean();
+                if (row.visible != next) {
+                    setRowVisible(row, next);
+                    row.wasEditing = false;
+                    changed = true;
+                }
             }
-        }
         if (changed) {
             invalidateMeasure();
             layout(viewportX, viewportY, viewportWidth, viewportHeight);
         }
     }
 
-    /** 卡片编辑页与条件树参数框启用，弹窗等其它宿主保留原有密度。 */
+    /**
+     * 卡片编辑页与条件树参数框启用，弹窗等其它宿主保留原有密度。
+     */
     public void useCardSpacing() {
         minimumControlHeight = FormControl.CARD_CONTROL_HEIGHT;
         rowGap = 6;
@@ -249,10 +282,16 @@ public final class FormView implements UiWidget, UiLayoutSource {
         invalidateMeasure();
     }
 
-    /** 在装配字段之前启用；输入页统一使用目录添加物品和标签。 */
-    public void useCatalogSelections() { catalogSelections = true; }
+    /**
+     * 在装配字段之前启用；输入页统一使用目录添加物品和标签。
+     */
+    public void useCatalogSelections() {
+        catalogSelections = true;
+    }
 
-    /** 基本页以紧凑密度显示，不重复给可选值添加默认前缀。 */
+    /**
+     * 基本页以紧凑密度显示，不重复给可选值添加默认前缀。
+     */
     public void useCompactSpacing() {
         minimumControlHeight = 18;
         rowGap = 4;
@@ -261,7 +300,9 @@ public final class FormView implements UiWidget, UiLayoutSource {
         invalidateMeasure();
     }
 
-    /** 输入被上限拒绝时的即时提示出口 */
+    /**
+     * 输入被上限拒绝时的即时提示出口
+     */
     public void setOnRejectedNotice(@Nullable Consumer<Component> handler) {
         this.rejectedNoticeHandler = handler;
     }
@@ -304,7 +345,8 @@ public final class FormView implements UiWidget, UiLayoutSource {
                 value = RuleValue.text(ids.getFirst());
             }
             writeField(row, value);
-            reload(); notifyChanged();
+            reload();
+            notifyChanged();
         });
     }
 
@@ -327,7 +369,9 @@ public final class FormView implements UiWidget, UiLayoutSource {
         invalidateMeasure();
     }
 
-    void clearChildInputs(String relative) { session.clearPendingInputs(childPath(relative)); }
+    void clearChildInputs(String relative) {
+        session.clearPendingInputs(childPath(relative));
+    }
 
     // 重排嵌套表单时同步输入路径，不把下标变化绑定到另一个子项。
     void rebase(String nextBase) {
@@ -406,17 +450,23 @@ public final class FormView implements UiWidget, UiLayoutSource {
         retainPendingInputs();
     }
 
-    /** 保存会话内输入，不改变规则 JSON 或配置历史。 */
+    /**
+     * 保存会话内输入，不改变规则 JSON 或配置历史。
+     */
     public void retainPendingInputs() {
         commit.retainPendingInputs();
     }
 
-    /** 完成当前字段输入；只写合法值，非法文本留在会话缓冲。 */
+    /**
+     * 完成当前字段输入；只写合法值，非法文本留在会话缓冲。
+     */
     public boolean commitPendingInputs() {
         return commit.applyToDraft(true);
     }
 
-    /** 把控件值写回草稿；逐字段比较，只有真正变化才记入撤销历史 */
+    /**
+     * 把控件值写回草稿；逐字段比较，只有真正变化才记入撤销历史
+     */
     public boolean applyToDraft() {
         return commit.applyToDraft(false);
     }
@@ -445,7 +495,9 @@ public final class FormView implements UiWidget, UiLayoutSource {
         this.geometryListener = listener;
     }
 
-    /** 行几何是否有待重测：页面据此决定是否需要重新布局。 */
+    /**
+     * 行几何是否有待重测：页面据此决定是否需要重新布局。
+     */
     public boolean needsMeasure() {
         return measureDirty;
     }
@@ -565,7 +617,9 @@ public final class FormView implements UiWidget, UiLayoutSource {
         return child;
     }
 
-    /** 本地校验问题清单 */
+    /**
+     * 本地校验问题清单
+     */
     public List<FormIssue> issues() {
         List<FormIssue> list = new ArrayList<>();
         for (FormRow row : rows) {
@@ -577,7 +631,9 @@ public final class FormView implements UiWidget, UiLayoutSource {
         return list;
     }
 
-    /** 定位到指定草稿路径的字段：滚动使其整行可见、短暂高亮，返回其首个可聚焦目标（没有则返回 null） */
+    /**
+     * 定位到指定草稿路径的字段：滚动使其整行可见、短暂高亮，返回其首个可聚焦目标（没有则返回 null）
+     */
     public @Nullable UiFocusTarget revealPath(String path) {
         FormRow row = rowFor(path);
         if (row == null || !row.visible) {
@@ -640,7 +696,9 @@ public final class FormView implements UiWidget, UiLayoutSource {
         return matched;
     }
 
-    /** Tab 顺序（U 界面把本表登记进 UiFocusManager） */
+    /**
+     * Tab 顺序（U 界面把本表登记进 UiFocusManager）
+     */
     public List<UiFocusTarget> focusTargets() {
         List<UiFocusTarget> list = new ArrayList<>();
         addFocusTargets(list);
@@ -689,7 +747,9 @@ public final class FormView implements UiWidget, UiLayoutSource {
         return nodes;
     }
 
-    /** 每个字段独立完成编辑，切换到下一字段也提交一次，不按字符记录。 */
+    /**
+     * 每个字段独立完成编辑，切换到下一字段也提交一次，不按字符记录。
+     */
     public void tick() {
         if (loadedRevision != session.revision()) reload();
         refreshRowVisibility();
@@ -730,12 +790,16 @@ public final class FormView implements UiWidget, UiLayoutSource {
         return layout(x, y, width, Integer.MAX_VALUE / 4);
     }
 
-    /** 页面按实际内容分配空间，避免固定空白与表单互相挤占。 */
+    /**
+     * 页面按实际内容分配空间，避免固定空白与表单互相挤占。
+     */
     public int preferredHeight(int width) {
         return measureRows(width);
     }
 
-    /** 布局：返回内容总高度 */
+    /**
+     * 布局：返回内容总高度
+     */
     public int layout(int x, int y, int width, int height) {
         this.viewportX = x;
         this.viewportY = y;
@@ -800,14 +864,14 @@ public final class FormView implements UiWidget, UiLayoutSource {
     public void setVisible(boolean newVisible) {
         this.visible = newVisible;
         if (!newVisible) {
-            endInteractions(UiInputCapture.EndReason.HIDDEN);
+            endInteractions(UiInteractionSession.EndReason.HIDDEN);
         }
     }
 
     public void setEnabled(boolean newEnabled) {
         this.enabled = newEnabled;
         if (!newEnabled) {
-            endInteractions(UiInputCapture.EndReason.DISABLED);
+            endInteractions(UiInteractionSession.EndReason.DISABLED);
         }
         for (FormRow row : rows) {
             row.control.setEnabled(newEnabled);
@@ -816,28 +880,19 @@ public final class FormView implements UiWidget, UiLayoutSource {
         }
     }
 
-    /** 焦点作用域切换（打开模态、切页）：先结束进行中的捕获再换焦点 */
-    public void onFocusScopeChanged() {
-        retainPendingInputs();
-        endInteractions(UiInputCapture.EndReason.FOCUS_SCOPE_CHANGED);
-    }
 
-    /** 表单从界面卸载 */
+    /**
+     * 表单从界面卸载
+     */
     public void unmount() {
+        endInteractions(UiInteractionSession.EndReason.UNMOUNTED);
         retainPendingInputs();
-        endInteractions(UiInputCapture.EndReason.UNMOUNTED);
         for (FormRow row : rows) row.attached = false;
     }
 
-    /** 宿主屏幕关闭 */
-    public void onHostClosed() {
-        retainPendingInputs();
-        endInteractions(UiInputCapture.EndReason.HOST_CLOSED);
-        for (FormRow row : rows) row.attached = false;
-    }
 
     // 统一结束入口：把「未提交的预览」按原因回退或提交，交由各控件实现
-    void endInteractions(UiInputCapture.EndReason reason) {
+    void endInteractions(UiInteractionSession.EndReason reason) {
         for (FormRow row : rows) {
             row.control.endInteractions(reason);
         }
@@ -895,7 +950,9 @@ public final class FormView implements UiWidget, UiLayoutSource {
         }
     }
 
-    /** 鼠标位置下的提示：优先显示该字段的校验问题，其次显示字段提示 */
+    /**
+     * 鼠标位置下的提示：优先显示该字段的校验问题，其次显示字段提示
+     */
     public @Nullable Component tooltipAt(double mouseX, double mouseY) {
         return FormRowRenderer.tooltipAt(mouseX, mouseY, font, rows, viewportX, viewportY, viewportWidth,
                 viewportHeight, scrollOffset);
@@ -904,27 +961,27 @@ public final class FormView implements UiWidget, UiLayoutSource {
     // ---- 输入分发薄封装：实现集中在 FormInputRouter ----
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        boolean handled = inputRouter.mouseClicked(mouseX, mouseY, button);
+    public boolean mousePressed(UiInputContext context) {
+        boolean handled = inputRouter.mousePressed(context);
         if (handled) invalidateMeasure();
         return handled;
     }
 
     @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        boolean handled = inputRouter.mouseReleased(mouseX, mouseY, button);
+    public boolean mouseReleased(UiInputContext context) {
+        boolean handled = inputRouter.mouseReleased(context);
         if (handled) invalidateMeasure();
         return handled;
     }
 
     @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        return inputRouter.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
+        return inputRouter.mouseDragged(context, dragX, dragY);
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        return inputRouter.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+    public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
+        return inputRouter.mouseScrolled(context, scrollX, scrollY);
     }
 
     @Override

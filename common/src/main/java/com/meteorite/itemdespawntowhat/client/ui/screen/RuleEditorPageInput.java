@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiListView;
@@ -11,7 +13,7 @@ import org.jetbrains.annotations.Nullable;
  * 规则编辑页的输入事件分发：把按下、释放、拖动、滚动与键盘输入派发给当前页控件，
  * 并维护结果页动作列表的拖动排序状态。
  */
-final class RuleEditorPageInput {
+final class RuleEditorPageInput implements UiInteractionSession.Target {
 
     // 判定拖动已开始的垂直位移阈值（像素）
     private static final double DRAG_START_THRESHOLD = 3;
@@ -24,8 +26,8 @@ final class RuleEditorPageInput {
 
     private final RuleEditorEditSections pages;
 
-    // 本次按下命中的页面控件：释放只派发给它，避免无关控件吞掉释放
-    private @Nullable UiWidget pressedWidget;
+    // 列表排序使用所属作用域的唯一会话；条目位置与阈值仅为手势数据。
+    private @Nullable UiInteractionSession interaction;
 
     // 拖动状态：局部预览、不每帧写数据，释放时一次提交
     private DragKind dragKind = DragKind.NONE;
@@ -40,18 +42,21 @@ final class RuleEditorPageInput {
 
     // 清空拖动状态（页面重建时调用）
     void resetDrag() {
-        pressedWidget = null;
+        if (interaction != null) interaction.end(this, UiInteractionSession.EndReason.CANCEL);
         dragKind = DragKind.NONE;
         dragFrom = -1;
         dragTo = -1;
         dragActive = false;
     }
 
-    boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mousePressed(UiInputContext context) {
+        double mouseX = context.pointerX();
+        double mouseY = context.pointerY();
+        int button = context.button();
         if (!pages.pageScroll.contains(mouseX, mouseY)) {
             return false;
         }
-        if (pages.pageScroll.mousePressed(mouseX, mouseY, button)) {
+        if (pages.pageScroll.mousePressed(context)) {
             return true;
         }
         // 行内删除先于列表选中与拖动排序，避免叉号触发双击激活或拖动。
@@ -61,9 +66,7 @@ final class RuleEditorPageInput {
         }
         boolean handled = false;
         for (UiWidget widget : pages.content.widgets) {
-            if (widget.isVisible() && widget.mouseClicked(mouseX, mouseY, button)) {
-                // 记录按下归属：随后的释放与拖动只发给这个控件
-                pressedWidget = widget;
+            if (widget.isVisible() && widget.mousePressed(context)) {
                 handled = true;
                 break;
             }
@@ -74,63 +77,50 @@ final class RuleEditorPageInput {
         }
         if (button == 0 && !pages.actions.rebuildPending()) {
             captureDrag(mouseX, mouseY);
+            if (dragKind != DragKind.NONE) {
+                interaction = context.scope().interaction();
+                interaction.begin(this, UiInteractionSession.Source.POINTER, button);
+            }
         }
         pages.actions.flushRebuild();
         return handled;
     }
 
-    boolean mouseReleased(double mouseX, double mouseY, int button) {
-        pages.pageScroll.mouseReleased();
-        if (dragKind != DragKind.NONE) {
-            int from = dragFrom;
-            int to = dragTo;
-            boolean active = dragActive;
-            dragKind = DragKind.NONE;
-            dragActive = false;
-            dragFrom = -1;
-            dragTo = -1;
-            if (active && from >= 0 && to >= 0 && from != to) {
-                pages.resultsSection.moveEffect(from, to);
-                pages.actions.flushRebuild();
-                return true;
-            }
-        }
-        // 释放只派发给承接按下的控件；没有归属时不派发，避免残留按下态吞掉释放
-        UiWidget owner = pressedWidget;
-        pressedWidget = null;
-        boolean handled = owner != null && owner.isVisible() && owner.mouseReleased(mouseX, mouseY, button);
+    public boolean mouseReleased(UiInputContext context) {
+        int from = dragFrom;
+        int to = dragTo;
+        boolean changed = dragActive && from >= 0 && to >= 0 && from != to;
+        resetDrag();
+        if (changed) pages.resultsSection.moveEffect(from, to);
         pages.actions.flushRebuild();
-        return handled;
+        return true;
     }
 
-    boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        if (pages.pageScroll.isDragging()) {
-            pages.pageScroll.mouseDragged(mouseY);
-            if (pages.lastArea != null) {
-                // 页面滚动只平移已排好的控件，不重新测量
-                pages.ensureLayout(pages.lastArea);
-            }
-            return true;
+    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
+        if (dragKind == DragKind.NONE) return false;
+        if (Math.abs(context.pointerY() - dragStartY) >= DRAG_START_THRESHOLD) {
+            dragActive = true;
+            dragTo = rowIndexAt(context.pointerY());
         }
-        if (dragKind != DragKind.NONE) {
-            if (Math.abs(mouseY - dragStartY) >= DRAG_START_THRESHOLD) {
-                dragActive = true;
-                dragTo = rowIndexAt(mouseY);
-            }
-            if (dragActive) {
-                return true;
-            }
-        }
-        UiWidget owner = pressedWidget;
-        return owner != null && owner.isVisible() && owner.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+        return true;
     }
 
-    boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+    @Override
+    public void interactionEnded(UiInteractionSession.EndReason reason) {
+        dragKind = DragKind.NONE;
+        dragFrom = -1;
+        dragTo = -1;
+        dragActive = false;
+    }
+
+    public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
+        double mouseX = context.pointerX();
+        double mouseY = context.pointerY();
         if (!pages.pageScroll.contains(mouseX, mouseY)) {
             return false;
         }
         for (UiWidget widget : pages.content.widgets) {
-            if (widget.isVisible() && widget.mouseScrolled(mouseX, mouseY, scrollX, scrollY)) {
+            if (widget.isVisible() && widget.mouseScrolled(context, scrollX, scrollY)) {
                 return true;
             }
         }
@@ -142,7 +132,7 @@ final class RuleEditorPageInput {
         return changed;
     }
 
-    boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         for (UiWidget widget : pages.content.widgets) {
             if (widget instanceof UiFocusTarget target && !target.isFocused()) {
                 continue;
@@ -156,7 +146,7 @@ final class RuleEditorPageInput {
         return false;
     }
 
-    boolean charTyped(char codePoint, int modifiers) {
+    public boolean charTyped(char codePoint, int modifiers) {
         for (UiWidget widget : pages.content.widgets) {
             if (widget.isVisible() && widget.charTyped(codePoint, modifiers)) {
                 pages.actions.flushRebuild();

@@ -1,11 +1,14 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCheckBox;
+
 import java.util.List;
+
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import org.jetbrains.annotations.Nullable;
@@ -17,7 +20,9 @@ final class BoolControl extends FormControl {
 
     // 复选框自身携带标签，卡片表单不重复绘制左侧标签。
     @Override
-    boolean usesLabelColumn() { return false; }
+    boolean usesLabelColumn() {
+        return false;
+    }
 
     private final UiCheckBox checkBox;
 
@@ -36,7 +41,9 @@ final class BoolControl extends FormControl {
     }
 
     @Override
-    int preferredWidth(int available) { return Math.min(available, checkBox.preferredWidth(2)); }
+    int preferredWidth(int available) {
+        return Math.min(available, checkBox.preferredWidth(2));
+    }
 
     @Override
     void setBounds(int x, int y, int width) {
@@ -49,12 +56,12 @@ final class BoolControl extends FormControl {
     }
 
     @Override
-    boolean mouseClicked(double mouseX, double mouseY, int button) {
-        return checkBox.mouseClicked(mouseX, mouseY, button);
+    public boolean mousePressed(UiInputContext context) {
+        return checkBox.mousePressed(context);
     }
 
     @Override
-    boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         return checkBox.keyPressed(keyCode, scanCode, modifiers);
     }
 

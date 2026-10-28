@@ -71,8 +71,9 @@ public final class RuleEditorScreen extends Screen implements UiLayoutSource {
         RuleEditorModel model = new RuleEditorModel(workspace);
         // 屏幕构造期 this.font 尚未注入，外壳与页面直接取客户端字体实例
         this.shell = new EditorShell(THEME, UiHostThemes.flatTheme(), workspace, model, new RuleListDisplayCache(model), Minecraft.getInstance().font);
-        this.input = new EditorInputRouter(shell, this::saveOverlay, () -> contentArea);
+        this.input = new EditorInputRouter(shell, this::saveOverlay);
     }
+
     // 编辑器不做游戏内暂停
     @Override
     public boolean isPauseScreen() {
@@ -124,7 +125,7 @@ public final class RuleEditorScreen extends Screen implements UiLayoutSource {
         } else {
             saveOverlay = null;
         }
-        var pointer = UiPointer.gated(!saving && shell.modals().isEmpty() && picker == null, mouseX, mouseY);
+        var pointer = UiPointer.gated(input.pageActive(), mouseX, mouseY);
         mouseX = pointer.x();
         mouseY = pointer.y();
         int w = this.width;
@@ -264,7 +265,6 @@ public final class RuleEditorScreen extends Screen implements UiLayoutSource {
 
     private RuleSaveOverlay saveOverlay() {
         if (saveOverlay == null) {
-            shell.leaveInteractions();
             saveOverlay = new RuleSaveOverlay(font, THEME, shell.workspace());
         }
         return saveOverlay;
@@ -310,6 +310,7 @@ public final class RuleEditorScreen extends Screen implements UiLayoutSource {
     // 外部切屏或断线也会调用 removed：这条路径不走 onClose，未应用的修改必须在这里写盘。
     @Override
     public void removed() {
+        input.close();
         shell.flushDrafts();
         PreviewResources.release();
         super.removed();
@@ -321,6 +322,7 @@ public final class RuleEditorScreen extends Screen implements UiLayoutSource {
         if (shell.saving()) {
             return;
         }
+        input.close();
         PreviewResources.release();
         shell.flushDrafts();
         super.onClose();
@@ -331,6 +333,7 @@ public final class RuleEditorScreen extends Screen implements UiLayoutSource {
     public void tick() {
         shell.setScreenSize(this.width, this.height);
         shell.tick();
+        input.synchronize();
         // 外壳只登记关闭请求，真正摘屏在这里执行，避免外壳反向依赖屏幕与渲染类型
         if (shell.takeCloseRequest()) {
             onClose();

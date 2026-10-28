@@ -1,7 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiNumberPolicy;
@@ -13,15 +14,15 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderWindow;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiValueInteraction;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
+
 import java.util.Objects;
 import java.util.function.DoubleConsumer;
 import java.util.function.Function;
+
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
-import org.lwjgl.glfw.GLFW;
 
 /**
  * 数值滑杆：左侧标签，右侧当前值，中间像素轨道与滑块。
@@ -148,24 +149,10 @@ public final class UiSlider implements UiWidget, UiFocusTarget, UiInputTarget {
     }
 
     // 统一结束入口：宿主隐藏/禁用/卸载/失焦作用域切换/关闭时调用，会回退未提交的预览
-    public void endInteraction(UiInputCapture.EndReason reason) {
+    public void endInteraction(UiInteractionSession.EndReason reason) {
         this.core.endInteraction(reason);
     }
 
-    // 控件从界面卸载
-    public void unmount() {
-        this.core.unmount();
-    }
-
-    // 焦点作用域切换（模态打开、页面切换）
-    public void onFocusScopeChanged() {
-        this.core.onFocusScopeChanged();
-    }
-
-    // 宿主关闭
-    public void onHostClosed() {
-        this.core.onHostClosed();
-    }
 
     public Component formatValue() {
         return this.core.formatValue();
@@ -191,22 +178,22 @@ public final class UiSlider implements UiWidget, UiFocusTarget, UiInputTarget {
         if (!this.core.isVisible()) {
             return;
         }
-        this.core.render(graphics, renderFont, pointer(mouseX, mouseY, -1));
+        this.core.render(graphics, renderFont, UiInputContext.pointer(null, mouseX, mouseY, -1, 0));
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        return this.core.mousePressed(pointer(mouseX, mouseY, button));
+    public boolean mousePressed(UiInputContext context) {
+        return this.core.mousePressed(context);
     }
 
     @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        return this.core.mouseDragged(pointer(mouseX, mouseY, button));
+    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
+        return this.core.mouseDragged(context, dragX, dragY);
     }
 
     @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        return this.core.mouseReleased(pointer(mouseX, mouseY, button));
+    public boolean mouseReleased(UiInputContext context) {
+        return this.core.mouseReleased(context);
     }
 
     @Override
@@ -226,13 +213,18 @@ public final class UiSlider implements UiWidget, UiFocusTarget, UiInputTarget {
     }
 
     @Override
+    public UiFocusState focusState() {
+        return core.focusState();
+    }
+
+    @Override
     public boolean canFocus() {
         return this.core.canFocus();
     }
 
     @Override
-    public void setFocused(boolean next) {
-        this.core.setFocused(next);
+    public void focusChanged(boolean next) {
+        core.focusChanged(next);
     }
 
     @Override
@@ -250,20 +242,6 @@ public final class UiSlider implements UiWidget, UiFocusTarget, UiInputTarget {
         return this.core.accessibleName();
     }
 
-    // 旧签名没有修饰键参数，这里按当前键盘状态补齐 Shift/Ctrl/Alt 快照
-    private static UiInputContext pointer(double mouseX, double mouseY, int button) {
-        int modifiers = 0;
-        if (Screen.hasShiftDown()) {
-            modifiers |= GLFW.GLFW_MOD_SHIFT;
-        }
-        if (Screen.hasControlDown()) {
-            modifiers |= GLFW.GLFW_MOD_CONTROL;
-        }
-        if (Screen.hasAltDown()) {
-            modifiers |= GLFW.GLFW_MOD_ALT;
-        }
-        return UiInputContext.pointer(mouseX, mouseY, button, modifiers);
-    }
 
     // 用当前取值域与步长构造 kit 数值策略；step<=0 时键盘微调档回退为取值域百分之一（下限 1.0E-4）
     private UiNumberPolicy buildPolicy() {

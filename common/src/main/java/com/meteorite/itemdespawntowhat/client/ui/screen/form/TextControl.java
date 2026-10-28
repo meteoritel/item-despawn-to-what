@@ -1,12 +1,13 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.EditorPreset;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextArea;
@@ -14,10 +15,12 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTextValue;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
 import java.util.function.Predicate;
+
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -43,8 +46,8 @@ final class TextControl extends FormControl {
     private boolean rejectedOverflow;
 
     TextControl(UiHostTheme theme, Font font, EditorField field, Predicate<String> filter,
-            Function<String, RuleValue> parse, Function<RuleValue, String> format,
-            Runnable onChanged, String invalidKey) {
+                Function<String, RuleValue> parse, Function<RuleValue, String> format,
+                Runnable onChanged, String invalidKey) {
         super(theme, field);
         this.font = font;
         this.parse = parse;
@@ -64,7 +67,10 @@ final class TextControl extends FormControl {
         } else {
             UiTextInput single = new UiTextInput(THEME, font, hint == null ? Component.empty() : hint);
             single.setFilter(filter);
-            single.setOnCommit(text -> { markEdited(); onChanged.run(); });
+            single.setOnCommit(text -> {
+                markEdited();
+                onChanged.run();
+            });
             single.setOnValueChanged(() -> rejectedOverflow = false);
             input = single;
             widget = single;
@@ -121,56 +127,56 @@ final class TextControl extends FormControl {
     }
 
     @Override
-    boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mousePressed(UiInputContext context) {
         for (UiButton preset : presetButtons) {
-            if (preset.mouseClicked(mouseX, mouseY, button)) {
+            if (preset.mousePressed(context)) {
                 return true;
             }
         }
-        return widget.mouseClicked(mouseX, mouseY, button);
+        return widget.mousePressed(context);
     }
 
     @Override
-    boolean mouseReleased(double mouseX, double mouseY, int button) {
-        // 预设 chip 的按下由本控件代收（FormInputRouter 记录的按下归属是本控件），释放必须转发回
-        // 同一个按钮，否则 UiButton 的 activate() 永不执行，chip 点了没反应
+    public boolean mouseReleased(UiInputContext context) {
         boolean handled = false;
         for (UiButton preset : presetButtons) {
-            handled |= preset.mouseReleased(mouseX, mouseY, button);
+            handled |= preset.mouseReleased(context);
         }
-        boolean fieldHandled = widget.mouseReleased(mouseX, mouseY, button);
+        boolean fieldHandled = widget.mouseReleased(context);
         return handled | fieldHandled;
     }
 
     @Override
-    void endInteractions(UiInputCapture.EndReason reason) {
+    void endInteractions(UiInteractionSession.EndReason reason) {
         // 隐藏/禁用/卸载/关闭不会收到释放事件，chip 的按下态要在这里清掉，否则会一直停在按下外观
         cancelButtonPresses(presetButtons);
         input.endInteraction(reason);
     }
 
     @Override
-    boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        return widget.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
+        return widget.mouseDragged(context, dragX, dragY);
     }
 
     @Override
-    boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        return widget.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+    public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
+        return widget.mouseScrolled(context, scrollX, scrollY);
     }
 
     @Override
-    boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         return widget.keyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override
-    boolean charTyped(char codePoint, int modifiers) {
+    public boolean charTyped(char codePoint, int modifiers) {
         return widget.charTyped(codePoint, modifiers);
     }
 
     @Override
-    void addFocusTargets(List<UiFocusTarget> out) { out.add(input); }
+    void addFocusTargets(List<UiFocusTarget> out) {
+        out.add(input);
+    }
 
     @Override
     void setEnabled(boolean enabled) {
@@ -201,7 +207,9 @@ final class TextControl extends FormControl {
     }
 
     // 程序化写入文本（预设值与建议值）
-    private void setText(String value) { input.setValue(value); }
+    private void setText(String value) {
+        input.setValue(value);
+    }
 
     @Override
     void load(@Nullable RuleValue value) {

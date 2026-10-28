@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
@@ -7,8 +8,10 @@ import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiSegmentedControl;
+
 import java.util.ArrayList;
 import java.util.List;
+
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -50,12 +53,12 @@ final class EnumControl extends FormControl {
     }
 
     @Override
-    boolean mouseClicked(double mouseX, double mouseY, int button) {
-        return segments.mouseClicked(mouseX, mouseY, button);
+    public boolean mousePressed(UiInputContext context) {
+        return segments.mousePressed(context);
     }
 
     @Override
-    boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         return segments.keyPressed(keyCode, scanCode, modifiers);
     }
 

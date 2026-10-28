@@ -1,9 +1,12 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputTarget;
 import com.meteorite.itemdespawntowhat.client.net.RuleEditClientWorkspace;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputScope;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiProgressBar;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
@@ -13,10 +16,11 @@ import com.meteorite.itemdespawntowhat.core.service.edit.RuleSaveProgress;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
-import org.jetbrains.annotations.Nullable;
 
-/** 保存模态的宿主适配；取消只发送信号，终态回执到达前不提供关闭入口。 */
-final class RuleSaveOverlay {
+/**
+ * 保存模态的宿主适配；取消只发送信号，终态回执到达前不提供关闭入口。
+ */
+final class RuleSaveOverlay implements UiInputTarget {
     private static final String UI = TypeLabels.UI_PREFIX + "save.";
     private static final int PANEL_WIDTH = 340;
     private static final int COLLAPSED_HEIGHT = 128;
@@ -29,10 +33,10 @@ final class RuleSaveOverlay {
     private final UiHostTheme theme;
     private final RuleEditClientWorkspace workspace;
     private final UiProgressBar bar;
-    private final UiFocusManager focus = new UiFocusManager();
+    private final UiInputScope inputScope = new UiInputScope(this);
+    private final UiFocusManager focus = inputScope.focus();
     private final UiButton advancedButton;
     private final UiButton cancelButton;
-    private @Nullable UiButton pressed;
     private RuleSaveProgress.Stage lastStage;
     private boolean advanced;
 
@@ -45,9 +49,9 @@ final class RuleSaveOverlay {
                 colors.controlBevelDark(), colors.accentHover()));
         advancedButton = new UiButton(theme, font, Component.translatable(UI + "advanced.show"),
                 UiButtonVariant.SECONDARY, () -> {
-                    advanced = !advanced;
-                    advancedButtonLabel();
-                });
+            advanced = !advanced;
+            advancedButtonLabel();
+        });
         cancelButton = new UiButton(theme, font, Component.translatable(UI + "cancel"), UiButtonVariant.SECONDARY,
                 this::requestCancel);
         focus.beginUpdate();
@@ -57,7 +61,9 @@ final class RuleSaveOverlay {
     }
 
     private void requestCancel() {
-        if (workspace.cancelSave()) { cancelButton.setEnabled(false); }
+        if (workspace.cancelSave()) {
+            cancelButton.setEnabled(false);
+        }
     }
 
     private void advancedButtonLabel() {
@@ -66,7 +72,9 @@ final class RuleSaveOverlay {
 
     void render(GuiGraphics graphics, int screenWidth, int screenHeight, int mouseX, int mouseY, long milliseconds) {
         RuleSaveProgress progress = workspace.saving().progress();
-        if (progress == null) { progress = new RuleSaveProgress(RuleSaveProgress.Stage.PREPARING, 0, 0, "", false); }
+        if (progress == null) {
+            progress = new RuleSaveProgress(RuleSaveProgress.Stage.PREPARING, 0, 0, "", false);
+        }
         boolean cancelling = workspace.saving().cancelRequested() || progress.stage() == RuleSaveProgress.Stage.CANCELLING
                 || progress.stage() == RuleSaveProgress.Stage.ROLLING_BACK;
         cancelButton.setEnabled(progress.cancellable() && !cancelling);
@@ -87,7 +95,10 @@ final class RuleSaveOverlay {
                     : progress.cancellable() ? "keep_open" : "finishing")), left, y, innerWidth, false);
             y += font.lineHeight + ROW_GAP;
             double fraction = progress.total() == 0 ? 0.0 : progress.completed() / (double) progress.total();
-            if (lastStage != progress.stage()) { bar.reset(fraction, milliseconds); lastStage = progress.stage(); }
+            if (lastStage != progress.stage()) {
+                bar.reset(fraction, milliseconds);
+                lastStage = progress.stage();
+            }
             bar.render(graphics, new UiRect(left, y, innerWidth, BAR_HEIGHT), fraction, progress.total() == 0, milliseconds);
             y += BAR_HEIGHT + ROW_GAP;
             Component count = progress.total() == 0 ? Component.translatable(UI + "unknown_count")
@@ -110,7 +121,9 @@ final class RuleSaveOverlay {
             }
             cancelButton.setBounds(left, panel.bottom() - PADDING - RuleEditorPageSupport.DIALOG_BUTTON_H, innerWidth, RuleEditorPageSupport.DIALOG_BUTTON_H);
             cancelButton.render(graphics, font, mouseX, mouseY);
-        } finally { graphics.disableScissor(); }
+        } finally {
+            graphics.disableScissor();
+        }
     }
 
     private void drawLine(GuiGraphics graphics, Component text, int x, int y, int width, boolean primary) {
@@ -118,17 +131,13 @@ final class RuleSaveOverlay {
                 primary ? theme.palette().textPrimary() : theme.palette().textSecondary(), false);
     }
 
-    void mouseClicked(double x, double y, int button) {
-        pressed = null;
-        if (advancedButton.mouseClicked(x, y, button)) { pressed = advancedButton; }
-        else if (cancelButton.mouseClicked(x, y, button)) { pressed = cancelButton; }
+    UiInputScope inputScope() {
+        return inputScope;
     }
 
-    void mouseReleased(double x, double y, int button) {
-        UiButton owner = pressed;
-        pressed = null;
-        if (owner != null) { owner.mouseReleased(x, y, button); }
+    @Override
+    public boolean mousePressed(UiInputContext context) {
+        if (!advancedButton.mousePressed(context)) cancelButton.mousePressed(context);
+        return true;
     }
-
-    void keyPressed(int key, int scan, int modifiers) { focus.keyPressed(key, scan, modifiers); }
 }

@@ -20,14 +20,20 @@ import java.util.Objects;
  * <p>{@link #setBounds} 后立即重排，不需要再调用布局方法；不可见的格子不占槽位。
  * 所有格子共用统一尺寸（取可见项图标的最大宽高），因此切换字形不会让图标错位。</p>
  */
-public final class UiIconStrip implements UiInputTarget, UiFocusTarget, UiLayoutSource {
+public final class UiIconStrip implements UiInteractionSession.Target, UiFocusTarget, UiLayoutSource {
 
-    /** 排列方向：水平功能栏沿 x 排布，竖直工具列沿 y 排布。 */
-    public enum Orientation { HORIZONTAL, VERTICAL }
+    /**
+     * 排列方向：水平功能栏沿 x 排布，竖直工具列沿 y 排布。
+     */
+    public enum Orientation {HORIZONTAL, VERTICAL}
 
-    /** 单格四周留白：图标与格子边缘的最小距离。 */
+    /**
+     * 单格四周留白：图标与格子边缘的最小距离。
+     */
     private static final int CELL_PADDING = 2;
-    /** 空标签占位色：格子只有图标，标签恒为空，该颜色不参与画面。 */
+    /**
+     * 空标签占位色：格子只有图标，标签恒为空，该颜色不参与画面。
+     */
     private static final int EMPTY_LABEL_COLOR = 0xFFFFFFFF;
 
     private final Font font;
@@ -37,19 +43,24 @@ public final class UiIconStrip implements UiInputTarget, UiFocusTarget, UiLayout
     private UiRect bounds = new UiRect(0, 0, 0, 0);
     private int focusedIndex = -1;
     private int pressedIndex = -1;
-    private boolean focused;
+    private @Nullable UiInteractionSession session;
+    private final UiFocusState focusState = new UiFocusState();
 
     public UiIconStrip(Font font, Orientation orientation) {
         this.font = Objects.requireNonNull(font);
         this.orientation = Objects.requireNonNull(orientation);
     }
 
-    /** 加一格：常态与禁用共用同一字形。 */
+    /**
+     * 加一格：常态与禁用共用同一字形。
+     */
     public Item add(UiIcon icon, Component tooltip, UiAction action) {
         return add(icon, icon, tooltip, action);
     }
 
-    /** 加一格：禁用时切换到 {@code disabled} 字形。 */
+    /**
+     * 加一格：禁用时切换到 {@code disabled} 字形。
+     */
     public Item add(UiIcon normal, UiIcon disabled, Component tooltip, UiAction action) {
         Item item = new Item(this, Objects.requireNonNull(normal, "Normal icon"),
                 Objects.requireNonNull(disabled, "Disabled icon"), tooltip, action);
@@ -64,7 +75,9 @@ public final class UiIconStrip implements UiInputTarget, UiFocusTarget, UiLayout
         relayout();
     }
 
-    /** 皮肤注入：只影响格子结构色与焦点轮廓。 */
+    /**
+     * 皮肤注入：只影响格子结构色与焦点轮廓。
+     */
     public void setStyle(UiControlStyle style) {
         this.style = Objects.requireNonNull(style);
         for (Item item : cells) item.control.setStyle(style);
@@ -76,7 +89,9 @@ public final class UiIconStrip implements UiInputTarget, UiFocusTarget, UiLayout
     }
 
     @Override
-    public UiRect bounds() { return bounds; }
+    public UiRect bounds() {
+        return bounds;
+    }
 
     /**
      * 量取一组格子横向覆盖的宽度：取可见格子的最右边缘减最左边缘，零可见格子时为 0。
@@ -128,17 +143,22 @@ public final class UiIconStrip implements UiInputTarget, UiFocusTarget, UiLayout
         return nodes;
     }
 
-    /** 绘制全部可见格子；{@code mouseX/mouseY} 为宿主 GUI 逻辑坐标。 */
+    /**
+     * 绘制全部可见格子；{@code mouseX/mouseY} 为宿主 GUI 逻辑坐标。
+     */
     public void render(GuiGraphics graphics, int mouseX, int mouseY) {
         for (int i = 0; i < cells.size(); i++) {
             UiControl control = cells.get(i).control;
             if (!control.isVisible()) continue;
-            control.setFocused(focused && i == focusedIndex);
+
             control.render(graphics, font, mouseX, mouseY);
+            if (isFocusVisible() && i == focusedIndex) control.renderFocusOutline(graphics);
         }
     }
 
-    /** 命中的格子目标（含 tooltip 与动作）；供宿主显示提示或做光标反馈。 */
+    /**
+     * 命中的格子目标（含 tooltip 与动作）；供宿主显示提示或做光标反馈。
+     */
     @Nullable
     public UiTarget hit(double x, double y) {
         int index = indexAt(x, y);
@@ -147,7 +167,9 @@ public final class UiIconStrip implements UiInputTarget, UiFocusTarget, UiLayout
 
     // ---------- UiInputTarget ----------
 
-    /** 接收新的左键按压，替换同一图标条上尚未释放的旧按压。 */
+    /**
+     * 接收新的左键按压，替换同一图标条上尚未释放的旧按压。
+     */
     @Override
     public boolean mousePressed(UiInputContext context) {
         if (context.button() != 0) return false;
@@ -155,6 +177,9 @@ public final class UiIconStrip implements UiInputTarget, UiFocusTarget, UiLayout
         if (index < 0) return false;
         UiControl control = cells.get(index).control;
         if (!control.isHittable()) return false;
+        context.scope().pointerHit(this);
+        session = context.scope().interaction();
+        session.begin(this, UiInteractionSession.Source.POINTER, context.button());
         clearPress();
         control.setPressed(true);
         pressedIndex = index;
@@ -162,13 +187,17 @@ public final class UiIconStrip implements UiInputTarget, UiFocusTarget, UiLayout
         return true;
     }
 
-    /** 已按下格子只消费左键拖动，指针离开格子后仍保持归属。 */
+    /**
+     * 已按下格子只消费左键拖动，指针离开格子后仍保持归属。
+     */
     @Override
-    public boolean mouseDragged(UiInputContext context) {
+    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
         return context.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT && pressedIndex >= 0;
     }
 
-    /** 对应左键释放时结束按压，仍命中原格子才激活动作。 */
+    /**
+     * 对应左键释放时结束按压，仍命中原格子才激活动作。
+     */
     @Override
     public boolean mouseReleased(UiInputContext context) {
         if (context.button() != 0 || pressedIndex < 0) return false;
@@ -198,21 +227,41 @@ public final class UiIconStrip implements UiInputTarget, UiFocusTarget, UiLayout
     // ---------- UiFocusTarget ----------
 
     @Override
-    public boolean canFocus() { return firstFocusableIndex() >= 0; }
+    public UiFocusState focusState() {
+        return focusState;
+    }
 
-    /** 失去焦点作用域时取消尚未释放的格子按压。 */
     @Override
-    public void setFocused(boolean focused) {
-        this.focused = focused && canFocus();
-        if (this.focused && focusedIndex < 0) focusedIndex = firstFocusableIndex();
-        if (!this.focused) {
+    public boolean canFocus() {
+        return firstFocusableIndex() >= 0;
+    }
+
+    /**
+     * 失去焦点作用域时取消尚未释放的格子按压。
+     */
+    @Override
+    public void focusChanged(boolean focused) {
+        if (focused && focusedIndex < 0) focusedIndex = firstFocusableIndex();
+        if (!isFocused()) {
             clearPress();
-            for (Item item : cells) item.control.setFocused(false);
+            for (Item item : cells) item.control.focusState().clear();
         }
     }
 
     @Override
-    public boolean isFocused() { return focused; }
+    public boolean isFocused() {
+        return focusState.isFocused();
+    }
+
+    @Override
+    public void interactionEnded(UiInteractionSession.EndReason reason) {
+        clearPress();
+    }
+
+    private void cancelPress() {
+        if (session != null) session.end(this, UiInteractionSession.EndReason.CANCEL);
+        clearPress();
+    }
 
     private void clearPress() {
         if (pressedIndex < 0) return;
@@ -261,7 +310,8 @@ public final class UiIconStrip implements UiInputTarget, UiFocusTarget, UiLayout
                 ? (delta < 0 ? focusable.size() - 1 : 0)
                 : Math.floorMod(position + delta, focusable.size());
         focusedIndex = focusable.get(next);
-        focused = true;
+
+        focusState.request();
         return true;
     }
 
@@ -307,12 +357,15 @@ public final class UiIconStrip implements UiInputTarget, UiFocusTarget, UiLayout
         }
     }
 
-    /** 图标条的格子句柄：状态变化只影响该格绘制，不重建图标条。 */
+    /**
+     * 图标条的格子句柄：状态变化只影响该格绘制，不重建图标条。
+     */
     public static final class Item {
         private final UiIconStrip strip;
         private final UiControl control = new UiControl();
         private final Component tooltipOrNull;
-        @Nullable private final UiAction action;
+        @Nullable
+        private final UiAction action;
         private UiIcon normal;
         private UiIcon disabled;
         private boolean enabled = true;
@@ -327,22 +380,27 @@ public final class UiIconStrip implements UiInputTarget, UiFocusTarget, UiLayout
             this.tooltipOrNull = tooltip == null ? null : tooltip.copy();
             this.action = action;
             this.control.setStyle(strip.style);
+            this.control.setFocusable(action != null);
         }
 
-        /** 禁用当前按压格子时取消该次按压，恢复启用后等待新输入。 */
+        /**
+         * 禁用当前按压格子时取消该次按压，恢复启用后等待新输入。
+         */
         public void setEnabled(boolean value) {
             if (enabled == value) return;
             enabled = value;
-            if (!value && strip.pressedIndex >= 0 && strip.cells.get(strip.pressedIndex) == this) strip.clearPress();
+            if (!value && strip.pressedIndex >= 0 && strip.cells.get(strip.pressedIndex) == this) strip.cancelPress();
             control.setEnabled(value);
             applyIcon();
         }
 
-        /** 隐藏当前按压格子时取消该次按压，再更新占位布局。 */
+        /**
+         * 隐藏当前按压格子时取消该次按压，再更新占位布局。
+         */
         public void setVisible(boolean value) {
             if (visible == value) return;
             visible = value;
-            if (!value && strip.pressedIndex >= 0 && strip.cells.get(strip.pressedIndex) == this) strip.clearPress();
+            if (!value && strip.pressedIndex >= 0 && strip.cells.get(strip.pressedIndex) == this) strip.cancelPress();
             control.setVisible(value);
             strip.relayout();
         }
@@ -352,7 +410,9 @@ public final class UiIconStrip implements UiInputTarget, UiFocusTarget, UiLayout
             control.setSelected(value);
         }
 
-        /** 切换图标对（例如 JSON 入口在树视图与外置 JSON 视图之间切换）；尺寸变化时重排。 */
+        /**
+         * 切换图标对（例如 JSON 入口在树视图与外置 JSON 视图之间切换）；尺寸变化时重排。
+         */
         public void setIcon(UiIcon normal, UiIcon disabled) {
             this.normal = Objects.requireNonNull(normal, "Normal icon");
             this.disabled = Objects.requireNonNull(disabled, "Disabled icon");
@@ -360,13 +420,21 @@ public final class UiIconStrip implements UiInputTarget, UiFocusTarget, UiLayout
             strip.relayout();
         }
 
-        public boolean isEnabled() { return enabled; }
+        public boolean isEnabled() {
+            return enabled;
+        }
 
-        public boolean isVisible() { return visible; }
+        public boolean isVisible() {
+            return visible;
+        }
 
-        public boolean isSelected() { return selected; }
+        public boolean isSelected() {
+            return selected;
+        }
 
-        public UiRect bounds() { return control.bounds(); }
+        public UiRect bounds() {
+            return control.bounds();
+        }
 
         // 禁用时换成禁用字形；提示与动作保持不变，因此只需重配一次 UiControl。
         private void applyIcon() {

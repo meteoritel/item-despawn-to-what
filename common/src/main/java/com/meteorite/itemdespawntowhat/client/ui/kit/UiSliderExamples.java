@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.client.ui.kit;
 
 import java.util.ArrayList;
 import java.util.List;
+
 import net.minecraft.network.chat.Component;
 
 /**
@@ -10,13 +11,29 @@ import net.minecraft.network.chat.Component;
  * <p>三个示例只演示 kit 自身的装配与事件顺序，不涉及任何业务字段、不读取存档、配置或世界时间：
  * 宿主把示例里的标签换成自己的本地化 key、把回调接到自己的状态上即可。</p>
  *
- * <p><b>事件顺序</b>与 {@link UiInputRouter} 一致：顶层 modal 作用域 → 该作用域捕获目标 → 聚焦控件 → 容器导航，
- * 每个事件只消费一次（返回 {@code true} 表示已消费，宿主不再向下传递）。指针释放必须转发给捕获目标，
- * 即使指针已移出控件矩形；键盘用 {@code keyReleased} 把按住的方向键重复合并成一次提交。</p>
- *
- * <p><b>生命周期</b>：控件被隐藏/禁用/卸载、焦点范围切换、宿主窗口关闭时，必须调用统一结束入口
- * （{@code endInteraction(EndReason.HIDDEN/DISABLED)}、{@code unmount()}、{@code onFocusScopeChanged()}、
- * {@code onHostClosed()}），捕获才会释放、预览值才会按原因提交或回退。</p>
+ * <p>宿主为内容创建稳定的 {@link UiInputScope}，将实际焦点目标登记到该作用域，
+ * 再通过 {@link UiInputRouter#select(UiInputScope)} 选择活动作用域。指针事件携带同一个作用域，
+ * 拖动、释放与键盘事件全部交给路由器；路由器负责会话匹配、Tab 完成、Esc 取消和作用域切换收尾。</p>
+ * <pre>{@code
+ * UiInputScope scope = new UiInputScope(slider);
+ * scope.setFocusTargets(() -> {
+ *     scope.focus().beginUpdate();
+ *     scope.focus().add(slider);
+ *     scope.focus().endUpdate();
+ * });
+ * scope.refreshFocus();
+ * UiInputRouter input = new UiInputRouter();
+ * input.select(scope);
+ * input.mousePressed(UiInputContext.pointer(scope, x, y, 0, modifiers));
+ * input.mouseDragged(UiInputContext.pointer(scope, x, y, 0, modifiers), dx, dy);
+ * input.mouseReleased(UiInputContext.pointer(scope, x, y, 0, modifiers));
+ * input.keyPressed(GLFW.GLFW_KEY_LEFT, 0, modifiers);
+ * input.keyReleased(GLFW.GLFW_KEY_LEFT, 0, modifiers);
+ * input.close();
+ * }</pre>
+ * <p>控件隐藏、禁用由控件入口取消；内容重建时刷新焦点登记，并对卸载子树调用
+ * {@code endInteraction(EndReason.UNMOUNTED)}。关屏调用 {@link UiInputRouter#close()}，
+ * 作用域切换只调用 {@code select}，无需遍历控件模拟释放。</p>
  */
 public final class UiSliderExamples {
 
@@ -26,21 +43,14 @@ public final class UiSliderExamples {
 
     /**
      * 示例一：普通小数滑块（精确回填、Shift 细调、方向键、Esc 取消）。
-     * 宿主典型接线（modifiers 由宿主从 GLFW 位掩码或按键快照取得）：
-     * slider.mousePressed(UiInputContext.pointer(x, y, 0, modifiers));
-     * slider.mouseDragged(UiInputContext.pointer(x, y, 0, modifiers));
-     * slider.mouseReleased(UiInputContext.pointer(x, y, 0, modifiers));
-     * slider.keyPressed(GLFW.GLFW_KEY_LEFT, 0, modifiers); // Shift 按下即切细调档
-     * slider.keyReleased(GLFW.GLFW_KEY_LEFT, 0, modifiers); // 抬起合并为一次提交
-     * slider.keyPressed(GLFW.GLFW_KEY_ESCAPE, 0, 0); // 回退到本次交互前的值
      *
-     * @param label 控件标签
-     * @param bounds 控件矩形
+     * @param label    控件标签
+     * @param bounds   控件矩形
      * @param listener 交互结果回调
      * @return 装配好的滑块
      */
     public static UiScalarSlider scalarSlider(Component label, UiRect bounds,
-            UiValueInteraction.Listener listener) {
+                                              UiValueInteraction.Listener listener) {
         UiNumberPolicy policy = UiNumberPolicy.of(0.0D, 1.0D, 0.05D, 0.01D).withFineDragFactor(0.25D);
         UiScalarSlider slider = new UiScalarSlider(policy, UiSliderWindow.of(0.0D, 1.0D));
         // 无主题宿主可直接用 kit 自带的像素外观（样式与画法成对）
@@ -63,8 +73,8 @@ public final class UiSliderExamples {
      * slider.setSelectedValue(12.0D, false); // 精确编辑当前端 = 一次完整操作
      * 拖到对端会停在同值且不交换字段身份：低端仍是低端，便于宿主区分身份。
      *
-     * @param label 控件标签
-     * @param bounds 控件矩形
+     * @param label    控件标签
+     * @param bounds   控件矩形
      * @param listener 区间结果回调
      * @return 装配好的区间滑块
      */
@@ -86,15 +96,15 @@ public final class UiSliderExamples {
      * 宿主按自己的时间轴把刻度换算成 tick 后传入，kit 不读取世界时间、不假定 level；
      * from > to 表示跨周期，同刻为单点，二者都由宿主按需设置。
      *
-     * @param label 控件标签
-     * @param bounds 控件矩形
-     * @param period 周期长度
+     * @param label     控件标签
+     * @param bounds    控件矩形
+     * @param period    周期长度
      * @param hostTicks 宿主换算后的刻度值
-     * @param listener 区间结果回调
+     * @param listener  区间结果回调
      * @return 装配好的周期区间控件
      */
     public static UiCyclicRange cyclicRange(Component label, UiRect bounds, double period,
-            List<Double> hostTicks, UiCyclicRange.Listener listener) {
+                                            List<Double> hostTicks, UiCyclicRange.Listener listener) {
         UiCyclicRange range = new UiCyclicRange(period);
         range.setThumbWidth(3);
         range.setTickStep(period / 24.0D);

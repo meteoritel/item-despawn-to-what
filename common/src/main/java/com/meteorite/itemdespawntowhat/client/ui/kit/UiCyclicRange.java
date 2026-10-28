@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.client.ui.kit;
 
 import java.util.List;
 import java.util.Objects;
+
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
 import org.jetbrains.annotations.Nullable;
@@ -17,17 +18,23 @@ import org.lwjgl.glfw.GLFW;
  * 周期、刻度（吸附网格）与标记都由宿主注入：kit 不读取 {@code Level}、不假定现实世界时间，
  * 也不猜测任何一天/一月多长。</p>
  */
-public final class UiCyclicRange extends AbstractRangeCore implements UiFocusTarget, UiInputTarget, UiInputCapture.Target {
+public final class UiCyclicRange extends AbstractRangeCore implements UiFocusTarget, UiInputTarget, UiInteractionSession.Target {
 
-    /** 宿主注入的刻度；label 可为空表示只有刻度线。 */
+    /**
+     * 宿主注入的刻度；label 可为空表示只有刻度线。
+     */
     public record Tick(double tick, @Nullable Component label) {
     }
 
-    /** 宿主注入的标记；只用于展示，不参与吸附。 */
+    /**
+     * 宿主注入的标记；只用于展示，不参与吸附。
+     */
     public record Marker(double tick, int color) {
     }
 
-    /** 周期区间交互生命周期监听：一次操作内按 {@code began} → {@code previewed} → {@code committed} / {@code cancelled} 的顺序回调，用于区分预览与最终提交。 */
+    /**
+     * 周期区间交互生命周期监听：一次操作内按 {@code began} → {@code previewed} → {@code committed} / {@code cancelled} 的顺序回调，用于区分预览与最终提交。
+     */
     @SuppressWarnings("unused")
     public interface Listener {
 
@@ -48,7 +55,9 @@ public final class UiCyclicRange extends AbstractRangeCore implements UiFocusTar
         }
     }
 
-    /** 空回调。 */
+    /**
+     * 空回调。
+     */
     public static final Listener NONE = new Listener() {
     };
 
@@ -192,7 +201,9 @@ public final class UiCyclicRange extends AbstractRangeCore implements UiFocusTar
         return this.trackLeft() + (int) Math.round(this.fractionOf(tick) * this.trackWidth());
     }
 
-    /** 点选轨道按有界刻度吸附，右端停在最后一格；循环步进仍使用 {@link #snapTick(double)}。 */
+    /**
+     * 点选轨道按有界刻度吸附，右端停在最后一格；循环步进仍使用 {@link #snapTick(double)}。
+     */
     public double tickAtPointer(double pointerX) {
         double fraction = Mth.clamp((pointerX - this.trackLeft()) / (double) this.trackWidth(), 0.0D, 1.0D);
         double snapped = Math.round(fraction * this.period / this.tickStep) * this.tickStep;
@@ -201,7 +212,7 @@ public final class UiCyclicRange extends AbstractRangeCore implements UiFocusTar
 
     // 当前端是否被按下（供宿主渲染）
     public boolean isPressed() {
-        return this.dragging || this.heldKey != -1;
+        return capture != null && capture.owns(this);
     }
 
     @Override
@@ -217,7 +228,7 @@ public final class UiCyclicRange extends AbstractRangeCore implements UiFocusTar
     }
 
     @Override
-    public boolean mouseDragged(UiInputContext context) {
+    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
         if (!this.canDrag()) {
             return false;
         }
@@ -246,11 +257,11 @@ public final class UiCyclicRange extends AbstractRangeCore implements UiFocusTar
      * 精确设置当前端刻度；一次调用恰好一条操作。
      */
     public boolean setSelectedTick(double raw) {
-        if (!this.enabled || this.dragging) {
+        if (!this.enabled || isDragging()) {
             return false;
         }
         if (this.operationActive) {
-            this.endInteraction(UiInputCapture.EndReason.RELEASE);
+            this.endInteraction(UiInteractionSession.EndReason.RELEASE);
         }
         return this.oneShotSelected(raw);
     }
@@ -272,25 +283,21 @@ public final class UiCyclicRange extends AbstractRangeCore implements UiFocusTar
     }
 
     private boolean adjustByKey(int keyCode, double direction) {
-        if (this.heldKey != -1 && this.heldKey != keyCode) {
-            this.heldKey = -1;
-            this.endInteraction(UiInputCapture.EndReason.RELEASE);
-        }
+        this.capture = Objects.requireNonNull(focusState.scope(), "Focused input requires a mounted scope").interaction();
+        this.capture.begin(this, UiInteractionSession.Source.KEY, keyCode);
         if (!this.operationActive) {
             this.beginOperation();
         }
-        this.heldKey = keyCode;
-        this.capture.begin(this);
         this.previewSelected(this.selectedTick() + direction * this.tickStep);
         return true;
     }
 
     private boolean oneShotSelected(double raw) {
-        if (this.dragging) {
+        if (isDragging()) {
             return false;
         }
         if (this.operationActive) {
-            this.endInteraction(UiInputCapture.EndReason.RELEASE);
+            this.endInteraction(UiInteractionSession.EndReason.RELEASE);
         }
         double next = this.snapTick(raw);
         if (next == this.selectedTick()) {
@@ -298,7 +305,7 @@ public final class UiCyclicRange extends AbstractRangeCore implements UiFocusTar
         }
         this.beginOperation();
         this.previewSelected(next);
-        this.endInteraction(UiInputCapture.EndReason.RELEASE);
+        this.endInteraction(UiInteractionSession.EndReason.RELEASE);
         return true;
     }
 
@@ -331,21 +338,19 @@ public final class UiCyclicRange extends AbstractRangeCore implements UiFocusTar
     }
 
     @Override
-    protected void onOperationFinished(UiInputCapture.EndReason reason) {
+    protected void onOperationFinished(UiInteractionSession.EndReason reason) {
         double beganFrom = this.startFrom;
         double beganTo = this.startTo;
         double currentFrom = this.from;
         double currentTo = this.to;
         boolean changed = currentFrom != beganFrom || currentTo != beganTo;
-        if (this.listener == null) {
-            return;
-        }
         if (reason.cancels()) {
             this.from = beganFrom;
             this.to = beganTo;
-            this.listener.cancelled(beganFrom, beganTo, beganFrom, beganTo);
-        } else if (changed) {
-            this.listener.committed(beganFrom, beganTo, currentFrom, currentTo);
+        }
+        if (this.listener != null) {
+            if (reason.cancels()) this.listener.cancelled(beganFrom, beganTo, beganFrom, beganTo);
+            else if (changed) this.listener.committed(beganFrom, beganTo, currentFrom, currentTo);
         }
     }
 

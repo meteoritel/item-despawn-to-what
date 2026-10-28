@@ -8,7 +8,6 @@ import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.net.RuleEditClientState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryDispatcher;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
@@ -22,7 +21,9 @@ import com.meteorite.itemdespawntowhat.core.api.DevelopmentDiagnostics;
 import com.meteorite.itemdespawntowhat.core.service.edit.RuleIssue;
 import com.meteorite.itemdespawntowhat.core.service.edit.RuleSnapshotEntry;
 import com.meteorite.itemdespawntowhat.platform.Services;
+
 import java.util.List;
+
 import net.minecraft.Util;
 import net.minecraft.client.gui.Font;
 import net.minecraft.network.chat.Component;
@@ -40,13 +41,21 @@ final class EditorShell {
      * 底部提示的级别：只表达信息性质，形态、用色与停留由渲染层决定。
      */
     enum NoticeLevel {
-        /** 操作回执：短暂展示后自动清除 */
+        /**
+         * 操作回执：短暂展示后自动清除
+         */
         INFO,
-        /** 成功回执：与操作回执同形，语义上表示完成 */
+        /**
+         * 成功回执：与操作回执同形，语义上表示完成
+         */
         SUCCESS,
-        /** 需要玩家留意的异常：常驻，直到被替换或页面切换 */
+        /**
+         * 需要玩家留意的异常：常驻，直到被替换或页面切换
+         */
         WARNING,
-        /** 失败或危险：常驻，用危险色区分 */
+        /**
+         * 失败或危险：常驻，用危险色区分
+         */
         DANGER
     }
 
@@ -62,7 +71,6 @@ final class EditorShell {
     private final RuleEditorModel model;
     private final RuleListDisplayCache display;
     private final Font font;
-    private final UiFocusManager focus = new UiFocusManager();
     private final UiModalStack modals;
 
     private final RuleEditorListPage listPage;
@@ -86,6 +94,18 @@ final class EditorShell {
     // 草稿冲刷只做一次：关闭路径会连续经过多个入口
     private boolean released;
     private boolean closeRequested;
+    private Runnable inputChanged = () -> {
+    };
+    private Runnable closeInput = () -> {
+    };
+
+    void setInputChanged(Runnable handler) {
+        inputChanged = handler;
+    }
+
+    void setCloseInput(Runnable handler) {
+        closeInput = handler;
+    }
 
     EditorShell(UiHostTheme theme, UiHostTheme chromeTheme, RuleEditClientWorkspace workspace, RuleEditorModel model, RuleListDisplayCache display, Font font) {
         this.THEME = UiHostThemes.require(theme);
@@ -96,27 +116,37 @@ final class EditorShell {
         this.display = display;
         this.font = font;
         this.listPage = new RuleEditorListPage(this, model, display, font, modals);
-        this.editPage = new RuleEditorEditPage(this, model, workspace, font, modals, focus);
+        this.editPage = new RuleEditorEditPage(this, model, workspace, font, modals);
         this.debugPage = new RuleEditorDebugPage(this, model, font, modals);
         this.page = listPage;
         modals.setHistoryTarget(editPage::restoreHistory);
-        modals.setOnScopeChanged(() -> {
-            listPage.onScopeChanged();
-            editPage.endInteractions();
-            debugPage.onScopeChanged();
-        });
-        // 焦点变化时播报控件的可读名称（未开启朗读时 GameNarrator 内部会静默）
-        focus.setListener((previous, next) -> {
-            UiNarration.focus(next);
-            focus.setSpaceActivates((next == null || !next.acceptsTextInput())
-                    && !(next instanceof UiListEditor));
-            editPage.ensureVisible(next);
-        });
+        for (EditorPage current : List.of(listPage, editPage, debugPage)) {
+            var scope = current.inputScope();
+            scope.setHistory(editPage::restoreHistory);
+            scope.setEscape(this::escape);
+            scope.setFocusTargets(() -> {
+                UiFocusManager manager = scope.focus();
+                manager.beginUpdate();
+                current.addFocusTargets(manager);
+                manager.endUpdate();
+            });
+            UiFocusManager manager = scope.focus();
+            manager.setListener((previous, next) -> {
+                UiNarration.focus(next);
+                manager.setSpaceActivates((next == null || !next.acceptsTextInput()) && !(next instanceof UiListEditor));
+                editPage.ensureVisible(next);
+            });
+        }
         model.refresh();
     }
 
-    UiHostTheme theme() { return THEME; }
-    UiHostTheme chromeTheme() { return chromeTheme; }
+    UiHostTheme theme() {
+        return THEME;
+    }
+
+    UiHostTheme chromeTheme() {
+        return chromeTheme;
+    }
 
     // ---- 查询 ----
 
@@ -137,13 +167,17 @@ final class EditorShell {
         return editingId == null ? null : model.session(editingId);
     }
 
-    /** 当前会话的只读实时值，分区不缓存目标身份。 */
+    /**
+     * 当前会话的只读实时值，分区不缓存目标身份。
+     */
     @Nullable RuleValue editingValue() {
         EditSession session = editingSession();
         return session == null ? null : session.root();
     }
 
-    /** 当前内容是否可写：只有工作区处于 ACTIVE 时可编辑。 */
+    /**
+     * 当前内容是否可写：只有工作区处于 ACTIVE 时可编辑。
+     */
     boolean editable() {
         return workspace.session().editable();
     }
@@ -173,7 +207,7 @@ final class EditorShell {
     }
 
     UiFocusManager focus() {
-        return focus;
+        return page.inputScope().focus();
     }
 
     UiModalStack modals() {
@@ -205,7 +239,9 @@ final class EditorShell {
         return true;
     }
 
-    /** 请求屏幕关闭自己：外壳不回调屏幕类型，只留下标志。 */
+    /**
+     * 请求屏幕关闭自己：外壳不回调屏幕类型，只留下标志。
+     */
     void requestClose() {
         closeRequested = true;
     }
@@ -222,12 +258,7 @@ final class EditorShell {
     }
 
     // 保存遮罩接管输入前：结束页面交互并释放焦点
-    void leaveInteractions() {
-        listPage.onScopeChanged();
-        editPage.endInteractions();
-        debugPage.onScopeChanged();
-        focus.clearFocus();
-    }
+
 
     void openEditor(String id) {
         if (!editable()) {
@@ -301,9 +332,6 @@ final class EditorShell {
         editPage.save();
     }
 
-    boolean dispatchHistory(int keyCode, int scanCode, int modifiers, UiHistoryDispatcher.KeyHandler activeScope) {
-        return UiHistoryDispatcher.dispatch(keyCode, scanCode, modifiers, activeScope, editPage::restoreHistory);
-    }
 
     // 草稿改动清单（管理页底排与编辑页底排共用）
     void showChanges() {
@@ -335,13 +363,12 @@ final class EditorShell {
     }
 
     void rebuildFocus() {
-        focus.clear();
-        focus.beginUpdate();
-        activePage().addFocusTargets(focus);
-        focus.endUpdate();
-        if (focus.focused() == null) {
-            focus.focusFirst();
-        }
+        inputChanged.run();
+        UiFocusManager manager = focus();
+        manager.beginUpdate();
+        activePage().addFocusTargets(manager);
+        manager.endUpdate();
+        if (manager.focused() == null) manager.focusFirst();
     }
 
     // ---- 提示 ----
@@ -484,8 +511,9 @@ final class EditorShell {
         modals.push(modal);
     }
 
-    // 关闭编辑界面：先冲刷草稿再结束工作区会话——会话结束会立刻摘屏并触发 removed
+    // 关闭前先取消未完成输入，再冲刷已提交草稿；工作区结束会立刻摘屏并触发 removed
     private void closeEditor() {
+        closeInput.run();
         flushDrafts();
         workspace.close("screen_closed");
         requestClose();
@@ -522,7 +550,9 @@ final class EditorShell {
 
     // ---- 实时尺寸 ----
 
-    /** 当前窗口宽度：由屏幕在每帧与事件里刷新，页与外壳都按它排版。 */
+    /**
+     * 当前窗口宽度：由屏幕在每帧与事件里刷新，页与外壳都按它排版。
+     */
     private int screenWidth = 320;
     private int screenHeight = 240;
 

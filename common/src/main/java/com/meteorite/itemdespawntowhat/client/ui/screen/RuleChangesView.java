@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusState;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlatText;
@@ -10,12 +12,16 @@ import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiListView;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
 import com.meteorite.itemdespawntowhat.core.service.edit.RuleEdit;
+
 import java.util.function.Function;
+
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 
-/** 变更清单的只读条目快照，与管理列表共用配方行和标题布局。 */
+/**
+ * 变更清单的只读条目快照，与管理列表共用配方行和标题布局。
+ */
 final class RuleChangesView implements UiWidget, UiFocusTarget {
     private final UiHostTheme THEME;
     private static final String UI = TypeLabels.UI_PREFIX;
@@ -26,7 +32,8 @@ final class RuleChangesView implements UiWidget, UiFocusTarget {
     private final int rowHeight;
     private UiRect bounds = new UiRect(0, 0, 0, 0);
 
-    private record Change(String title, Component kind, RuleRecipeView recipe) { }
+    private record Change(String title, Component kind, RuleRecipeView recipe) {
+    }
 
     RuleChangesView(UiHostTheme theme, Font font, RuleEditorModel model, Function<String, String> labels) {
         this.THEME = UiHostThemes.require(theme);
@@ -62,19 +69,30 @@ final class RuleChangesView implements UiWidget, UiFocusTarget {
         return Math.min(maximum, font.lineHeight * 2 + NOTE_GAP + Math.max(1, list.size()) * rowHeight + 2);
     }
 
-    /** @return 弹窗内容的屏幕坐标范围 */
-    @Override public UiRect bounds() { return bounds; }
+    /**
+     * @return 弹窗内容的屏幕坐标范围
+     */
+    @Override
+    public UiRect bounds() {
+        return bounds;
+    }
 
-    /** 按提示文字的换行高度为列表保留滚动区域。 */
-    @Override public void setBounds(int x, int y, int width, int height) {
+    /**
+     * 按提示文字的换行高度为列表保留滚动区域。
+     */
+    @Override
+    public void setBounds(int x, int y, int width, int height) {
         bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
         int noteHeight = font.split(Component.translatable(UI + "changes.note"), Math.max(1, width)).size()
                 * font.lineHeight + NOTE_GAP;
         list.setBounds(x, y + noteHeight, width, Math.max(0, height - noteHeight));
     }
 
-    /** 绘制条目后展示完整配方提示，滚动条拖动时不产生悬停提示。 */
-    @Override public void render(GuiGraphics graphics, Font rowFont, int mouseX, int mouseY) {
+    /**
+     * 绘制条目后展示完整配方提示，滚动条拖动时不产生悬停提示。
+     */
+    @Override
+    public void render(GuiGraphics graphics, Font rowFont, int mouseX, int mouseY) {
         int y = bounds.y();
         for (var line : rowFont.split(Component.translatable(UI + "changes.note"), Math.max(1, bounds.width()))) {
             graphics.drawString(rowFont, line, bounds.x(), y, THEME.palette().textSecondary(), false);
@@ -89,25 +107,87 @@ final class RuleChangesView implements UiWidget, UiFocusTarget {
         UiFlatText.tooltip(graphics, rowFont, tip, Math.clamp(bounds.width(), 1, TOOLTIP_WIDTH), mouseX, mouseY);
     }
 
-    /** 将鼠标按下交给列表处理选择和滚动条。 */
-    @Override public boolean mouseClicked(double x, double y, int button) { return list.mouseClicked(x, y, button); }
-    /** 将拖动交给列表滚动条。 */
-    @Override public boolean mouseDragged(double x, double y, int button, double dx, double dy) { return list.mouseDragged(x, y, button, dx, dy); }
-    /** 结束列表滚动条拖动。 */
-    @Override public boolean mouseReleased(double x, double y, int button) { return list.mouseReleased(x, y, button); }
-    /** 将滚轮交给列表。 */
-    @Override public boolean mouseScrolled(double x, double y, double sx, double sy) { return list.mouseScrolled(x, y, sx, sy); }
-    /** 将键盘导航交给列表。 */
-    @Override public boolean keyPressed(int keyCode, int scanCode, int modifiers) { return list.keyPressed(keyCode, scanCode, modifiers); }
+    /**
+     * 将鼠标按下交给列表处理选择和滚动条。
+     */
+    @Override
+    public boolean mousePressed(UiInputContext context) {
+        return list.mousePressed(context);
+    }
 
-    /** {@inheritDoc} */
-    @Override public boolean canFocus() { return list.canFocus(); }
-    /** {@inheritDoc} */
-    @Override public void setFocused(boolean focused) { list.setFocused(focused); }
-    /** {@inheritDoc} */
-    @Override public boolean isFocused() { return list.isFocused(); }
-    /** {@inheritDoc} */
-    @Override public boolean activate() { return list.activate(); }
-    /** {@inheritDoc} */
-    @Override public Component accessibleName() { return Component.translatable(UI + "button.changes"); }
+    /**
+     * 将拖动交给列表滚动条。
+     */
+    @Override
+    public boolean mouseDragged(UiInputContext context, double dx, double dy) {
+        return list.mouseDragged(context, dx, dy);
+    }
+
+    /**
+     * 结束列表滚动条拖动。
+     */
+    @Override
+    public boolean mouseReleased(UiInputContext context) {
+        return list.mouseReleased(context);
+    }
+
+    /**
+     * 将滚轮交给列表。
+     */
+    @Override
+    public boolean mouseScrolled(UiInputContext context, double sx, double sy) {
+        return list.mouseScrolled(context, sx, sy);
+    }
+
+    /**
+     * 将键盘导航交给列表。
+     */
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        return list.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public UiFocusState focusState() {
+        return list.focusState();
+    }
+
+    @Override
+    public boolean canFocus() {
+        return list.canFocus();
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void focusChanged(boolean focused) {
+        list.focusChanged(focused);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public boolean isFocused() {
+        return list.isFocused();
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public boolean activate() {
+        return list.activate();
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public Component accessibleName() {
+        return Component.translatable(UI + "button.changes");
+    }
 }

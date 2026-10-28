@@ -1,7 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryDispatcher;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
@@ -10,18 +9,19 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRenderLayers;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.Function;
+
 import org.jetbrains.annotations.Nullable;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 
 /**
- * 模态弹窗栈。
- * <p>负责：遮罩绘制与淡入淡出、弹窗居中与逐层偏移、焦点在弹窗内部切换、
- * 以及把输入事件只投递给最上层弹窗（下层界面在栈非空时不再收到输入）。
+ * 模态弹窗栈：负责层次、遮罩、淡入淡出、排版与关闭通知。
+ * <p>每个模态拥有独立输入作用域；栈变化通知宿主重新选域，输入与焦点由 kit 路由器维护。
  * <p>调用方先渲染自己的底层界面，再调用 {@link #render}，遮罩会盖在底层之上。
  */
 public final class UiModalStack implements UiWidget, UiLayoutSource {
@@ -34,12 +34,12 @@ public final class UiModalStack implements UiWidget, UiLayoutSource {
     // 弹窗栈（末尾为最上层）
     private final List<UiModal> modals = new ArrayList<>();
     // 弹窗内部的焦点管理
-    private final UiFocusManager focusManager = new UiFocusManager();
     // 可用屏幕区域
     private UiRect bounds = new UiRect(0, 0, 0, 0);
     // 剩余淡入帧数
     private int fadeTicks;
-    private Runnable onScopeChanged = () -> { };
+    private Runnable onScopeChanged = () -> {
+    };
     private @Nullable Function<UiHistoryShortcut, Boolean> historyTarget;
 
     public void setHistoryTarget(@Nullable Function<UiHistoryShortcut, Boolean> target) {
@@ -51,8 +51,6 @@ public final class UiModalStack implements UiWidget, UiLayoutSource {
 
     public UiModalStack(UiHostTheme theme) {
         this.theme = UiHostThemes.require(theme);
-        focusManager.setEnterActivates(true);
-        focusManager.setSpaceActivates(true);
     }
 
     public UiRect bounds() {
@@ -110,16 +108,16 @@ public final class UiModalStack implements UiWidget, UiLayoutSource {
 
     // 弹窗内部焦点管理器
     public UiFocusManager focusManager() {
-        return focusManager;
+        UiModal modal = top();
+        return modal == null ? null : modal.inputScope().focus();
     }
 
     // 压入一个弹窗
     public UiModal push(UiModal modal) {
-        onScopeChanged.run();
-        UiModal previous = top();
-        if (previous != null) previous.mouseReleased(-1, -1, 0);
         modal.setCloseHandler(this::close);
         modals.add(modal);
+        modal.inputScope().setHistory(this::requestHistory);
+        onScopeChanged.run();
         fadeTicks = FADE_TICKS;
         relayout();
         refreshFocus();
@@ -135,7 +133,9 @@ public final class UiModalStack implements UiWidget, UiLayoutSource {
         if (modals.isEmpty()) {
             return false;
         }
-        modals.removeLast().closed();
+        UiModal closing = modals.removeLast();
+        onScopeChanged.run();
+        closing.closed();
         relayout();
         refreshFocus();
         return true;
@@ -143,6 +143,7 @@ public final class UiModalStack implements UiWidget, UiLayoutSource {
 
     public void close(UiModal modal) {
         if (modals.remove(modal)) {
+            onScopeChanged.run();
             modal.closed();
             relayout();
             refreshFocus();
@@ -152,8 +153,9 @@ public final class UiModalStack implements UiWidget, UiLayoutSource {
     public void clear() {
         List<UiModal> closing = List.copyOf(modals);
         modals.clear();
+        onScopeChanged.run();
         closing.reversed().forEach(UiModal::closed);
-        focusManager.clear();
+
     }
 
     // 推进淡入动画，每帧调用一次
@@ -184,12 +186,10 @@ public final class UiModalStack implements UiWidget, UiLayoutSource {
     // 焦点只保留在最上层弹窗内
     private void refreshFocus() {
         UiModal modal = top();
-        if (modal == null) {
-            focusManager.clear();
-            return;
+        if (modal != null) {
+            modal.addFocusTargets(modal.inputScope().focus());
+            if (modal.inputScope().focus().focused() == null) modal.inputScope().focus().focusFirst();
         }
-        modal.addFocusTargets(focusManager);
-        focusManager.focusFirst();
     }
 
     // ---- 渲染 ----
@@ -212,73 +212,11 @@ public final class UiModalStack implements UiWidget, UiLayoutSource {
                     () -> graphics.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), dim));
         }
         for (int i = 0; i < modals.size(); i++) {
-            boolean isTop = i == modals.size() - 1;
             UiModal modal = modals.get(i);
-            UiPointer pointer = UiPointer.gated(isTop, mouseX, mouseY);
+            UiPointer pointer = UiPointer.gated(modal.inputScope().isActive(), mouseX, mouseY);
             UiRenderLayers.draw(graphics, (i + 1) * UiRenderLayers.MODAL_STEP + 1,
                     () -> modal.render(graphics, font, pointer.x(), pointer.y()));
         }
-    }
-
-    // ---- 输入 ----
-
-    @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        UiModal modal = top();
-        if (modal == null) {
-            return false;
-        }
-        if (modal.bounds().contains(mouseX, mouseY)) {
-            modal.mouseClicked(mouseX, mouseY, button);
-        } else if (modal.closeOnBackdrop()) {
-            closeTop();
-        }
-        // 弹窗打开时吞掉全部鼠标点击，避免穿透到底层界面
-        return true;
-    }
-
-    @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        UiModal modal = top();
-        if (modal == null) {
-            return false;
-        }
-        modal.mouseReleased(mouseX, mouseY, button);
-        return true;
-    }
-
-    @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        UiModal modal = top();
-        if (modal == null) {
-            return false;
-        }
-        modal.mouseDragged(mouseX, mouseY, button, dragX, dragY);
-        return true;
-    }
-
-    @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        UiModal modal = top();
-        if (modal == null) {
-            return false;
-        }
-        modal.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
-        return true;
-    }
-
-    @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        UiModal modal = top();
-        if (modal == null) {
-            return false;
-        }
-        if (UiHistoryDispatcher.dispatch(keyCode, scanCode, modifiers, modal::keyPressed, this::requestHistory)) return true;
-        if (modal.keyPressed(keyCode, scanCode, modifiers)) {
-            return true;
-        }
-        focusManager.setSpaceActivates(focusManager.focused() instanceof UiButton);
-        return focusManager.keyPressed(keyCode, scanCode, modifiers);
     }
 
     /**
@@ -294,16 +232,4 @@ public final class UiModalStack implements UiWidget, UiLayoutSource {
         }
     }
 
-    /** 顶层模态独占按键释放，底页不接收该事件。 */
-    @Override
-    public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
-        UiModal modal = top();
-        return modal != null && modal.keyReleased(keyCode, scanCode, modifiers);
-    }
-
-    @Override
-    public boolean charTyped(char codePoint, int modifiers) {
-        UiModal modal = top();
-        return modal != null && modal.charTyped(codePoint, modifiers);
-    }
 }

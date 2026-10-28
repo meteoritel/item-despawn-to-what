@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit;
 
 import java.util.Objects;
+
 import net.minecraft.util.Mth;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
@@ -22,9 +23,11 @@ import org.lwjgl.glfw.GLFW;
  * <p>本类只关心逻辑与几何，不绘制：区间渲染（时间条与双端轨道）由宿主用 kit 的样式与
  * painter 完成。</p>
  */
-public final class UiRangeSlider extends AbstractRangeCore implements UiFocusTarget, UiInputTarget, UiInputCapture.Target {
+public final class UiRangeSlider extends AbstractRangeCore implements UiFocusTarget, UiInputTarget, UiInteractionSession.Target {
 
-    /** 区间交互生命周期监听：一次操作内按 {@code began} → {@code previewed} → {@code committed} / {@code cancelled} 的顺序回调，用于区分预览与最终提交。 */
+    /**
+     * 区间交互生命周期监听：一次操作内按 {@code began} → {@code previewed} → {@code committed} / {@code cancelled} 的顺序回调，用于区分预览与最终提交。
+     */
     @SuppressWarnings("unused")
     public interface Listener {
 
@@ -40,12 +43,20 @@ public final class UiRangeSlider extends AbstractRangeCore implements UiFocusTar
         default void committed(UiRangeValue startValue, UiRangeValue currentValue) {
         }
 
+        /**
+         * 操作已结清，无净变化时也通知绑定。
+         */
+        default void finished() {
+        }
+
         // 取消：值已回退到操作开始时的状态
         default void cancelled(UiRangeValue startValue, UiRangeValue restoredValue) {
         }
     }
 
-    /** 空回调。 */
+    /**
+     * 空回调。
+     */
     public static final Listener NONE = new Listener() {
     };
 
@@ -181,6 +192,7 @@ public final class UiRangeSlider extends AbstractRangeCore implements UiFocusTar
 
     /**
      * 判断区间是否仍在预览，供宿主延后提交关联输入。
+     *
      * @return 鼠标或键盘操作尚未结束时为 true
      */
     public boolean isInteracting() {
@@ -223,7 +235,7 @@ public final class UiRangeSlider extends AbstractRangeCore implements UiFocusTar
     }
 
     @Override
-    public boolean mouseDragged(UiInputContext context) {
+    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
         if (!this.canDrag()) {
             return false;
         }
@@ -266,11 +278,11 @@ public final class UiRangeSlider extends AbstractRangeCore implements UiFocusTar
      * @return 调用是否被接受（端点不存在或禁用时 false）
      */
     public boolean setSelectedValue(double raw, boolean fine) {
-        if (!this.enabled || !this.value.isPresent(this.selectedEnd) || this.dragging) {
+        if (!this.enabled || !this.value.isPresent(this.selectedEnd) || isDragging()) {
             return false;
         }
         if (this.operationActive) {
-            this.endInteraction(UiInputCapture.EndReason.RELEASE);
+            this.endInteraction(UiInteractionSession.EndReason.RELEASE);
         }
         double bounded = this.boundEnd(this.selectedEnd, this.policy.snap(raw, fine));
         UiRangeValue candidate = this.value.withValue(this.selectedEnd, bounded);
@@ -279,7 +291,7 @@ public final class UiRangeSlider extends AbstractRangeCore implements UiFocusTar
         }
         this.beginOperation();
         this.previewValue(candidate);
-        this.endInteraction(UiInputCapture.EndReason.RELEASE);
+        this.endInteraction(UiInteractionSession.EndReason.RELEASE);
         return true;
     }
 
@@ -287,18 +299,18 @@ public final class UiRangeSlider extends AbstractRangeCore implements UiFocusTar
      * 提交当前端的精确输入；缺失端按合法域与对端约束补齐，已有端保持当前档吸附策略。
      * <p>补端与改值都通过同一操作生命周期通知监听器，不产生额外宿主提交。
      *
-     * @param raw 输入数值，必须有限
+     * @param raw  输入数值，必须有限
      * @param fine 已有端是否使用细调档
      * @return 控件是否接受输入
      */
     public boolean setSelectedValueOrPresent(double raw, boolean fine) {
-        if (!Double.isFinite(raw) || !enabled || dragging) return false;
+        if (!Double.isFinite(raw) || !enabled || isDragging()) return false;
         if (value.isPresent(selectedEnd)) return setSelectedValue(raw, fine);
-        if (operationActive) endInteraction(UiInputCapture.EndReason.RELEASE);
+        if (operationActive) endInteraction(UiInteractionSession.EndReason.RELEASE);
         UiRangeValue candidate = value.withValue(selectedEnd, boundEnd(selectedEnd, policy.clamp(raw)));
         beginOperation();
         previewValue(candidate);
-        endInteraction(UiInputCapture.EndReason.RELEASE);
+        endInteraction(UiInteractionSession.EndReason.RELEASE);
         return true;
     }
 
@@ -343,32 +355,28 @@ public final class UiRangeSlider extends AbstractRangeCore implements UiFocusTar
         if (!this.value.isPresent(this.selectedEnd)) {
             return false;
         }
-        if (this.heldKey != -1 && this.heldKey != keyCode) {
-            this.heldKey = -1;
-            this.endInteraction(UiInputCapture.EndReason.RELEASE);
-        }
+        this.capture = Objects.requireNonNull(focusState.scope(), "Focused input requires a mounted scope").interaction();
+        this.capture.begin(this, UiInteractionSession.Source.KEY, keyCode);
         if (!this.operationActive) {
             this.beginOperation();
         }
-        this.heldKey = keyCode;
-        this.capture.begin(this);
         this.previewSelected(this.selectedValue() + direction * this.policy.step(fine), fine);
         return true;
     }
 
     private boolean oneShotSelected(double raw, boolean fine) {
-        if (!this.value.isPresent(this.selectedEnd) || this.dragging) {
+        if (!this.value.isPresent(this.selectedEnd) || isDragging()) {
             return false;
         }
         if (this.operationActive) {
-            this.endInteraction(UiInputCapture.EndReason.RELEASE);
+            this.endInteraction(UiInteractionSession.EndReason.RELEASE);
         }
         double bounded = this.boundEnd(this.selectedEnd, this.policy.snap(raw, fine));
         UiRangeValue candidate = this.value.withValue(this.selectedEnd, bounded);
         if (!candidate.equals(this.value)) {
             this.beginOperation();
             this.previewValue(candidate);
-            this.endInteraction(UiInputCapture.EndReason.RELEASE);
+            this.endInteraction(UiInteractionSession.EndReason.RELEASE);
         }
         return true;
     }
@@ -404,18 +412,15 @@ public final class UiRangeSlider extends AbstractRangeCore implements UiFocusTar
     }
 
     @Override
-    protected void onOperationFinished(UiInputCapture.EndReason reason) {
+    protected void onOperationFinished(UiInteractionSession.EndReason reason) {
         UiRangeValue start = this.operationStart;
         UiRangeValue current = this.value;
         boolean changed = !current.equals(start);
-        if (this.listener == null) {
-            return;
-        }
-        if (reason.cancels()) {
-            this.value = start;
-            this.listener.cancelled(start, start);
-        } else if (changed) {
-            this.listener.committed(start, current);
+        if (reason.cancels()) this.value = start;
+        if (this.listener != null) {
+            if (reason.cancels()) this.listener.cancelled(start, start);
+            else if (changed) this.listener.committed(start, current);
+            this.listener.finished();
         }
     }
 

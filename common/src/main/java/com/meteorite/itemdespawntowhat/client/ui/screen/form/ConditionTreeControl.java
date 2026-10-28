@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionTreeViewModel;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.edit.ConditionTreeJsonCodec;
@@ -21,9 +22,11 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiConditionTreeSummary;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Supplier;
+
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.locale.Language;
@@ -37,7 +40,9 @@ final class ConditionTreeControl extends FormControl {
 
     // 条件树包含自己的标题和工具栏，卡片内铺满宽度。
     @Override
-    boolean usesLabelColumn() { return false; }
+    boolean usesLabelColumn() {
+        return false;
+    }
 
     // 工具栏自动换行，树高度随内容增长；工具条按钮比表单区按钮矮一档
     private static final int TOOLBAR_BUTTON_H = 14;
@@ -64,9 +69,9 @@ final class ConditionTreeControl extends FormControl {
     /**
      * 创建条件树摘要控件。
      *
-     * @param font    渲染字体
-     * @param field   字段描述符
-     * @param support 共享的条件定义能力
+     * @param font           渲染字体
+     * @param field          字段描述符
+     * @param support        共享的条件定义能力
      * @param contextFactory 按当前绑定解析本字段局部编辑上下文的供应器；null 时摘要只读。
      *                       供应而非固定实例，因为嵌套表单重排后字段的绝对路径会变化
      */
@@ -95,7 +100,7 @@ final class ConditionTreeControl extends FormControl {
             ConditionEditContext context = context();
             if (context != null) context.open(path, viewModel);
         });
-        if (contextFactory != null) addButton( () -> {
+        if (contextFactory != null) addButton(() -> {
             ConditionEditContext context = context();
             if (context != null) context.open(null, viewModel);
         });
@@ -205,21 +210,21 @@ final class ConditionTreeControl extends FormControl {
     }
 
     @Override
-    boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mousePressed(UiInputContext context) {
         if (!enabled || fallbackRaw != null) {
             return false;
         }
         int heightBefore = height();
         boolean handled = false;
         for (UiButton target : toolbar) {
-            if (target.mouseClicked(mouseX, mouseY, button)) {
+            if (target.mousePressed(context)) {
                 handled = true;
                 break;
             }
         }
         if (!handled) {
             // 摘要自身处理命中：点击节点进入画布，展开标记只做折叠展示
-            handled = editor.mouseClicked(mouseX, mouseY, button);
+            handled = editor.mousePressed(context);
         }
         // 展开/折叠会改变摘要行数，进而改变本控件高度：真的变了才让行测量失效
         if (height() != heightBefore) {
@@ -229,26 +234,26 @@ final class ConditionTreeControl extends FormControl {
     }
 
     @Override
-    boolean mouseReleased(double mouseX, double mouseY, int button) {
+    public boolean mouseReleased(UiInputContext context) {
         boolean consumed = false;
         for (UiButton target : toolbar) {
-            consumed |= target.mouseReleased(mouseX, mouseY, button);
+            consumed |= target.mouseReleased(context);
         }
-        return consumed | (fallbackRaw == null && editor.mouseReleased(mouseX, mouseY, button));
+        return consumed | (fallbackRaw == null && editor.mouseReleased(context));
     }
 
     @Override
-    boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        return fallbackRaw == null && editor.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
+        return fallbackRaw == null && editor.mouseDragged(context, dragX, dragY);
     }
 
     @Override
-    boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        return fallbackRaw == null && editor.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+    public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
+        return fallbackRaw == null && editor.mouseScrolled(context, scrollX, scrollY);
     }
 
     @Override
-    boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         return fallbackRaw == null && editor.keyPressed(keyCode, scanCode, modifiers);
     }
 

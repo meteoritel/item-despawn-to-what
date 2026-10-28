@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
@@ -9,16 +10,18 @@ import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.shared.FieldCatalogTypes;
 import com.meteorite.itemdespawntowhat.client.ui.shared.RuleDisplayLabels;
 import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalogType;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -78,13 +81,21 @@ final class ItemCountsControl extends FormControl {
     private int labelTextX;
     private int labelTextWidth;
 
-    /** 物品数量控件的配对角色；配对时物品名只出现一次，其下依次是门槛与消耗两道滑条。 */
+    /**
+     * 物品数量控件的配对角色；配对时物品名只出现一次，其下依次是门槛与消耗两道滑条。
+     */
     enum PairRole {
-        /** 独立字段：每条滑条各带一次物品名。 */
+        /**
+         * 独立字段：每条滑条各带一次物品名。
+         */
         NONE,
-        /** 配对上行：物品名独占一行，其下是上行滑条与下行滑条。 */
+        /**
+         * 配对上行：物品名独占一行，其下是上行滑条与下行滑条。
+         */
         UPPER,
-        /** 配对下行：物品名、图标与第二行文案均由上行绘制，本控件只排自己的滑条。 */
+        /**
+         * 配对下行：物品名、图标与第二行文案均由上行绘制，本控件只排自己的滑条。
+         */
         LOWER
     }
 
@@ -94,15 +105,23 @@ final class ItemCountsControl extends FormControl {
         if (role != PairRole.LOWER) labelColumnOverride = 0;
     }
 
-    /** 上行设置第二条滑条的含义文案（例如「消耗数量」）。 */
+    /**
+     * 上行设置第二条滑条的含义文案（例如「消耗数量」）。
+     */
     void setSecondRowLabel(@Nullable Component label) {
         secondRowLabel = label;
     }
 
-    /** 上行控件配对时，第二条滑条起始位置相对本控件顶部的偏移量。 */
-    int pairOffset() { return HEADER_HEIGHT + HEADER_GAP + rowHeight() + PAIR_GAP; }
+    /**
+     * 上行控件配对时，第二条滑条起始位置相对本控件顶部的偏移量。
+     */
+    int pairOffset() {
+        return HEADER_HEIGHT + HEADER_GAP + rowHeight() + PAIR_GAP;
+    }
 
-    /** 配对下行沿用上行的名称列宽度：两条滑条必须从同一横坐标开始。 */
+    /**
+     * 配对下行沿用上行的名称列宽度：两条滑条必须从同一横坐标开始。
+     */
     void setLabelColumnWidth(int width) {
         labelColumnOverride = Math.max(0, width);
     }
@@ -116,7 +135,9 @@ final class ItemCountsControl extends FormControl {
         sliderColumnOffset = Math.max(0, offset);
     }
 
-    /** 实际使用的名称列宽度：注入了滑条列偏移时按偏移反推，否则按名称宽度计算。 */
+    /**
+     * 实际使用的名称列宽度：注入了滑条列偏移时按偏移反推，否则按名称宽度计算。
+     */
     int resolvedLabelColumnWidth(int width) {
         if (sliderColumnOffset > 0) {
             return Math.clamp(sliderColumnOffset - NAME_GAP, 0, Math.max(0, width - NAME_GAP));
@@ -124,7 +145,9 @@ final class ItemCountsControl extends FormControl {
         return labelColumnOverride > 0 ? Math.min(labelColumnOverride, width) : labelColumnWidth(width);
     }
 
-    /** 按可用宽度算出名称列宽度；配对下行由 {@link #setLabelColumnWidth} 直接沿用上行的结果。 */
+    /**
+     * 按可用宽度算出名称列宽度；配对下行由 {@link #setLabelColumnWidth} 直接沿用上行的结果。
+     */
     int labelColumnWidth(int width) {
         // 名称列取全场最宽名称（封顶 NAME_MAX_WIDTH），保证滑条上下对齐；
         // 配对上行还要容纳两道滑条的含义文案，避免文案被名称列宽度截断
@@ -140,9 +163,9 @@ final class ItemCountsControl extends FormControl {
         }
         return Math.clamp(ICON_COLUMN + ICON_GAP + nameWidth, 0, Math.max(0, width / NAME_COLUMN_SHARE));
     }
+
     // 最近一次布局使用的行高：命中判定与绘制共用同一份几何
     private int lastRowHeight = ROW_HEIGHT;
-    private @Nullable NumberControl pressed;
 
     ItemCountsControl(UiHostTheme theme, Font font, EditorField field, Runnable onChanged) {
         super(theme, field);
@@ -235,7 +258,9 @@ final class ItemCountsControl extends FormControl {
         return label == null ? Component.literal(reference) : label;
     }
 
-    void setDefaultCount(int count) { defaultCount = count; }
+    void setDefaultCount(int count) {
+        defaultCount = count;
+    }
 
     @Override
     void appendInputText(List<String> out) {
@@ -264,7 +289,10 @@ final class ItemCountsControl extends FormControl {
         markEdited();
     }
 
-    @Override boolean usesLabelColumn() { return false; }
+    @Override
+    public boolean usesLabelColumn() {
+        return false;
+    }
 
     @Override
     int height() {
@@ -390,57 +418,66 @@ final class ItemCountsControl extends FormControl {
     }
 
     @Override
-    boolean mouseClicked(double x, double y, int button) {
+    public boolean mousePressed(UiInputContext context) {
         for (Entry entry : entries.values()) {
-            if (entry.control.mouseClicked(x, y, button)) {
-                pressed = entry.control;
+            if (entry.control.mousePressed(context)) {
                 return true;
             }
         }
         return false;
     }
 
-    @Override
-    boolean mouseReleased(double x, double y, int button) {
-        NumberControl owner = pressed;
-        pressed = null;
-        return owner != null && owner.mouseReleased(x, y, button);
-    }
 
-    @Override boolean mouseDragged(double x, double y, int button, double dx, double dy) {
-        return pressed != null && pressed.mouseDragged(x, y, button, dx, dy);
-    }
-    @Override boolean keyPressed(int key, int scan, int modifiers) {
+    @Override
+    public boolean keyPressed(int key, int scan, int modifiers) {
         for (Entry entry : entries.values()) if (entry.control.keyPressed(key, scan, modifiers)) return true;
         return false;
     }
-    @Override boolean keyReleased(int key, int scan, int modifiers) {
+
+    @Override
+    public boolean keyReleased(int key, int scan, int modifiers) {
         for (Entry entry : entries.values()) if (entry.control.keyReleased(key, scan, modifiers)) return true;
         return false;
     }
-    @Override boolean charTyped(char point, int modifiers) {
+
+    @Override
+    public boolean charTyped(char point, int modifiers) {
         for (Entry entry : entries.values()) if (entry.control.charTyped(point, modifiers)) return true;
         return false;
     }
-    @Override void addFocusTargets(List<UiFocusTarget> out) {
+
+    @Override
+    void addFocusTargets(List<UiFocusTarget> out) {
         entries.values().forEach(entry -> entry.control.addFocusTargets(out));
     }
-    @Override void setEnabled(boolean enabled) {
+
+    @Override
+    void setEnabled(boolean enabled) {
         entries.values().forEach(entry -> entry.control.setEnabled(enabled));
     }
-    @Override boolean hasPendingInput() {
+
+    @Override
+    public boolean hasPendingInput() {
         return entries.values().stream().anyMatch(entry -> entry.control.hasPendingInput());
     }
-    @Override boolean isEditing() {
+
+    @Override
+    public boolean isEditing() {
         return entries.values().stream().anyMatch(entry -> entry.control.isEditing());
     }
-    @Override void finishInput() {
+
+    @Override
+    void finishInput() {
         entries.values().forEach(entry -> entry.control.finishInput());
     }
-    @Override void endInteractions(UiInputCapture.EndReason reason) {
+
+    @Override
+    void endInteractions(UiInteractionSession.EndReason reason) {
         entries.values().forEach(entry -> entry.control.endInteractions(reason));
     }
-    @Override @Nullable Component tooltipAt(double x, double y) {
+
+    @Override
+    @Nullable Component tooltipAt(double x, double y) {
         // 配对下行不绘制图标，提示与悬停滚动都留给上行
         if (pairRole == PairRole.LOWER) return null;
         // 提示只在图标列弹出：名称列留给悬停滚动，避免提示框盖住正在滚动的名称

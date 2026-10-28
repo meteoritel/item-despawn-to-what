@@ -1,5 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInteractionSession;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusState;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiControlRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlatText;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
@@ -7,11 +10,13 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollView;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
+
 import net.minecraft.Util;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -28,7 +33,9 @@ import org.jetbrains.annotations.Nullable;
  */
 public final class UiListView<T> implements UiWidget, UiFocusTarget {
 
-    /** 行渲染回调：背景、选中/悬停/焦点标记与命中由控件处理，行内容由调用方绘制；{@code row} 已为左侧选中标记预留空间。 */
+    /**
+     * 行渲染回调：背景、选中/悬停/焦点标记与命中由控件处理，行内容由调用方绘制；{@code row} 已为左侧选中标记预留空间。
+     */
     @FunctionalInterface
     public interface RowRenderer<T> {
         // 渲染一行；row 已为左侧选中标记预留空间
@@ -64,7 +71,7 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
     private boolean activateOnSingleClick;
     private boolean selectionMarkerVisible = true;
     private boolean chipRows;
-    private boolean focused;
+    private final UiFocusState focusState = new UiFocusState();
     private boolean visible = true;
     // 上次点击时间与下标（双击判定）
     private long lastClickTime;
@@ -74,7 +81,9 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
     // 注入的宿主主题
     private final UiHostTheme theme;
 
-    /** 使用注入主题的实例度量初始化行布局。 */
+    /**
+     * 使用注入主题的实例度量初始化行布局。
+     */
     public UiListView(UiHostTheme theme, @SuppressWarnings("unused") Font font, RowRenderer<T> rowRenderer) {
         this.theme = UiHostThemes.require(theme);
         this.rowHeight = this.theme.rowHeight();
@@ -147,7 +156,9 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
     }
 
     // 导航清单与菜单可显式使用单击激活，普通可编辑列表仍保持双击。
-    public void setActivateOnSingleClick(boolean enabled) { activateOnSingleClick = enabled; }
+    public void setActivateOnSingleClick(boolean enabled) {
+        activateOnSingleClick = enabled;
+    }
 
     /**
      * 设置是否绘制并预留左侧选中标记；隐藏时仍保留选中背景和键盘导航。
@@ -238,7 +249,9 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
         return indexAt(mouseX, mouseY);
     }
 
-    public boolean isDraggingScrollbar() { return scrollView.isDragging(); }
+    public boolean isDraggingScrollbar() {
+        return scrollView.isDragging();
+    }
 
     /**
      * 返回数据行的完整屏幕矩形，供宿主统一行内操作的绘制与命中坐标。
@@ -312,10 +325,10 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
             int markerWidth = !chipRows && selectionMarkerVisible ? theme.selectMarkerWidth() : 0;
             UiRect textRow = new UiRect(row.x() + markerWidth, row.y(),
                     Math.max(0, row.width() - markerWidth), row.height());
-            rowRenderer.renderRow(graphics, font, items.get(i), i, textRow, i == selectedIndex, i == hoveredIndex, focused);
+            rowRenderer.renderRow(graphics, font, items.get(i), i, textRow, i == selectedIndex, i == hoveredIndex, isFocused());
         }
         scrollView.pop(graphics);
-        if (focused) {
+        if (isFocusVisible()) {
             UiRect focusBounds = chipRows ? visibleRowBounds(selectedIndex) : bounds;
             if (focusBounds != null) theme.drawFocusOutline(graphics, focusBounds);
         }
@@ -325,11 +338,14 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
     // ---- 输入 ----
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mousePressed(UiInputContext context) {
+        if (canFocus() && bounds.contains(context.pointerX(), context.pointerY())) context.scope().pointerHit(this);
+        double mouseX = context.pointerX();
+        double mouseY = context.pointerY();
         if (!visible || !bounds.contains(mouseX, mouseY)) {
             return false;
         }
-        if (scrollView.mousePressed(mouseX, mouseY, button)) {
+        if (scrollView.mousePressed(context)) {
             return true;
         }
         int index = indexAt(mouseX, mouseY);
@@ -348,7 +364,8 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
     }
 
     @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
+        double mouseY = context.pointerY();
         if (scrollView.isDragging()) {
             scrollView.mouseDragged(mouseY);
             return true;
@@ -357,13 +374,15 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
     }
 
     @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        scrollView.mouseReleased();
+    public boolean mouseReleased(UiInputContext context) {
+        scrollView.endInteraction(UiInteractionSession.EndReason.CANCEL);
         return false;
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+    public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
+        double mouseX = context.pointerX();
+        double mouseY = context.pointerY();
         if (!visible || !bounds.contains(mouseX, mouseY) || scrollY == 0.0D) {
             return false;
         }
@@ -413,15 +432,9 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
 
     // ---- 焦点 ----
 
-    /**
-     * 判断指针能否赋予列表焦点；气泡样式仅接受条目点击，空白不夺取焦点。
-     *
-     * @param mouseX 鼠标屏幕 X 坐标
-     * @param mouseY 鼠标屏幕 Y 坐标
-     * @return 是否命中可聚焦的列表内容
-     */
-    public boolean acceptsFocusAt(double mouseX, double mouseY) {
-        return visible && bounds.contains(mouseX, mouseY) && (!chipRows || itemIndexAt(mouseX, mouseY) >= 0);
+    @Override
+    public UiFocusState focusState() {
+        return focusState;
     }
 
     @Override
@@ -430,11 +443,7 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
     }
 
     @Override
-    public void setFocused(boolean focused) {
-        if (this.focused == focused) {
-            return;
-        }
-        this.focused = focused;
+    public void focusChanged(boolean focused) {
         if (onFocusChanged != null) {
             onFocusChanged.accept(focused);
         }
@@ -442,7 +451,7 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
 
     @Override
     public boolean isFocused() {
-        return focused;
+        return focusState.isFocused();
     }
 
     @Override

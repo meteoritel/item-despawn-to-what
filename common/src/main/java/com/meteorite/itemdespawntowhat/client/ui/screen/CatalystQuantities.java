@@ -5,8 +5,10 @@ import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.model.CatalystCost;
+
 import java.util.ArrayList;
 import java.util.List;
+
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -47,6 +49,7 @@ final class CatalystQuantities {
         references.forEach(reference -> values.put(reference, RuleValue.integer(fallback)));
         return values.build();
     }
+
     static void retargetCatalystItems(RuleDraft draft) {
         RuleValue cost = draft.valueAt(RuleFields.CATALYST_COST);
         if (cost == null) cost = RuleValue.mapping().build();
@@ -83,6 +86,7 @@ final class CatalystQuantities {
         }
         return RuleValue.mapping(owner).put(field, next.build()).build();
     }
+
     static List<EditorField> relabelCatalystThreshold(List<EditorField> fields) {
         List<EditorField> relabeled = new ArrayList<>();
         for (EditorField field : fields) {

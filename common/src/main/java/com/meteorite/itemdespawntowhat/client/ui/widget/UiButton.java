@@ -1,5 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInteractionSession;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusState;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiAction;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiControl;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
@@ -10,9 +13,11 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.locale.Language;
@@ -24,10 +29,33 @@ import org.jetbrains.annotations.Nullable;
  * <p>委托 kit 的 {@link UiControl} 处理状态与焦点，按需绘制主题的像素立体边或胶囊底图，
  * 因此同时兼容键盘（Tab / Enter）与鼠标（按下、拖出取消）操作。
  */
-public final class UiButton implements UiWidget, UiFocusTarget, UiLayoutSource {
+public final class UiButton implements UiWidget, UiFocusTarget, UiLayoutSource, UiInteractionSession.Target {
 
     // 被委托的 kit 控件
     private final UiControl control = new UiControl();
+    private UiInteractionSession session;
+
+    /**
+     * 焦点能力与激活动作独立声明。
+     */
+    public UiButton setFocusable(boolean value) {
+        control.setFocusable(value);
+        return this;
+    }
+
+    /**
+     * 取消尚未激活的按压。
+     */
+    public void cancelPress() {
+        if (session != null) session.end(this, UiInteractionSession.EndReason.CANCEL);
+        control.setPressed(false);
+    }
+
+    @Override
+    public void interactionEnded(UiInteractionSession.EndReason reason) {
+        control.setPressed(false);
+    }
+
     // 变体
     private final UiButtonVariant variant;
     // 字体（重新配置文本时需要）
@@ -54,6 +82,7 @@ public final class UiButton implements UiWidget, UiFocusTarget, UiLayoutSource {
 
     public UiButton(UiHostTheme theme, Font font, Component label, UiButtonVariant variant, UiAction action) {
         this.theme = UiHostThemes.require(theme);
+        control.setFocusable(true);
         this.font = font;
         this.label = label;
         this.variant = variant;
@@ -153,6 +182,7 @@ public final class UiButton implements UiWidget, UiFocusTarget, UiLayoutSource {
         if (this.enabled == enabled) {
             return this;
         }
+        if (!enabled) cancelPress();
         this.enabled = enabled;
         applyState();
         return this;
@@ -163,6 +193,7 @@ public final class UiButton implements UiWidget, UiFocusTarget, UiLayoutSource {
         if (this.visible == visible) {
             return this;
         }
+        if (!visible) cancelPress();
         this.visible = visible;
         applyState();
         return this;
@@ -258,23 +289,32 @@ public final class UiButton implements UiWidget, UiFocusTarget, UiLayoutSource {
         } finally {
             graphics.disableScissor();
         }
-        if (control.isFocused()) theme.drawFocusOutline(graphics, rect);
+        if (control.isFocusVisible()) theme.drawFocusOutline(graphics, rect);
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mousePressed(UiInputContext context) {
+        double mouseX = context.pointerX();
+        double mouseY = context.pointerY();
+        int button = context.button();
         if (!visible || button != 0 || !control.isHittable()) {
             return false;
         }
         if (!control.bounds().contains(mouseX, mouseY)) {
             return false;
         }
+        context.scope().pointerHit(this);
+        session = context.scope().interaction();
+        session.begin(this, UiInteractionSession.Source.POINTER, button);
         control.setPressed(true);
         return true;
     }
 
     @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+    public boolean mouseReleased(UiInputContext context) {
+        double mouseX = context.pointerX();
+        double mouseY = context.pointerY();
+        int button = context.button();
         if (button != 0 || !control.isPressed()) {
             return false;
         }
@@ -287,13 +327,18 @@ public final class UiButton implements UiWidget, UiFocusTarget, UiLayoutSource {
     }
 
     @Override
+    public UiFocusState focusState() {
+        return control.focusState();
+    }
+
+    @Override
     public boolean canFocus() {
         return visible && control.canFocus();
     }
 
     @Override
-    public void setFocused(boolean focused) {
-        control.setFocused(focused);
+    public void focusChanged(boolean focused) {
+        control.focusChanged(focused);
     }
 
     @Override

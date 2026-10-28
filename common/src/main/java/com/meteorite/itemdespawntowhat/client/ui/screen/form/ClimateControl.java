@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
@@ -8,7 +9,7 @@ import com.meteorite.itemdespawntowhat.client.edit.NumericDomain;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiNumberPolicy;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiNumbers;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeEnd;
@@ -17,9 +18,11 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiValueTextBinding;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCheckBox;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiRangeBar;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -72,47 +75,53 @@ final class ClimateControl extends FormControl {
                         Component.translatable(CLIMATE_UI + MAX_FIELD),
                         Component.translatable(TypeLabels.UI_PREFIX + "range.absent"),
                         Component.translatable(TypeLabels.UI_PREFIX + "range.precise")), new UiRangeBar.Listener() {
-                    @Override
-                    public void onBegan(UiRangeValue value) {
-                        binding.beginValueChange();
-                    }
+            @Override
+            public void onBegan(UiRangeValue value) {
+                binding.beginValueChange();
+            }
 
-                    @Override
-                    public void onPreviewed(UiRangeValue value) {
-                        binding.previewValue();
-                    }
+            @Override
+            public void onPreviewed(UiRangeValue value) {
+                binding.previewValue();
+            }
 
-                    @Override
-                    public void onCommitted(UiRangeValue value) {
-                        binding.commitValue();
-                    }
+            @Override
+            public void onCommitted(UiRangeValue value) {
+                binding.commitValue();
+            }
 
-                    @Override
-                    public void onCancelled(UiRangeValue value) {
-                        binding.cancelValue();
-                    }
-                });
+            @Override
+            public void onFinished() {
+                binding.finishValueChange();
+            }
+
+            @Override
+            public void onCancelled(UiRangeValue value) {
+                binding.cancelValue();
+            }
+        });
         binding = new UiValueTextBinding<>(range.core()::value, range.core()::setValue,
                 () -> List.of(minInput.value(), maxInput.value()), texts -> {
-                    minInput.setValue(texts.getFirst());
-                    maxInput.setValue(texts.get(1));
-                }, this::parseRangeText,
+            minInput.setValue(texts.getFirst());
+            maxInput.setValue(texts.get(1));
+        }, this::parseRangeText,
                 value -> List.of(value.lowPresent() ? trimDouble(value.low()) : "",
                         value.highPresent() ? trimDouble(value.high()) : ""), () -> {
-                    markEdited();
-                    onChanged.run();
-                });
+            markEdited();
+            onChanged.run();
+        });
         range.setPreciseEditor(end -> {
-            range.setFocused(false);
-            minInput.setFocused(end == UiRangeEnd.LOW);
-            maxInput.setFocused(end == UiRangeEnd.HIGH);
+            range.focusState().clear();
+            (end == UiRangeEnd.LOW ? minInput : maxInput).focusState().request();
         });
         minInput.setOnValueChanged(this::syncRange);
         maxInput.setOnValueChanged(this::syncRange);
+        minInput.setOnInteractionEnd(this::finishText);
+        maxInput.setOnInteractionEnd(this::finishText);
         matching.setOnChanged(checked -> {
-            range.endInteraction(UiInputCapture.EndReason.CANCEL);
-            minInput.setFocused(false);
-            maxInput.setFocused(false);
+            range.endInteraction(UiInteractionSession.EndReason.CANCEL);
+            minInput.focusState().clear();
+            maxInput.focusState().clear();
             // 首次启用给出完整区间；再次启用保留原来的端点与单端留空状态。
             if (checked && minInput.value().isBlank() && maxInput.value().isBlank()) {
                 range.core().setValue(fullRange());
@@ -155,31 +164,31 @@ final class ClimateControl extends FormControl {
     }
 
     @Override
-    boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mousePressed(UiInputContext context) {
         if (!enabled) return false;
-        if (matching.mouseClicked(mouseX, mouseY, button)) return true;
-        return matching.isChecked() && (range.mouseClicked(mouseX, mouseY, button)
-                || minInput.mouseClicked(mouseX, mouseY, button) || maxInput.mouseClicked(mouseX, mouseY, button));
+        if (matching.mousePressed(context)) return true;
+        return matching.isChecked() && (range.mousePressed(context)
+                || minInput.mousePressed(context) || maxInput.mousePressed(context));
     }
 
     @Override
-    boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        return minInput.mouseDragged(mouseX, mouseY, button, dragX, dragY)
-                || maxInput.mouseDragged(mouseX, mouseY, button, dragX, dragY)
-                || range.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
+        return minInput.mouseDragged(context, dragX, dragY)
+                || maxInput.mouseDragged(context, dragX, dragY)
+                || range.mouseDragged(context, dragX, dragY);
     }
 
     @Override
-    boolean mouseReleased(double mouseX, double mouseY, int button) {
-        boolean handled = range.mouseReleased(mouseX, mouseY, button)
-                || minInput.mouseReleased(mouseX, mouseY, button) || maxInput.mouseReleased(mouseX, mouseY, button);
+    public boolean mouseReleased(UiInputContext context) {
+        boolean handled = range.mouseReleased(context)
+                || minInput.mouseReleased(context) || maxInput.mouseReleased(context);
         // 没有净变化的操作不回调提交，仍需结束预览并恢复文本的缺席端。
         if (handled) binding.finishValueChange();
         return handled;
     }
 
     @Override
-    boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         if (matching.isFocused()) return matching.keyPressed(keyCode, scanCode, modifiers);
         if (range.isFocused()) {
             boolean handled = range.keyPressed(keyCode, scanCode, modifiers);
@@ -190,14 +199,14 @@ final class ClimateControl extends FormControl {
     }
 
     @Override
-    boolean keyReleased(int keyCode, int scanCode, int modifiers) {
+    public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
         boolean handled = range.keyReleased(keyCode, scanCode, modifiers);
         if (handled) binding.finishValueChange();
         return handled;
     }
 
     @Override
-    void endInteractions(UiInputCapture.EndReason reason) {
+    void endInteractions(UiInteractionSession.EndReason reason) {
         range.endInteraction(reason);
         binding.finishValueChange();
         minInput.endInteraction(reason);
@@ -205,7 +214,7 @@ final class ClimateControl extends FormControl {
     }
 
     @Override
-    boolean charTyped(char codePoint, int modifiers) {
+    public boolean charTyped(char codePoint, int modifiers) {
         return minInput.charTyped(codePoint, modifiers) || maxInput.charTyped(codePoint, modifiers);
     }
 
@@ -309,11 +318,22 @@ final class ClimateControl extends FormControl {
         markEdited();
     }
 
-    private double lower() { return Objects.requireNonNull(numbers.backendMin()); }
+    private double lower() {
+        return Objects.requireNonNull(numbers.backendMin());
+    }
 
-    private double upper() { return Objects.requireNonNull(numbers.backendMax()); }
+    private double upper() {
+        return Objects.requireNonNull(numbers.backendMax());
+    }
 
-    private UiRangeValue fullRange() { return UiRangeValue.of(lower(), upper()); }
+    private UiRangeValue fullRange() {
+        return UiRangeValue.of(lower(), upper());
+    }
+
+    private void finishText(UiInteractionSession.EndReason reason) {
+        if (reason.cancels()) binding.cancelText();
+        else binding.finishText();
+    }
 
     private void syncRange() {
         binding.previewText();
@@ -328,7 +348,7 @@ final class ClimateControl extends FormControl {
         if ((min == null && !lowText.isBlank()) || (max == null && !highText.isBlank())) return null;
         double low = min == null ? lower() : min;
         double high = max == null ? upper() : max;
-        return low >= lower() && high <= upper() && low <= high ? UiRangeValue.of(low, high) : null;
+        return low >= lower() && high <= upper() && low <= high ? new UiRangeValue(min == null ? Double.NaN : low, max == null ? Double.NaN : high, min != null, max != null) : null;
     }
 
     @Override

@@ -1,5 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInteractionSession;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusState;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.ConditionTreeNodes;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreePath;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeProjection;
@@ -16,6 +19,7 @@ import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.ConditionNode;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -24,6 +28,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
+
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.locale.Language;
@@ -99,7 +104,7 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
     private @Nullable Function<ConditionNode.Leaf, Component> leafDetail;
     // 参数为节点的树路径
     private @Nullable Consumer<String> onOpenCanvas;
-    private boolean focused;
+    private final UiFocusState focusState = new UiFocusState();
     private boolean visible = true;
     // 禁用时拒绝导航与进入画布
     private boolean enabled = true;
@@ -236,7 +241,8 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
     public void setEnabled(boolean next) {
         enabled = next;
         if (!next) {
-            focused = false;
+
+            focusState.clear();
         }
     }
 
@@ -262,8 +268,14 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         return view.selected() == null ? null : ConditionTreeNodes.jsonPath(expression.root(), view.selected(), ConditionTreeContract.ROOT_PATH);
     }
 
-    /** 注入字段级展示协调器；摘要和画布各自拥有选择折叠，复用结构诊断。 */
-    public void setViewModel(ConditionTreeViewModel model) { viewModel = model; projection = null; rebuild(); }
+    /**
+     * 注入字段级展示协调器；摘要和画布各自拥有选择折叠，复用结构诊断。
+     */
+    public void setViewModel(ConditionTreeViewModel model) {
+        viewModel = model;
+        projection = null;
+        rebuild();
+    }
 
     /**
      * 选中的节点。
@@ -293,14 +305,19 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
      */
     @Override
     public void selectPath(@Nullable String path) {
-        if (path == null) { view = view.select(null); return; }
+        if (path == null) {
+            view = view.select(null);
+            return;
+        }
         var address = ConditionTreeNodes.address(path, ConditionTreeContract.ROOT_PATH);
         if (address == null) return;
         UiTreePath chosen = address.path();
-        while (chosen != null && (projection == null || projection.structure().entry(chosen) == null)) chosen = chosen.indices().isEmpty() ? null : chosen.parent();
+        while (chosen != null && (projection == null || projection.structure().entry(chosen) == null))
+            chosen = chosen.indices().isEmpty() ? null : chosen.parent();
         if (chosen == null) return;
         for (UiTreePath ancestor = chosen.indices().isEmpty() ? null : chosen.parent(); ancestor != null;
-                ancestor = ancestor.indices().isEmpty() ? null : ancestor.parent()) view = view.fold(ancestor, false);
+             ancestor = ancestor.indices().isEmpty() ? null : ancestor.parent())
+            view = view.fold(ancestor, false);
         view = view.select(chosen);
         rebuild();
         ensureVisible(indexOfPath(selectedPath()));
@@ -472,7 +489,7 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
             }
             scrollView.pop(graphics);
         }
-        if (focused) {
+        if (isFocusVisible()) {
             theme.drawFocusOutline(graphics, bounds);
         }
         scrollView.renderScrollbar(graphics, theme.controlStyle(UiControlRole.SECONDARY));
@@ -618,11 +635,14 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mousePressed(UiInputContext context) {
+        if (canFocus() && bounds.contains(context.pointerX(), context.pointerY())) context.scope().pointerHit(this);
+        double mouseX = context.pointerX();
+        double mouseY = context.pointerY();
         if (!visible || !enabled || !bounds.contains(mouseX, mouseY)) {
             return false;
         }
-        if (scrollView.mousePressed(mouseX, mouseY, button)) {
+        if (scrollView.mousePressed(context)) {
             return true;
         }
         int index = indexAt(mouseX, mouseY);
@@ -648,7 +668,8 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
     }
 
     @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double deltaX, double deltaY) {
+    public boolean mouseDragged(UiInputContext context, double deltaX, double deltaY) {
+        double mouseY = context.pointerY();
         if (scrollView.isDragging()) {
             scrollView.mouseDragged(mouseY);
             return true;
@@ -657,16 +678,20 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
     }
 
     @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+    public boolean mouseReleased(UiInputContext context) {
+        double mouseX = context.pointerX();
+        double mouseY = context.pointerY();
         if (!visible) {
             return false;
         }
-        scrollView.mouseReleased();
+        scrollView.endInteraction(UiInteractionSession.EndReason.CANCEL);
         return bounds.contains(mouseX, mouseY);
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+    public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
+        double mouseX = context.pointerX();
+        double mouseY = context.pointerY();
         if (!visible || !bounds.contains(mouseX, mouseY) || scrollY == 0.0D) {
             return false;
         }
@@ -687,18 +712,19 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
     }
 
     @Override
+    public UiFocusState focusState() {
+        return focusState;
+    }
+
+    @Override
     public boolean canFocus() {
         return visible && enabled;
     }
 
-    @Override
-    public void setFocused(boolean newFocused) {
-        this.focused = newFocused;
-    }
 
     @Override
     public boolean isFocused() {
-        return focused;
+        return focusState.isFocused();
     }
 
     @Override

@@ -5,6 +5,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
+
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -38,13 +39,13 @@ public final class UiValueTextBinding<V, T> {
     /**
      * 注入控件读写和文本转换；构造时只读取初始快照，不写控件或发出事件。
      *
-     * @param readValue 读取当前数值
+     * @param readValue  读取当前数值
      * @param writeValue 精确回填数值，返回是否接受
-     * @param readText 读取当前文本快照
-     * @param writeText 回填文本，不应产生文本编辑历史
-     * @param parse 解析文本，非法或未完成输入返回 null
-     * @param format 把数值转换为显示文本
-     * @param committed 一次用户提交的宿主通知
+     * @param readText   读取当前文本快照
+     * @param writeText  回填文本，不应产生文本编辑历史
+     * @param parse      解析文本，非法或未完成输入返回 null
+     * @param format     把数值转换为显示文本
+     * @param committed  一次用户提交的宿主通知
      */
     public UiValueTextBinding(Supplier<V> readValue, Predicate<V> writeValue,
                               Supplier<T> readText, Consumer<T> writeText,
@@ -79,7 +80,9 @@ public final class UiValueTextBinding<V, T> {
         }
     }
 
-    /** 接受当前缓冲为新的回退基线；装载或宿主接受输入后调用，不发出提交事件。 */
+    /**
+     * 接受当前缓冲为新的回退基线；装载或宿主接受输入后调用，不发出提交事件。
+     */
     public void acceptText() {
         textPreviewing = false;
         valueChanging = false;
@@ -120,7 +123,29 @@ public final class UiValueTextBinding<V, T> {
         return true;
     }
 
-    /** 取消文本预览并恢复编辑前的数值与原始文本；没有预览时显示当前数值。 */
+    /**
+     * 完成文本编辑；非法缓冲保留原文并回退本次数值预览。
+     */
+    public boolean finishText() {
+        if (!textPreviewing) return true;
+        if (commitText(readText.get())) return true;
+        rollbackTextPreview();
+        return false;
+    }
+
+    /**
+     * 保留输入原文，仅撤销尚未提交的数值预览。
+     */
+    public void rollbackTextPreview() {
+        if (!textPreviewing) return;
+        V restored = textStartValue;
+        acceptText();
+        writeValue.test(restored);
+    }
+
+    /**
+     * 取消文本预览并恢复编辑前的数值与原始文本；没有预览时显示当前数值。
+     */
     public void cancelText() {
         if (textPreviewing) {
             V restoredValue = textStartValue;
@@ -133,26 +158,34 @@ public final class UiValueTextBinding<V, T> {
         }
     }
 
-    /** 滑条开始操作时保存原始文本，结束先前的文本预览。 */
+    /**
+     * 滑条开始操作时保存原始文本，结束先前的文本预览。
+     */
     public void beginValueChange() {
         acceptText();
         valueStartText = readText.get();
         valueChanging = true;
     }
 
-    /** 滑条预览只同步显示，不通知宿主提交。 */
+    /**
+     * 滑条预览只同步显示，不通知宿主提交。
+     */
     public void previewValue() {
         setText(format.apply(readValue.get()));
     }
 
-    /** 滑条提交时同步显示并通知宿主一次。 */
+    /**
+     * 滑条提交时同步显示并通知宿主一次。
+     */
     public void commitValue() {
         acceptText();
         previewValue();
         committed.run();
     }
 
-    /** 滑条已恢复数值后调用，恢复操作前的原始文本，不产生提交。 */
+    /**
+     * 滑条已恢复数值后调用，恢复操作前的原始文本，不产生提交。
+     */
     public void cancelValue() {
         if (!valueChanging) return;
         T restoredText = valueStartText;
@@ -160,7 +193,9 @@ public final class UiValueTextBinding<V, T> {
         setText(restoredText);
     }
 
-    /** 滑条操作结束而无净变化时恢复原始文本；已提交或取消时为空操作。 */
+    /**
+     * 滑条操作结束而无净变化时恢复原始文本；已提交或取消时为空操作。
+     */
     public void finishValueChange() {
         cancelValue();
     }

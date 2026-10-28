@@ -41,12 +41,14 @@ import com.meteorite.itemdespawntowhat.core.model.ConditionLimits;
 import com.meteorite.itemdespawntowhat.core.model.OutcomeCandidate;
 import com.meteorite.itemdespawntowhat.core.api.param.ParamTier;
 import com.meteorite.itemdespawntowhat.core.type.effect.PlaceBlockEffect;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.locale.Language;
@@ -107,7 +109,8 @@ final class RuleEditorResultsSection {
     private int combinationOptionWidth;
 
     // 一条效果行的绘制数据：文本已裁剪，图标与文本内缩一并缓存
-    private record EffectRowText(String text, @Nullable UiIcon icon, int inset) {}
+    private record EffectRowText(String text, @Nullable UiIcon icon, int inset) {
+    }
 
     // 主题：与容器共用宿主默认主题
     private final UiHostTheme THEME;
@@ -127,6 +130,7 @@ final class RuleEditorResultsSection {
     private static final int DETAIL_ICON_SIZE = 18;
     private static final int DETAIL_PADDING = 8;
     private static final int EMPTY_MESSAGE_GAP = 8;
+
     RuleEditorResultsSection(EditorShell shell, Font font, EditorFormFactory forms, EditorSectionActions actions, UiScrollView scroll) {
         this.THEME = shell.theme();
         this.shell = shell;
@@ -138,10 +142,10 @@ final class RuleEditorResultsSection {
 
         typePicker = new UiTypePicker(shell.chromeTheme(), font,
                 Component.translatable(RuleEditorPageSupport.UI + "pick.type_title"), type -> {
-                    addEffectOfType(type);
-                    commands.flushRebuild();
-                });
-        }
+            addEffectOfType(type);
+            commands.flushRebuild();
+        });
+    }
 
     final UiTypePicker typePicker;
 
@@ -275,7 +279,7 @@ final class RuleEditorResultsSection {
         }
         if (candidates > 1) {
             combinationButton = new UiButton(THEME, font, combinationLabel(rule), UiButtonVariant.SECONDARY,
-                    this::cycleCombination).setChipStyle(true);
+                    this::cycleCombination).setChipStyle(true).setFocusable(false);
             content.widgets.add(combinationButton);
             content.buttons.add(combinationButton);
         }
@@ -326,7 +330,7 @@ final class RuleEditorResultsSection {
                         && element != null && element.isMapping()) {
                     descriptor = BuiltinEditorDescriptors.entityDescriptor(productStop.variant());
                     productButton = new UiButton(THEME, font, productLabel(productStop), UiButtonVariant.SECONDARY,
-                            () -> cycleProduct(actionPath)).setChipStyle(true);
+                            () -> cycleProduct(actionPath)).setChipStyle(true).setFocusable(false);
                     productButton.setTooltip(Component.translatable(RuleEditorPageSupport.UI + "results.product_switch"));
                     productButton.setAccessibleName(Component.translatable(RuleEditorPageSupport.UI + "results.product_switch"));
                     content.widgets.add(productButton);
@@ -356,12 +360,15 @@ final class RuleEditorResultsSection {
                 if (!advanced.isEmpty()) {
                     advancedEffectForm = forms.create(session, actionPath, new TypeEditorDescriptor(descriptor.id(), descriptor.label(), advanced, false));
                     advancedEffectForm.setLabelWidth(DETAIL_LABEL_WIDTH);
-                    content.forms.add(advancedEffectForm); content.widgets.add(advancedEffectForm);
+                    content.forms.add(advancedEffectForm);
+                    content.widgets.add(advancedEffectForm);
                     advancedButton = new UiButton(THEME, font, advancedLabel(), UiButtonVariant.SECONDARY, () -> {
                         commands.finishEditing();
-                        showAdvancedEffects = !showAdvancedEffects; commands.requestRebuild();
+                        showAdvancedEffects = !showAdvancedEffects;
+                        commands.requestRebuild();
                     }).setChipStyle(true);
-                    content.widgets.add(advancedButton); content.buttons.add(advancedButton);
+                    content.widgets.add(advancedButton);
+                    content.buttons.add(advancedButton);
                 }
             }
         }
@@ -440,7 +447,7 @@ final class RuleEditorResultsSection {
      * 构造 place_block 的 radius→limit 联动：驱动值是草稿里的 radius，跟随值是草稿里的 limit，
      * 目标值是 radius 方框内的位置总数；radius 缺失或越界时不联动。
      *
-     * @param session 当前编辑会话
+     * @param session    当前编辑会话
      * @param actionPath 动作在草稿中的路径
      * @return 联动绑定（带回上次记录的手动状态）
      */
@@ -469,7 +476,7 @@ final class RuleEditorResultsSection {
     /**
      * 草稿里 place_block 的 radius：缺失或越界时按默认半径。
      *
-     * @param session 当前编辑会话
+     * @param session    当前编辑会话
      * @param actionPath 动作在草稿中的路径
      * @return 有效半径
      */
@@ -487,8 +494,8 @@ final class RuleEditorResultsSection {
      * 按草稿当前 radius 设置 limit 行的滑条窗口上限（方框内位置总数）；radius 缺失或非法时按默认半径计算。
      * 窗口只影响滑块手感，草稿里已有的 limit 值不随之夹取。
      *
-     * @param form place_block 参数表单
-     * @param session 当前编辑会话
+     * @param form       place_block 参数表单
+     * @param session    当前编辑会话
      * @param actionPath 动作在草稿中的路径
      */
     private void updatePlaceBlockWindows(FormView form, EditSession session, String actionPath) {
@@ -538,7 +545,7 @@ final class RuleEditorResultsSection {
 
     // 提示只表达级别：色值由屏幕层按级别取（编辑页宿主桥接层仍以颜色传递）
     private void notice(EditorShell.NoticeLevel level, Component message) {
-        shell.setNotice(message,level);
+        shell.setNotice(message, level);
     }
 
     void setCandidateStrategy(String field, boolean value) {
@@ -710,14 +717,14 @@ final class RuleEditorResultsSection {
         // 服务端上限低于默认半径时，新建动作的半径与上限一并收进上限，避免一出生就非法
         int placeRadius = Math.min(PlaceBlockEffect.DEFAULT_RADIUS, serverMaxPlaceBlockRadius());
         if (!commands.applyStructure(EditSession.OP_ADD_EFFECT, edits -> {
-                    String effectPath = DraftPaths.indexPath(listPath, edits.effectCountAt(listPath));
-                    edits.setAt(effectPath, body);
-                    if (PlaceBlockEffect.ID.equals(type) && placeRadius < PlaceBlockEffect.DEFAULT_RADIUS) {
-                        edits.setAt(DraftPaths.child(effectPath, PlaceBlockEffect.RADIUS_FIELD), RuleValue.integer(placeRadius));
-                        edits.setAt(DraftPaths.child(effectPath, PlaceBlockEffect.LIMIT_FIELD),
-                                RuleValue.integer(PlaceBlockEffect.limitUpperBound(placeRadius)));
-                    }
-                })) {
+            String effectPath = DraftPaths.indexPath(listPath, edits.effectCountAt(listPath));
+            edits.setAt(effectPath, body);
+            if (PlaceBlockEffect.ID.equals(type) && placeRadius < PlaceBlockEffect.DEFAULT_RADIUS) {
+                edits.setAt(DraftPaths.child(effectPath, PlaceBlockEffect.RADIUS_FIELD), RuleValue.integer(placeRadius));
+                edits.setAt(DraftPaths.child(effectPath, PlaceBlockEffect.LIMIT_FIELD),
+                        RuleValue.integer(PlaceBlockEffect.limitUpperBound(placeRadius)));
+            }
+        })) {
             return;
         }
         effectIndex = Math.max(0, draft.listSizeAt(listPath) - 1);
@@ -1097,9 +1104,9 @@ final class RuleEditorResultsSection {
         headerLanguage = language;
         EditorSectionContent.CardHeader next = empty
                 ? new EditorSectionContent.CardHeader(
-                        Component.translatable(RuleEditorPageSupport.UI + "card.action_detail"), null)
+                Component.translatable(RuleEditorPageSupport.UI + "card.action_detail"), null)
                 : new EditorSectionContent.CardHeader(RuleNaming.effectTitle(selectedAction, nameSource),
-                        selectedAction == null ? null : RulePreviewIcons.action(selectedAction));
+                selectedAction == null ? null : RulePreviewIcons.action(selectedAction));
         headerValue = next;
         return next;
     }
@@ -1218,7 +1225,9 @@ final class RuleEditorResultsSection {
         return readonlyNoteValue;
     }
 
-    /** 方案翻页组：只让左右按钮接收输入，页码与两箭头保持同一行。 */
+    /**
+     * 方案翻页组：只让左右按钮接收输入，页码与两箭头保持同一行。
+     */
     private final class PlanPager implements UiWidget {
         private final Component label;
         private final UiButton previous;
@@ -1249,22 +1258,31 @@ final class RuleEditorResultsSection {
             return TOOLBAR_HEIGHT * 2 + font.width(label) + RuleEditorPageSupport.BUTTON_GAP * 2;
         }
 
-        /** @return 整组的屏幕矩形 */
-        @Override public UiRect bounds() { return bounds; }
+        /**
+         * @return 整组的屏幕矩形
+         */
+        @Override
+        public UiRect bounds() {
+            return bounds;
+        }
 
-        /** @return 指针是否落在只读页码上：翻页箭头有图标说明方向，提示只讲当前方案。 */
+        /**
+         * @return 指针是否落在只读页码上：翻页箭头有图标说明方向，提示只讲当前方案。
+         */
         private boolean isLabelHovered(double mouseX, double mouseY) {
             return labelRect.contains(mouseX, mouseY);
         }
 
         /**
          * 分配左右按钮与中间页码的同排几何。
-         * @param x 左缘
-         * @param y 顶缘
-         * @param width 可用宽度
+         *
+         * @param x      左缘
+         * @param y      顶缘
+         * @param width  可用宽度
          * @param height 行高
          */
-        @Override public void setBounds(int x, int y, int width, int height) {
+        @Override
+        public void setBounds(int x, int y, int width, int height) {
             bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
             int buttonWidth = Math.min(TOOLBAR_HEIGHT, bounds.width() / 2);
             previous.setBounds(x, y, buttonWidth, bounds.height());
@@ -1274,12 +1292,14 @@ final class RuleEditorResultsSection {
 
         /**
          * 居中绘制只读页码；按钮由页面统一绘制。
+         *
          * @param graphics 绘制上下文
-         * @param font 绘制字体
-         * @param mouseX 鼠标屏幕 X 坐标
-         * @param mouseY 鼠标屏幕 Y 坐标
+         * @param font     绘制字体
+         * @param mouseX   鼠标屏幕 X 坐标
+         * @param mouseY   鼠标屏幕 Y 坐标
          */
-        @Override public void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        @Override
+        public void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
             String text = TextScroll.trimToWidth(font, label.getString(), labelRect.width());
             graphics.drawString(font, text, labelRect.x() + (labelRect.width() - font.width(text)) / 2,
                     labelRect.y() + (labelRect.height() - font.lineHeight) / 2, THEME.palette().textPrimary(), false);

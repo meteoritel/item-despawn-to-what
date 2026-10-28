@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.client.ui.kit;
 
 import java.util.Objects;
 import java.util.function.Function;
+
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
@@ -15,15 +16,17 @@ import org.lwjgl.glfw.GLFW;
  *
  * <p>子类只提供五个钩子：{@link #hitEnd(double)} 与 {@link #cycleSelectedEnd()} 决定当前端，
  * {@link #canStartPress()} 决定能否开始一次指针交互，
- * {@link #onOperationBegan()} 与 {@link #onOperationFinished(UiInputCapture.EndReason)}
+ * {@link #onOperationBegan()} 与 {@link #onOperationFinished(UiInteractionSession.EndReason)}
  * 负责各自数值模型的起点快照与提交/回退。</p>
  */
-abstract class AbstractRangeCore implements UiInputCapture.Target {
+abstract class AbstractRangeCore implements UiInteractionSession.Target, UiFocusTarget {
 
-    /** 两端在屏幕上重叠的像素容差；小于等于它视为重叠，按下时切换当前端。 */
+    /**
+     * 两端在屏幕上重叠的像素容差；小于等于它视为重叠，按下时切换当前端。
+     */
     protected static final int OVERLAP_TOLERANCE_PX = 4;
 
-    protected final UiInputCapture capture = new UiInputCapture();
+    protected UiInteractionSession capture;
     protected UiRangeEnd selectedEnd = UiRangeEnd.LOW;
     protected @Nullable Function<Double, Component> formatter;
     protected @Nullable Component label;
@@ -32,14 +35,12 @@ abstract class AbstractRangeCore implements UiInputCapture.Target {
     protected UiRect bounds = new UiRect(0, 0, 0, 0);
     protected boolean enabled = true;
     protected boolean visible = true;
-    protected boolean focused;
-    protected boolean dragging;
+    protected final UiFocusState focusState = new UiFocusState();
     protected double dragAnchorPointer;
     protected double dragAnchorValue;
     // 一次操作的起点
     protected boolean operationActive;
     // 合并 key-up 的行为：当前按住的键码
-    protected int heldKey = -1;
 
     public UiRect bounds() {
         return this.bounds;
@@ -75,7 +76,7 @@ abstract class AbstractRangeCore implements UiInputCapture.Target {
     }
 
     public boolean isDragging() {
-        return this.dragging;
+        return capture != null && capture.owns(this) && capture.matches(UiInteractionSession.Source.POINTER, 0);
     }
 
     public UiRangeEnd selectedEnd() {
@@ -97,7 +98,7 @@ abstract class AbstractRangeCore implements UiInputCapture.Target {
     // 转为禁用时结束未完成的交互（回退）
     public void setEnabled(boolean enabled) {
         if (this.enabled && !enabled) {
-            this.endInteraction(UiInputCapture.EndReason.DISABLED);
+            this.endInteraction(UiInteractionSession.EndReason.DISABLED);
         }
         this.enabled = enabled;
     }
@@ -109,21 +110,23 @@ abstract class AbstractRangeCore implements UiInputCapture.Target {
     // 转为隐藏时结束未完成的交互（回退）
     public void setVisible(boolean visible) {
         if (this.visible && !visible) {
-            this.endInteraction(UiInputCapture.EndReason.HIDDEN);
+            this.endInteraction(UiInteractionSession.EndReason.HIDDEN);
         }
         this.visible = visible;
     }
 
+    public UiFocusState focusState() {
+        return focusState;
+    }
+
+    @Override
     public boolean canFocus() {
         return this.visible && this.enabled;
     }
 
-    public void setFocused(boolean focused) {
-        this.focused = focused;
-    }
 
     public boolean isFocused() {
-        return this.focused;
+        return focusState.isFocused();
     }
 
     public boolean activate() {
@@ -157,13 +160,15 @@ abstract class AbstractRangeCore implements UiInputCapture.Target {
         if (!this.canStartPress()) {
             return false;
         }
-        if (this.dragging) {
-            this.endInteraction(UiInputCapture.EndReason.RELEASE);
+        if (isDragging()) {
+            this.endInteraction(UiInteractionSession.EndReason.RELEASE);
         }
         UiRangeEnd target = this.hitEnd(context.pointerX());
         this.selectedEnd = target != null ? target : this.cycleSelectedEnd();
-        this.capture.begin(this);
-        this.dragging = true;
+        context.scope().pointerHit(this);
+        this.capture = context.scope().interaction();
+        this.capture.begin(this, UiInteractionSession.Source.POINTER, context.button());
+
         this.beginOperation();
         this.dragAnchorPointer = context.pointerX();
         return true;
@@ -171,61 +176,44 @@ abstract class AbstractRangeCore implements UiInputCapture.Target {
 
     // 拖动是否仍由本控件接管：拖动中且捕获属于自己
     protected final boolean canDrag() {
-        return this.dragging && this.capture.isCapturedBy(this);
+        return isDragging();
     }
 
     // 隐藏或禁用时不消费键盘事件
     protected final boolean acceptsKey() {
-        return this.visible && this.enabled;
+        return this.visible && this.enabled && isFocused();
     }
 
     public boolean mouseReleased(UiInputContext context) {
-        if (!this.dragging) {
+        if (!isDragging()) {
             return false;
         }
-        this.capture.release();
+        capture.end(this, UiInteractionSession.EndReason.RELEASE);
         return true;
     }
 
     public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
-        if (this.heldKey == -1 || keyCode != this.heldKey) {
+        if (capture == null || !capture.owns(this) || !capture.matches(UiInteractionSession.Source.KEY, keyCode))
             return false;
-        }
-        this.heldKey = -1;
-        // 方向键重复只在 key-up 合并为一次提交
-        this.endInteraction(UiInputCapture.EndReason.RELEASE);
+        endInteraction(UiInteractionSession.EndReason.RELEASE);
         return true;
     }
 
     // 统一结束入口：宿主隐藏/禁用/卸载/失焦范围切换/关闭以及释放都走这里
-    public void endInteraction(UiInputCapture.EndReason reason) {
+    public void endInteraction(UiInteractionSession.EndReason reason) {
         Objects.requireNonNull(reason, "reason");
-        this.dragging = false;
-        this.heldKey = -1;
-        if (this.capture.isCapturedBy(this)) {
-            this.capture.end(reason);
+
+
+        if ((capture != null && capture.owns(this))) {
+            capture.end(this, reason);
             return;
         }
         this.finishOperation(reason);
     }
 
-    // 控件从界面卸载
-    public void unmount() {
-        this.endInteraction(UiInputCapture.EndReason.UNMOUNTED);
-    }
-
-    // 焦点作用域切换（模态打开、页面切换）
-    public void onFocusScopeChanged() {
-        this.endInteraction(UiInputCapture.EndReason.FOCUS_SCOPE_CHANGED);
-    }
-
-    // 宿主关闭
-    public void onHostClosed() {
-        this.endInteraction(UiInputCapture.EndReason.HOST_CLOSED);
-    }
 
     @Override
-    public void captureEnded(UiInputCapture.EndReason reason) {
+    public void interactionEnded(UiInteractionSession.EndReason reason) {
         this.finishOperation(reason);
     }
 
@@ -233,10 +221,10 @@ abstract class AbstractRangeCore implements UiInputCapture.Target {
      * 取消当前操作；没有进行中的操作或捕获时返回 false，表示调用方不消费该键。
      */
     protected final boolean cancelInteraction() {
-        if (!this.operationActive && !this.capture.isCapturedBy(this)) {
+        if (!this.operationActive && !(capture != null && capture.owns(this))) {
             return false;
         }
-        this.endInteraction(UiInputCapture.EndReason.CANCEL);
+        this.endInteraction(UiInteractionSession.EndReason.CANCEL);
         return true;
     }
 
@@ -249,9 +237,9 @@ abstract class AbstractRangeCore implements UiInputCapture.Target {
         this.onOperationBegan();
     }
 
-    protected final void finishOperation(UiInputCapture.EndReason reason) {
-        this.dragging = false;
-        this.heldKey = -1;
+    protected final void finishOperation(UiInteractionSession.EndReason reason) {
+
+
         if (!this.operationActive) {
             return;
         }
@@ -259,18 +247,28 @@ abstract class AbstractRangeCore implements UiInputCapture.Target {
         this.onOperationFinished(reason);
     }
 
-    /** 操作开始时快照起点并通知监听器。 */
+    /**
+     * 操作开始时快照起点并通知监听器。
+     */
     protected abstract void onOperationBegan();
 
-    /** 操作结束时按 {@code reason} 决定提交还是回退到起点。 */
-    protected abstract void onOperationFinished(UiInputCapture.EndReason reason);
+    /**
+     * 操作结束时按 {@code reason} 决定提交还是回退到起点。
+     */
+    protected abstract void onOperationFinished(UiInteractionSession.EndReason reason);
 
-    /** 当前端命中的端点；无法区分（两端重叠或端点不构成区间）时返回 null，表示切换到另一端。 */
+    /**
+     * 当前端命中的端点；无法区分（两端重叠或端点不构成区间）时返回 null，表示切换到另一端。
+     */
     protected abstract @Nullable UiRangeEnd hitEnd(double pointerX);
 
-    /** 在可用端之间切换当前端。 */
+    /**
+     * 在可用端之间切换当前端。
+     */
     protected abstract UiRangeEnd cycleSelectedEnd();
 
-    /** 当前数值模型是否具备开始指针交互的前提（如两端都不存在时不能开始）。 */
+    /**
+     * 当前数值模型是否具备开始指针交互的前提（如两端都不存在时不能开始）。
+     */
     protected abstract boolean canStartPress();
 }

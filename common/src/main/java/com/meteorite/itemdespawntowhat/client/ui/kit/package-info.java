@@ -1,7 +1,7 @@
 /**
  * UI kit：Java 声明式客户端 UI 组件集（当前公开边界，尚未拆包发布）。
  *
- * <p><b>公开入口</b>（第三方宿主可直接依赖，签名变更按兼容策略走变更记录）：</p>
+ * <p><b>公开入口</b>（宿主直接依赖，当前在本项目内开发与测试）：</p>
  * <ul>
  *   <li>内容排版：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiDocument}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiNode}、
@@ -34,12 +34,12 @@
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeViewState}（各视图独立的选择与折叠）、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeNavigation}（可见行导航）、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeRowMarker}（缩进、命中与展开标记）</li>
- *   <li>输入与捕获：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext}、
+ *   <li>输入作用域：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiInputTarget}、
- *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiInputRouter}（路由顺序：顶层 modal 作用域 →
- *       捕获目标 → 聚焦控件 → 容器导航，事件只消费一次）、
- *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture}（捕获与统一结束原因）、
- *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiValueInteraction}（begin / preview / commit / cancel）</li>
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiInputScope}（内容、唯一焦点与持续交互）、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiInputRouter}（宿主选域、统一派发及切换收尾）、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiInteractionSession}（来源匹配与完成、取消通知）、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiValueInteraction}（值快照与预览、提交、取消）</li>
  *   <li>数值策略：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiNumberPolicy}（合法数值域、粗细档与吸附）、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderWindow}（轨道显示窗口，可与数值域不同）、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiNumbers}（数值文本互转：整数直出与定点小数、有限值解析）</li>
@@ -59,10 +59,10 @@
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollbarGeometry} 共用</li>
  *   <li>文本局部历史：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTextHistory}（文本、光标与选择快照）、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTextSelection}（鼠标选择：固定锚点、Shift 扩选与矩形外拖动）、
- *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut}（事件修饰键识别撤销与重做）、
- *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryDispatcher}（当前作用域优先与宿主历史派发）</li>
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut}（事件修饰键识别撤销与重做）</li>
  *   <li>焦点：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget}、
- *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager}</li>
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager}（唯一焦点持有者）、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusState}（控件焦点视图与请求）</li>
  *   <li>导航：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiNavigationHistory}（泛型快照、有界历史与有效性过滤）</li>
  *   <li>灯箱：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiLightbox}（含 Content / Gallery / Labels）、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiImageView}、
@@ -121,15 +121,16 @@
  *   <li>{@code UiFlowLayout}: host</li>
  *   <li>{@code UiFocusManager}: host</li>
  *   <li>{@code UiFocusTarget}: host</li>
- *   <li>{@code UiHistoryDispatcher}: host</li>
+ *   <li>{@code UiFocusState}: host</li>
  *   <li>{@code UiHistoryShortcut}: host</li>
  *   <li>{@code UiIcon}: host</li>
  *   <li>{@code UiIconSheet}: host</li>
  *   <li>{@code UiIconStrip}: host</li>
  *   <li>{@code UiImageView}: library</li>
- *   <li>{@code UiInputCapture}: host</li>
+ *   <li>{@code UiInteractionSession}: host</li>
  *   <li>{@code UiInputContext}: host</li>
- *   <li>{@code UiInputRouter}: library</li>
+ *   <li>{@code UiInputRouter}: host</li>
+ *   <li>{@code UiInputScope}: host</li>
  *   <li>{@code UiInputTarget}: host</li>
  *   <li>{@code UiJsonText}: host</li>
  *   <li>{@code UiLayoutNode}: host</li>
@@ -203,7 +204,7 @@
  * 同一脚本还核对本文件的登记清单：kit 顶层 {@code public} 类型缺少唯一的 host/library/example 角色登记即失败。</p>
  *
  * <p><b>宿主适配层</b>：{@code client/ui/theme/}（把主题色映射成 {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderStyle} 等 kit 样式后注入）、
- * {@code client/ui/widget/}（把既有控件委托给 kit 核心并保持公开 API 兼容）属于宿主层，
+ * {@code client/ui/widget/}（组合 kit 核心与项目文案、目录及业务协议）属于宿主层，
  * 允许依赖项目常量与平台服务；它们依赖 kit，而不是反过来。kit 自身不 import {@code theme} 或 {@code widget}。</p>
  *
  * <p><b>公开行为约定</b>：几何入口对负尺寸一律**钳制**而不是抛异常——{@code UiControl.setBounds} 与

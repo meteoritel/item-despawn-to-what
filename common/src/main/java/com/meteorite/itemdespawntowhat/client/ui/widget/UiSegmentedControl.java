@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusState;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
@@ -7,10 +9,12 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
+
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -35,7 +39,9 @@ public final class UiSegmentedControl implements UiWidget, UiFocusTarget, UiLayo
     // 键盘焦点指示点距段左边界的像素
     private static final int FOCUS_DOT_INSET = 4;
 
-    /** 单个分段选项：{@code value} 为回传宿主的选择值且必填，{@code label} 为段内文案，为空时用 {@code value} 兜底。 */
+    /**
+     * 单个分段选项：{@code value} 为回传宿主的选择值且必填，{@code label} 为段内文案，为空时用 {@code value} 兜底。
+     */
     public record Option(String value, Component label) {
         public Option {
             Objects.requireNonNull(value, "value");
@@ -47,15 +53,17 @@ public final class UiSegmentedControl implements UiWidget, UiFocusTarget, UiLayo
 
     private final Font font;
     private List<Option> options = List.of();
+    private int navigationIndex = -1;
     private String selected = "";
     private UiRect bounds = new UiRect(0, 0, 0, 0);
     private boolean enabled = true;
     private boolean visible = true;
-    private boolean focused;
+    private final UiFocusState focusState = new UiFocusState();
     private @Nullable Consumer<String> onChanged;
 
     // 注入的宿主主题
     private final UiHostTheme theme;
+
     public UiSegmentedControl(UiHostTheme theme, Font font, List<Option> options) {
         this.theme = UiHostThemes.require(theme);
         this.font = Objects.requireNonNull(font, "font");
@@ -227,8 +235,8 @@ public final class UiSegmentedControl implements UiWidget, UiFocusTarget, UiLayo
             graphics.drawString(renderFont, label, segment.x() + Math.max(0, (segment.width() - renderFont.width(label)) / 2),
                     segment.y() + Math.max(0, (segment.height() - renderFont.lineHeight) / 2), color, false);
         }
-        if (focused) {
-            int index = Math.max(0, chosen);
+        if (isFocusVisible()) {
+            int index = Math.clamp(navigationIndex, 0, options.size() - 1);
             UiRect segment = segmentRect(index);
             // 焦点指示用深色点：选中段是浅蓝底，白色点在浅蓝底上不可辨
             int dotY = segment.y() + Math.max(0, (segment.height() - FOCUS_DOT_SIZE) / 2);
@@ -255,37 +263,40 @@ public final class UiSegmentedControl implements UiWidget, UiFocusTarget, UiLayo
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mousePressed(UiInputContext context) {
+        double mouseX = context.pointerX();
+        double mouseY = context.pointerY();
+        int button = context.button();
         if (!visible || !enabled || button != 0) {
             return false;
         }
         int index = indexAt(mouseX, mouseY);
-        return index >= 0 && select(index);
+        if (index < 0) return false;
+        navigationIndex = index;
+        context.scope().pointerHit(this);
+        return select(index);
     }
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (!visible || !enabled || options.isEmpty()) {
-            return false;
-        }
-        int current = Math.max(0, selectedIndex());
+        if (!canFocus() || !isFocused()) return false;
+        int current = Math.clamp(navigationIndex < 0 ? selectedIndex() : navigationIndex, 0, options.size() - 1);
         switch (keyCode) {
-            case GLFW.GLFW_KEY_LEFT, GLFW.GLFW_KEY_UP -> {
-                return select(Math.floorMod(current - 1, options.size()));
-            }
-            case GLFW.GLFW_KEY_RIGHT, GLFW.GLFW_KEY_DOWN -> {
-                return select((current + 1) % options.size());
-            }
-            case GLFW.GLFW_KEY_HOME -> {
-                return select(0);
-            }
-            case GLFW.GLFW_KEY_END -> {
-                return select(options.size() - 1);
-            }
+            case GLFW.GLFW_KEY_LEFT, GLFW.GLFW_KEY_UP -> navigationIndex = Math.floorMod(current - 1, options.size());
+            case GLFW.GLFW_KEY_RIGHT, GLFW.GLFW_KEY_DOWN -> navigationIndex = (current + 1) % options.size();
+            case GLFW.GLFW_KEY_HOME -> navigationIndex = 0;
+            case GLFW.GLFW_KEY_END -> navigationIndex = options.size() - 1;
             default -> {
                 return false;
             }
         }
+        UiNarration.focus(this);
+        return true;
+    }
+
+    @Override
+    public UiFocusState focusState() {
+        return focusState;
     }
 
     @Override
@@ -294,28 +305,29 @@ public final class UiSegmentedControl implements UiWidget, UiFocusTarget, UiLayo
     }
 
     @Override
-    public void setFocused(boolean next) {
-        this.focused = next;
+    public void focusChanged(boolean next) {
+        if (next && (navigationIndex < 0 || navigationIndex >= options.size()))
+            navigationIndex = Math.max(0, selectedIndex());
     }
 
     @Override
     public boolean isFocused() {
-        return focused;
+        return focusState.isFocused();
     }
 
-    // Enter 激活：循环切到下一项
+    // 激活当前导航项，导航本身不改变业务选中。
     @Override
     public boolean activate() {
         if (!visible || !enabled || options.isEmpty()) {
             return false;
         }
         int current = Math.max(0, selectedIndex());
-        return select((current + 1) % options.size());
+        return select(Math.clamp(navigationIndex < 0 ? current : navigationIndex, 0, options.size() - 1));
     }
 
     @Override
     public @Nullable Component accessibleName() {
-        int index = selectedIndex();
+        int index = isFocused() && navigationIndex >= 0 ? navigationIndex : selectedIndex();
         if (index < 0) {
             return Component.empty();
         }

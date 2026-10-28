@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
@@ -8,8 +9,10 @@ import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
+
 import java.util.ArrayList;
 import java.util.List;
+
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -35,12 +38,12 @@ final class SublistControl extends FormControl {
         this.subFields = field.subFields();
         this.addButton = new UiButton(THEME, font, Component.translatable(TypeLabels.UI_PREFIX + "list.add"),
                 UiButtonVariant.SECONDARY, () -> {
-                    owner.changeChildStructure(field.name(), () -> {
-                        markEdited();
-                        appendChild(null);
-                    }, this::store);
-                    onChanged.run();
-                }).setChipStyle(true);
+            owner.changeChildStructure(field.name(), () -> {
+                markEdited();
+                appendChild(null);
+            }, this::store);
+            onChanged.run();
+        }).setChipStyle(true);
     }
 
     // 追加一个子表单
@@ -60,21 +63,21 @@ final class SublistControl extends FormControl {
     private UiButton createRemoveButton(FormView child) {
         return new UiButton(THEME, font, Component.translatable(TypeLabels.UI_PREFIX + "list.remove"),
                 UiButtonVariant.DANGER, () -> {
-                    int index = children.indexOf(child);
-                    if (index >= 0) {
-                        owner.changeChildStructure(field.name(), () -> {
-                            markEdited();
-                            children.get(index).retainPendingInputs();
-                            owner.clearChildInputs(childPath(index));
-                            children.remove(index);
-                            removeButtons.remove(index);
-                            for (int next = index; next < children.size(); next++) {
-                                children.get(next).rebase(owner.childPath(childPath(next)));
-                            }
-                        }, this::store);
-                        owner.notifyChanged();
+            int index = children.indexOf(child);
+            if (index >= 0) {
+                owner.changeChildStructure(field.name(), () -> {
+                    markEdited();
+                    children.get(index).retainPendingInputs();
+                    owner.clearChildInputs(childPath(index));
+                    children.remove(index);
+                    removeButtons.remove(index);
+                    for (int next = index; next < children.size(); next++) {
+                        children.get(next).rebase(owner.childPath(childPath(next)));
                     }
-                }).setChipStyle(true);
+                }, this::store);
+                owner.notifyChanged();
+            }
+        }).setChipStyle(true);
     }
 
     // 子项相对路径：字段名[下标]
@@ -123,15 +126,15 @@ final class SublistControl extends FormControl {
     }
 
     @Override
-    boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (addButton.mouseClicked(mouseX, mouseY, button)) {
+    public boolean mousePressed(UiInputContext context) {
+        if (addButton.mousePressed(context)) {
             return true;
         }
         for (int i = 0; i < children.size(); i++) {
-            if (removeButtons.get(i).mouseClicked(mouseX, mouseY, button)) {
+            if (removeButtons.get(i).mousePressed(context)) {
                 return true;
             }
-            if (children.get(i).mouseClicked(mouseX, mouseY, button)) {
+            if (children.get(i).mousePressed(context)) {
                 return true;
             }
         }
@@ -139,35 +142,35 @@ final class SublistControl extends FormControl {
     }
 
     @Override
-    boolean mouseReleased(double mouseX, double mouseY, int button) {
-        boolean consumed = addButton.mouseReleased(mouseX, mouseY, button);
+    public boolean mouseReleased(UiInputContext context) {
+        boolean consumed = addButton.mouseReleased(context);
         for (int i = 0; i < children.size(); i++) {
-            consumed |= removeButtons.get(i).mouseReleased(mouseX, mouseY, button);
-            consumed |= children.get(i).mouseReleased(mouseX, mouseY, button);
+            consumed |= removeButtons.get(i).mouseReleased(context);
+            consumed |= children.get(i).mouseReleased(context);
         }
         return consumed;
     }
 
     @Override
-    boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
         boolean consumed = false;
         for (FormView child : children) {
-            consumed |= child.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+            consumed |= child.mouseDragged(context, dragX, dragY);
         }
         return consumed;
     }
 
     @Override
-    boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+    public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
         boolean consumed = false;
         for (FormView child : children) {
-            consumed |= child.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+            consumed |= child.mouseScrolled(context, scrollX, scrollY);
         }
         return consumed;
     }
 
     @Override
-    boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         boolean consumed = false;
         for (FormView child : children) {
             consumed |= child.keyPressed(keyCode, scanCode, modifiers);
@@ -176,7 +179,7 @@ final class SublistControl extends FormControl {
     }
 
     @Override
-    boolean charTyped(char codePoint, int modifiers) {
+    public boolean charTyped(char codePoint, int modifiers) {
         boolean consumed = false;
         for (FormView child : children) {
             consumed |= child.charTyped(codePoint, modifiers);
@@ -205,7 +208,8 @@ final class SublistControl extends FormControl {
 
     // 子表单把输入保留在自己的 FormView 里，本控件不再贡献文本
     @Override
-    void appendInputText(List<String> out) { }
+    void appendInputText(List<String> out) {
+    }
 
     @Override
     void retainChildInputs() {

@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.EditorPreset;
 import com.meteorite.itemdespawntowhat.client.edit.FieldNumbers;
@@ -8,7 +9,7 @@ import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.NumericDomain;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiNumberPolicy;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiNumbers;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
@@ -22,8 +23,10 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiSlider;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
+
 import java.util.ArrayList;
 import java.util.List;
+
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -112,7 +115,7 @@ final class NumberControl extends FormControl {
         double fine = Math.min(numbers.step(), numbers.shiftStep());
         this.slider.core().setPolicy(integerDomain
                 ? UiNumberPolicy.integer((int) Math.round(policyMin), (int) Math.round(policyMax),
-                        (int) Math.round(numbers.step()), (int) Math.round(fine))
+                (int) Math.round(numbers.step()), (int) Math.round(fine))
                 : UiNumberPolicy.of(policyMin, policyMax, numbers.step(), fine));
         this.slider.core().setWindow(new UiSliderWindow(windowMin, windowMax));
         // 单位由宿主在轨道外绘制，避免文字与滑块占用同一矩形。
@@ -128,15 +131,17 @@ final class NumberControl extends FormControl {
                 : FormControl::decimalChars);
         this.binding = new UiValueTextBinding<>(slider::value, slider.core()::setValue,
                 input::value, input::setValue, text -> {
-                    RuleValue parsed = parseText(text);
-                    return parsed == null ? null : parsed.asDecimal(0.0D);
-                }, this::displayText, () -> {
-                    markEdited();
-                    onChanged.run();
-                });
+            RuleValue parsed = parseText(text);
+            return parsed == null ? null : parsed.asDecimal(0.0D);
+        }, this::displayText, () -> {
+            markEdited();
+            onChanged.run();
+        });
         this.slider.core().setInteractionListener(new UiValueInteraction.Listener() {
             @Override
-            public void began(double startValue) { binding.beginValueChange(); }
+            public void began(double startValue) {
+                binding.beginValueChange();
+            }
 
             @Override
             public void previewed(double startValue, double currentValue) {
@@ -151,6 +156,11 @@ final class NumberControl extends FormControl {
             }
 
             @Override
+            public void finished() {
+                binding.finishValueChange();
+            }
+
+            @Override
             public void cancelled(double startValue, double restoredValue) {
                 binding.cancelValue();
                 refreshTextError();
@@ -162,6 +172,15 @@ final class NumberControl extends FormControl {
             refreshTextError();
         });
         this.input.setOnValueChanged(this::previewText);
+        this.input.setOnInteractionEnd(reason -> {
+            if (reason.cancels()) binding.cancelText();
+            else if (input.value().isBlank() && !field.required() && field.nullable()) {
+                binding.rollbackTextPreview();
+                store();
+                onChanged.run();
+            } else binding.finishText();
+            refreshTextError();
+        });
         for (EditorPreset preset : field.presets()) {
             UiButton button = new UiButton(THEME, font, Component.translatable(preset.labelKey()),
                     UiButtonVariant.SECONDARY, () -> applyPreset(preset.value())).setChipStyle(true);
@@ -499,40 +518,38 @@ final class NumberControl extends FormControl {
     }
 
     @Override
-    boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mousePressed(UiInputContext context) {
         for (UiButton preset : presetButtons) {
-            if (preset.mouseClicked(mouseX, mouseY, button)) {
+            if (preset.mousePressed(context)) {
                 return true;
             }
         }
-        if (slider.mouseClicked(mouseX, mouseY, button)) {
+        if (slider.mousePressed(context)) {
             return true;
         }
-        return input.mouseClicked(mouseX, mouseY, button);
+        return input.mousePressed(context);
     }
 
     @Override
-    boolean mouseReleased(double mouseX, double mouseY, int button) {
-        // 预设 chip 的按下由本控件代收（FormInputRouter 记录的按下归属是本控件），释放必须转发回
-        // 同一个按钮，否则 UiButton 的 activate() 永不执行，chip 点了没反应
+    public boolean mouseReleased(UiInputContext context) {
         boolean handled = false;
         for (UiButton preset : presetButtons) {
-            handled |= preset.mouseReleased(mouseX, mouseY, button);
+            handled |= preset.mouseReleased(context);
         }
-        handled |= slider.mouseReleased(mouseX, mouseY, button);
+        handled |= slider.mouseReleased(context);
         if (!slider.core().isInteracting()) binding.finishValueChange();
-        handled |= input.mouseReleased(mouseX, mouseY, button);
+        handled |= input.mouseReleased(context);
         return handled;
     }
 
     @Override
-    boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        return input.mouseDragged(mouseX, mouseY, button, dragX, dragY)
-                || slider.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
+        return input.mouseDragged(context, dragX, dragY)
+                || slider.mouseDragged(context, dragX, dragY);
     }
 
     @Override
-    boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         if (slider.isFocused()) {
             boolean handled = slider.keyPressed(keyCode, scanCode, modifiers);
             if (!slider.core().isInteracting()) binding.finishValueChange();
@@ -542,14 +559,14 @@ final class NumberControl extends FormControl {
     }
 
     @Override
-    boolean keyReleased(int keyCode, int scanCode, int modifiers) {
+    public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
         boolean handled = slider.isFocused() && slider.keyReleased(keyCode, scanCode, modifiers);
         if (handled) binding.finishValueChange();
         return handled;
     }
 
     @Override
-    boolean charTyped(char codePoint, int modifiers) {
+    public boolean charTyped(char codePoint, int modifiers) {
         return input.isFocused() && input.charTyped(codePoint, modifiers);
     }
 
@@ -596,7 +613,7 @@ final class NumberControl extends FormControl {
     }
 
     @Override
-    void endInteractions(UiInputCapture.EndReason reason) {
+    void endInteractions(UiInteractionSession.EndReason reason) {
         // 隐藏/禁用/卸载/关闭不会收到释放事件，chip 的按下态要在这里清掉，否则会一直停在按下外观
         cancelButtonPresses(presetButtons);
         slider.endInteraction(reason);

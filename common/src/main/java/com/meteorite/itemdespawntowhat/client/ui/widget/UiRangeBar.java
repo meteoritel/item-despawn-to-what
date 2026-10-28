@@ -2,7 +2,7 @@ package com.meteorite.itemdespawntowhat.client.ui.widget;
 
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiNumberPolicy;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiNumbers;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeEnd;
@@ -15,7 +15,9 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderStyle;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderWindow;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiValueTextBinding;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
+
 import java.util.Objects;
+
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -31,11 +33,14 @@ import org.jetbrains.annotations.Nullable;
  */
 public final class UiRangeBar extends AbstractBarShell<UiRangeSlider> {
 
-    /** 区间的预览、提交与取消回调；预览不应写入配置历史。 */
+    /**
+     * 区间的预览、提交与取消回调；预览不应写入配置历史。
+     */
     public interface Listener {
 
         /**
          * 在预览前保存宿主输入的回退基线。
+         *
          * @param value 操作开始时的区间
          */
         default void onBegan(UiRangeValue value) {
@@ -43,6 +48,7 @@ public final class UiRangeBar extends AbstractBarShell<UiRangeSlider> {
 
         /**
          * 拖动预览时同步宿主输入框，但不产生提交历史。
+         *
          * @param value 当前预览区间
          */
         default void onPreviewed(UiRangeValue value) {
@@ -50,19 +56,29 @@ public final class UiRangeBar extends AbstractBarShell<UiRangeSlider> {
 
         /**
          * 提交一次完整区间操作。
+         *
          * @param value 最终区间
          */
         void onCommitted(UiRangeValue value);
 
         /**
+         * 操作已结清，无净变化时也收束宿主输入快照。
+         */
+        default void onFinished() {
+        }
+
+        /**
          * 取消操作时恢复宿主输入。
+         *
          * @param value 回退后的区间
          */
         default void onCancelled(UiRangeValue value) {
         }
     }
 
-    /** 区间输入栏的宿主本地化文本：两端标签、缺端提示与精确输入提示。 */
+    /**
+     * 区间输入栏的宿主本地化文本：两端标签、缺端提示与精确输入提示。
+     */
     public record Texts(Component lowEnd, Component highEnd, Component absentHint, Component preciseHint) {
     }
 
@@ -81,11 +97,11 @@ public final class UiRangeBar extends AbstractBarShell<UiRangeSlider> {
     /**
      * 装配区间条与精确文本绑定；主题、提示文案和提交接收方由宿主注入。
      *
-     * @param theme 宿主主题
-     * @param font 文本测量与绘制字体
-     * @param policy 数值合法域与交互步长
-     * @param initial 初始区间
-     * @param texts 本地化提示
+     * @param theme    宿主主题
+     * @param font     文本测量与绘制字体
+     * @param policy   数值合法域与交互步长
+     * @param initial  初始区间
+     * @param texts    本地化提示
      * @param listener 可选的宿主交互监听器
      */
     public UiRangeBar(UiHostTheme theme, Font font, UiNumberPolicy policy, UiRangeValue initial, Texts texts,
@@ -116,6 +132,11 @@ public final class UiRangeBar extends AbstractBarShell<UiRangeSlider> {
             }
 
             @Override
+            public void finished() {
+                if (listener != null) listener.onFinished();
+            }
+
+            @Override
             public void cancelled(UiRangeValue startValue, UiRangeValue restoredValue) {
                 if (listener != null) listener.onCancelled(restoredValue);
                 closePrecise();
@@ -123,7 +144,8 @@ public final class UiRangeBar extends AbstractBarShell<UiRangeSlider> {
         });
         this.preciseBinding = new UiValueTextBinding<>(core::selectedValue,
                 value -> core.setSelectedValueOrPresent(value, false), precise::value, precise::setValue,
-                UiNumbers::parseFinite, this::plainText, () -> {});
+                UiNumbers::parseFinite, this::plainText, () -> {
+        });
     }
 
     /**
@@ -184,7 +206,7 @@ public final class UiRangeBar extends AbstractBarShell<UiRangeSlider> {
         }
         UiRangeValue value = core.value();
         // 没有独立提示行时，聚焦提示挤进标签行的空白处，避免压住轨道
-        drawLabelRow(graphics, hintRow == null && focused && !preciseActive);
+        drawLabelRow(graphics, hintRow == null && isFocused() && !preciseActive);
         drawTrack(graphics, value, mouseX, mouseY);
         if (preciseActive) {
             precise.render(graphics, renderFont, mouseX, mouseY);
@@ -239,7 +261,7 @@ public final class UiRangeBar extends AbstractBarShell<UiRangeSlider> {
         UiRect textSlot = new UiRect(0, 0, 0, 0);
         boolean hovered = enabled && bounds.contains(mouseX, mouseY);
         painter.paint(graphics, new UiSliderPainter.Frame(bounds, track, filled, thumb, textSlot, style,
-                enabled, hovered, core.isDragging(), focused, core.isDragging(), false, false, false));
+                enabled, hovered, core.isDragging(), isFocusVisible(), core.isDragging(), false, false, false));
         UiRangeEnd other = core.selectedEnd().other();
         if (value.isPresent(other)) {
             UiRect otherThumb = new UiRect(core.xOf(value.value(other)) - core.thumbWidth() / 2,
@@ -290,11 +312,6 @@ public final class UiRangeBar extends AbstractBarShell<UiRangeSlider> {
 
     // ---- 焦点与生命周期 ----
 
-    // 区间条把失焦视为焦点作用域切换，核心随之结束进行中的交互
-    @Override
-    protected void onFocusLost() {
-        core.onFocusScopeChanged();
-    }
 
     @Override
     public Component accessibleName() {
@@ -332,24 +349,10 @@ public final class UiRangeBar extends AbstractBarShell<UiRangeSlider> {
     }
 
     @Override
-    protected void coreEndInteraction(UiInputCapture.EndReason reason) {
+    protected void coreEndInteraction(UiInteractionSession.EndReason reason) {
         core.endInteraction(reason);
     }
 
-    @Override
-    protected void coreUnmount() {
-        core.unmount();
-    }
-
-    @Override
-    protected void coreOnFocusScopeChanged() {
-        core.onFocusScopeChanged();
-    }
-
-    @Override
-    protected void coreOnHostClosed() {
-        core.onHostClosed();
-    }
 
     @Override
     protected UiRangeEnd coreSelectedEnd() {

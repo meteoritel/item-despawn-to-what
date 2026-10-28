@@ -1,11 +1,13 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
+
 import java.util.ArrayList;
 import java.util.List;
+
 import org.lwjgl.glfw.GLFW;
 
 /**
@@ -25,7 +27,9 @@ final class FormInputRouter {
         this.view = view;
     }
 
-    boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mousePressed(UiInputContext context) {
+        double mouseX = context.pointerX();
+        double mouseY = context.pointerY();
         if (!view.visible) {
             return false;
         }
@@ -36,59 +40,41 @@ final class FormInputRouter {
         for (FormRow row : view.rows) {
             if (!row.visible) continue;
             for (var pickerButton : row.pickers) {
-                if (pickerButton.mouseClicked(mouseX, mouseY, button)) {
-                    return rememberPress(pickerButton);
+                if (pickerButton.mousePressed(context)) {
+                    return true;
                 }
             }
             for (UiButton action : row.actions) {
-                if (action.mouseClicked(mouseX, mouseY, button)) {
-                    return rememberPress(action);
+                if (action.mousePressed(context)) {
+                    return true;
                 }
             }
-            if (row.control.mouseClicked(mouseX, mouseY, button)) {
-                return rememberPress(row.control);
+            if (row.control.mousePressed(context)) {
+                return true;
             }
         }
         return false;
     }
 
     // 记录本次按下的归属：只允许这个控件接收随后的释放与拖动
-    private boolean rememberPress(UiWidget widget) {
-        view.pressedWidget = widget;
-        view.pressedControl = null;
-        return true;
+
+
+    public boolean mouseReleased(UiInputContext context) {
+        return false;
     }
 
-    private boolean rememberPress(FormControl control) {
-        view.pressedWidget = null;
-        view.pressedControl = control;
-        return true;
+    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
+        return false;
     }
 
-    boolean mouseReleased(double mouseX, double mouseY, int button) {
-        UiWidget widget = view.pressedWidget;
-        FormControl control = view.pressedControl;
-        view.pressedWidget = null;
-        view.pressedControl = null;
-        if (widget != null) {
-            return widget.mouseReleased(mouseX, mouseY, button);
-        }
-        return control != null && control.mouseReleased(mouseX, mouseY, button);
-    }
-
-    boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        if (view.pressedWidget != null) {
-            return view.pressedWidget.mouseDragged(mouseX, mouseY, button, dragX, dragY);
-        }
-        return view.pressedControl != null && view.pressedControl.mouseDragged(mouseX, mouseY, button, dragX, dragY);
-    }
-
-    boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+    public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
+        double mouseX = context.pointerX();
+        double mouseY = context.pointerY();
         if (!view.visible || !view.bounds().contains(mouseX, mouseY)) {
             return false;
         }
         for (FormRow row : view.rows) {
-            if (row.visible && row.control.mouseScrolled(mouseX, mouseY, scrollX, scrollY)) {
+            if (row.visible && row.control.mouseScrolled(context, scrollX, scrollY)) {
                 return true;
             }
         }
@@ -100,7 +86,7 @@ final class FormInputRouter {
         return true;
     }
 
-    boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         // 顺序：聚焦控件优先；方向键与 PageUp/PageDown 都不允许同时改值和滚动
         for (FormRow row : view.rows) {
             if (row.visible && handlesInput(row.control) && row.control.keyPressed(keyCode, scanCode, modifiers)) {
@@ -126,7 +112,7 @@ final class FormInputRouter {
     }
 
     // 按键抬起：交给聚焦控件收尾（方向键重复在抬起时合并为一次提交）
-    boolean keyReleased(int keyCode, int scanCode, int modifiers) {
+    public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
         for (FormRow row : view.rows) {
             if (row.visible && handlesInput(row.control) && row.control.keyReleased(keyCode, scanCode, modifiers)) {
                 return true;
@@ -135,7 +121,7 @@ final class FormInputRouter {
         return false;
     }
 
-    boolean charTyped(char codePoint, int modifiers) {
+    public boolean charTyped(char codePoint, int modifiers) {
         for (FormRow row : view.rows) {
             if (row.visible && handlesInput(row.control) && row.control.charTyped(codePoint, modifiers)) {
                 view.retainPendingInputs();

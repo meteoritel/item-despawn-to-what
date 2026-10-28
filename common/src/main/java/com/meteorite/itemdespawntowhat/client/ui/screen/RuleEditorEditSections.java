@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInteractionSession;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
@@ -20,10 +22,12 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.model.CombinationMode;
 import com.meteorite.itemdespawntowhat.core.model.ConditionLimits;
+
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.IdentityHashMap;
 import java.util.List;
+
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -47,7 +51,9 @@ final class RuleEditorEditSections {
     // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
     final UiHostTheme THEME;
 
-    /** 页签 */
+    /**
+     * 页签
+     */
     enum EditSection {
 
         // 基本信息
@@ -129,7 +135,9 @@ final class RuleEditorEditSections {
         return page;
     }
 
-    /** 切页：先结束进行中的预览，再重建新页 */
+    /**
+     * 切页：先结束进行中的预览，再重建新页
+     */
     public void setPage(@Nullable EditSection next) {
         EditSection target = next == null ? EditSection.INFO : next;
         if (target == page) {
@@ -139,7 +147,7 @@ final class RuleEditorEditSections {
         endInteractions();
         page = target;
         // 切页后旧提示失效：消息传 null 清除，色值沿用 INFO 级别的次要文本色
-        shell.setNotice(null,EditorShell.NoticeLevel.INFO);
+        shell.setNotice(null, EditorShell.NoticeLevel.INFO);
         resultsSection.effectIndex = 0;
         rebuild();
         pageScroll.setOffset(scrollOffsets.getOrDefault(page, 0));
@@ -149,7 +157,9 @@ final class RuleEditorEditSections {
         }
     }
 
-    /** 重建当前页的全部控件（草稿结构或选择变化后调用） */
+    /**
+     * 重建当前页的全部控件（草稿结构或选择变化后调用）
+     */
     public void rebuild() {
         rebuild(null);
     }
@@ -195,7 +205,9 @@ final class RuleEditorEditSections {
 
     // ---- 布局 ----
 
-    /** 页面布局失效：下一次渲染前重排一次；只在真实几何输入变化时调用。 */
+    /**
+     * 页面布局失效：下一次渲染前重排一次；只在真实几何输入变化时调用。
+     */
     void invalidateLayout() {
         layoutDirty = true;
     }
@@ -233,7 +245,9 @@ final class RuleEditorEditSections {
         return false;
     }
 
-    /** 全量布局：页、宽度、行结构与控件高度变化时执行；滚动偏移只决定控件最终落位。 */
+    /**
+     * 全量布局：页、宽度、行结构与控件高度变化时执行；滚动偏移只决定控件最终落位。
+     */
     public void layout(UiRect area) {
         lastArea = area;
         pageScroll.setViewport(area.x(), area.y(), area.width(), area.height());
@@ -285,7 +299,9 @@ final class RuleEditorEditSections {
         }
     }
 
-    /** 已作用到控件上的滚动偏移：页面自绘文字的命中判定要把指针坐标换算回文档坐标。 */
+    /**
+     * 已作用到控件上的滚动偏移：页面自绘文字的命中判定要把指针坐标换算回文档坐标。
+     */
     private int layoutPage(UiRect area) {
         content.cards.clear();
         return switch (page) {
@@ -360,7 +376,9 @@ final class RuleEditorEditSections {
 
     // ---- 状态与提交 ----
 
-    /** 提交所有可见表单的待写字段；返回是否有改动 */
+    /**
+     * 提交所有可见表单的待写字段；返回是否有改动
+     */
     public boolean applyToDraft() {
         if (!shell.editable()) {
             return false;
@@ -375,7 +393,9 @@ final class RuleEditorEditSections {
         return changed;
     }
 
-    /** 收集所有可见表单的校验问题，再补页面级约束（触发来源、候选与效果上限、组合模式） */
+    /**
+     * 收集所有可见表单的校验问题，再补页面级约束（触发来源、候选与效果上限、组合模式）
+     */
     public List<FormIssue> issues() {
         List<FormIssue> issues = new ArrayList<>();
         for (FormView form : content.forms) {
@@ -438,53 +458,34 @@ final class RuleEditorEditSections {
     }
 
     /**
-     * 结束进行中的数值/滑杆交互：回退未释放预览，保留字段输入。
-     * <p>{@code FormView#endInteractions} 是包级方法，宿主经公开入口
-     * {@link FormView#onFocusScopeChanged()} 触发。</p>
+     * 取消本页作用域的未完成交互，值恢复由当前会话目标执行。
      */
     public void endInteractions() {
-        pageScroll.mouseReleased();
-        input.resetDrag();
-        for (FormView form : content.forms) {
-            if (form.isVisible()) {
-                form.onFocusScopeChanged();
-            }
-        }
+        shell.editPage().inputScope().interaction().end(UiInteractionSession.EndReason.CANCEL);
     }
 
-    /** 宿主关闭屏幕：让表单释放全部捕获与输入状态 */
-    public void onHostClosed() {
-        for (FormView form : content.forms) {
-            form.onHostClosed();
-        }
-    }
-
-    /** 宿主离开编辑页（返回管理页）：卸载表单的输入状态 */
+    /**
+     * 宿主离开编辑页（返回管理页）：卸载表单的输入状态
+     */
     public void unmount() {
         for (FormView form : content.forms) {
             form.unmount();
         }
     }
 
-    /** 键盘抬起：把滑杆方向键的按住过程合并为一次提交（屏幕在 EDIT 模式下转发） */
+    /**
+     * 键盘抬起：把滑杆方向键的按住过程合并为一次提交（屏幕在 EDIT 模式下转发）
+     */
     public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
-        boolean handled = false;
-        for (FormView form : content.forms) {
-            if (form.isVisible() && form.keyReleased(keyCode, scanCode, modifiers)) {
-                handled = true;
-            }
-        }
-        if (handled) {
-            return true;
-        }
-        UiFocusTarget focused = focus.focused();
-        if (focused instanceof UiWidget widget) {
-            return widget.keyReleased(keyCode, scanCode, modifiers);
+        for (UiWidget widget : content.widgets) {
+            if (widget.isVisible() && widget.keyReleased(keyCode, scanCode, modifiers)) return true;
         }
         return false;
     }
 
-    /** 聚焦目标（按视觉顺序） */
+    /**
+     * 聚焦目标（按视觉顺序）
+     */
     public List<UiFocusTarget> focusTargets() {
         List<UiFocusTarget> targets = new ArrayList<>();
         for (UiWidget widget : content.widgets) {
@@ -498,7 +499,9 @@ final class RuleEditorEditSections {
         return targets;
     }
 
-    /** 冻结时禁用交互；只读内容不在这里禁用控件（沙盒可写） */
+    /**
+     * 冻结时禁用交互；只读内容不在这里禁用控件（沙盒可写）
+     */
     void syncEditableState() {
         boolean editable = shell.editable();
         if (!editable) resultsSection.typePicker.close();
@@ -531,8 +534,8 @@ final class RuleEditorEditSections {
      * 绘制当前结果动作的自绘说明，保持与页面滚动一致的命中范围。
      *
      * @param graphics 绘制上下文
-     * @param mouseX 鼠标屏幕 X 坐标
-     * @param mouseY 鼠标屏幕 Y 坐标
+     * @param mouseX   鼠标屏幕 X 坐标
+     * @param mouseY   鼠标屏幕 Y 坐标
      * @return 是否已绘制说明面板
      */
     public boolean renderDescriptionTooltip(GuiGraphics graphics, int mouseX, int mouseY) {
@@ -639,20 +642,20 @@ final class RuleEditorEditSections {
 
     // ---- 输入事件 ----
 
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        return input.mouseClicked(mouseX, mouseY, button);
+    public boolean mousePressed(UiInputContext context) {
+        return input.mousePressed(context);
     }
 
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        return input.mouseReleased(mouseX, mouseY, button);
+    public boolean mouseReleased(UiInputContext context) {
+        return input.mouseReleased(context);
     }
 
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        return input.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
+        return input.mouseDragged(context, dragX, dragY);
     }
 
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        return input.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+    public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
+        return input.mouseScrolled(context, scrollX, scrollY);
     }
 
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
@@ -680,14 +683,16 @@ final class RuleEditorEditSections {
         if (!shell.editable()) {
             return;
         }
-        retainPendingInputs();
         endInteractions();
+        retainPendingInputs();
         if (applyToDraft()) {
             shell.draftChanged();
         }
     }
 
-    /** Tab 和问题定位都需把焦点滚进外层页面视口。 */
+    /**
+     * Tab 和问题定位都需把焦点滚进外层页面视口。
+     */
     public void ensureVisible(UiFocusTarget target) {
         if (lastArea == null || !focusTargets().contains(target)) {
             return;

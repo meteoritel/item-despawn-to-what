@@ -1,5 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputScope;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiAction;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
@@ -9,10 +12,12 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.Consumer;
+
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -23,12 +28,23 @@ import org.lwjgl.glfw.GLFW;
  * 模态弹窗。
  * <p>结构固定为「标题栏 + 内容区 + 按钮栏」。内容可以是纯文本消息、自定义渲染回调，
  * 也可以是任意 {@link UiWidget}（例如列表、树、输入框），由弹窗负责把鼠标、滚轮与键盘事件转发给它。
- * <p>遮罩、淡入淡出、焦点切换与点击穿透由 {@link UiModalStack} 统一处理，
+ * <p>遮罩与淡入淡出由 {@link UiModalStack} 处理，输入独占与焦点归本模态的作用域，
  * 弹窗本身只关心自身矩形内的绘制与命中。
  */
 public final class UiModal implements UiWidget {
+    private final UiInputScope inputScope = new UiInputScope(this);
 
-    /** 自定义内容渲染回调：只负责绘制内容，内容区矩形与鼠标坐标由弹窗给出；{@code content} 为绝对屏幕坐标。 */
+    /**
+     * 模态实例的稳定输入作用域。
+     */
+    public UiInputScope inputScope() {
+        return inputScope;
+    }
+
+
+    /**
+     * 自定义内容渲染回调：只负责绘制内容，内容区矩形与鼠标坐标由弹窗给出；{@code content} 为绝对屏幕坐标。
+     */
     @FunctionalInterface
     public interface ContentRenderer {
         void renderContent(GuiGraphics graphics, Font font, UiRect content, int mouseX, int mouseY);
@@ -66,8 +82,10 @@ public final class UiModal implements UiWidget {
     // 由弹窗栈注入
     private Consumer<UiModal> closeHandler;
     private boolean visible = true;
-    private Consumer<UiHistoryShortcut> onHistoryChanged = shortcut -> {};
-    private Runnable onClosed = () -> {};
+    private Consumer<UiHistoryShortcut> onHistoryChanged = shortcut -> {
+    };
+    private Runnable onClosed = () -> {
+    };
 
     /**
      * 设置关闭回调。各关闭入口统一通知宿主保存输入缓冲并释放交互。
@@ -99,6 +117,7 @@ public final class UiModal implements UiWidget {
     private UiModal(UiHostTheme theme, Font font) {
         this.theme = UiHostThemes.require(theme);
         this.font = font;
+        inputScope.setFocusTargets(() -> addFocusTargets(inputScope.focus()));
     }
 
     /**
@@ -382,7 +401,10 @@ public final class UiModal implements UiWidget {
             if (!button.isVisible()) continue;
             int next = buttonWidth(button, available);
             if (rows == 0) rows = 1;
-            if (used > 0 && used + BUTTON_SPACING + next > available) { rows++; used = 0; }
+            if (used > 0 && used + BUTTON_SPACING + next > available) {
+                rows++;
+                used = 0;
+            }
             used += (used == 0 ? 0 : BUTTON_SPACING) + next;
         }
         return rows == 0 ? 0 : rows * BUTTON_HEIGHT + (rows - 1) * BUTTON_SPACING;
@@ -411,7 +433,9 @@ public final class UiModal implements UiWidget {
             if (!button.isVisible()) continue;
             int next = buttonWidth(button, available);
             if (!row.isEmpty() && used + BUTTON_SPACING + next > available) {
-                rows.add(row); row = new ArrayList<>(); used = 0;
+                rows.add(row);
+                row = new ArrayList<>();
+                used = 0;
             }
             used += (row.isEmpty() ? 0 : BUTTON_SPACING) + next;
             row.add(button);
@@ -483,51 +507,60 @@ public final class UiModal implements UiWidget {
     // ---- 输入 ----
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mousePressed(UiInputContext context) {
+        double mouseX = context.pointerX();
+        double mouseY = context.pointerY();
         if (!visible) {
             return false;
         }
+        if (!bounds.contains(mouseX, mouseY)) {
+            context.scope().pointerHit(null);
+            if (closeOnBackdrop()) requestClose();
+            return true;
+        }
         for (int i = buttons.size() - 1; i >= 0; i--) {
             UiButton candidate = buttons.get(i);
-            if (candidate.isVisible() && candidate.mouseClicked(mouseX, mouseY, button)) {
+            if (candidate.isVisible() && candidate.mousePressed(context)) {
                 return true;
             }
         }
         if (contentWidget != null) {
-            return contentWidget.mouseClicked(mouseX, mouseY, button);
+            return contentWidget.mousePressed(context);
         }
         return true;
     }
 
     @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+    public boolean mouseReleased(UiInputContext context) {
         if (!visible) {
             return false;
         }
         for (int i = buttons.size() - 1; i >= 0; i--) {
             UiButton candidate = buttons.get(i);
             if (candidate.isVisible()) {
-                candidate.mouseReleased(mouseX, mouseY, button);
+                candidate.mouseReleased(context);
             }
         }
         if (contentWidget != null) {
-            contentWidget.mouseReleased(mouseX, mouseY, button);
+            contentWidget.mouseReleased(context);
         }
         return true;
     }
 
     @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
         if (contentWidget != null) {
-            contentWidget.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+            contentWidget.mouseDragged(context, dragX, dragY);
         }
         return true;
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+    public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
+        double mouseX = context.pointerX();
+        double mouseY = context.pointerY();
         if (contentWidget != null) {
-            contentWidget.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+            contentWidget.mouseScrolled(context, scrollX, scrollY);
         } else if (contentRect.contains(mouseX, mouseY)) {
             int maximum = Math.max(0, messageLines(contentRect.width() - theme.padding() * 2).size()
                     * (font.lineHeight + 2) + theme.padding() * 2 - contentRect.height());
@@ -552,7 +585,9 @@ public final class UiModal implements UiWidget {
         return false;
     }
 
-    /** 按键释放只交给本层内容，完成方向键数值交互。 */
+    /**
+     * 按键释放只交给本层内容，完成方向键数值交互。
+     */
     @Override
     public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
         return visible && contentWidget != null && contentWidget.keyReleased(keyCode, scanCode, modifiers);
@@ -563,11 +598,16 @@ public final class UiModal implements UiWidget {
         return visible && contentWidget != null && contentWidget.charTyped(codePoint, modifiers);
     }
 
+    @Override
+    public void scopeExited(UiInteractionSession.EndReason reason) {
+        if (contentWidget != null) contentWidget.scopeExited(reason);
+    }
+
     // ---- 焦点 ----
 
     // 把自身可聚焦控件登记到焦点管理器
     public void addFocusTargets(UiFocusManager manager) {
-        manager.clear();
+        manager.beginUpdate();
         if (contentWidget instanceof UiFocusTarget target && target.canFocus()) {
             manager.add(target);
         }
@@ -576,6 +616,7 @@ public final class UiModal implements UiWidget {
                 manager.add(button);
             }
         }
+        manager.endUpdate();
     }
 
     // ---- 关闭 ----

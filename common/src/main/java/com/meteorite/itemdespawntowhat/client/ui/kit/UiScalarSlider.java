@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.client.ui.kit;
 
 import java.util.Objects;
 import java.util.function.Function;
+
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -31,12 +32,14 @@ import org.lwjgl.glfw.GLFW;
  * <p>本类只依赖 kit 与客户端通用类型：默认绘制使用 {@link UiSliderPainter} 与 {@link UiSliderStyle}，
  * 宿主可替换成主题化或贴图实现。</p>
  */
-public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInputCapture.Target {
+public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInteractionSession.Target {
 
-    /** 默认显示小数位数：整数按 {@link UiNumbers} 的整数直出规则显示。 */
+    /**
+     * 默认显示小数位数：整数按 {@link UiNumbers} 的整数直出规则显示。
+     */
     private static final int VALUE_DECIMALS = 2;
 
-    private final UiInputCapture capture = new UiInputCapture();
+    private UiInteractionSession capture;
     private final UiValueInteraction interaction = new UiValueInteraction();
 
     private UiNumberPolicy policy;
@@ -52,11 +55,9 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInp
     private UiRect bounds = new UiRect(0, 0, 0, 0);
     private boolean enabled = true;
     private boolean visible = true;
-    private boolean focused;
+    private final UiFocusState focusState = new UiFocusState();
     private boolean hovered;
     private boolean error;
-    private boolean dragging;
-    private int heldKey = -1;
     private double dragAnchorPointer;
     private double dragAnchorValue;
     private boolean dragFineAnchor;
@@ -187,7 +188,7 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInp
 
     // 禁用时立即结束进行中的交互并回退预览
     public UiScalarSlider setEnabled(boolean next) {
-        if (!next && enabled) endInteraction(UiInputCapture.EndReason.DISABLED);
+        if (!next && enabled) endInteraction(UiInteractionSession.EndReason.DISABLED);
         enabled = next;
         return this;
     }
@@ -198,7 +199,7 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInp
 
     // 隐藏时立即结束进行中的交互并回退预览
     public UiScalarSlider setVisible(boolean next) {
-        if (!next && visible) endInteraction(UiInputCapture.EndReason.HIDDEN);
+        if (!next && visible) endInteraction(UiInteractionSession.EndReason.HIDDEN);
         visible = next;
         return this;
     }
@@ -217,7 +218,7 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInp
     }
 
     public boolean isDragging() {
-        return dragging;
+        return capture != null && capture.owns(this) && capture.matches(UiInteractionSession.Source.POINTER, 0);
     }
 
     // 当前值的显示文本：整数直出、否则定点小数；规则集中在 UiNumbers，避免与宿主各写一份
@@ -298,7 +299,7 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInp
         boolean overflowBelow = value < window.min();
         boolean overflowAbove = value > window.max();
         return new UiSliderPainter.Frame(bounds, track, filled, thumb, textSlot, style,
-                enabled, hovered, dragging, focused, dragging, error, overflowBelow, overflowAbove);
+                enabled, hovered, isDragging(), isFocusVisible(), isDragging(), error, overflowBelow, overflowAbove);
     }
 
     @Override
@@ -307,8 +308,10 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInp
                 || !bounds.contains(context.pointerX(), context.pointerY())) {
             return false;
         }
-        capture.begin(this);
-        dragging = true;
+        context.scope().pointerHit(this);
+        capture = context.scope().interaction();
+        capture.begin(this, UiInteractionSession.Source.POINTER, context.button());
+
         if (interaction.begin(value, interactionListener)) {
             preview(valueAtPointer(context.pointerX()));
         }
@@ -320,8 +323,8 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInp
     }
 
     @Override
-    public boolean mouseDragged(UiInputContext context) {
-        if (!dragging || !capture.isCapturedBy(this)) {
+    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
+        if (!isDragging()) {
             return false;
         }
         if (context.shiftDown() != dragFineAnchor) {
@@ -338,21 +341,21 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInp
 
     @Override
     public boolean mouseReleased(UiInputContext context) {
-        if (!dragging) {
+        if (!isDragging()) {
             return false;
         }
-        dragging = false;
-        if (capture.isCapturedBy(this)) {
-            capture.release();
+
+        if ((capture != null && capture.owns(this))) {
+            capture.end(this, UiInteractionSession.EndReason.RELEASE);
         } else {
-            finishInteraction(UiInputCapture.EndReason.RELEASE);
+            finishInteraction(UiInteractionSession.EndReason.RELEASE);
         }
         return true;
     }
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (!visible || !enabled) {
+        if (!visible || !enabled || !isFocused()) {
             return false;
         }
         boolean fine = (modifiers & GLFW.GLFW_MOD_SHIFT) != 0;
@@ -391,37 +394,27 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInp
 
     @Override
     public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
-        if (heldKey != keyCode) {
+        if (capture == null || !capture.owns(this) || !capture.matches(UiInteractionSession.Source.KEY, keyCode))
             return false;
-        }
-        heldKey = -1;
-        endInteraction(UiInputCapture.EndReason.RELEASE);
+        endInteraction(UiInteractionSession.EndReason.RELEASE);
         return true;
     }
 
     // 方向键重复：同一次按键重复在 key-up 才提交，换键前先结清上一次
     private void adjustByKey(int keyCode, double direction, boolean fine) {
-        if (interaction.isActive() && heldKey != keyCode) {
-            endInteraction(UiInputCapture.EndReason.RELEASE);
-        }
-        if (heldKey != keyCode) {
-            heldKey = keyCode;
-            capture.begin(this);
-        }
-        if (!interaction.isActive() && !interaction.begin(value, interactionListener)) {
-            heldKey = -1;
-            return;
-        }
+        capture = Objects.requireNonNull(focusState.scope(), "Focused input requires a mounted scope").interaction();
+        capture.begin(this, UiInteractionSession.Source.KEY, keyCode);
+        if (!interaction.isActive()) interaction.begin(value, interactionListener);
         preview(policy.snap(value + direction * policy.step(fine), fine));
     }
 
     // 一次性用户操作：Home/End、启用后的 PageUp/PageDown
     private void oneShot(double target, boolean fine) {
-        if (dragging) {
+        if (isDragging()) {
             return;
         }
         if (interaction.isActive()) {
-            endInteraction(UiInputCapture.EndReason.RELEASE);
+            endInteraction(UiInteractionSession.EndReason.RELEASE);
         }
         double next = policy.snap(target, fine);
         if (next == value) {
@@ -436,10 +429,10 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInp
 
     // Esc：只回退进行中的交互；没有交互时返回 false 交给宿主关闭页面
     private boolean cancelInteraction() {
-        if (!interaction.isActive() && !capture.isCaptured()) {
+        if (!interaction.isActive() && !(capture != null && capture.owns(this))) {
             return false;
         }
-        endInteraction(UiInputCapture.EndReason.CANCEL);
+        endInteraction(UiInteractionSession.EndReason.CANCEL);
         return true;
     }
 
@@ -466,7 +459,7 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInp
      * @return 收进显示窗口后的值
      */
     private double clampToWindow(double next) {
-        if (dragging) {
+        if (isDragging()) {
             return Math.clamp(next, window.min(), window.max());
         }
         double anchor = interaction.isActive() ? interaction.startValue() : value;
@@ -477,39 +470,25 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInp
 
     /**
      * 统一结束入口：宿主在隐藏、禁用、卸载、焦点作用域切换、宿主关闭时调用。
-     * 只有 {@link UiInputCapture.EndReason#RELEASE} 会提交，其余原因都回退到本次操作起点值。
+     * 正常释放与同域焦点转移完成有效预览，取消原因回退到本次操作起点值。
      */
-    public void endInteraction(UiInputCapture.EndReason reason) {
+    public void endInteraction(UiInteractionSession.EndReason reason) {
         Objects.requireNonNull(reason, "End reason");
-        if (capture.end(reason)) {
+        if (capture != null && capture.end(this, reason)) {
             return;
         }
         finishInteraction(reason);
     }
 
-    // 控件从内容树移除时调用
-    public void unmount() {
-        endInteraction(UiInputCapture.EndReason.UNMOUNTED);
-    }
-
-    // 焦点作用域切换（打开模态、切页）时调用
-    public void onFocusScopeChanged() {
-        endInteraction(UiInputCapture.EndReason.FOCUS_SCOPE_CHANGED);
-    }
-
-    // 宿主关闭（屏幕关闭、断线）时调用
-    public void onHostClosed() {
-        endInteraction(UiInputCapture.EndReason.HOST_CLOSED);
-    }
 
     @Override
-    public void captureEnded(UiInputCapture.EndReason reason) {
+    public void interactionEnded(UiInteractionSession.EndReason reason) {
         finishInteraction(reason);
     }
 
-    private void finishInteraction(UiInputCapture.EndReason reason) {
-        dragging = false;
-        heldKey = -1;
+    private void finishInteraction(UiInteractionSession.EndReason reason) {
+
+
         if (!interaction.isActive()) {
             return;
         }
@@ -522,18 +501,19 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInp
     }
 
     @Override
+    public UiFocusState focusState() {
+        return focusState;
+    }
+
+    @Override
     public boolean canFocus() {
         return visible && enabled;
     }
 
-    @Override
-    public void setFocused(boolean next) {
-        this.focused = next;
-    }
 
     @Override
     public boolean isFocused() {
-        return focused;
+        return focusState.isFocused();
     }
 
     @Override

@@ -1,36 +1,71 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit;
 
 import net.minecraft.network.chat.Component;
+
+import java.util.List;
+
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 可聚焦目标适配器：kit 的焦点系统只通过本接口读可聚焦性与边界、写焦点、请求激活。
- *
- * <p>这样原生 {@code EditBox} 这类非 kit 控件也能按宿主给定的视觉顺序参与 Tab 导航，
- * 而 kit **不接管**它的文字编辑、剪贴板与输入法——那些仍归原版控件；同理，禁用、不可见、
- * 尚未注册的目标一律通过 {@link #canFocus()} 返回 {@code false} 退出焦点序列。</p>
- *
- * <p>实现方应保证 {@link #setFocused(boolean)} 只改绘制状态，不重建内容、不重排。</p>
+ * 可聚焦能力与激活动作独立；当前焦点由所属作用域唯一决定。
  */
-public interface UiFocusTarget {
-    /** 当前是否可接收焦点（禁用、不可见或已卸载的目标返回 {@code false}）。 */
+public interface UiFocusTarget extends UiInputTarget {
+    /**
+     * 控件声明的焦点能力与当前可用性共同决定资格。
+     */
     boolean canFocus();
 
-    /** 焦点状态变化通知；焦点只在键盘导航与宿主显式请求时改变。 */
-    void setFocused(boolean focused);
+    /**
+     * 持久焦点视图；宿主包装与核心可共享同一视图。
+     */
+    UiFocusState focusState();
 
-    /** 当前是否持有焦点；模态入口据此判断「这个入口是不是键盘到达的」，避免鼠标点击也留下焦点轮廓。 */
-    boolean isFocused();
+    /**
+     * 复合面板可展开实际 Tab 目标；分面等组内导航控件保持一个停靠点。
+     */
+    default List<UiFocusTarget> focusTargets() {
+        return List.of(this);
+    }
 
-    /** 是否接收文字输入；焦点管理器据此将空格留给文本模型。 */
-    default boolean acceptsTextInput() { return false; }
+    /**
+     * 当前是否持有逻辑焦点。
+     */
+    default boolean isFocused() {
+        return focusState().isFocused();
+    }
 
-    /** Enter / Space 的激活语义；不适用（例如原生输入框）时返回 {@code false} 不消费。 */
+    /**
+     * 当前是否显示额外键盘焦点提示。
+     */
+    default boolean isFocusVisible() {
+        return focusState().isVisible();
+    }
+
+    /**
+     * 同步原生编辑状态等必要适配，不在此决定焦点所有权。
+     */
+    default void focusChanged(boolean focused) {
+    }
+
+    /**
+     * 空格是否应留给文本编辑。
+     */
+    default boolean acceptsTextInput() {
+        return false;
+    }
+
+    /**
+     * 激活动作独立于焦点资格，允许不可聚焦按钮响应点击。
+     */
     boolean activate();
 
-    /** 逻辑 GUI 坐标下的边界，供调试可视化与「滚动到焦点」使用。 */
+    /**
+     * 用于焦点自动滚动与可视化的 GUI 逻辑边界。
+     */
     UiRect bounds();
 
-    /** 可读名称：调试叠加层与 tooltip 回退用；{@code null} 表示没有名称。 */
+    /**
+     * 旁白与调试使用的可读名称。
+     */
     @Nullable Component accessibleName();
 }
