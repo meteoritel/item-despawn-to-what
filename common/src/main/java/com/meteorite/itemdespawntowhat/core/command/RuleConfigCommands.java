@@ -75,7 +75,7 @@ final class RuleConfigCommands {
         return RuleCommandTree.replyAll(ctx, lines);
     }
 
-    // config edit：先原子取锁，成功后下发 OpenRuleEditorPayload；失败下发 LOCK_BUSY 并提示持有者
+    // config edit：先确认连接的编辑能力再原子取锁，避免不可达客户端占用编辑会话
     private static int edit(CommandContext<CommandSourceStack> ctx, RuleCommandContext context) {
         if (!(ctx.getSource().getEntity() instanceof ServerPlayer player)) {
             return RuleCommandTree.replyFailure(ctx,
@@ -86,6 +86,10 @@ final class RuleConfigCommands {
         var transport = editContext.transport();
         if (!context.available() || service == null || transport == null) {
             return RuleCommandTree.notReady(ctx);
+        }
+        if (!editContext.canReachClient(player)) {
+            return RuleCommandTree.replyFailure(ctx,
+                    RuleCommandText.of("itemdespawntowhat.command.config.edit.client_unavailable").build());
         }
         // 唯一入口：先取锁，成功才发打开载荷；失败同样要下发 LOCK_BUSY 载荷让客户端提示持有者
         RuleEditService.OpenOutcome outcome = service.openEditor(player, ctx.getSource().getServer().getTickCount(), editContext.maxPlaceBlockRadius());

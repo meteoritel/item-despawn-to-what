@@ -1,21 +1,33 @@
 package com.meteorite.itemdespawntowhat.core.command;
 
+import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.api.Issue;
 import com.meteorite.itemdespawntowhat.core.load.RuleLoadResult;
 import com.meteorite.itemdespawntowhat.core.load.RuleSourceLayer;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
+import com.google.gson.JsonParser;
 import net.minecraft.network.chat.Component;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 命令反馈组件构造器。
- * 输出**可翻译组件**：{@code Component.translatable(key, 位置参数...)}，由客户端按玩家语言渲染；
+ * 输出带内置英文 fallback 的可翻译组件：已安装模组的客户端按玩家语言渲染，
+ * 缺少语言资源的客户端使用随组件发送的英文模板。模板从语言资源读取并缓存。
  * 参数一律按追加顺序对应语言文件里的 {@code %1$s/%2$s...}，因此每个 key 的参数个数固定——
  * 条件分支的场景用空串占位，不做可变参数。禁止在命令实现里拼中文字面量。
  */
 public final class RuleCommandText {
+
+    private static final Map<String, String> DEFAULT_MESSAGES = loadDefaultMessages();
 
     private final String key;
     private final List<Object> args = new ArrayList<>(4);
@@ -36,9 +48,35 @@ public final class RuleCommandText {
         return this;
     }
 
-    // 输出最终的可翻译组件
+    /**
+     * 保留客户端语言选择，并为缺少模组语言资源的客户端携带英文模板。
+     *
+     * @return 带英文 fallback 的可翻译命令反馈
+     */
     public Component build() {
-        return Component.translatable(key, args.toArray());
+        return Component.translatableWithFallback(key, DEFAULT_MESSAGES.get(key), args.toArray());
+    }
+
+    static String showInheritFallback() {
+        String key = "itemdespawntowhat.command.rule.show.inherit";
+        return DEFAULT_MESSAGES.getOrDefault(key, key);
+    }
+
+    private static Map<String, String> loadDefaultMessages() {
+        String path = "/assets/" + Constants.MOD_ID + "/lang/en_us.json";
+        try (InputStream stream = RuleCommandText.class.getResourceAsStream(path)) {
+            if (stream == null) {
+                throw new IllegalStateException("Missing command translations: " + path);
+            }
+            Map<String, String> messages = new HashMap<>();
+            try (InputStreamReader reader = new InputStreamReader(stream, StandardCharsets.UTF_8)) {
+                JsonParser.parseReader(reader).getAsJsonObject().entrySet()
+                        .forEach(entry -> messages.put(entry.getKey(), entry.getValue().getAsString()));
+            }
+            return Map.copyOf(messages);
+        } catch (IOException exception) {
+            throw new UncheckedIOException("Cannot read command translations: " + path, exception);
+        }
     }
 
     // 单条问题的组件：severity / message / 位置串（"来源#字段"，可空，固定 3 个参数）

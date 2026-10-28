@@ -42,6 +42,12 @@ public class NeoForgePlatformHelper implements IPlatformHelper {
         return FMLPaths.CONFIGDIR.get();
     }
 
+    /** 按目标连接已开放的通道查询，编辑载荷可选时仍需逐连接确认可达性。 */
+    @Override
+    public boolean canSendToPlayer(ServerPlayer player, CustomPacketPayload.Type<?> type) {
+        return player.connection.hasChannel(type);
+    }
+
     @Override
     public void sendToPlayer(ServerPlayer player, CustomPacketPayload payload) {
         PacketDistributor.sendToPlayer(player, payload);

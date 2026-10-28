@@ -35,7 +35,7 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat/platform、core/
 - **宿主生命周期**：`RuleRuntimeHostCore.start` / `reload` / `shutdown`；两端 `RuleRuntimeHost` 各持有私有 `CORE`，通过 `core()` 返回本端装配的共享宿主。
 - **宿主转发入口**：掉落物加入与移除、环境致死请求、自然消失延后判定、服务端 tick、维度加载与卸载；两端事件接线只调用这些方法。
 - **能力视图**：`editContext()` 与 `commandContext()`，分别在网络层与命令层使用。
-- **平台能力**：`Services.PLATFORM`，即 `IPlatformHelper` 的唯一实例；默认行为逐项定义，`sendToPlayer` 未实现时抛出 `UnsupportedOperationException`，状态读取返回 `DropState.NONE`、写入为空操作。
+- **平台能力**：`Services.PLATFORM`，即 `IPlatformHelper` 的唯一实例；默认行为逐项定义，连接通道查询未实现时返回 `false` 并关闭编辑入口，`sendToPlayer` 未实现时抛出 `UnsupportedOperationException`，状态读取返回 `DropState.NONE`、写入为空操作。
 - **差异适配面**：`RuleRuntimeHostCore.PlatformAdapter`，两端唯一需要实现的差异集合（寿命提供者、包层判定、参考寿命采样与复位）。
 - **配置聚合**：`ServerConfig` 与 `NearbyProductLimits`，字段语义与默认值见 [服务器配置](../ops/configuration.md)。
 - **客户端接线**：Fabric 的 `client.ItemDespawnToWhatClient` 与 NeoForge 的 `client.register.ClientSetup`。
@@ -82,7 +82,7 @@ Fabric 的寿命判定读取运行期参考采样值，采样前使用配置回�
 
 ### 注册面：网络与命令
 
-- **网络**：载荷命名空间取 `RuleEditLimits.NAMESPACE`，协议版本取 `RuleEditProtocol.VERSION`；两端都在公共初始化路径注册 C2S 与 S2C 两类类型，保证连接协商双向可编码。类型、codec、方向与处理器统一取自 `RuleEditChannels`。C2S 回调在调度前捕捉本次编辑服务，切回服务端线程后核对仍是当前实例，再交 `RuleEditServerHandler`。S2C 回调捕捉当前连接 Binding，在客户端主线程核对连接身份后调用中立 receiver；Fabric 客户端接收注册与公共类型注册分别遍历同一声明。
+- **网络**：载荷命名空间取 `RuleEditLimits.NAMESPACE`，协议版本取 `RuleEditProtocol.VERSION`；两端都在公共初始化路径注册 C2S 与 S2C 两类类型，保证连接协商双向可编码。NeoForge 将双向编辑载荷注册为 optional；Fabric 保持自定义 payload 类型注册。各平台按目标连接的接收通道判定编辑能力，打开命令在取锁前验证，服务端传输出口逐载荷检查可达性。类型、codec、方向与处理器统一取自 `RuleEditChannels`。C2S 回调在调度前捕捉本次编辑服务，切回服务端线程后核对仍是当前实例，再交 `RuleEditServerHandler`。S2C 回调捕捉当前连接 Binding，在客户端主线程核对连接身份后调用中立 receiver；Fabric 客户端接收注册与公共类型注册分别遍历同一声明。
 - **命令**：正式平台注册器把 dispatcher 与 `RuleRuntimeHost.core().commandContext()` 交给 `RuleCommandTree`；开发命令由 NeoForge `src/probe` 的 `ProbeMod` 另行合并注册。
 - **开发观测**：`ProbeMod` 装配空接缝的实现、推进开发场景并在停服时释放；运行和发布隔离见[后端探针](../guides/backend-probes.md)。
 - **载荷字段、分片与回执语义**：[编辑协议](../api/edit-protocol.md)。

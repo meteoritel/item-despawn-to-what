@@ -246,6 +246,7 @@
   "itemdespawntowhat.command.not_ready": "The new rule runtime is not ready yet; please wait for the server to finish starting.",
   "itemdespawntowhat.command.load.summary": "Rule load [%1$s]: %2$s rule(s) total (builtin %3$s / world datapack %4$s / overlay %5$s), %6$s error(s), %7$s warning(s)",
   "itemdespawntowhat.command.config.edit.player_only": "This subcommand can only be run by a player.",
+  "itemdespawntowhat.command.config.edit.client_unavailable": "Your client does not support the rule editor. Install a compatible version of Item Despawn To What to use the GUI, or edit the server rule files and run /idtw config reload.",
   "itemdespawntowhat.command.config.edit.sent": "Editor entry sent to %1$s.",
   "itemdespawntowhat.command.config.reload.failed": "Rule reload failed; the previous index and tracking were kept and no rule changes were applied: %1$s",
   "itemdespawntowhat.command.config.list.entry": "%1$s | layer=%2$s | priority=%3$s | trigger=%4$ss | effects=%5$s | enabled=%6$s | origin=%7$s",

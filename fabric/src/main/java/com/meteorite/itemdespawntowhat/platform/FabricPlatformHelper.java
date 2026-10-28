@@ -43,6 +43,12 @@ public class FabricPlatformHelper implements IPlatformHelper {
         return FabricLoader.getInstance().getConfigDir();
     }
 
+    /** 按目标连接声明的接收通道查询，独立于服务端本地的模组列表。 */
+    @Override
+    public boolean canSendToPlayer(ServerPlayer player, CustomPacketPayload.Type<?> type) {
+        return ServerPlayNetworking.canSend(player, type);
+    }
+
     @Override
     public void sendToPlayer(ServerPlayer player, CustomPacketPayload payload) {
         ServerPlayNetworking.send(player, payload);

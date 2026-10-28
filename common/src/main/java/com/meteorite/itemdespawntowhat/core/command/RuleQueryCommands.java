@@ -87,7 +87,9 @@ final class RuleQueryCommands {
                     Boolean override = RuleEnableState.get(ctx.getSource().getServer().overworld()).overrideFor(id);
                     RuleCommandTree.reply(ctx, RuleCommandText.of("itemdespawntowhat.command.rule.show.source")
                             .kv("id", id).kv("origin", result.origin())
-                            .kv("override", override == null ? Component.translatable("itemdespawntowhat.command.rule.show.inherit").getString() : override).build());
+                            .kv("override", override == null
+                                    ? RuleCommandText.showInheritFallback()
+                                    : override).build());
                     RuleCommandTree.reply(ctx, RuleCommandText.of("itemdespawntowhat.command.rule.show.json").kv("json", result.json()).build());
                 }
                 case INVALID_REQUEST -> notFound(ctx, id);

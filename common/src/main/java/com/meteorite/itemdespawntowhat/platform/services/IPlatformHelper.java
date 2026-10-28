@@ -31,6 +31,17 @@ public interface IPlatformHelper {
     }
 
     /**
+     * 查询目标玩家的当前连接是否声明可接收指定载荷；未提供查询能力的平台保持编辑入口关闭。
+     *
+     * @param player 目标玩家
+     * @param type 下行载荷类型
+     * @return 当前连接是否具备该接收通道
+     */
+    default boolean canSendToPlayer(ServerPlayer player, CustomPacketPayload.Type<?> type) {
+        return false;
+    }
+
+    /**
      * 向指定玩家发送服务端负载。
      *
      * @param player 目标玩家

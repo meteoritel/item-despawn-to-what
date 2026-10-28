@@ -20,9 +20,9 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 public final class RuleEditPayloadRegistrar {
     private RuleEditPayloadRegistrar() { }
 
-    /** 从唯一声明注册双向通道，专用服务端也完成下行协商注册。 */
+    /** 双向编辑通道均为可选，允许任一端缺少编辑客户端或服务端。 */
     @SubscribeEvent public static void registerPayloads(RegisterPayloadHandlersEvent event) {
-        PayloadRegistrar registrar = event.registrar(Integer.toString(RuleEditProtocol.VERSION));
+        PayloadRegistrar registrar = event.registrar(Integer.toString(RuleEditProtocol.VERSION)).optional();
         RuleEditChannels.serverbound().forEach(channel -> server(registrar, channel));
         RuleEditChannels.clientbound().forEach(channel -> client(registrar, channel));
         NeoForge.EVENT_BUS.addListener((PlayerEvent.PlayerLoggedOutEvent logout) -> {

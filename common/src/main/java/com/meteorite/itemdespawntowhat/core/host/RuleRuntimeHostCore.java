@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.core.host;
 
 import com.meteorite.itemdespawntowhat.Constants;
+import com.meteorite.itemdespawntowhat.core.network.transport.OpenRuleEditorPayload;
 import com.meteorite.itemdespawntowhat.core.api.Issue;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.IssueSeverity;
@@ -467,7 +468,17 @@ public final class RuleRuntimeHostCore {
         }
 
         @Override
+        public boolean canReachClient(ServerPlayer player) {
+            return Services.PLATFORM.canSendToPlayer(player, OpenRuleEditorPayload.TYPE);
+        }
+
+        @Override
         public void sendTo(ServerPlayer player, CustomPacketPayload payload) {
+            if (!Services.PLATFORM.canSendToPlayer(player, payload.type())) {
+                LOGGER.warn("跳过向玩家 {} 发送未开放通道的编辑载荷 {}",
+                        player.getGameProfile().getName(), payload.type().id());
+                return;
+            }
             // 发包方式由平台层提供（Fabric: ServerPlayNetworking / NeoForge: PacketDistributor）
             Services.PLATFORM.sendToPlayer(player, payload);
         }

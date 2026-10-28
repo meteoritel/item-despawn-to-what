@@ -246,6 +246,7 @@
   "itemdespawntowhat.command.not_ready": "新链路规则运行时尚未就绪，请等待服务端启动完成。",
   "itemdespawntowhat.command.load.summary": "规则加载[%1$s]：共 %2$s 条（内置数据包 %3$s / 世界数据包 %4$s / 覆盖层 %5$s），错误 %6$s，告警 %7$s",
   "itemdespawntowhat.command.config.edit.player_only": "该子命令只能由玩家执行。",
+  "itemdespawntowhat.command.config.edit.client_unavailable": "当前客户端未提供规则编辑通道。请安装兼容版本的 Item Despawn To What 后使用 GUI，或修改服务端规则文件后执行 /idtw config reload。",
   "itemdespawntowhat.command.config.edit.sent": "已向 %1$s 发送编辑入口。",
   "itemdespawntowhat.command.config.reload.failed": "规则重载失败，已保留旧索引与追踪，本次未应用任何规则变更：%1$s",
   "itemdespawntowhat.command.config.list.entry": "%1$s | 来源层=%2$s | 优先级=%3$s | 触发=%4$s 秒 | 效果=%5$s | 启用=%6$s | 出处=%7$s",
