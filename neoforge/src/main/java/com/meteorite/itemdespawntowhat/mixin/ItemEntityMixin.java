@@ -25,7 +25,7 @@ public abstract class ItemEntityMixin {
     private void itemdespawntowhat$onEnvironmentDestroy(DamageSource source, float amount, CallbackInfoReturnable<Boolean> cir) {
         ItemEntity self = (ItemEntity) (Object) this;
         if (self.level() instanceof ServerLevel level) {
-            RuleRuntimeHost.requestEnvironmentalConversion(level, self, source);
+            RuleRuntimeHost.core().requestEnvironmentalConversion(level, self, source);
         }
     }
 

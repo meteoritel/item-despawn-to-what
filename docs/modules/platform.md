@@ -9,7 +9,7 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat/platform、core/
 
 > **TL;DR**
 > - 公共宿主持有一次存档生命周期的全部运行时状态，两端只实现差异适配面、事件接线与注册。
-> - 平台能力经 `IPlatformHelper` 由 `ServiceLoader` 注入；两端各提供一个实现，能力以接口默认实现兜底。
+> - 平台能力经 `IPlatformHelper` 由 `ServiceLoader` 注入；发包由两端实现，状态读写另有无状态/空操作的默认语义。
 > - Fabric 与 NeoForge 的事件能力不同：能走原生事件的走事件，事件覆盖不到的路径用最小 Mixin 补齐。
 
 **适用对象**：新增平台能力、调整服务端生命周期接线、补 Mixin 或维护客户端接入的开发者。读之前先看 [架构总览](../architecture/overview.md) 与 [包职责](../architecture/package-responsibility.md)。
@@ -20,7 +20,7 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat/platform、core/
 
 模块承担的面：
 
-- **公共宿主** `RuleRuntimeHostCore`：引导、数据包重载、停服、维度回扫，以及掉落物进入/离开、环境致死、自然消失判定、tick 的转发入口；持有一次存档生命周期的当前服务端、模组级配置、内置类型注册表、覆盖层目录、运行时与保存重载上下文。
+- **公共宿主** `RuleRuntimeHostCore`：引导、数据包重载、停服、维度回扫，以及掉落物进入/离开、环境致死与自然消失判定；统一编排运行时、编辑交付、观测窗口与租约过期，持有一次存档生命周期的当前服务端、配置、注册表、覆盖层、运行时与保存重载上下文。
 - **窄接口适配**：以 `RuleAuthoringContext` 提供业务能力，`RuleEditServerContext` 在其上组合传输与发包，`RuleCommandContext` 提供命令能力；开发诊断单独取得宿主的 `RuleRuntimeDiagnosticsContext`。
 - **平台能力注入**：`IPlatformHelper` 由 `ServiceLoader` 发现唯一实现，具体能力面见接口本身；实体状态的读写也在这里，两端使用各自的持久化容器。
 - **模组级配置读取**：`ServerConfig.loadOrCreate` 负责 `server.json` 的读取、缺失即落盘与坏文件降级，两端共用同一实现与同一份文件。
@@ -32,10 +32,10 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat/platform、core/
 
 ### 对外入口
 
-- **宿主生命周期**：`RuleRuntimeHostCore.start` / `reload` / `shutdown`，两端 `RuleRuntimeHost` 提供同名静态门面并持有单例 `CORE`。
+- **宿主生命周期**：`RuleRuntimeHostCore.start` / `reload` / `shutdown`；两端 `RuleRuntimeHost` 各持有私有 `CORE`，通过 `core()` 返回本端装配的共享宿主。
 - **宿主转发入口**：掉落物加入与移除、环境致死请求、自然消失延后判定、服务端 tick、维度加载与卸载；两端事件接线只调用这些方法。
 - **能力视图**：`editContext()` 与 `commandContext()`，分别在网络层与命令层使用。
-- **平台能力**：`Services.PLATFORM`，即 `IPlatformHelper` 的唯一实例；新增能力先在该接口加默认实现。
+- **平台能力**：`Services.PLATFORM`，即 `IPlatformHelper` 的唯一实例；默认行为逐项定义，`sendToPlayer` 未实现时抛出 `UnsupportedOperationException`，状态读取返回 `DropState.NONE`、写入为空操作。
 - **差异适配面**：`RuleRuntimeHostCore.PlatformAdapter`，两端唯一需要实现的差异集合（寿命提供者、包层判定、参考寿命采样与复位）。
 - **配置聚合**：`ServerConfig` 与 `NearbyProductLimits`，字段语义与默认值见 [服务器配置](../ops/configuration.md)。
 - **客户端接线**：Fabric 的 `client.ItemDespawnToWhatClient` 与 NeoForge 的 `client.register.ClientSetup`。
@@ -64,8 +64,9 @@ flowchart LR
 | 关注点 | Fabric 端 | NeoForge 端 |
 |---|---|---|
 | 模组入口 | `ModInitializer#onInitialize` 依次注册运行时事件、编辑载荷、命令注册器 | `@Mod` 构造为空，事件由各 `@EventBusSubscriber` 类静态注册 |
-| 服务端启动 | `ServerLifecycleEvents.SERVER_STARTED` 转 `RuleRuntimeHost.start` | `ServerStartedEvent` 转同名方法 |
-| 服务端停止 | `SERVER_STOPPING` 转 `RuleRuntimeHost.shutdown` | `ServerStoppingEvent` 转同名方法 |
+| 服务端启动 | `ServerLifecycleEvents.SERVER_STARTED` 转 `RuleRuntimeHost.core().start` | `ServerStartedEvent` 转本端装配的共享宿主 |
+| 服务端停止 | `SERVER_STOPPING` 转 `RuleRuntimeHost.core().shutdown` | `ServerStoppingEvent` 转本端装配的共享宿主 |
+| 服务端 tick | `END_SERVER_TICK` 调用一次 `core().tickServer` | `ServerTickEvent.Post` 调用同一共享入口 |
 | 数据包重载 | `END_DATA_PACK_RELOAD`，成功标志为真才重建 | `OnDatapackSyncEvent`，`getPlayer()` 为空时重建（登录同步不重建） |
 | 掉落物进入与离开 | `ServerEntityEvents.ENTITY_LOAD` / `ENTITY_UNLOAD` | `EntityJoinLevelEvent` / `EntityLeaveLevelEvent` |
 | 自然消失 | Mixin 拦截 `ItemEntity#tick` 的 `discard()`，延后判定为真时不丢弃 | `ItemExpireEvent`，延后判定为真时 `addExtraLife`，并在寿命钳制上限前抬升 age |
@@ -77,10 +78,12 @@ flowchart LR
 | 命令注册 | `CommandRegistrationCallback` | `RegisterCommandsEvent` |
 | 客户端初始化 | `ClientModInitializer#onInitializeClient` 顺序接线 | `FMLClientSetupEvent` 内 `enqueueWork` 到客户端主线程 |
 
+Fabric 的寿命判定读取运行期参考采样值，采样前使用配置回退；NeoForge 读取实体自身 `lifespan`。自定义掉落物寿命时，两端的到期判断可以因此不同，寿命来源和事件覆盖由各自 Adapter 与事件实现承担。
+
 ### 注册面：网络与命令
 
 - **网络**：载荷命名空间取 `RuleEditLimits.NAMESPACE`，协议版本取 `RuleEditProtocol.VERSION`；两端都在公共初始化路径注册 C2S 与 S2C 两类类型，保证连接协商双向可编码。类型、codec、方向与处理器统一取自 `RuleEditChannels`。C2S 回调在调度前捕捉本次编辑服务，切回服务端线程后核对仍是当前实例，再交 `RuleEditServerHandler`。S2C 回调捕捉当前连接 Binding，在客户端主线程核对连接身份后调用中立 receiver；Fabric 客户端接收注册与公共类型注册分别遍历同一声明。
-- **命令**：正式平台注册器把 dispatcher 与 `RuleRuntimeHost.commandContext()` 交给 `RuleCommandTree`；开发命令由 NeoForge `src/probe` 的 `ProbeMod` 另行合并注册。
+- **命令**：正式平台注册器把 dispatcher 与 `RuleRuntimeHost.core().commandContext()` 交给 `RuleCommandTree`；开发命令由 NeoForge `src/probe` 的 `ProbeMod` 另行合并注册。
 - **开发观测**：`ProbeMod` 装配空接缝的实现、推进开发场景并在停服时释放；运行和发布隔离见[后端探针](../guides/backend-probes.md)。
 - **载荷字段、分片与回执语义**：[编辑协议](../api/edit-protocol.md)。
 
@@ -92,11 +95,11 @@ flowchart LR
 |---|---|---|---|
 | `RuleRuntimeHostCore`（core/host） | 聚合根·生命周期 | 持有一次存档生命周期的配置、注册表、覆盖层、运行时与保存重载上下文；启动失败就地降级为未启动并释放本轮状态，重载失败保留上一版索引 | `PlatformAdapter`、`ConversionRuntime`、`RuleLoadingService`、`AuthoringHost` |
 | `RuleRuntimeHostCore.PlatformAdapter`（core/host） | 扩展点 | 两端唯一需要实现的差异面：寿命提供者、包层判定、参考寿命采样与复位 | 两端 `RuleRuntimeHost` |
-| `Services` / `IPlatformHelper`（common/platform） | 注入入口 | `ServiceLoader` 发现唯一实现；平台名、模组判断、开发环境、配置目录、发包与实体状态读写都以接口方法声明，默认实现给出安全兜底 | 全部调用方 |
+| `Services` / `IPlatformHelper`（common/platform） | 注入入口 | `ServiceLoader` 发现唯一实现；接口逐项声明环境查询、发包与状态读写能力及默认语义 | 全部调用方 |
 | `FabricPlatformHelper` / `NeoForgePlatformHelper`（两端 platform 包） | 平台能力实现 | 按各自加载器 API 覆盖能力方法 | `Services.PLATFORM` |
-| `RuleRuntimeHost`（两端 runtime 包） | 端适配门面 | 持有 `CORE` 单例，提供静态转发，并把本端 `PlatformAdapter` 交给核心 | `RuleRuntimeEvents`、网络与命令注册器 |
-| `RuleRuntimeEvents`（两端 runtime 包） | 事件接线 | 平台事件转宿主转发方法；同时驱动编辑会话 tick 与空闲过期；开发调试由 NeoForge probe 事件独立驱动 | `RuleRuntimeHost`、`RuleEditServerHandler` |
-| `ItemEntityMixin`、`EntityMixin`、`PlayerMixin`、`ItemLifespanReferenceMixin`（各端 mixin 包） | 最小注入 | 补齐平台事件覆盖不到的路径：自然到期、环境伤害、死亡掉落标记、掉落物合并兼容、参考寿命采样 | `DropStateStore`、死亡掉落标记、`RuleRuntimeHost` |
+| `RuleRuntimeHost`（两端 runtime 包） | 端装配入口 | 持有私有 `CORE`，通过 `core()` 提供共享宿主，并向核心注入本端 `PlatformAdapter` | `RuleRuntimeEvents`、网络与命令注册器 |
+| `RuleRuntimeEvents`（两端 runtime 包） | 事件接线 | 每个服务端 tick 只进入共享宿主一次；开发调试由 NeoForge probe 事件独立驱动 | `RuleRuntimeHost` |
+| 两端 `ItemEntityMixin`；Fabric 的 `EntityMixin`、`PlayerMixin`、`ItemLifespanReferenceMixin` | 最小注入 | 两端补齐销毁与合并路径；Fabric 另补自然到期、环境伤害、死亡掉落标记与参考寿命采样；NeoForge 对应路径使用原生事件 | `DropStateStore`、死亡掉落标记、`RuleRuntimeHost` |
 | `RuleEditPayloadRegistrar`（两端 network/registrar） | 注册面 | 载荷类型、协议版本、服务端接收器与断线清理；S2C 只经路由器分发 | `RuleEditServerHandler`、`RuleEditPayloadRouter` |
 | `FabricRuleCommandRegistrar` / `NeoForgeRuleCommandRegistrar` | 注册面 | 把命令树挂到平台命令事件 | `RuleCommandTree` |
 | `ClientSetup` / `ItemDespawnToWhatClient`（两端 client 包） | 客户端接线 | 安装发送器、注册 S2C 接收器与连接绑定/解绑、客户端 tick 与界面 opener bootstrap | `RuleEditClientWorkspace`、`EditorScreenHooks` |
@@ -109,11 +112,12 @@ flowchart LR
 ```mermaid
 sequenceDiagram
     participant P as 平台事件
-    participant H as RuleRuntimeHost（端门面）
+    participant H as RuleRuntimeHost（端装配）
     participant C as RuleRuntimeHostCore
     participant R as ConversionRuntime
-    P->>H: 服务端启动
-    H->>C: start(server)
+    P->>H: core()
+    H-->>P: 本端共享宿主
+    P->>C: start(server)
     C->>C: shutdown() 释放上一轮
     C->>C: RuleOverlayStore.requireIdle()
     C->>C: loadOrCreate(server.json)
@@ -149,6 +153,12 @@ flowchart TD
 
 重载与保存后的重建共用同一条发布实现（换入索引与候选摘要、逐维排队回扫都在运行时内部）；两条路径的差异只在等待与失败表现：重载不等待收尾、构建失败保留旧索引并返回空结果；保存链路在公共预算内等到回扫完成，失败落成已写盘未重载。
 
+### 服务端 tick
+
+两端 tick 结束事件只调用 `RuleRuntimeHost.core().tickServer(server)`。共享宿主依次开始观测、推进运行时共享预算、推进编辑交付并结束观测；租约过期按服务端 tick 计数的每秒节拍在观测窗口外执行。开始与结束使用同一个 Observer，结束放在 `finally` 中；业务异常继续沿原调用栈传播，其后的业务步骤中止。
+
+NeoForge 开发场景在正式 tick 后以 `LOWEST` 优先级推进；停服前以 `HIGHEST` 先释放夹具，再由正式事件关闭宿主。
+
 ### 客户端接入顺序
 
 两端在客户端初始化安装发送器和界面 opener；接收对象随连接建立而绑定，断线时只解绑对应连接并重置工作区：
@@ -162,16 +172,16 @@ flowchart TD
 
 ### 新增平台能力
 
-1. 先在 `IPlatformHelper` 加方法并给出安全默认实现：世界逻辑热路径上的读取（如实体状态）只能返回确定值，不得抛异常。
-2. 两端实现按需覆盖；覆盖前调用方拿到的就是默认语义。
+1. 在 `IPlatformHelper` 明确能力契约：必需能力由两端实现；可选能力在空状态有业务意义时提供对应默认值或空操作。
+2. 两端分别适配加载器 API；发包沿用未实现即抛异常的契约，实体状态的热路径默认读写保持无状态语义。
 3. 调用方只经 `Services.PLATFORM`，不在业务代码里判断当前平台。
 4. 能力与“一次存档生命周期”绑定时（需要服务端实例、需要每次启动重建），加在 `PlatformAdapter` 上而不是 `IPlatformHelper`。
 
 ### 新增事件接线
 
 - 订阅写在 `RuleRuntimeEvents`，回调只做薄转发：判断当前是否就绪、状态是否命中的逻辑留在核心，平台类不复制业务规则。
-- 需要两端语义一致时在 `RuleRuntimeHostCore` 加转发方法，两端各自接一次线。
-- 服务端 tick 上的新工作并入现有 tick 入口，与编辑会话 tick、空闲过期、调试会话保持既有顺序，避免同一帧内的处理顺序漂移。
+- 共享业务入口加在 `RuleRuntimeHostCore`，调用方通过 `core()` 取得宿主；平台类仅在新增事件或真实平台能力时接线。
+- 服务端 tick 上的新工作并入共享 tick 入口；开发场景沿用独立事件与既有优先级。
 
 ### Mixin 使用原则
 

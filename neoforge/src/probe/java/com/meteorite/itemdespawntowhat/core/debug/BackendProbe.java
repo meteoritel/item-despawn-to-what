@@ -82,7 +82,7 @@ public final class BackendProbe {
         if (step.startsWith("world:")) { world = new BackendWorldProbe(server, step.substring(6)); }
         else if (DebugScenarioManager.startHeadless(server.createCommandSourceStack()
                 .withLevel(server.overworld()).withPosition(new Vec3(8, 100, 8)),
-                RuleRuntimeHost.diagnosticsContext(), step.substring(6), benchmark) != 1) {
+                RuleRuntimeHost.core().diagnosticsContext(), step.substring(6), benchmark) != 1) {
             throw new IllegalStateException("场景启动失败: " + step);
         }
         report.write("RUNNING", null, null);
@@ -99,7 +99,7 @@ public final class BackendProbe {
 
     /** 正式运行时完成、场景推进之前记录 tick；序列化留到步骤结束。 */
     public static void observeTick(MinecraftServer server) {
-        DebugProbePerformance.tick(server, RuleRuntimeHost.diagnosticsContext().runtime());
+        DebugProbePerformance.tick(server, RuleRuntimeHost.core().diagnosticsContext().runtime());
     }
 
     /** 提前停服输出非成功终态，报告和场景日志保留首错证据。 */

@@ -27,14 +27,14 @@ public final class RuleEditPayloadRegistrar {
         RuleEditChannels.clientbound().forEach(channel -> client(registrar, channel));
         NeoForge.EVENT_BUS.addListener((PlayerEvent.PlayerLoggedOutEvent logout) -> {
             if (logout.getEntity() instanceof ServerPlayer player) {
-                RuleEditServerHandler.clearPlayer(player.getUUID(), RuleRuntimeHost.editContext());
+                RuleEditServerHandler.clearPlayer(player.getUUID(), RuleRuntimeHost.core().editContext());
             }
         });
     }
 
     private static <P extends CustomPacketPayload> void server(PayloadRegistrar registrar, RuleEditChannels.Serverbound<P> channel) {
         registrar.playToServer(channel.type(), channel.codec(), (payload, context) -> {
-            var target = RuleRuntimeHost.editContext();
+            var target = RuleRuntimeHost.core().editContext();
             var service = target.editService();
             context.enqueueWork(() -> {
                 if (target.editService() == service && context.player() instanceof ServerPlayer player) {

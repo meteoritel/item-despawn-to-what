@@ -1,7 +1,5 @@
 package com.meteorite.itemdespawntowhat.runtime;
 
-import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
-
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -35,13 +33,13 @@ public final class RuleRuntimeEvents {
     // 服务端就绪：此时全部维度已创建，可安全回扫；启动期的首次数据包加载不作为重载处理
     @SubscribeEvent
     public static void onServerStarted(ServerStartedEvent event) {
-        RuleRuntimeHost.start(event.getServer());
+        RuleRuntimeHost.core().start(event.getServer());
     }
 
     // 服务端停止：释放全部维度的追踪状态与到期任务
     @SubscribeEvent
     public static void onServerStopping(ServerStoppingEvent event) {
-        RuleRuntimeHost.shutdown();
+        RuleRuntimeHost.core().shutdown();
     }
 
     // PlayerList.reloadResources 在新资源与标签切换后发布事件；登录同步不需要重建索引。
@@ -49,7 +47,7 @@ public final class RuleRuntimeEvents {
     public static void onDatapackSync(OnDatapackSyncEvent event) {
         if (event.getPlayer() == null) {
             var server = event.getPlayerList().getServer();
-            RuleRuntimeHost.reload(server, server.getResourceManager());
+            RuleRuntimeHost.core().reload(server, server.getResourceManager());
         }
     }
 
@@ -57,7 +55,7 @@ public final class RuleRuntimeEvents {
     @SubscribeEvent
     public static void onEntityJoinLevel(EntityJoinLevelEvent event) {
         if (event.getLevel() instanceof ServerLevel level && event.getEntity() instanceof ItemEntity item) {
-            RuleRuntimeHost.onItemAdded(level, item);
+            RuleRuntimeHost.core().onItemAdded(level, item);
         }
     }
 
@@ -72,7 +70,7 @@ public final class RuleRuntimeEvents {
     @SubscribeEvent
     public static void onEntityLeave(EntityLeaveLevelEvent event) {
         if (event.getLevel() instanceof ServerLevel level && event.getEntity() instanceof ItemEntity item) {
-            RuleRuntimeHost.onItemRemoved(level, item);
+            RuleRuntimeHost.core().onItemRemoved(level, item);
         }
     }
 
@@ -80,7 +78,7 @@ public final class RuleRuntimeEvents {
     @SubscribeEvent
     public static void onItemExpire(ItemExpireEvent event) {
         ItemEntity item = event.getEntity();
-        if (item.level() instanceof ServerLevel level && RuleRuntimeHost.deferNaturalExpiry(level, item)) {
+        if (item.level() instanceof ServerLevel level && RuleRuntimeHost.core().deferNaturalExpiry(level, item)) {
             // NeoForge 将寿命钳制为 32766；达到边界时短暂重置年龄，队列仍按 expiryPending 判定并最终 discard。
             if (item.getAge() >= 32765) { item.setExtendedLifetime(); }
             event.addExtraLife(1);
@@ -102,21 +100,14 @@ public final class RuleRuntimeEvents {
     // 服务器 tick 结束：统一推进一次公共预算（所有维度共享），再处理周期性失效清理
     @SubscribeEvent
     public static void onServerTick(net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) {
-        RuntimeObserver.current().runtimeTickStarted(event.getServer());
-        RuleRuntimeHost.tickServer(event.getServer());
-        com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler.tick(event.getServer(), RuleRuntimeHost.editContext());
-        RuntimeObserver.current().runtimeTickFinished(event.getServer());
-        if (event.getServer().getTickCount() % 20 == 0) {
-            com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler
-                    .expireIdle(event.getServer(), RuleRuntimeHost.editContext());
-        }
+        RuleRuntimeHost.core().tickServer(event.getServer());
     }
 
     // 维度加载：对后加载的维度补一次回扫（本事件两端都会触发，只处理服务端维度）
     @SubscribeEvent
     public static void onLevelLoad(LevelEvent.Load event) {
         if (event.getLevel() instanceof ServerLevel level) {
-            RuleRuntimeHost.levelLoaded(level);
+            RuleRuntimeHost.core().levelLoaded(level);
         }
     }
 
@@ -124,7 +115,7 @@ public final class RuleRuntimeEvents {
     @SubscribeEvent
     public static void onLevelUnload(LevelEvent.Unload event) {
         if (event.getLevel() instanceof ServerLevel level) {
-            RuleRuntimeHost.levelUnloaded(level);
+            RuleRuntimeHost.core().levelUnloaded(level);
         }
     }
 }

@@ -40,14 +40,14 @@ public final class ProbeMod {
     /** 开发命令与正式根命令合并，生产命令树没有探针依赖。 */
     @SubscribeEvent(priority = EventPriority.LOWEST)
     public static void commands(RegisterCommandsEvent event) {
-        event.getDispatcher().register(Commands.literal(RuleCommandTree.ROOT).then(RuleDebugCommands.build(RuleRuntimeHost.diagnosticsContext())));
+        event.getDispatcher().register(Commands.literal(RuleCommandTree.ROOT).then(RuleDebugCommands.build(RuleRuntimeHost.core().diagnosticsContext())));
     }
 
     /** 正式运行时已推进后再推进开发夹具，世界读写仍在服务端线程。 */
     @SubscribeEvent(priority = EventPriority.LOWEST)
     public static void tick(ServerTickEvent.Post event) {
         BackendProbe.observeTick(event.getServer());
-        DebugSessionManager.tick(event.getServer(), RuleRuntimeHost.diagnosticsContext());
+        DebugSessionManager.tick(event.getServer(), RuleRuntimeHost.core().diagnosticsContext());
         BackendProbe.tick(event.getServer());
     }
 
@@ -55,7 +55,7 @@ public final class ProbeMod {
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     public static void stopping(ServerStoppingEvent event) {
         BackendProbe.stopping();
-        DebugSessionManager.shutdown(event.getServer(), RuleRuntimeHost.diagnosticsContext());
+        DebugSessionManager.shutdown(event.getServer(), RuleRuntimeHost.core().diagnosticsContext());
     }
 
     /** 释放装配引用，下一次存档启动重新安装。 */

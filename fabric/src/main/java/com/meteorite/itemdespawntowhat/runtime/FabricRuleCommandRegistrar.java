@@ -22,6 +22,6 @@ public final class FabricRuleCommandRegistrar {
         }
         registered = true;
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
-                RuleCommandTree.register(dispatcher, RuleRuntimeHost.commandContext()));
+                RuleCommandTree.register(dispatcher, RuleRuntimeHost.core().commandContext()));
     }
 }

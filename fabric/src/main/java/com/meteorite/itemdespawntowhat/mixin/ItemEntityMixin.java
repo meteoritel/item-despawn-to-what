@@ -22,7 +22,7 @@ public abstract class ItemEntityMixin {
 
     @Redirect(method = "tick", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/item/ItemEntity;discard()V", ordinal = 1))
     private void itemdespawntowhat$beforeNaturalExpiry(ItemEntity item) {
-        if (!(item.level() instanceof ServerLevel level) || !RuleRuntimeHost.deferNaturalExpiry(level, item)) {
+        if (!(item.level() instanceof ServerLevel level) || !RuleRuntimeHost.core().deferNaturalExpiry(level, item)) {
             item.discard();
         }
     }
@@ -33,7 +33,7 @@ public abstract class ItemEntityMixin {
     private void itemdespawntowhat$onEnvironmentDestroy(DamageSource source, float amount, CallbackInfoReturnable<Boolean> cir) {
         ItemEntity self = (ItemEntity) (Object) this;
         if (self.level() instanceof ServerLevel level) {
-            RuleRuntimeHost.requestEnvironmentalConversion(level, self, source);
+            RuleRuntimeHost.core().requestEnvironmentalConversion(level, self, source);
         }
     }
 

@@ -20,6 +20,6 @@ public final class NeoForgeRuleCommandRegistrar {
     // 注册命令树；事件只在服务端启动时触发一次
     @SubscribeEvent
     public static void onRegisterCommands(RegisterCommandsEvent event) {
-        RuleCommandTree.register(event.getDispatcher(), RuleRuntimeHost.commandContext());
+        RuleCommandTree.register(event.getDispatcher(), RuleRuntimeHost.core().commandContext());
     }
 }

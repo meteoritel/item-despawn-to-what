@@ -1,7 +1,5 @@
 package com.meteorite.itemdespawntowhat.runtime;
 
-import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
-
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
@@ -31,15 +29,15 @@ public final class RuleRuntimeEvents {
         registered = true;
 
         // 服务端就绪：此时全部维度已创建，可安全回扫；启动期的首次数据包加载不作为重载处理
-        ServerLifecycleEvents.SERVER_STARTED.register(RuleRuntimeHost::start);
+        ServerLifecycleEvents.SERVER_STARTED.register(RuleRuntimeHost.core()::start);
 
         // 服务端停止：释放全部维度的追踪状态与到期任务
-        ServerLifecycleEvents.SERVER_STOPPING.register(server -> RuleRuntimeHost.shutdown());
+        ServerLifecycleEvents.SERVER_STOPPING.register(server -> RuleRuntimeHost.core().shutdown());
 
         // 数据包重载：该回调在服务端线程（handleAsync(server)）触发，成功后重建索引并回扫
         ServerLifecycleEvents.END_DATA_PACK_RELOAD.register((server, resourceManager, success) -> {
             if (success) {
-                RuleRuntimeHost.reload(server, resourceManager);
+                RuleRuntimeHost.core().reload(server, resourceManager);
             } else {
                 LOGGER.warn("数据包重载失败，保留上一版规则索引");
             }
@@ -48,30 +46,21 @@ public final class RuleRuntimeEvents {
         // 掉落物进入世界（含从磁盘加载的实体）：纳入追踪
         ServerEntityEvents.ENTITY_LOAD.register((entity, world) -> {
             if (entity instanceof ItemEntity item) {
-                RuleRuntimeHost.onItemAdded(world, item);
+                RuleRuntimeHost.core().onItemAdded(world, item);
             }
         });
 
         ServerEntityEvents.ENTITY_UNLOAD.register((entity, world) -> {
-            if (entity instanceof ItemEntity item) { RuleRuntimeHost.onItemRemoved(world, item); }
+            if (entity instanceof ItemEntity item) { RuleRuntimeHost.core().onItemRemoved(world, item); }
         });
 
         // 服务器 tick 结束：只推进一次公共预算（所有维度共享）
-        ServerTickEvents.END_SERVER_TICK.register(server -> {
-            RuntimeObserver.current().runtimeTickStarted(server);
-            RuleRuntimeHost.tickServer(server);
-            com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler.tick(server, RuleRuntimeHost.editContext());
-            RuntimeObserver.current().runtimeTickFinished(server);
-            if (server.getTickCount() % 20 == 0) {
-                com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler
-                        .expireIdle(server, RuleRuntimeHost.editContext());
-            }
-        });
+        ServerTickEvents.END_SERVER_TICK.register(RuleRuntimeHost.core()::tickServer);
 
         // 维度加载：对后加载的维度补一次回扫
-        ServerWorldEvents.LOAD.register((server, world) -> RuleRuntimeHost.levelLoaded(world));
+        ServerWorldEvents.LOAD.register((server, world) -> RuleRuntimeHost.core().levelLoaded(world));
 
         // 维度卸载：释放该维度状态
-        ServerWorldEvents.UNLOAD.register((server, world) -> RuleRuntimeHost.levelUnloaded(world));
+        ServerWorldEvents.UNLOAD.register((server, world) -> RuleRuntimeHost.core().levelUnloaded(world));
     }
 }

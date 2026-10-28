@@ -17,13 +17,13 @@ public final class RuleEditPayloadRegistrar {
         RuleEditChannels.serverbound().forEach(RuleEditPayloadRegistrar::server);
         RuleEditChannels.clientbound().forEach(RuleEditPayloadRegistrar::clientType);
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) ->
-                RuleEditServerHandler.clearPlayer(handler.getPlayer().getUUID(), RuleRuntimeHost.editContext()));
+                RuleEditServerHandler.clearPlayer(handler.getPlayer().getUUID(), RuleRuntimeHost.core().editContext()));
     }
 
     private static <P extends CustomPacketPayload> void server(RuleEditChannels.Serverbound<P> channel) {
         PayloadTypeRegistry.playC2S().register(channel.type(), channel.codec());
         ServerPlayNetworking.registerGlobalReceiver(channel.type(), (payload, context) -> {
-            var target = RuleRuntimeHost.editContext();
+            var target = RuleRuntimeHost.core().editContext();
             var service = target.editService();
             context.server().execute(() -> {
                 if (target.editService() == service) { channel.handler().accept(context.player(), target, payload); }

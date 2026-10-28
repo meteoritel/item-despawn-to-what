@@ -22,6 +22,8 @@ import com.meteorite.itemdespawntowhat.core.runtime.RuleIndex;
 import com.meteorite.itemdespawntowhat.core.type.BuiltinTypeRegistries;
 import com.meteorite.itemdespawntowhat.core.service.RuleOverlayStore;
 import com.meteorite.itemdespawntowhat.core.service.RuleEditService;
+import com.meteorite.itemdespawntowhat.core.service.RuleEditSessionLimits;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler;
 import com.meteorite.itemdespawntowhat.core.service.RuleLoadContext;
 import com.meteorite.itemdespawntowhat.core.service.RuleLoadingService;
 import com.meteorite.itemdespawntowhat.core.service.RuleSaveReloadContext;
@@ -46,7 +48,7 @@ import java.util.Objects;
 /**
  * 新链路（core/runtime）的公共宿主实现：持有一次存档生命周期的运行时状态，装配引导、数据包重载与停服时序，
  * 并以窄接口向网络层与命令层暴露运行时能力。
- * 两端平台宿主只保留 {@link PlatformAdapter} 的适配代码与事件转发；此前的当前服务端获取与重载签名差异由本类统一持有。
+ * 两端装配类提供本端 {@link PlatformAdapter}，事件直接调用本宿主；完整 tick 编排与生命周期状态由本类持有。
  * 生命周期契约：{@link #start(MinecraftServer)} 失败时就地降级回未启动状态，异常不外泄到平台启动回调。
  */
 public final class RuleRuntimeHostCore {
@@ -328,11 +330,26 @@ public final class RuleRuntimeHostCore {
         return current != null && current.deferNaturalExpiry(level, item);
     }
 
-    // 服务器 tick 结束：推进唯一的公共预算；所有维度、所有任务种类共享同一份额度
+    /**
+     * 在服务端线程推进一次完整 tick：共享预算、编辑交付和观测窗口依次完成，租约清理在窗口外按秒执行。
+     * 观测收尾与开始使用同一实现；业务失败继续向调用方传播，后续工作留待原异常处理路径。
+     *
+     * @param server 本次 tick 所属服务端
+     */
     public void tickServer(MinecraftServer server) {
-        ConversionRuntime current = runtime;
-        if (current != null) {
-            current.onServerTick(server);
+        RuntimeObserver observer = RuntimeObserver.current();
+        observer.runtimeTickStarted(server);
+        try {
+            ConversionRuntime current = runtime;
+            if (current != null) {
+                current.onServerTick(server);
+            }
+            RuleEditServerHandler.tick(server, editContext);
+        } finally {
+            observer.runtimeTickFinished(server);
+        }
+        if (server.getTickCount() % RuleEditSessionLimits.TICKS_PER_SECOND == 0) {
+            RuleEditServerHandler.expireIdle(server, editContext);
         }
     }
 

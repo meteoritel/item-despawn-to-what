@@ -37,7 +37,7 @@ final class BackendProbeFixtures {
     BackendProbeFixtures(MinecraftServer server) { this.server = server; level = server.overworld(); }
 
     Path ruleRoot() throws IOException {
-        Path root = java.util.Objects.requireNonNull(RuleRuntimeHost.diagnosticsContext().editContext().overlayRoot()).resolve("rules");
+        Path root = java.util.Objects.requireNonNull(RuleRuntimeHost.core().diagnosticsContext().editContext().overlayRoot()).resolve("rules");
         Files.createDirectories(root);
         return root;
     }
@@ -87,7 +87,7 @@ final class BackendProbeFixtures {
     }
 
     void reload() {
-        var outcome = DebugProbePerformance.operation("RELOAD", () -> RuleRuntimeHost.diagnosticsContext().reloadRules(server));
+        var outcome = DebugProbePerformance.operation("RELOAD", () -> RuleRuntimeHost.core().diagnosticsContext().reloadRules(server));
         if (outcome == null || outcome.result() == null || outcome.result().hasErrors()) {
             throw new IllegalStateException("正式规则重载失败: " + outcome);
         }
