@@ -34,6 +34,7 @@ import org.jetbrains.annotations.Nullable;
  * 方块效果的执行器：在共享预算内分批完成邻域计数与放置，摆放结果不依赖执行时机。
  *
  * <p>只替换可替换方块，并按原版支撑规则摆正朝向；站不住的位置跳过，不为凑数突破 limit 或 radius。
+ * 立方体与球体在触发位置上下展开，候选落到世界高度之外时直接跳过。
  * 同候选同槽位的各组共享候选游标与邻域账，limit 是该方框内所有组的共同上限。
  * 需要计数时先扫完方框再放置；区块未加载时保留游标等待，不丢弃候选。
  * 每成功放置一个方块经 {@link EffectContext#reportProgress(int)} 回执 1，终态回执只收束任务。
@@ -80,7 +81,7 @@ public final class PlaceBlockExecutor {
             return block;
         }
 
-        /** 由形状、半径与起点开关决定的候选偏移，按层序排列。 */
+        /** 由形状、半径与起点开关决定的候选偏移，按由内向外的层序排列。 */
         public List<BlockPos> candidates() {
             return candidates;
         }
@@ -256,24 +257,56 @@ public final class PlaceBlockExecutor {
         return state.setValue(property, (Comparable) value);
     }
 
-    // 按形状缓存，坐标只生成一次，并按由内向外的层序排序。
+    // 按形状缓存，坐标只生成一次，并按由内向外的层序排序；三维形状在触发位置上下展开。
     private static List<BlockPos> offsets(PlaceBlockEffect effect, boolean fillOrigin) {
         return OFFSETS.computeIfAbsent(new ShapeKey(effect.shape(), effect.radius(), fillOrigin), key -> {
             List<BlockPos> result = new ArrayList<>();
+            int vertical = key.shape.threeDimensional() ? key.radius : 0;
             for (int x = -key.radius; x <= key.radius; x++) {
-                for (int z = -key.radius; z <= key.radius; z++) {
-                    // 起点填充关闭时跳过触发位置本身，其余候选与顺序保持不变
-                    if (!key.fillOrigin && x == 0 && z == 0) { continue; }
-                    if (key.shape == PlaceBlockEffect.Shape.CROSS && x != 0 && z != 0) { continue; }
-                    if (key.shape == PlaceBlockEffect.Shape.CIRCLE && Math.hypot(x, z) >= key.radius + 1) { continue; }
-                    result.add(new BlockPos(x, 0, z));
+                for (int y = -vertical; y <= vertical; y++) {
+                    for (int z = -key.radius; z <= key.radius; z++) {
+                        // 起点填充关闭时跳过触发位置本身，其余候选与顺序保持不变
+                        if (!key.fillOrigin && x == 0 && y == 0 && z == 0) { continue; }
+                        if (!accepts(key.shape, x, y, z, key.radius)) { continue; }
+                        result.add(new BlockPos(x, y, z));
+                    }
                 }
             }
-            result.sort(Comparator.comparingInt((BlockPos pos) -> key.shape == PlaceBlockEffect.Shape.CIRCLE
-                    ? (int) Math.hypot(pos.getX(), pos.getZ()) : Math.max(Math.abs(pos.getX()), Math.abs(pos.getZ())))
-                    .thenComparingInt(BlockPos::getX).thenComparingInt(BlockPos::getZ));
+            result.sort(Comparator.comparingLong((BlockPos pos) ->
+                            orderKey(key.shape, pos.getX(), pos.getY(), pos.getZ()))
+                    .thenComparingInt(BlockPos::getX).thenComparingInt(BlockPos::getY).thenComparingInt(BlockPos::getZ));
             return List.copyOf(result);
         });
+    }
+
+    // 形状的候选判定：单层形状忽略垂直偏移，球体沿欧氏距离收边（与圆形的水平口径一致）
+    private static boolean accepts(PlaceBlockEffect.Shape shape, int dx, int dy, int dz, int radius) {
+        return switch (shape) {
+            case SQUARE, CUBE -> true;
+            case CROSS -> dx == 0 || dz == 0;
+            case CIRCLE -> Math.hypot(dx, dz) < radius + 1;
+            case SPHERE -> squaredDistance(dx, dy, dz) < squared(radius + 1);
+        };
+    }
+
+    // 由内向外的排序键：切比雪夫距离用于方形、十字与立方体，欧氏距离用于圆形与球体。
+    // 圆形沿用既有截断口径，避免改动既有形状的摆放顺序。
+    private static long orderKey(PlaceBlockEffect.Shape shape, int dx, int dy, int dz) {
+        return switch (shape) {
+            case SQUARE, CROSS -> Math.max(Math.abs(dx), Math.abs(dz));
+            case CUBE -> Math.max(Math.max(Math.abs(dx), Math.abs(dy)), Math.abs(dz));
+            case CIRCLE -> (long) (int) Math.hypot(dx, dz);
+            case SPHERE -> squaredDistance(dx, dy, dz);
+        };
+    }
+
+    // 球体用整数平方距离比较，避免开方的浮点误差
+    private static long squaredDistance(int dx, int dy, int dz) {
+        return (long) dx * dx + (long) dy * dy + (long) dz * dz;
+    }
+
+    private static long squared(int value) {
+        return (long) value * value;
     }
 
     // 放置游标：每步最多处理 MAX_VISITS_PER_STEP 个位置，时间或工作量任一耗尽即让出。
@@ -414,6 +447,12 @@ public final class PlaceBlockExecutor {
                 return stop(EffectStep.Yield.INSTANCE);
             }
             BlockPos pos = center.offset(offsets.get(cursor));
+            // 三维形状可能探出世界高度：越界位置既不能读也不能写，跳过并按一次候选计费。
+            if (context.level().isOutsideBuildHeight(pos.getY())) {
+                cursor++;
+                budget.spend();
+                return Advancement.Continue.INSTANCE;
+            }
             // canSurvive 可能读取相邻方块，等待时不推进候选游标。
             if (!ChunkPresence.containsArea(context.level(), pos, 1)) {
                 return stop(new EffectStep.AwaitChunks(ChunkRequirement.around(pos, 1)));

@@ -38,8 +38,10 @@ import org.jetbrains.annotations.Nullable;
 /**
  * place_block：在触发位置按指定形状放置方块。
  * block（TaggedId，可空）与 use_source_block 至少需要其一：前者放置指定方块，后者放置源物品对应的方块。
- * radius 是本次放置的最大向外扩散边界（放置候选为该范围内的单层位置）；limit（可空，省略表示不限）
- * 是以触发位置为中心、边长为 2 * radius + 1 的立体方框内同类方块的数量上限，只收窄实际放置量，不扩大边界。
+ * radius 是本次放置的最大向外扩散边界：方形、圆形与十字的候选固定在触发位置所在的那一层，
+ * 立方体与球体的候选在以触发位置为中心的三维范围内展开。limit（可空，省略表示不限）
+ * 是以触发位置为中心、边长为 2 * radius + 1 的立体方框内同类方块的数量上限，只收窄实际放置量，不扩大边界；
+ * 球体候选被这个方框完全包含，因此方框也是它的外接上界。
  * 本类只承载参数模型与参数校验。
  */
 public record PlaceBlockEffect(
@@ -80,7 +82,8 @@ public record PlaceBlockEffect(
      *
      * <p>方框内最多只能容纳这么多个方块，limit 超过该容量时仍可保存，但实际限不到数量、等价于不限；
      * 滑块窗口仍按这个容量收窄，窗口外的合法值可以精确输入并保存。radius 自身不设静态上界，
-     * 由服务端配置 max_place_block_radius 在加载与保存校验时限定。</p>
+     * 由服务端配置 max_place_block_radius 在加载与保存校验时限定。立方体的候选数正好等于这个容量，
+     * 球体的候选数少于它，因此对两种三维形状它都仍是保守上界。</p>
      *
      * @param radius 放置半径
      * @return (2 * radius + 1)³，超出 int 表示范围时取 int 上界
@@ -91,14 +94,34 @@ public record PlaceBlockEffect(
         return (int) Math.min(total, Integer.MAX_VALUE);
     }
 
-    // 放置形状
+    // 放置形状；新增取值会自动进入 codec 与编辑器下拉，执行器的候选判定与排序需要同步补齐
     public enum Shape {
-        SQUARE,
-        CIRCLE,
-        CROSS;
+        SQUARE(false),
+        CIRCLE(false),
+        CROSS(false),
+        CUBE(true),
+        SPHERE(true);
 
         /** JSON 取值：小写下划线，解析大小写不敏感 */
         public static final Codec<Shape> CODEC = EnumCodecs.lowerCase(Shape.class);
+
+        private final boolean threeDimensional;
+
+        Shape(boolean threeDimensional) {
+            this.threeDimensional = threeDimensional;
+        }
+
+        /**
+         * 候选位置是否在触发位置的上下方向展开。
+         *
+         * <p>单层形状的候选固定在触发位置所在的那一层；三维形状以触发位置为中心向外扩展，
+         * 由执行器据此决定是否遍历垂直偏移。</p>
+         *
+         * @return 三维形状返回 true
+         */
+        public boolean threeDimensional() {
+            return threeDimensional;
+        }
     }
 
     /** 参数声明：类型专属字段在前，通用字段复用 CommonFields 的声明；limit 的滑块窗口按默认半径的方框容量取上限 */

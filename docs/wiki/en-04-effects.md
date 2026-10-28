@@ -154,21 +154,21 @@ What you see in game: after a 10 tick delay the volley starts and drops 32 downw
 |---|---|---|---|---|
 | `block` | Which block to place | Block id or tag | Omit | Write this or `use_source_block`, and at least one of the two |
 | `use_source_block` | Places the block that matches the source item | `true` / `false` | `false` | A dirt source places dirt; when the source item has no matching block, this run fails |
-| `shape` | Shape of the candidate positions | `square` / `circle` / `cross` | `square` | A square, a circle, or a cross that keeps only the cells along the x axis or the z axis; not case sensitive |
+| `shape` | Shape of the candidate positions | `square` / `circle` / `cross` / `cube` / `sphere` | `square` | A square, a circle, or a cross that keeps only the cells along the x axis or the z axis stays on the trigger level; a cube or a sphere expands above and below the trigger position; not case sensitive |
 | `count` | Result budget per group | 1 to 64 | `1` | Positions are tried from the inside out, subject to the environment budget |
-| `radius` | Search radius (blocks) | 1 to the server setting `max_place_block_radius` (default 8) | `6` | The horizontal range at the same height as the trigger position; rules above the server cap are rejected, and the editor takes the same setting as the radius slider window |
+| `radius` | Search radius (blocks) | 1 to the server setting `max_place_block_radius` (default 8) | `6` | The horizontal range for squares, circles and crosses, and the three-dimensional range a cube or a sphere expands into; rules above the server cap are rejected, and the editor takes the same setting as the radius slider window |
 | `limit` | Cap on how many of this block may sit in the box | 1 or more | Omit for no limit | The mod counts the blocks of the same type already inside the radius box and fills up to the cap; in the editor the slider window and starting value both equal the current radius box capacity (2 × radius + 1)³, and a value above that capacity means no limit |
 
 Notes:
 
 - When you write neither field, the rule is rejected with a message about `block` and `use_source_block`. When you write both, `block` wins.
-- Blocks go only at **the same height as the trigger position**; nothing stacks above or below.
+- Squares, circles and crosses go only at **the same height as the trigger position**; a cube or a sphere expands above and below the trigger position as well.
 - Only replaceable positions, such as grass and water, are used, and the block needs support. A position that does not fit is skipped, and the mod never steps outside `radius` to reach `count`.
 - The **result budget** is the output available from qualifying source items. The **environment budget** is the amount allowed by usable positions inside the radius and by `limit`. When the task ends, source cost follows actual placement and unused source items return: with 10 source items and 2 blocks per source, placing 6 returns 7 sources; placing 7 consumes 4 and returns 6.
 - Each group rounds `placed × source_cost ÷ count` up to whole source items. Multiple block effects in one group share the highest cost used; a dispatched non-block effect, a missed chance or an invalid target uses the full group cost. Catalysts and fluid sources are paid when the group opens.
 - Groups with the same candidate, slot and target block share one position scan while retaining their individual chance results and due times. Counting skips whole chunk sections whose palette lacks the target. Placement remains subject to the shared tick budget.
 - Blocks that need a direction or support, such as buttons, torches, and ladders, get the orientation vanilla would give them: the mod tries standing on the floor, then hanging from the ceiling, then attaching to each of the four walls, and places the first orientation that can stand; when none can, that position is skipped.
-- `limit` counts a box centered on the trigger position with side length `2 × radius + 1`: `radius` decides how far the mod may place, `limit` only caps how many, and never widens the area. When one candidate produces several groups of blocks in the same conversion, those groups share one count and one remaining allowance, so the box never ends up holding more than `limit` of the block.
+- `limit` counts a box centered on the trigger position with side length `2 × radius + 1`: `radius` decides how far the mod may place, `limit` only caps how many, and never widens the area. A cube fills that box exactly, while a sphere is fully contained in it and is still counted through the box. When one candidate produces several groups of blocks in the same conversion, those groups share one count and one remaining allowance, so the box never ends up holding more than `limit` of the block.
 - The `limit` slider maximum follows `radius`: it is at most the number of positions in the current radius box, (2 × radius + 1)³ (2197 when `radius` is 6). Typing a larger value is not rejected, because the box cannot hold more of that block anyway, so the value means no limit; a valid value outside the slider window can still be typed and saved.
 - A new place action writes `limit` as the capacity of the current radius box, so the slider sits at its maximum; when `radius` changes afterwards, `limit` follows to the new capacity. Once you edit `limit` yourself that follow stops and changing the radius no longer overwrites it; switching to another action or rule starts the follow again.
 - Whether the trigger position itself takes part depends on the fill origin switch of the candidate; see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
@@ -184,6 +184,12 @@ What you see in game: the block that matches the source item this run used appea
 ```
 
 What you see in game: cobblestone fills in from the inside out across a circle of radius 4 around the trigger position, up to 32 blocks. When that volume already holds 64 cobblestone, the mod places nothing at all.
+
+```json
+{ "type": "idtw:place_block", "block": "minecraft:glass", "shape": "sphere", "count": 24, "radius": 2 }
+```
+
+What you see in game: up to 24 glass blocks fill in from the inside out across a sphere of radius 2 centered on the trigger position. The sphere covers only positions less than 3 blocks from the center, so the eight corners of the enclosing cube stay empty.
 
 ## Loot Table (loot_table)
 
