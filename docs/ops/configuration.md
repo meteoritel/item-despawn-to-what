@@ -2,7 +2,7 @@
 title: server.json 运行配置
 layer: 5
 audience: 部署或调优服务端的开发者与服主
-authority: common/src/main/java/com/meteorite/itemdespawntowhat/core/config/ServerConfig.java、core/config/NearbyProductLimits.java、core/host/RuleRuntimeHostCore.java
+authority: common/src/main/java/com/meteorite/itemdespawntowhat/core/config、core/host/RuleRuntimeHostCore.java；tools/config-docs；tools/gen-config-reference.py
 ---
 
 # server.json 运行配置
@@ -10,7 +10,7 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat/core/config/Serv
 ## TL;DR
 
 - 模组级服务端配置固定位于 `config/itemdespawntowhat/server.json`，两端共用同一份实现与同一个文件。
-- 文件缺失时写出默认配置，解析失败时报告问题并按默认值启动；未知键被忽略，缺失键取默认值。
+- 文件缺失时写出默认配置，解析失败时报告问题并按默认值启动；未知键按完整路径记 WARN，缺失键取默认值。
 - 配置在运行时启动时读取一次，改完重启服务端生效；规则重载不重新读取本文件。
 
 ## 适用对象
@@ -27,15 +27,17 @@ flowchart TB
     B -->|不存在| C[写出默认值并返回默认]
     B -->|存在| D[有界解析 JSON]
     D -->|失败| E[记 ERROR 并回退默认]
-    D -->|成功| F[Codec 逐键读取: 缺省取默认, 未知键忽略]
+    D -->|成功| W[按声明识别未知键并记 WARN]
+    W --> F[Codec 读取并校验: 缺省取默认]
+    F -->|失败| E
     F --> G[换算派生值并注入运行时]
 ```
 
-读取结果按 Issue 报告：解析失败与读写异常记为 ERROR，同时回退到默认配置，服务端继续启动。默认值本身可以写回文件，方便直接编辑。
+已有文件的解析或读取失败以 ERROR Issue 报告并回退默认配置，原文件保留。根对象及 `nearby_products` 的未知键以 WARN Issue 报告完整路径，其余合法字段继续读取；值类型与区间交由 Codec 校验。缺失文件使用 Codec 写出默认值，等于默认值的键会被省略；写出失败记日志 WARN，仍按默认配置启动。
 
 ## 字段分组
 
-键名、默认值与合法区间都在 `ServerConfig` 的 Codec 里定义。Java 内按调度、有界任务、实体状态、位置与调试分组，各组 MapCodec 直接平铺组合；`overlay_directory` 留在顶层，`nearby_products` 保持嵌套对象。下文按使用职责说明，完整键表见[服务端配置](../wiki/zh-07-server-config.md)。
+键名、默认值与合法区间由 `core/config` 内的包内 `ConfigField` 声明提供，同一声明构造 MapCodec、各组 DEFAULT、未知键识别和构建期参考事实。Java 内按调度、有界任务、实体状态、位置与调试分组，各组 MapCodec 直接平铺组合；`overlay_directory` 留在顶层，`nearby_products` 保持嵌套对象。下文按使用职责说明，生成的完整键表见[服务端配置](../wiki/zh-07-server-config.md)。
 
 | 分组 | 回答的问题 | 代表键 | 消费方 |
 |---|---|---|---|
@@ -52,7 +54,7 @@ flowchart TB
 | 结算恢复 | 当前会话内结算失败后的重试上限 | `settlement_recovery_max_attempts` | 转化运行时 |
 | 调试 | 常规日志与调试场景准备预算 | `debug_logging`、`debug_scenario_prepare_batch_size`、`debug_scenario_prepare_budget_us` | 调试层 |
 
-取值口径需要注意：以秒为单位的键（新产物保护、转化冷却）允许写 0，表示不授予对应状态时长，其余数值键下限为正整数；`max_work_units_per_tick` 是唯一不设固定默认值的键，缺省时回退到每 tick 检查数的上限值。写违反区间的值会被整体解码失败处理，配置回退默认。
+新产物保护与转化冷却的秒数允许写 0，表示不授予对应状态时长；邻近容量上限的 0 表示关闭对应检查，合法区间见生成键表。`max_work_units_per_tick` 缺省时动态回退到本次配置的 `max_checks_per_tick`，显式填写时使用显式值。类型或区间错误使整份配置回退默认值。
 
 ## 派生换算
 
@@ -75,12 +77,13 @@ flowchart TB
 
 ## 新增参数
 
-1. 将字段加入 `ServerConfig` 中所属职责组的 record。
-2. 在该组 MapCodec 加 `optionalFieldOf` 并声明取值区间，键仍平铺在根对象。
-3. 在该组 `DEFAULT` 给出默认值；聚合层按需提供访问委托和派生换算。
-4. 若参数替换了既有硬编码常量，确认消费方改为读取配置，并在[架构总览](../architecture/overview.md)相关链路里保持口径一致。
+1. 将字段加入所属职责组的 record，在同组创建 `ConfigField` 并登记到有序 `FIELDS`；邻近子字段在 `NearbyProductLimits` 声明。
+2. 组 MapCodec 消费字段的 `codec()`，组 DEFAULT 消费 `defaultValue()`；聚合层按需提供访问委托与派生换算。根键平铺、邻近键嵌套的文件结构保持明确。
+3. 在 `tools/config-docs/messages/zh_cn.json` 与 `en_us.json` 为完整路径补齐说明文字与使用建议。
+4. 运行 `tools/dsh-build.ps1 -Tasks generateConfigReference` 更新两种语言的受管块；检查页面说明与场景示例是否仍适用。
+5. 完成 IDE 检查后运行 `tools/dsh-build.ps1 -Tasks build`，配置参考校验随各子项目 check 执行。
 
-组 MapCodec 直接参与顶层组合；新增键时同步组声明、Codec 与中英文配置键表。
+`tools/config-docs/ConfigReferenceExporter.java` 独立编译并读取实际声明，核对 Codec 键集和完整默认等价性，将事实导出至 `build/config-docs/schema.json`；工具类留在工具编译目录。Python 渲染器只读取导出事实与双语文案，生成完整默认等价 JSON、根字段表和邻近子表。`checkConfigReference` 只校验受管块与文案键集，`generateConfigReference` 负责写入页面。
 
 ## 相关文档
 

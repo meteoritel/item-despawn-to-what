@@ -19,6 +19,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
+import java.util.Objects;
+import java.util.List;
+import java.util.stream.Stream;
 
 /**
  * 模组级服务端配置（config/itemdespawntowhat/server.json）。
@@ -47,7 +50,7 @@ public record ServerConfig(
     // 公共调度预算默认值：10 ms 软预算、512 全局工作量、效果类 64、平滑窗口 20 tick、每 lane 每 tick 最多搬运 64
     public static final int DEFAULT_SERVER_BUDGET_US = 10_000;
     @SuppressWarnings("unused")
-    public static final int DEFAULT_MAX_WORK_UNITS_PER_TICK = 512;
+    public static final int DEFAULT_MAX_WORK_UNITS_PER_TICK = DEFAULT_MAX_CHECKS_PER_TICK;
     public static final int DEFAULT_EFFECTS_WORK_UNITS_PER_TICK = 64;
     public static final int DEFAULT_CHECK_SPREAD_WINDOW_TICKS = 20;
     public static final int DEFAULT_DISPATCH_BATCH_SIZE = 64;
@@ -101,34 +104,53 @@ public record ServerConfig(
             int checkSpreadWindowTicks,
             int dispatchBatchSize
     ) {
+        private static final ConfigField<Integer> CHECK_INTERVAL_TICKS = ConfigField.integer(
+                "check_interval_ticks", DEFAULT_CHECK_INTERVAL_TICKS, 1, 1200);
+        private static final ConfigField<Integer> BACKOFF_MAX_TICKS = ConfigField.integer(
+                "backoff_max_ticks", DEFAULT_BACKOFF_MAX_TICKS, 1, 72000);
+        private static final ConfigField<Integer> MAX_CHECKS_PER_TICK = ConfigField.integer(
+                "max_checks_per_tick", DEFAULT_MAX_CHECKS_PER_TICK, 1, 100000);
+        private static final ConfigField<Integer> SERVER_BUDGET_US = ConfigField.integer(
+                "server_budget_us", DEFAULT_SERVER_BUDGET_US, 100, 100000);
+        private static final ConfigField<Optional<Integer>> MAX_WORK_UNITS_PER_TICK = ConfigField.optionalInteger(
+                "max_work_units_per_tick", 1, 100000, MAX_CHECKS_PER_TICK);
+        private static final ConfigField<Integer> EFFECTS_WORK_UNITS_PER_TICK = ConfigField.integer(
+                "effects_work_units_per_tick", DEFAULT_EFFECTS_WORK_UNITS_PER_TICK, 1, 100000);
+        private static final ConfigField<Integer> CHECK_SPREAD_WINDOW_TICKS = ConfigField.integer(
+                "check_spread_window_ticks", DEFAULT_CHECK_SPREAD_WINDOW_TICKS, 1, 1200);
+        private static final ConfigField<Integer> DISPATCH_BATCH_SIZE = ConfigField.integer(
+                "dispatch_batch_size", DEFAULT_DISPATCH_BATCH_SIZE, 1, 100000);
+        private static final List<ConfigField<?>> FIELDS = List.of(
+                CHECK_INTERVAL_TICKS, BACKOFF_MAX_TICKS, MAX_CHECKS_PER_TICK, SERVER_BUDGET_US, MAX_WORK_UNITS_PER_TICK, EFFECTS_WORK_UNITS_PER_TICK, CHECK_SPREAD_WINDOW_TICKS, DISPATCH_BATCH_SIZE);
+
         /** 本组缺省配置。 */
         public static final Scheduling DEFAULT = new Scheduling(
-                DEFAULT_CHECK_INTERVAL_TICKS,
-                DEFAULT_BACKOFF_MAX_TICKS,
-                DEFAULT_MAX_CHECKS_PER_TICK,
-                DEFAULT_SERVER_BUDGET_US,
-                Optional.empty(),
-                DEFAULT_EFFECTS_WORK_UNITS_PER_TICK,
-                DEFAULT_CHECK_SPREAD_WINDOW_TICKS,
-                DEFAULT_DISPATCH_BATCH_SIZE
+                CHECK_INTERVAL_TICKS.defaultValue(),
+                BACKOFF_MAX_TICKS.defaultValue(),
+                MAX_CHECKS_PER_TICK.defaultValue(),
+                SERVER_BUDGET_US.defaultValue(),
+                MAX_WORK_UNITS_PER_TICK.defaultValue(),
+                EFFECTS_WORK_UNITS_PER_TICK.defaultValue(),
+                CHECK_SPREAD_WINDOW_TICKS.defaultValue(),
+                DISPATCH_BATCH_SIZE.defaultValue()
         );
 
         private static final MapCodec<Scheduling> MAP_CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
-                Codec.intRange(1, 1200).optionalFieldOf("check_interval_ticks", DEFAULT_CHECK_INTERVAL_TICKS)
+                CHECK_INTERVAL_TICKS.codec()
                         .forGetter(Scheduling::checkIntervalTicks),
-                Codec.intRange(1, 72000).optionalFieldOf("backoff_max_ticks", DEFAULT_BACKOFF_MAX_TICKS)
+                BACKOFF_MAX_TICKS.codec()
                         .forGetter(Scheduling::backoffMaxTicks),
-                Codec.intRange(1, 100000).optionalFieldOf("max_checks_per_tick", DEFAULT_MAX_CHECKS_PER_TICK)
+                MAX_CHECKS_PER_TICK.codec()
                         .forGetter(Scheduling::maxChecksPerTick),
-                Codec.intRange(100, 100000).optionalFieldOf("server_budget_us", DEFAULT_SERVER_BUDGET_US)
+                SERVER_BUDGET_US.codec()
                         .forGetter(Scheduling::serverBudgetUs),
-                Codec.intRange(1, 100000).optionalFieldOf("max_work_units_per_tick")
+                MAX_WORK_UNITS_PER_TICK.codec()
                         .forGetter(Scheduling::maxWorkUnitsPerTick),
-                Codec.intRange(1, 100000).optionalFieldOf("effects_work_units_per_tick", DEFAULT_EFFECTS_WORK_UNITS_PER_TICK)
+                EFFECTS_WORK_UNITS_PER_TICK.codec()
                         .forGetter(Scheduling::effectsWorkUnitsPerTick),
-                Codec.intRange(1, 1200).optionalFieldOf("check_spread_window_ticks", DEFAULT_CHECK_SPREAD_WINDOW_TICKS)
+                CHECK_SPREAD_WINDOW_TICKS.codec()
                         .forGetter(Scheduling::checkSpreadWindowTicks),
-                Codec.intRange(1, 100000).optionalFieldOf("dispatch_batch_size", DEFAULT_DISPATCH_BATCH_SIZE)
+                DISPATCH_BATCH_SIZE.codec()
                         .forGetter(Scheduling::dispatchBatchSize)
         ).apply(instance, Scheduling::new));
     }
@@ -146,22 +168,33 @@ public record ServerConfig(
             int prepareGroupsPerStep,
             int settlementRecoveryMaxAttempts
     ) {
+        private static final ConfigField<Integer> RESCAN_ENTITIES_PER_STEP = ConfigField.integer(
+                "rescan_entities_per_step", DEFAULT_RESCAN_ENTITIES_PER_STEP, 1, 4096);
+        private static final ConfigField<Integer> CANCELS_PER_STEP = ConfigField.integer(
+                "cancels_per_step", DEFAULT_CANCELS_PER_STEP, 1, 4096);
+        private static final ConfigField<Integer> PREPARE_GROUPS_PER_STEP = ConfigField.integer(
+                "prepare_groups_per_step", DEFAULT_PREPARE_GROUPS_PER_STEP, 1, 4096);
+        private static final ConfigField<Integer> SETTLEMENT_RECOVERY_MAX_ATTEMPTS = ConfigField.integer(
+                "settlement_recovery_max_attempts", DEFAULT_SETTLEMENT_RECOVERY_MAX_ATTEMPTS, 1, 100);
+        private static final List<ConfigField<?>> FIELDS = List.of(
+                RESCAN_ENTITIES_PER_STEP, CANCELS_PER_STEP, PREPARE_GROUPS_PER_STEP, SETTLEMENT_RECOVERY_MAX_ATTEMPTS);
+
         /** 本组缺省配置。 */
         public static final BoundedTasks DEFAULT = new BoundedTasks(
-                DEFAULT_RESCAN_ENTITIES_PER_STEP,
-                DEFAULT_CANCELS_PER_STEP,
-                DEFAULT_PREPARE_GROUPS_PER_STEP,
-                DEFAULT_SETTLEMENT_RECOVERY_MAX_ATTEMPTS
+                RESCAN_ENTITIES_PER_STEP.defaultValue(),
+                CANCELS_PER_STEP.defaultValue(),
+                PREPARE_GROUPS_PER_STEP.defaultValue(),
+                SETTLEMENT_RECOVERY_MAX_ATTEMPTS.defaultValue()
         );
 
         private static final MapCodec<BoundedTasks> MAP_CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
-                Codec.intRange(1, 4096).optionalFieldOf("rescan_entities_per_step", DEFAULT_RESCAN_ENTITIES_PER_STEP)
+                RESCAN_ENTITIES_PER_STEP.codec()
                         .forGetter(BoundedTasks::rescanEntitiesPerStep),
-                Codec.intRange(1, 4096).optionalFieldOf("cancels_per_step", DEFAULT_CANCELS_PER_STEP)
+                CANCELS_PER_STEP.codec()
                         .forGetter(BoundedTasks::cancelsPerStep),
-                Codec.intRange(1, 4096).optionalFieldOf("prepare_groups_per_step", DEFAULT_PREPARE_GROUPS_PER_STEP)
+                PREPARE_GROUPS_PER_STEP.codec()
                         .forGetter(BoundedTasks::prepareGroupsPerStep),
-                Codec.intRange(1, 100).optionalFieldOf("settlement_recovery_max_attempts", DEFAULT_SETTLEMENT_RECOVERY_MAX_ATTEMPTS)
+                SETTLEMENT_RECOVERY_MAX_ATTEMPTS.codec()
                         .forGetter(BoundedTasks::settlementRecoveryMaxAttempts)
         ).apply(instance, BoundedTasks::new));
     }
@@ -177,19 +210,28 @@ public record ServerConfig(
             int newProductProtectionSeconds,
             int conversionCooldownSeconds
     ) {
+        private static final ConfigField<Integer> FABRIC_LIFESPAN_FALLBACK_TICKS = ConfigField.integer(
+                "fabric_lifespan_fallback_ticks", DEFAULT_FABRIC_LIFESPAN_FALLBACK_TICKS, 1, 72000);
+        private static final ConfigField<Integer> NEW_PRODUCT_PROTECTION_SECONDS = ConfigField.integer(
+                "new_product_protection_seconds", DEFAULT_NEW_PRODUCT_PROTECTION_SECONDS, 0, 3600);
+        private static final ConfigField<Integer> CONVERSION_COOLDOWN_SECONDS = ConfigField.integer(
+                "conversion_cooldown_seconds", DEFAULT_CONVERSION_COOLDOWN_SECONDS, 0, 3600);
+        private static final List<ConfigField<?>> FIELDS = List.of(
+                FABRIC_LIFESPAN_FALLBACK_TICKS, NEW_PRODUCT_PROTECTION_SECONDS, CONVERSION_COOLDOWN_SECONDS);
+
         /** 本组缺省配置。 */
         public static final EntityState DEFAULT = new EntityState(
-                DEFAULT_FABRIC_LIFESPAN_FALLBACK_TICKS,
-                DEFAULT_NEW_PRODUCT_PROTECTION_SECONDS,
-                DEFAULT_CONVERSION_COOLDOWN_SECONDS
+                FABRIC_LIFESPAN_FALLBACK_TICKS.defaultValue(),
+                NEW_PRODUCT_PROTECTION_SECONDS.defaultValue(),
+                CONVERSION_COOLDOWN_SECONDS.defaultValue()
         );
 
         private static final MapCodec<EntityState> MAP_CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
-                Codec.intRange(1, 72000).optionalFieldOf("fabric_lifespan_fallback_ticks", DEFAULT_FABRIC_LIFESPAN_FALLBACK_TICKS)
+                FABRIC_LIFESPAN_FALLBACK_TICKS.codec()
                         .forGetter(EntityState::fabricLifespanFallbackTicks),
-                Codec.intRange(0, 3600).optionalFieldOf("new_product_protection_seconds", DEFAULT_NEW_PRODUCT_PROTECTION_SECONDS)
+                NEW_PRODUCT_PROTECTION_SECONDS.codec()
                         .forGetter(EntityState::newProductProtectionSeconds),
-                Codec.intRange(0, 3600).optionalFieldOf("conversion_cooldown_seconds", DEFAULT_CONVERSION_COOLDOWN_SECONDS)
+                CONVERSION_COOLDOWN_SECONDS.codec()
                         .forGetter(EntityState::conversionCooldownSeconds)
         ).apply(instance, EntityState::new));
     }
@@ -203,16 +245,23 @@ public record ServerConfig(
             int positionSearchChecksPerTick,
             int maxPlaceBlockRadius
     ) {
+        private static final ConfigField<Integer> POSITION_SEARCH_CHECKS_PER_TICK = ConfigField.integer(
+                "position_search_checks_per_tick", DEFAULT_POSITION_SEARCH_CHECKS_PER_TICK, 1, 4096);
+        private static final ConfigField<Integer> MAX_PLACE_BLOCK_RADIUS = ConfigField.integer(
+                "max_place_block_radius", DEFAULT_MAX_PLACE_BLOCK_RADIUS, 1, Integer.MAX_VALUE);
+        private static final List<ConfigField<?>> FIELDS = List.of(
+                POSITION_SEARCH_CHECKS_PER_TICK, MAX_PLACE_BLOCK_RADIUS);
+
         /** 本组缺省配置。 */
         public static final Positioning DEFAULT = new Positioning(
-                DEFAULT_POSITION_SEARCH_CHECKS_PER_TICK,
-                DEFAULT_MAX_PLACE_BLOCK_RADIUS
+                POSITION_SEARCH_CHECKS_PER_TICK.defaultValue(),
+                MAX_PLACE_BLOCK_RADIUS.defaultValue()
         );
 
         private static final MapCodec<Positioning> MAP_CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
-                Codec.intRange(1, 4096).optionalFieldOf("position_search_checks_per_tick", DEFAULT_POSITION_SEARCH_CHECKS_PER_TICK)
+                POSITION_SEARCH_CHECKS_PER_TICK.codec()
                         .forGetter(Positioning::positionSearchChecksPerTick),
-                Codec.intRange(1, Integer.MAX_VALUE).optionalFieldOf("max_place_block_radius", DEFAULT_MAX_PLACE_BLOCK_RADIUS)
+                MAX_PLACE_BLOCK_RADIUS.codec()
                         .forGetter(Positioning::maxPlaceBlockRadius)
         ).apply(instance, Positioning::new));
     }
@@ -228,40 +277,58 @@ public record ServerConfig(
             int debugScenarioPrepareBatchSize,
             int debugScenarioPrepareBudgetUs
     ) {
+        private static final ConfigField<Boolean> DEBUG_LOGGING = ConfigField.bool("debug_logging", DEFAULT_DEBUG_LOGGING);
+        private static final ConfigField<Integer> DEBUG_SCENARIO_PREPARE_BATCH_SIZE = ConfigField.integer(
+                "debug_scenario_prepare_batch_size", DEFAULT_DEBUG_SCENARIO_PREPARE_BATCH_SIZE, 1, 100000);
+        private static final ConfigField<Integer> DEBUG_SCENARIO_PREPARE_BUDGET_US = ConfigField.integer(
+                "debug_scenario_prepare_budget_us", DEFAULT_DEBUG_SCENARIO_PREPARE_BUDGET_US, 1, 100000);
+        private static final List<ConfigField<?>> FIELDS = List.of(
+                DEBUG_LOGGING, DEBUG_SCENARIO_PREPARE_BATCH_SIZE, DEBUG_SCENARIO_PREPARE_BUDGET_US);
+
         /** 本组缺省配置。 */
         public static final Debug DEFAULT = new Debug(
-                DEFAULT_DEBUG_LOGGING,
-                DEFAULT_DEBUG_SCENARIO_PREPARE_BATCH_SIZE,
-                DEFAULT_DEBUG_SCENARIO_PREPARE_BUDGET_US
+                DEBUG_LOGGING.defaultValue(),
+                DEBUG_SCENARIO_PREPARE_BATCH_SIZE.defaultValue(),
+                DEBUG_SCENARIO_PREPARE_BUDGET_US.defaultValue()
         );
 
         private static final MapCodec<Debug> MAP_CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
-                Codec.BOOL.optionalFieldOf("debug_logging", DEFAULT_DEBUG_LOGGING)
+                DEBUG_LOGGING.codec()
                         .forGetter(Debug::debugLogging),
-                Codec.intRange(1, 100000).optionalFieldOf("debug_scenario_prepare_batch_size", DEFAULT_DEBUG_SCENARIO_PREPARE_BATCH_SIZE)
+                DEBUG_SCENARIO_PREPARE_BATCH_SIZE.codec()
                         .forGetter(Debug::debugScenarioPrepareBatchSize),
-                Codec.intRange(1, 100000).optionalFieldOf("debug_scenario_prepare_budget_us", DEFAULT_DEBUG_SCENARIO_PREPARE_BUDGET_US)
+                DEBUG_SCENARIO_PREPARE_BUDGET_US.codec()
                         .forGetter(Debug::debugScenarioPrepareBudgetUs)
         ).apply(instance, Debug::new));
     }
 
+    private static final ConfigField<String> OVERLAY_DIRECTORY = ConfigField.string("overlay_directory", DEFAULT_OVERLAY_DIRECTORY);
+    private static final ConfigField<NearbyProductLimits> NEARBY_PRODUCTS = ConfigField.object(
+            "nearby_products", NearbyProductLimits.CODEC, NearbyProductLimits.DEFAULT, NearbyProductLimits.FIELDS);
+    static final List<ConfigField<?>> FIELDS = Stream.of(Scheduling.FIELDS, BoundedTasks.FIELDS,
+            EntityState.FIELDS, Positioning.FIELDS, Debug.FIELDS, List.of(OVERLAY_DIRECTORY, NEARBY_PRODUCTS))
+            .flatMap(List::stream).toList();
+
     /** 缺失字段取对应组默认值；工作量上限未配置时保留空值以执行检查上限回退。 */
     public static final ServerConfig DEFAULT = new ServerConfig(
             Scheduling.DEFAULT, BoundedTasks.DEFAULT, EntityState.DEFAULT, Positioning.DEFAULT, Debug.DEFAULT,
-            DEFAULT_OVERLAY_DIRECTORY, NearbyProductLimits.DEFAULT);
+            OVERLAY_DIRECTORY.defaultValue(), NEARBY_PRODUCTS.defaultValue());
 
     /** 五组 MapCodec 直接合并键，只有 nearby_products 保留独立嵌套对象。 */
-    public static final Codec<ServerConfig> CODEC = RecordCodecBuilder.create(instance -> instance.group(
+    static final MapCodec<ServerConfig> MAP_CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
             Scheduling.MAP_CODEC.forGetter(ServerConfig::scheduling),
             BoundedTasks.MAP_CODEC.forGetter(ServerConfig::boundedTasks),
             EntityState.MAP_CODEC.forGetter(ServerConfig::entityState),
             Positioning.MAP_CODEC.forGetter(ServerConfig::positioning),
             Debug.MAP_CODEC.forGetter(ServerConfig::debug),
-            Codec.STRING.optionalFieldOf("overlay_directory", DEFAULT_OVERLAY_DIRECTORY)
+            OVERLAY_DIRECTORY.codec()
                     .forGetter(ServerConfig::overlayDirectory),
-            NearbyProductLimits.CODEC.optionalFieldOf("nearby_products", NearbyProductLimits.DEFAULT)
+            NEARBY_PRODUCTS.codec()
                     .forGetter(ServerConfig::nearbyProducts)
     ).apply(instance, ServerConfig::new));
+
+    /** 模组配置的读写入口，字段缺省和区间由同一声明构造。 */
+    public static final Codec<ServerConfig> CODEC = MAP_CODEC.codec();
 
     /** 检查间隔刻数。 */
     public int checkIntervalTicks() {
@@ -387,7 +454,12 @@ public record ServerConfig(
         return Math.max(0, conversionCooldownSeconds()) * 20;
     }
 
-    // 从文件读取；文件不存在时写出默认配置并返回默认值，解析失败时记录问题并返回默认值
+    /**
+     * 读取模组运行配置；缺失时生成默认文件，未知键按完整路径告警，解析失败保留原文件并回退默认值。
+     * @param file 配置文件路径；为空时直接返回默认配置
+     * @param issues 接收字段告警和读取错误
+     * @return 本次读取的配置或默认配置
+     */
     public static ServerConfig loadOrCreate(Path file, IssueCollector issues) {
         if (file == null) {
             return DEFAULT;
@@ -410,7 +482,8 @@ public record ServerConfig(
                 issues.error("server.json 解析失败: " + document.failureReason(), file.toString(), null);
                 return DEFAULT;
             }
-            JsonElement json = document.element();
+            JsonElement json = Objects.requireNonNull(document.element());
+            ConfigField.warnUnknown(json, FIELDS, issues, file.toString(), "");
             DataResult<ServerConfig> result = CODEC.parse(JsonOps.INSTANCE, json);
             Optional<ServerConfig> parsed = result.resultOrPartial(message ->
                     issues.error("server.json 解析失败: " + message, file.toString(), null));

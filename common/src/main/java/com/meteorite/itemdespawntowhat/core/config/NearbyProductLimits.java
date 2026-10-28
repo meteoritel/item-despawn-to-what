@@ -1,6 +1,8 @@
 package com.meteorite.itemdespawntowhat.core.config;
 
 import com.mojang.serialization.Codec;
+import com.mojang.serialization.MapCodec;
+import java.util.List;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 
 /**
@@ -11,16 +13,29 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 public record NearbyProductLimits(int itemLimit, int itemRadius, int entityLimit, int entityRadius,
                                   int experienceOrbLimit, int experienceRadius) {
 
-    // 物品与实体默认阈值；经验字段保留旧默认值以兼容已有配置。
-    public static final NearbyProductLimits DEFAULT = new NearbyProductLimits(1024, 6, 128, 6, 64, 6);
+    private static final ConfigField<Integer> ITEM_LIMIT = ConfigField.integer("item_limit", 1024, 0, 1000000);
+    private static final ConfigField<Integer> ITEM_RADIUS = ConfigField.integer("item_radius", 6, 1, 32);
+    private static final ConfigField<Integer> ENTITY_LIMIT = ConfigField.integer("entity_limit", 128, 0, 1000000);
+    private static final ConfigField<Integer> ENTITY_RADIUS = ConfigField.integer("entity_radius", 6, 1, 32);
+    private static final ConfigField<Integer> EXPERIENCE_ORB_LIMIT = ConfigField.integer("experience_orb_limit", 64, 0, 1000000);
+    private static final ConfigField<Integer> EXPERIENCE_RADIUS = ConfigField.integer("experience_radius", 6, 1, 32);
+    static final List<ConfigField<?>> FIELDS = List.of(
+            ITEM_LIMIT, ITEM_RADIUS, ENTITY_LIMIT, ENTITY_RADIUS, EXPERIENCE_ORB_LIMIT, EXPERIENCE_RADIUS);
 
-    // 配置编解码：字段名 snake_case；上限允许 0（关闭该类检查），半径下限 1
-    public static final Codec<NearbyProductLimits> CODEC = RecordCodecBuilder.create(instance -> instance.group(
-            Codec.intRange(0, 1000000).optionalFieldOf("item_limit", DEFAULT.itemLimit()).forGetter(NearbyProductLimits::itemLimit),
-            Codec.intRange(1, 32).optionalFieldOf("item_radius", DEFAULT.itemRadius()).forGetter(NearbyProductLimits::itemRadius),
-            Codec.intRange(0, 1000000).optionalFieldOf("entity_limit", DEFAULT.entityLimit()).forGetter(NearbyProductLimits::entityLimit),
-            Codec.intRange(1, 32).optionalFieldOf("entity_radius", DEFAULT.entityRadius()).forGetter(NearbyProductLimits::entityRadius),
-            Codec.intRange(0, 1000000).optionalFieldOf("experience_orb_limit", DEFAULT.experienceOrbLimit()).forGetter(NearbyProductLimits::experienceOrbLimit),
-            Codec.intRange(1, 32).optionalFieldOf("experience_radius", DEFAULT.experienceRadius()).forGetter(NearbyProductLimits::experienceRadius)
+    /** 物品与实体的缺省阈值及经验兼容字段的缺省值。 */
+    public static final NearbyProductLimits DEFAULT = new NearbyProductLimits(
+            ITEM_LIMIT.defaultValue(), ITEM_RADIUS.defaultValue(), ENTITY_LIMIT.defaultValue(),
+            ENTITY_RADIUS.defaultValue(), EXPERIENCE_ORB_LIMIT.defaultValue(), EXPERIENCE_RADIUS.defaultValue());
+
+    static final MapCodec<NearbyProductLimits> MAP_CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
+            ITEM_LIMIT.codec().forGetter(NearbyProductLimits::itemLimit),
+            ITEM_RADIUS.codec().forGetter(NearbyProductLimits::itemRadius),
+            ENTITY_LIMIT.codec().forGetter(NearbyProductLimits::entityLimit),
+            ENTITY_RADIUS.codec().forGetter(NearbyProductLimits::entityRadius),
+            EXPERIENCE_ORB_LIMIT.codec().forGetter(NearbyProductLimits::experienceOrbLimit),
+            EXPERIENCE_RADIUS.codec().forGetter(NearbyProductLimits::experienceRadius)
     ).apply(instance, NearbyProductLimits::new));
+
+    /** 字段名、范围和缺省值由配置声明提供的嵌套对象编解码器。 */
+    public static final Codec<NearbyProductLimits> CODEC = MAP_CODEC.codec();
 }
