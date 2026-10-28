@@ -17,6 +17,7 @@ import com.meteorite.itemdespawntowhat.core.api.param.ParamList;
 import com.meteorite.itemdespawntowhat.core.api.param.RefSpec;
 import com.meteorite.itemdespawntowhat.core.model.CommonFields;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
+import com.meteorite.itemdespawntowhat.core.model.EffectOffset;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
 import com.meteorite.itemdespawntowhat.core.model.ProductKind;
 import com.meteorite.itemdespawntowhat.core.model.SimpleEffectType;
@@ -49,7 +50,8 @@ public record PlaceBlockEffect(
         int radius,
         @Nullable Integer limit,
         int delayTicks,
-        double chance
+        double chance,
+        EffectOffset offset
 ) implements Effect {
 
     /** 效果类型 id，同时是 JSON 中 type 字段的取值 */
@@ -128,10 +130,11 @@ public record PlaceBlockEffect(
                 PARAMS.field(RADIUS),
                 PARAMS.nullableField(LIMIT),
                 PARAMS.field(CommonFields.DELAY_TICKS),
-                PARAMS.field(CommonFields.CHANCE)
-        ).apply(instance, (block, useSourceBlock, shape, count, radius, limit, delayTicks, chance) ->
+                PARAMS.field(CommonFields.CHANCE),
+                PARAMS.field(CommonFields.OFFSET)
+        ).apply(instance, (block, useSourceBlock, shape, count, radius, limit, delayTicks, chance, offset) ->
                 new PlaceBlockEffect(block.orElse(null), useSourceBlock, shape, count, radius,
-                        limit.orElse(null), delayTicks, chance)));
+                        limit.orElse(null), delayTicks, chance, offset)));
     }
 
     /** 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器。；显式实现执行状态入口：放置需要按预算分批推进，lambda 只能表达一次同步执行。 */

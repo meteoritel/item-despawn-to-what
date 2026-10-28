@@ -11,6 +11,7 @@ import com.meteorite.itemdespawntowhat.core.api.param.FloatSpec;
 import com.meteorite.itemdespawntowhat.core.api.param.ParamList;
 import com.meteorite.itemdespawntowhat.core.model.CommonFields;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
+import com.meteorite.itemdespawntowhat.core.model.EffectOffset;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
 import com.meteorite.itemdespawntowhat.core.model.ProductKind;
 import com.meteorite.itemdespawntowhat.core.model.SimpleEffectType;
@@ -34,7 +35,8 @@ public record ExplosionEffect(
         boolean fire,
         boolean visualOnly,
         int delayTicks,
-        double chance
+        double chance,
+        EffectOffset offset
 ) implements Effect {
 
     /** 效果类型 id，同时是 JSON 中 type 字段的取值 */
@@ -68,7 +70,8 @@ public record ExplosionEffect(
                 PARAMS.field(FIRE),
                 PARAMS.field(VISUAL_ONLY),
                 PARAMS.field(CommonFields.DELAY_TICKS),
-                PARAMS.field(CommonFields.CHANCE)
+                PARAMS.field(CommonFields.CHANCE),
+                PARAMS.field(CommonFields.OFFSET)
         ).apply(instance, ExplosionEffect::new));
     }
 

@@ -68,6 +68,7 @@ public record ServerConfig(
 
     // 单次放置半径上限的默认值：放置开销随半径立方增长，默认只放行 1～8
     public static final int DEFAULT_MAX_PLACE_BLOCK_RADIUS = 8;
+    public static final int DEFAULT_MAX_EFFECT_OFFSET = 6;
 
     // 回扫每步实体上限：与 position_search_checks_per_tick 同量级，万级物品约数十秒扫完，单 tick 仍受共享预算约束
     public static final int DEFAULT_RESCAN_ENTITIES_PER_STEP = 16;
@@ -240,29 +241,43 @@ public record ServerConfig(
      * 位置搜索与方块放置范围；Java 内分组，JSON 字段仍平铺在根对象。
      * @param positionSearchChecksPerTick 每 tick 位置候选检查上限
      * @param maxPlaceBlockRadius 规则允许的最大放置半径
+     * @param maxEffectOffsetX 行为 X 轴偏移绝对值上限，0 固定该轴
+     * @param maxEffectOffsetY 行为 Y 轴偏移绝对值上限，0 固定该轴
+     * @param maxEffectOffsetZ 行为 Z 轴偏移绝对值上限，0 固定该轴
      */
     public record Positioning(
             int positionSearchChecksPerTick,
-            int maxPlaceBlockRadius
+            int maxPlaceBlockRadius,
+            int maxEffectOffsetX,
+            int maxEffectOffsetY,
+            int maxEffectOffsetZ
     ) {
         private static final ConfigField<Integer> POSITION_SEARCH_CHECKS_PER_TICK = ConfigField.integer(
                 "position_search_checks_per_tick", DEFAULT_POSITION_SEARCH_CHECKS_PER_TICK, 1, 4096);
         private static final ConfigField<Integer> MAX_PLACE_BLOCK_RADIUS = ConfigField.integer(
                 "max_place_block_radius", DEFAULT_MAX_PLACE_BLOCK_RADIUS, 1, Integer.MAX_VALUE);
+        private static final ConfigField<Integer> MAX_EFFECT_OFFSET_X = ConfigField.integer(
+                "max_effect_offset_x", DEFAULT_MAX_EFFECT_OFFSET, 0, Integer.MAX_VALUE);
+        private static final ConfigField<Integer> MAX_EFFECT_OFFSET_Y = ConfigField.integer(
+                "max_effect_offset_y", DEFAULT_MAX_EFFECT_OFFSET, 0, Integer.MAX_VALUE);
+        private static final ConfigField<Integer> MAX_EFFECT_OFFSET_Z = ConfigField.integer(
+                "max_effect_offset_z", DEFAULT_MAX_EFFECT_OFFSET, 0, Integer.MAX_VALUE);
         private static final List<ConfigField<?>> FIELDS = List.of(
-                POSITION_SEARCH_CHECKS_PER_TICK, MAX_PLACE_BLOCK_RADIUS);
+                POSITION_SEARCH_CHECKS_PER_TICK, MAX_PLACE_BLOCK_RADIUS,
+                MAX_EFFECT_OFFSET_X, MAX_EFFECT_OFFSET_Y, MAX_EFFECT_OFFSET_Z);
 
         /** 本组缺省配置。 */
         public static final Positioning DEFAULT = new Positioning(
-                POSITION_SEARCH_CHECKS_PER_TICK.defaultValue(),
-                MAX_PLACE_BLOCK_RADIUS.defaultValue()
+                POSITION_SEARCH_CHECKS_PER_TICK.defaultValue(), MAX_PLACE_BLOCK_RADIUS.defaultValue(),
+                MAX_EFFECT_OFFSET_X.defaultValue(), MAX_EFFECT_OFFSET_Y.defaultValue(), MAX_EFFECT_OFFSET_Z.defaultValue()
         );
 
         private static final MapCodec<Positioning> MAP_CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
-                POSITION_SEARCH_CHECKS_PER_TICK.codec()
-                        .forGetter(Positioning::positionSearchChecksPerTick),
-                MAX_PLACE_BLOCK_RADIUS.codec()
-                        .forGetter(Positioning::maxPlaceBlockRadius)
+                POSITION_SEARCH_CHECKS_PER_TICK.codec().forGetter(Positioning::positionSearchChecksPerTick),
+                MAX_PLACE_BLOCK_RADIUS.codec().forGetter(Positioning::maxPlaceBlockRadius),
+                MAX_EFFECT_OFFSET_X.codec().forGetter(Positioning::maxEffectOffsetX),
+                MAX_EFFECT_OFFSET_Y.codec().forGetter(Positioning::maxEffectOffsetY),
+                MAX_EFFECT_OFFSET_Z.codec().forGetter(Positioning::maxEffectOffsetZ)
         ).apply(instance, Positioning::new));
     }
 
@@ -415,6 +430,15 @@ public record ServerConfig(
         return positioning.maxPlaceBlockRadius();
     }
 
+    /** 行为 X 轴偏移的绝对值上限，单位为格。 */
+    public int maxEffectOffsetX() { return positioning.maxEffectOffsetX(); }
+
+    /** 行为 Y 轴偏移的绝对值上限，单位为格。 */
+    public int maxEffectOffsetY() { return positioning.maxEffectOffsetY(); }
+
+    /** 行为 Z 轴偏移的绝对值上限，单位为格。 */
+    public int maxEffectOffsetZ() { return positioning.maxEffectOffsetZ(); }
+
     /** 调试日志开关。 */
     public boolean debugLogging() {
         return debug.debugLogging();
@@ -436,7 +460,7 @@ public record ServerConfig(
      * @return 运行期上限
      */
     public RuleRuntimeLimits runtimeLimits() {
-        return new RuleRuntimeLimits(maxPlaceBlockRadius());
+        return new RuleRuntimeLimits(maxPlaceBlockRadius(), maxEffectOffsetX(), maxEffectOffsetY(), maxEffectOffsetZ());
     }
 
     /** 未显式配置工作量上限时，回退到 max_checks_per_tick。 */

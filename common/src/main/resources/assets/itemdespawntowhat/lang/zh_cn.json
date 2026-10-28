@@ -1030,5 +1030,16 @@
   "gui.itemdespawntowhat.edit.debug.delete.message": "将删除全部 %s 条测试规则草稿，非测试规则不受影响。确认继续？",
   "gui.itemdespawntowhat.edit.rule.catalyst_cost.consume_count": "消耗数量",
   "gui.itemdespawntowhat.edit.rule.consume_fluid": "消耗源头",
-  "gui.itemdespawntowhat.edit.issue.catalyst_consume_count_out_of_range": "催化剂消耗数量必须为 1 到 64 的整数，且只引用已选物品"
+  "gui.itemdespawntowhat.edit.issue.catalyst_consume_count_out_of_range": "催化剂消耗数量必须为 1 到 64 的整数，且只引用已选物品",
+  "gui.itemdespawntowhat.edit.field.common.offset": "触发点偏移",
+  "gui.itemdespawntowhat.edit.field.common.offset.hint": "产出原点 = 触发点 + 偏移；每步 1 格。邻近产物上限也以此原点统计。",
+  "gui.itemdespawntowhat.edit.field.common.offset.x": "X 轴",
+  "gui.itemdespawntowhat.edit.field.common.offset.y": "Y 轴",
+  "gui.itemdespawntowhat.edit.field.common.offset.z": "Z 轴",
+  "gui.itemdespawntowhat.edit.field.common.offset.west": "西",
+  "gui.itemdespawntowhat.edit.field.common.offset.east": "东",
+  "gui.itemdespawntowhat.edit.field.common.offset.down": "下",
+  "gui.itemdespawntowhat.edit.field.common.offset.up": "上",
+  "gui.itemdespawntowhat.edit.field.common.offset.north": "北",
+  "gui.itemdespawntowhat.edit.field.common.offset.south": "南"
 }

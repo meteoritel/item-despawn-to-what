@@ -381,7 +381,7 @@ abstract class FormControl {
         }
         for (int i = 0; i < text.length(); i++) {
             char c = text.charAt(i);
-            boolean ok = Character.isDigit(c) || (c == '-' && i == 0);
+            boolean ok = Character.isDigit(c) || ((c == '-' || c == '+') && i == 0);
             if (!ok) {
                 return false;
             }

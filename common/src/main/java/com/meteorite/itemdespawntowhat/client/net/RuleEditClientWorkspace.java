@@ -334,7 +334,7 @@ public final class RuleEditClientWorkspace {
             return;
         }
         EditorOpenRequest request = new EditorOpenRequest(payload.sessionId(), payload.targetId(), payload.contextRevision(),
-                payload.protocolVersion(), payload.maxPlaceBlockRadius(), payload.statusCode(), payload.messageArgs(), payload.fallbackMessage());
+                payload.protocolVersion(), payload.limits(), payload.statusCode(), payload.messageArgs(), payload.fallbackMessage());
         clearSessionData();
         ticket.reset();
         lease.enter(request, currentTick());

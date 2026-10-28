@@ -138,6 +138,11 @@ public final class BuiltinEditorDefaults {
         return codec.encodeStart(JsonOps.INSTANCE, value).result().orElse(null);
     }
 
+    /** 将参数声明的缺省值投影为展示值，保持未编辑字段的省略语义。 */
+    public static @Nullable RuleValue defaultValue(ParamSpec<?> spec) {
+        return toRuleValue(spec, spec.defaultValue());
+    }
+
     // 规则值出口：null 表示该字段没有可展示的默认值
     private static @Nullable RuleValue toRuleValue(ParamSpec<?> spec, @Nullable Object value) {
         JsonElement element = encode(spec, value);

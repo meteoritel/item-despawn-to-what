@@ -101,13 +101,13 @@ flowchart TD
 ### 第三方类型 SPI
 
 1. 实现 `core/extension/RuleTypeProvider`，在自身 jar 的 `META-INF/services/com.meteorite.itemdespawntowhat.core.extension.RuleTypeProvider` 中登记实现类全名。
-2. provider 方法接收 `TypeRegistrar`，只在装配线程登记或查询；调用时机就是 `BuiltinTypeRegistries.create()`：内置条件登记之后、`conditionTypes.freeze()` 之前调 `registerConditions`；内置效果登记之后、`effectTypes.freeze()` 之前调 `registerEffects`。冻结前会检查每个效果类型的 `params()` 使用 `CommonFields.DELAY_TICKS` 与 `CommonFields.CHANCE` 两个公共声明实例；缺失时装配失败并给出类型 id 和字段名。
+2. provider 方法接收 `TypeRegistrar`，只在装配线程登记或查询；调用时机就是 `BuiltinTypeRegistries.create()`：内置条件登记之后、`conditionTypes.freeze()` 之前调 `registerConditions`；内置效果登记之后、`effectTypes.freeze()` 之前调 `registerEffects`。冻结前会检查每个效果类型的 `params()` 使用 `CommonFields.DELAY_TICKS`、`CommonFields.CHANCE` 与 `CommonFields.OFFSET` 三个公共声明实例；缺失时装配失败并给出类型 id 和字段名。
 3. 多个 provider 按实现类名排序后依次调用，跨端与跨次启动顺序稳定。
 4. 注册的 id 自带命名空间；与已注册 id 冲突会抛 `DuplicateTypeException`，注册表不做覆盖。
 5. 客户端安装同一 provider 后，`ClientTypeRegistries` 复用该装配流程。非空 `params()` 自动生成表单、初值与默认值，必填字段的新建预填由 `initialValue` 提供；参数可用 `tier(ParamTier.ADVANCED)` 标记为编辑器高级层级，默认层级为主区；定制描述符入口见[客户端编辑器](client-editor.md#新增类型编辑器)。
 6. provider 的注册方法只建立类型定义，可在客户端和服务端分别装配，类加载与注册独立于当前世界和服务端实例。
 
-`SimpleEffectType` 未提供参数声明或传入空声明时使用 `CommonFields.EFFECT_PARAMS`；提供自身非空声明时需追加这组公共绑定。类型的 Codec 负责按公共字段名编解码延迟和概率，并与实例 getter 一致。
+`SimpleEffectType` 未提供参数声明或传入空声明时使用 `CommonFields.EFFECT_PARAMS`；提供自身非空声明时需追加这组公共绑定。类型的 Codec 负责按公共字段名编解码延迟、概率和整格偏移，并与实例 getter 一致。 `Effect.offset()` 显式返回 `EffectOffset`，实现者在参数 record 中保存该值，并使用公共嵌套声明的零默认值构造 Codec。
 
 ### 动态引用校验扩展点
 

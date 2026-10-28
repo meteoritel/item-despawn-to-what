@@ -18,6 +18,9 @@ public interface Effect {
     // 执行概率，取值 [0,1]，1 表示必定执行
     double chance();
 
+    /** 行为相对成功触发点的整数格偏移，准备、执行与邻近容量共用。 */
+    EffectOffset offset();
+
 
     // 字段名常量的引用点，确保实现类与常量定义使用同一套命名
     String TYPE_FIELD = RuleFields.TYPE;

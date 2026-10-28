@@ -50,11 +50,13 @@ flowchart TB
 | 覆盖层与平台差异 | 覆盖层目录名、Fabric 端寿命兜底 | `overlay_directory`、`fabric_lifespan_fallback_ticks` | 加载与编辑链路、平台适配 |
 | 实体临时状态 | 新产物保护与转化冷却各持续多久；保护覆盖全部产物，冷却只作用于掉落物 | `new_product_protection_seconds`、`conversion_cooldown_seconds` | 掉落物状态层 |
 | 邻近阈值 | 同区域同类物品或实体的容量口径 | `nearby_products` 子对象 | 计划期产出预算（组数上界） |
-| 规则上限 | 规则里 `place_block` 的半径上限，同时决定编辑器半径滑条的窗口 | `max_place_block_radius` | 规则加载与保存校验、编辑器 |
+| 规则上限 | `place_block` 的半径上限，以及每个行为三轴整格偏移的绝对值上限 | `max_place_block_radius`、`max_effect_offset_x/y/z` | 规则加载与保存校验、编辑器 |
 | 结算恢复 | 当前会话内结算失败后的重试上限 | `settlement_recovery_max_attempts` | 转化运行时 |
 | 调试 | 常规日志与调试场景准备预算 | `debug_logging`、`debug_scenario_prepare_batch_size`、`debug_scenario_prepare_budget_us` | 调试层 |
 
 新产物保护与转化冷却的秒数允许写 0，表示不授予对应状态时长；邻近容量上限的 0 表示关闭对应检查，合法区间见生成键表。`max_work_units_per_tick` 缺省时动态回退到本次配置的 `max_checks_per_tick`，显式填写时使用显式值。类型或区间错误使整份配置回退默认值。
+
+三轴偏移上限各默认 6，以整数格为单位，0 将对应轴固定为零。开屏载荷下发当前上限，重新打开编辑器即可刷新滑条合法域；超出当前上限的规则在加载和保存时报告问题。
 
 ## 派生换算
 
@@ -72,6 +74,8 @@ flowchart TB
 ## nearby_products
 
 `nearby_products` 是一个嵌套对象，默认值来自 `NearbyProductLimits`。物品与实体（生物与其他实体）各自有容量上限与统计半径，上限写 0 表示不对该类做容量检查；半径按方块计。经验球两项保留读写与区间校验，开组只按物品与实体两项计算。
+
+统计区域以各行为产出原点所在方块为中心，与实际生成共用同一原点；产出原点为冻结触发点加该行为 `offset`。同域同类需求合并，空间与引用均相交的需求共享理论额度，分离区域独立。
 
 阈值在计划期按初始区域存量和声明的理论产量确定完整组预算，不按概率折减；预算覆盖之外的源物品返还。生成期间不再查询上限，外部新增产物不挤占额度，允许最终存量超限。实际产量由效果类型决定，未用完的预算不补开组。
 

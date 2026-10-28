@@ -462,9 +462,9 @@ public final class RuleRuntimeHostCore {
         }
 
         @Override
-        public int maxPlaceBlockRadius() {
+        public RuleRuntimeLimits runtimeLimits() {
             ServerConfig config = serverConfig;
-            return config == null ? ServerConfig.DEFAULT.maxPlaceBlockRadius() : config.maxPlaceBlockRadius();
+            return (config == null ? ServerConfig.DEFAULT : config).runtimeLimits();
         }
 
         @Override

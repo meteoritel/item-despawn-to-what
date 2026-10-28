@@ -12,7 +12,7 @@ import java.util.function.IntConsumer;
 
 /**
  * 效果执行上下文的服务端实现。
- * 每个转化组各持有一个实例；跨 tick 的推进只经执行状态的 {@code advance} 返回继续请求，
+ * 每个行为各持有一个实例，携带该组信息与行为原点；跨 tick 的推进只经执行状态的 {@code advance} 返回继续请求，
  * 异步批次通过进度回执把「已受理」收敛为「已完成」。
  */
 public final class RuntimeEffectContext implements EffectContext {

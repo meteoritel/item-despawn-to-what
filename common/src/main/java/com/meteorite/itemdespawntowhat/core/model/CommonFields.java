@@ -3,12 +3,13 @@ package com.meteorite.itemdespawntowhat.core.model;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.api.param.DoubleSpec;
 import com.meteorite.itemdespawntowhat.core.api.param.IntSpec;
+import com.meteorite.itemdespawntowhat.core.api.param.NestedSpec;
 import com.meteorite.itemdespawntowhat.core.api.param.ParamList;
 import com.meteorite.itemdespawntowhat.core.api.param.ParamUnit;
 import com.meteorite.itemdespawntowhat.core.api.param.ParamTier;
 
 /**
- * 效果通用字段（延迟、概率）的参数声明。
+ * 效果通用字段（延迟、概率、原点偏移）的参数声明。
  * 各具体类型在自己的参数声明里引用这些 spec、在 codec 里引用对应的 fieldFor 片段，避免通用字段在各类型里重复定义。
  * 两点约定：
  * 1) 字段构造器返回 RecordCodecBuilder（而非自由的 MapCodec）：forGetter 的结果绑定在所属记录类型 O 上；
@@ -36,9 +37,14 @@ public final class CommonFields {
             .unit(ParamUnit.PERCENT)
             .label("common.chance").tier(ParamTier.ADVANCED);
 
-    // 效果参数声明的公共尾部（延迟 + 概率），具体类型按「专属字段 + 公共字段」拼接
+    /** 原点偏移与其三轴子字段共同投影到行为高级区。 */
+    public static final NestedSpec<EffectOffset> OFFSET = NestedSpec
+            .defaulted(RuleFields.OFFSET, EffectOffset.CODEC, EffectOffset.PARAMS, EffectOffset.ZERO)
+            .label("common.offset").hint("common.offset.hint").tier(ParamTier.ADVANCED);
+
+    // 效果参数声明的公共尾部，具体类型按「专属字段 + 公共字段」拼接
     public static final ParamList<Effect> EFFECT_PARAMS = ParamList.of(
-            DELAY_TICKS.bind(Effect::delayTicks), CHANCE.bind(Effect::chance));
+            DELAY_TICKS.bind(Effect::delayTicks), CHANCE.bind(Effect::chance), OFFSET.bind(Effect::offset));
 
     private CommonFields() {
         throw new UnsupportedOperationException("Utility class");

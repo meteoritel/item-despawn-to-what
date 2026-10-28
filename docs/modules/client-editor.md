@@ -210,6 +210,8 @@ flowchart TD
 
 - 内置类型与客户端已安装的 SPI 类型共用参数投影入口（发现方式见[类型系统](type-system.md#第三方类型-spi)）；非空 `params()` 自动生成描述符、新建初值与省略字段的展示默认值，必填字段的新建预填由 `initialValue` 提供。
 - 定制表单可在自动装配前注册到 `EditorRegistries.CONDITIONS` 或 `EditorRegistries.EFFECTS`；描述符用 `TypeEditorDescriptor.of(id, label, fields...)` 构造，手动描述符优先于自动投影。内置说明行与动态初值保留在客户端装配表。
+- 公共高级字段 `offset` 投影为固定嵌套表单，X/Y/Z 三行复用 `NumberControl`，步长均为 1 格。`BuiltinEditorDescriptors.withEffectLimits` 将开屏限额绑定为逐轴合法域；`NumericDomain.SignedLabels` 提供西/东、下/上、北/南双端文案、显式正号和零位刻度。上限为 0 时保留禁用滑条，精确输入仍可将超限草稿修正为 0；回填保留原始值。
+- 参数声明的展示默认值经 `EditorField.defaultValue` 传入嵌套子表单；原字段与缺省轴在未编辑时保持省略形态。
 - 自动投影保留 `ParamSpec.tier()`；手工描述符中的高级字段使用 `.withTier(ParamTier.ADVANCED)` 标记。结果页仅按动作顶层字段分区，嵌套字段随所属顶层字段展示。
 - 界面层按 `EditorField` 的分类谓词判断字段归类（列表、数值、说明行、可带标签等），不对 `EditorFieldType` 做 switch；新增 `EditorFieldType` 取值时同步补谓词实现。
 - 本地未发现的类型与参数声明为空的第三方条件类型由 `descriptorFor` 返回只读回退描述，展示原始 JSON 并原样保留未识别字段；内置无参条件类型保留说明行。已发现的效果类型在装配时检查公共字段声明（见[类型系统](type-system.md#第三方类型-spi)）。

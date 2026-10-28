@@ -56,6 +56,9 @@ public record BuiltinTypeRegistries(
     }
 
     private static void validateCommonEffectFields(EffectType<?> type) {
+        if (type.params().get(CommonFields.OFFSET.name()) != CommonFields.OFFSET) {
+            throw new IllegalStateException("效果类型 " + type.id() + " 未声明通用字段 " + CommonFields.OFFSET.name());
+        }
         if (type.params().get(CommonFields.DELAY_TICKS.name()) != CommonFields.DELAY_TICKS) {
             throw new IllegalStateException("效果类型 " + type.id() + " 未声明通用字段 " + CommonFields.DELAY_TICKS.name());
         }

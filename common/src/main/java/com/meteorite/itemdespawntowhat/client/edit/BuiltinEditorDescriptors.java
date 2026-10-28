@@ -1,6 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.edit;
 
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
+import com.meteorite.itemdespawntowhat.core.api.RuleRuntimeLimits;
+import com.meteorite.itemdespawntowhat.core.model.EffectOffset;
 import com.meteorite.itemdespawntowhat.core.api.TypeDefinition;
 import com.meteorite.itemdespawntowhat.core.config.ServerConfig;
 import com.meteorite.itemdespawntowhat.core.model.CatalystCost;
@@ -137,6 +139,25 @@ public final class BuiltinEditorDescriptors {
                 ParamProjection.fields(EntityProduct.variantParams(variant), typeId));
         fields.addAll(ParamProjection.fields(SpawnEntityEffect.PARAMS, typeId));
         return new TypeEditorDescriptor(typeId, TypeLabels.effectLabel(typeId), fields, false);
+    }
+
+    /** 将当前服务端的整格偏移合法域绑定到公共嵌套字段，不改变其它参数声明。 */
+    public static TypeEditorDescriptor withEffectLimits(TypeEditorDescriptor descriptor, RuleRuntimeLimits limits) {
+        List<EditorField> fields = descriptor.fields().stream().map(field -> {
+            if (!RuleFields.OFFSET.equals(field.name()) || !field.isObject()) return field;
+            return field.withSubFields(field.subFields().stream().map(axis -> switch (axis.name()) {
+                case EffectOffset.X_FIELD -> offsetAxis(axis, limits.maxEffectOffsetX(), "west", "east");
+                case EffectOffset.Y_FIELD -> offsetAxis(axis, limits.maxEffectOffsetY(), "down", "up");
+                case EffectOffset.Z_FIELD -> offsetAxis(axis, limits.maxEffectOffsetZ(), "north", "south");
+                default -> axis;
+            }).toList());
+        }).toList();
+        return new TypeEditorDescriptor(descriptor.id(), descriptor.label(), fields, descriptor.readOnly());
+    }
+
+    private static EditorField offsetAxis(EditorField axis, int maximum, String lower, String upper) {
+        return axis.withNumbers(NumericDomain.integers(-maximum, maximum)
+                .withSignedLabels(FIELD + "common.offset." + lower, FIELD + "common.offset." + upper));
     }
 
     // ---- 规则级与来源对象（不在条件/效果注册表内，界面按需取用） ----

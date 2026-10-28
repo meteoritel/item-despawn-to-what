@@ -722,7 +722,7 @@ public final class ConversionRuntime {
         int costPerGroup = types.perRoundSourceConsumption(rule, source);
         tracked.locked = true;
         // 成功转化当刻的触发点与源速度：都必须在源实体清空前读取，清空后位置与运动都不再可信
-        Vec3 triggerPosition = item.position();
+        EffectOrigins origins = new EffectOrigins(item.position());
         Vec3 triggerVelocity = item.getDeltaMovement();
         // 源实体清空前要固定的效果输入：概率在此判定一次，结果随任务携带，清空后不再重判。
         // 判定异常按同一补偿单元处理：整堆源物品写回并保留所有权追踪。
@@ -731,7 +731,7 @@ public final class ConversionRuntime {
         // 其余组的固定输入由结算任务在 PREPARING 阶段分组续接，大堆叠的重活不会全压在检查步骤里
         int leadGroups = Math.min(costPerGroup > 0 ? available / costPerGroup : 1, scheduler.config().prepareGroupsPerStep());
         try {
-            preparations = prepareEffects(level, item, rule, triggerPosition, leadGroups, source.copy());
+            preparations = prepareEffects(level, item, rule, origins, leadGroups, source.copy());
         } catch (RuntimeException failure) {
             tracked.locked = false;
             // 准备阶段异常发生在源物品扣减之前，守恒天然成立；仍需结构化事件把规则与原因定位下来，
@@ -763,7 +763,7 @@ public final class ConversionRuntime {
                 RuntimeObserver.current().converted(item, rule.id().toString(), estimated);
             }
             ConversionSettlement settlement = new ConversionSettlement(this, scheduler, scheduler.config(), level, item, rule, held, writer,
-                    triggerPosition, triggerVelocity, preparations, leadGroups);
+                    origins, triggerVelocity, preparations, leadGroups);
             scheduler.scheduleAt(level.dimension(), settlement, level.getGameTime());
             transferred = true;
             VisualFeedback.conversion(level, item.position());
@@ -833,7 +833,7 @@ public final class ConversionRuntime {
     // 结果随结算任务携带，源实体清空后不再重新判定。没有准备阶段的类型不产出，保持原有判定时机。
     // preparedGroups 只是领先准备的组数上界，未覆盖的组由结算任务按组续接准备。
     private Map<PreparedEffectKey, EffectPreparation> prepareEffects(ServerLevel level, ItemEntity item, Rule rule,
-                                                                    Vec3 position, int preparedGroups,
+                                                                    EffectOrigins origins, int preparedGroups,
                                                                     ItemStack sourceSnapshot) {
         Map<PreparedEffectKey, EffectPreparation> preparations = new HashMap<>();
         // 组间共享的固定输入：同一候选同一槽位只保留首份，各组共用它承载执行期的跨组状态
@@ -851,6 +851,7 @@ public final class ConversionRuntime {
                 }
                 // 一次性效果同一源只尝试一组，固定一份即可；其余类型按潜在组各固定一份，
                 // 概率判定互不复用，声明可共享的固定输入在组间复用首份
+                Vec3 position = origins.position(effect);
                 int groups = definition.oneShot() ? 1 : preparedGroups;
                 for (int group = 0; group < groups; group++) {
                     EffectPreparation preparation = prepareEffectSlot(definition, effect, level, item, position,

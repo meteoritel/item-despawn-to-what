@@ -17,6 +17,7 @@ import com.meteorite.itemdespawntowhat.core.api.param.ParamUnit;
 import com.meteorite.itemdespawntowhat.core.api.param.RefSpec;
 import com.meteorite.itemdespawntowhat.core.model.CommonFields;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
+import com.meteorite.itemdespawntowhat.core.model.EffectOffset;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
 import com.meteorite.itemdespawntowhat.core.model.ProductKind;
 import com.meteorite.itemdespawntowhat.core.model.SimpleEffectType;
@@ -47,7 +48,8 @@ public record ArrowRainEffect(
         Pickup pickup,
         @Nullable List<PotionEffectSpec> potionEffects,
         int delayTicks,
-        double chance
+        double chance,
+        EffectOffset offset
 ) implements Effect {
 
     /** 效果类型 id，同时是 JSON 中 type 字段的取值 */
@@ -148,9 +150,10 @@ public record ArrowRainEffect(
                 PARAMS.field(PICKUP),
                 PARAMS.nullableField(POTION_EFFECTS),
                 PARAMS.field(CommonFields.DELAY_TICKS),
-                PARAMS.field(CommonFields.CHANCE)
-        ).apply(instance, (count, pickup, potionEffects, delayTicks, chance) ->
-                new ArrowRainEffect(count, pickup, potionEffects.orElse(null), delayTicks, chance)));
+                PARAMS.field(CommonFields.CHANCE),
+                PARAMS.field(CommonFields.OFFSET)
+        ).apply(instance, (count, pickup, potionEffects, delayTicks, chance, offset) ->
+                new ArrowRainEffect(count, pickup, potionEffects.orElse(null), delayTicks, chance, offset)));
     }
 
     /**

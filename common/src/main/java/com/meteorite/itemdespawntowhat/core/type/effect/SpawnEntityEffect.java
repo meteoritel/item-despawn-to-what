@@ -11,6 +11,7 @@ import com.meteorite.itemdespawntowhat.core.api.param.ParamList;
 import com.meteorite.itemdespawntowhat.core.model.CapacityDemand;
 import com.meteorite.itemdespawntowhat.core.model.CommonFields;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
+import com.meteorite.itemdespawntowhat.core.model.EffectOffset;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
 import com.meteorite.itemdespawntowhat.core.model.ProductKind;
 import com.meteorite.itemdespawntowhat.core.model.SimpleEffectType;
@@ -25,7 +26,7 @@ import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 
 /** 统一实体生成效果：按 variant 分发产物，公共执行字段只定义一次。 */
-public record SpawnEntityEffect(EntityProduct product, int delayTicks, double chance) implements Effect {
+public record SpawnEntityEffect(EntityProduct product, int delayTicks, double chance, EffectOffset offset) implements Effect {
     public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(Constants.ID_NAMESPACE, "spawn_entity");
 
     /** 类型自身没有专属参数：产出子类的字段由 EntityProduct.PARAMS 按 variant 声明 */
@@ -36,7 +37,8 @@ public record SpawnEntityEffect(EntityProduct product, int delayTicks, double ch
         return RecordCodecBuilder.mapCodec(instance -> instance.group(
                 EntityProduct.CODEC.forGetter(SpawnEntityEffect::product),
                 PARAMS.field(CommonFields.DELAY_TICKS),
-                PARAMS.field(CommonFields.CHANCE)
+                PARAMS.field(CommonFields.CHANCE),
+                PARAMS.field(CommonFields.OFFSET)
         ).apply(instance, SpawnEntityEffect::new));
     }
 

@@ -1030,5 +1030,16 @@
   "gui.itemdespawntowhat.edit.debug.delete.message": "This deletes all %s test rule drafts; normal rules are untouched. Continue?",
   "gui.itemdespawntowhat.edit.rule.catalyst_cost.consume_count": "Consumed quantity",
   "gui.itemdespawntowhat.edit.rule.consume_fluid": "Consume source",
-  "gui.itemdespawntowhat.edit.issue.catalyst_consume_count_out_of_range": "Catalyst consumption must be an integer from 1 to 64 and reference selected items only"
+  "gui.itemdespawntowhat.edit.issue.catalyst_consume_count_out_of_range": "Catalyst consumption must be an integer from 1 to 64 and reference selected items only",
+  "gui.itemdespawntowhat.edit.field.common.offset": "Trigger offset",
+  "gui.itemdespawntowhat.edit.field.common.offset.hint": "Output origin = trigger point + offset, in whole blocks. Nearby product limits use the same origin.",
+  "gui.itemdespawntowhat.edit.field.common.offset.x": "X axis",
+  "gui.itemdespawntowhat.edit.field.common.offset.y": "Y axis",
+  "gui.itemdespawntowhat.edit.field.common.offset.z": "Z axis",
+  "gui.itemdespawntowhat.edit.field.common.offset.west": "West",
+  "gui.itemdespawntowhat.edit.field.common.offset.east": "East",
+  "gui.itemdespawntowhat.edit.field.common.offset.down": "Down",
+  "gui.itemdespawntowhat.edit.field.common.offset.up": "Up",
+  "gui.itemdespawntowhat.edit.field.common.offset.north": "North",
+  "gui.itemdespawntowhat.edit.field.common.offset.south": "South"
 }

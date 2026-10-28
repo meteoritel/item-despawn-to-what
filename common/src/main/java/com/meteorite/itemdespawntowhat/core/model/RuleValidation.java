@@ -153,6 +153,10 @@ public final class RuleValidation {
         if (effect.type() == null) {
             return;
         }
+        if (effect.offset() != null) {
+            effect.offset().validateLimits(runtimeLimits, issues.originScoped(origin),
+                    ParamChecks.child(path, RuleFields.OFFSET));
+        }
         EffectType<?> definition = effectTypes.getOrNull(effect.type());
         if (definition == null) {
             validateCommonEffect(effect, issues.originScoped(origin), path);
@@ -314,6 +318,7 @@ public final class RuleValidation {
                 "delay_ticks 不能为负数: " + effect.delayTicks());
         CommonFields.CHANCE.check(effect.chance(), issues, path,
                 "chance 必须在 [0,1] 内: " + effect.chance());
+        CommonFields.OFFSET.check(effect.offset(), issues, path);
     }
 
     /** 便捷入口：无来源信息的结构校验 */

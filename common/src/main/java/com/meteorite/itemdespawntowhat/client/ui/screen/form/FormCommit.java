@@ -52,7 +52,8 @@ final class FormCommit {
             }
             RuleValue effective = original == null && row.defaultValue != null ? row.defaultValue.get()
                     : original == null && container != null && container.isMapping()
-                    ? effectiveValue(container, row.field.name()) : null;
+                    ? effectiveValue(container, row.field.name()) : row.field.defaultValue();
+            if (original == null && effective == null) effective = row.field.defaultValue();
             row.defaultDisplayed = original == null && effective != null;
             RuleValue displayed = row.defaultDisplayed ? effective : original;
             if (row.control instanceof ItemCountsControl && row.defaultValue != null && original != null && original.isMapping()) {
@@ -104,7 +105,10 @@ final class FormCommit {
         view.loadedRevision = view.session.revision();
         for (FormRow row : view.rows) {
             RuleValue value = object.has(row.field.name()) ? object.child(row.field.name()) : null;
-            row.control.load(value);
+            RuleValue effective = row.defaultValue != null ? row.defaultValue.get() : row.field.defaultValue();
+            row.defaultDisplayed = value == null && effective != null;
+            row.control.load(row.defaultDisplayed ? effective : value);
+            row.control.rememberLoaded(value);
             row.loadedInputs = List.copyOf(row.control.inputText());
             row.loaded = true;
             EditSession.PendingInput pending = view.session.pendingInput(row.path);

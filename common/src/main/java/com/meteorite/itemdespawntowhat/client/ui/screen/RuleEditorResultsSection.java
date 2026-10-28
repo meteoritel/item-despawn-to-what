@@ -34,6 +34,7 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiListView;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTypePicker;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
+import com.meteorite.itemdespawntowhat.core.api.RuleRuntimeLimits;
 import com.meteorite.itemdespawntowhat.core.config.ServerConfig;
 import com.meteorite.itemdespawntowhat.core.model.CombinationMode;
 import com.meteorite.itemdespawntowhat.core.model.ConditionLimits;
@@ -331,6 +332,7 @@ final class RuleEditorResultsSection {
                     content.widgets.add(productButton);
                     content.buttons.add(productButton);
                 }
+                descriptor = BuiltinEditorDescriptors.withEffectLimits(descriptor, serverLimits());
                 // 按动作顶层字段的声明层级分区，嵌套字段随所属顶层字段展示
                 List<EditorField> editable = descriptor.fields();
                 List<EditorField> primary = new ArrayList<>(editable.stream()
@@ -500,8 +502,12 @@ final class RuleEditorResultsSection {
      * @return radius 滑条的取值窗口上限
      */
     private int serverMaxPlaceBlockRadius() {
+        return serverLimits().maxPlaceRadius();
+    }
+
+    private RuleRuntimeLimits serverLimits() {
         EditorOpenRequest request = shell.workspace().session().openRequest();
-        return request == null ? ServerConfig.DEFAULT.maxPlaceBlockRadius() : request.maxPlaceBlockRadius();
+        return request == null ? ServerConfig.DEFAULT.runtimeLimits() : request.limits();
     }
 
     private UiButton addPlanButton(String key, UiAction action) {

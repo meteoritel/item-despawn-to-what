@@ -97,7 +97,7 @@ final class ConversionSettlement implements ServerTask {
     // 触发时刻的整堆快照：计划期整堆已移出实体，效果读取 sourceStack() 时必须用这份快照
     private final ItemStack sourceSnapshot;
     // 成功转化当刻固定的触发点：源实体清空或被移除后仍以此定位触发点
-    private final Vec3 triggerPosition;
+    private final EffectOrigins origins;
     // 成功转化当刻固定的源速度：源实体被移除后产物初速仍由此决定
     private final Vec3 sourceVelocity;
     // 效果槽位固定输入（键 = 候选 id + 槽序号 + 组序号）：前若干组在成功转化当刻领先固定，
@@ -133,7 +133,6 @@ final class ConversionSettlement implements ServerTask {
     private int pendingCandidateIndex = -1;
     // 同一源请求内已尝试过的一次性效果槽（键 = 候选 id + "#" + 槽序号）
     private final Set<String> attemptedOneShots = new HashSet<>();
-    private EffectContext groupContext;
     private int groupCount;
     private int groupsStarted;
     private int effectCursor;
@@ -160,7 +159,7 @@ final class ConversionSettlement implements ServerTask {
     // 受控写入句柄由调用方（首次登记方）给出
     ConversionSettlement(ConversionRuntime runtime, TaskQueue taskQueue, SchedulerConfig schedulerConfig,
                          ServerLevel level, ItemEntity source,
-                         Rule rule, ItemStack sourceSnapshot, SettlementRecord.Writer writer, Vec3 triggerPosition,
+                         Rule rule, ItemStack sourceSnapshot, SettlementRecord.Writer writer, EffectOrigins origins,
                          Vec3 sourceVelocity, Map<ConversionRuntime.PreparedEffectKey, EffectPreparation> preparations,
                          int leadPreparedGroups) {
         this.runtime = runtime;
@@ -172,7 +171,7 @@ final class ConversionSettlement implements ServerTask {
         this.writer = writer;
         this.record = writer.record();
         this.sourceSnapshot = sourceSnapshot.copy();
-        this.triggerPosition = triggerPosition == null ? source.position() : triggerPosition;
+        this.origins = origins;
         this.sourceVelocity = sourceVelocity == null ? Vec3.ZERO : sourceVelocity;
         // 准备阶段要按组续接写入，因此复制成可变映射；领先准备的内容原样带入
         this.preparations = preparations == null ? new HashMap<>() : new HashMap<>(preparations);
@@ -184,8 +183,8 @@ final class ConversionSettlement implements ServerTask {
         // 候选结构摘要按规则实例缓存，结构未变时不重算；失效条件见 ConversionRuntime
         this.structureVersion = runtime.candidateStructureVersion(rule, level.registryAccess());
         this.groupPlan = new SettlementGroupPlan(level, rule, candidates, structureVersion,
-                new SettlementCapacityProbe(runtime, level, this.triggerPosition));
-        this.catalystStage = new SettlementCatalystStage(runtime, level, source, this.triggerPosition, rule, record,
+                new SettlementCapacityProbe(runtime, level, origins));
+        this.catalystStage = new SettlementCatalystStage(runtime, level, source, origins.triggerPosition(), rule, record,
                 record.sourceCostPerGroup(), record.id());
         this.payment = new SettlementPayment(runtime, level);
         this.delivery = new RebateDelivery(level, source, writer, schedulerConfig.positionSearchChecksPerTick());
@@ -415,7 +414,7 @@ final class ConversionSettlement implements ServerTask {
                     continue;
                 }
                 EffectPreparation preparation = runtime.prepareEffectSlot(definition, effect, level, source,
-                        triggerPosition, sourceSnapshot, candidate.fillOrigin());
+                        origins.position(effect), sourceSnapshot, candidate.fillOrigin());
                 if (preparation == null) {
                     // 未迁移的类型不在准备阶段固定输入，其概率仍在首次执行时判定
                     continue;
@@ -580,7 +579,6 @@ final class ConversionSettlement implements ServerTask {
         pendingCandidateIndex = -1;
         // 本组已开：此前的门槛/流体让出不再是截断原因，后续受阻按新的原因记录
         paymentBlockReason = null;
-        groupContext = contextForGroup(groupsStarted);
         return GroupStep.OPENED;
     }
 
@@ -601,7 +599,7 @@ final class ConversionSettlement implements ServerTask {
             }
             return;
         }
-        dispatchEffect(effect, slot, groupContext, groupsStarted - 1);
+        dispatchEffect(effect, slot, groupsStarted - 1);
         budget.charge(1);
         dispatchedThisStep++;
     }
@@ -691,30 +689,23 @@ final class ConversionSettlement implements ServerTask {
         reservations().releaseOwner(record.id());
     }
 
-    // 本组上下文：组序号、组数、本组已付成本与真实回执入口
-    private EffectContext contextForGroup(int groupIndex) {
-        // 进度回执经受控句柄改账目：执行器持有的只是写入通道，拿不到可任意变更账目的裸入口
-        IntConsumer sink = receipts.progressSink();
-        return contextForGroup(groupIndex, sink);
-    }
-
-    private EffectContext contextForGroup(int groupIndex, IntConsumer sink) {
+    // 行为独享位置与回执，组信息仍使用同一次开组的快照；groupIndex 从 0 起。
+    private EffectContext contextForEffect(Effect effect, int groupIndex, IntConsumer sink) {
         int covered = record.sourceCostPerGroup() > 0 ? record.sourceCostPerGroup() : 1;
-        // 候选级位置策略（safe_spawn / fill_origin）随组上下文传给执行器；位置用成功转化当刻的固定值
-        return new RuntimeEffectContext(level, source, triggerPosition, rule.id(), schedulerConfig.positionSearchChecksPerTick(),
-                sourceSnapshot, sourceVelocity, 1, covered, candidate.id(), groupIndex - 1, groupCount,
+        return new RuntimeEffectContext(level, source, origins.position(effect), rule.id(), schedulerConfig.positionSearchChecksPerTick(),
+                sourceSnapshot, sourceVelocity, 1, covered, candidate.id(), groupIndex, groupCount,
                 record.sourceCostPerGroup(), sink, candidate.safeSpawn(), candidate.fillOrigin());
     }
 
     // 效果派发：延迟交给调度器；成功转化当刻已固定输入的槽位按本组的固定输入执行，
     // 其余在首次执行时统一判定
-    private void dispatchEffect(Effect effect, int slot, EffectContext context, int groupIndex) {
+    private void dispatchEffect(Effect effect, int slot, int groupIndex) {
         EffectPreparation preparation = preparations.get(
                 new ConversionRuntime.PreparedEffectKey(candidate.id(), slot, preparedGroupIndex(effect, groupIndex)));
+        IntConsumer sink = receipts.progressSink();
         if (effect instanceof PlaceBlockEffect block) {
             if (preparation instanceof PlaceBlockExecutor.PlacementPlan plan && plan.block() != null) {
-                context = contextForGroup(groupIndex + 1,
-                        sourceCharge.placementProgress(block.count(), receipts.progressSink()));
+                sink = sourceCharge.placementProgress(block.count(), sink);
             } else {
                 // 概率落空与无效固定输入仍属于已支付的组尝试。
                 sourceCharge.chargeFully();
@@ -722,6 +713,7 @@ final class ConversionSettlement implements ServerTask {
         } else {
             sourceCharge.chargeFully();
         }
+        EffectContext context = contextForEffect(effect, groupIndex, sink);
         int delay = Math.max(0, effect.delayTicks());
         if (RuntimeObserver.current().enabled()) {
             RuntimeObserver.current().observe(source, "EFFECT_SCHEDULED", "effect", effect.type(),

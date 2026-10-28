@@ -15,6 +15,7 @@ import com.meteorite.itemdespawntowhat.core.extension.DynamicReferenceContext;
 import com.meteorite.itemdespawntowhat.core.model.CapacityDemand;
 import com.meteorite.itemdespawntowhat.core.model.CommonFields;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
+import com.meteorite.itemdespawntowhat.core.model.EffectOffset;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
 import com.meteorite.itemdespawntowhat.core.model.ProductKind;
 import com.meteorite.itemdespawntowhat.core.model.SimpleEffectType;
@@ -38,7 +39,8 @@ public record LootTableEffect(
         ResourceLocation lootTable,
         float luck,
         int delayTicks,
-        double chance
+        double chance,
+        EffectOffset offset
 ) implements Effect, DynamicReferenceCheck {
 
     /** 效果类型 id，同时是 JSON 中 type 字段的取值 */
@@ -65,7 +67,8 @@ public record LootTableEffect(
                 PARAMS.field(LOOT_TABLE),
                 PARAMS.field(LUCK),
                 PARAMS.field(CommonFields.DELAY_TICKS),
-                PARAMS.field(CommonFields.CHANCE)
+                PARAMS.field(CommonFields.CHANCE),
+                PARAMS.field(CommonFields.OFFSET)
         ).apply(instance, LootTableEffect::new));
     }
 

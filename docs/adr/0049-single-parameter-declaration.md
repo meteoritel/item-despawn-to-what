@@ -16,7 +16,7 @@
 2. **一个声明同时承载**：字段名、wire 存在性（必填、有默认值的可选、可空可选）、值域、默认值、新建初值、单位、编辑器投影元数据（标签后缀、枚举分组名、目录注册表、常用窗口、精度、提示、是否在表单显示）与声明顺序。
 3. **四个读点由声明派生**：`ParamBinding<P,V>` 把声明与 typed getter 绑定一次；`ParamList.field` / `nullableField` 生成 Codec 字段构件，`ParamList.check` 直接读取真实参数并遍历全部字段，嵌套对象和列表递归检查，客户端 `ParamProjection` 投影成 `EditorField`，新建条目用 `initialValues()` 写初值。
 4. **声明不承载跨字段校验**：模式相关判断、字段间引用、动态引用校验、运行期上限与执行器/产出声明仍写在各自的 `validateParams`、`validateRuntimeLimits` 与类型定义里；`ParamSpec` 只见单字段，跨字段逻辑塞进声明会让它变成校验脚本。
-5. **通用效果字段由 `CommonFields` 声明**：延迟与概率以 spec 常量（`DELAY_TICKS`、`CHANCE`）加 `EFFECT_PARAMS` 提供，公共绑定读取 `Effect` getter，各效果通过 `plus` 复用同一份绑定。
+5. **通用效果字段由 `CommonFields` 声明**：延迟、概率与整格偏移以 spec 常量（`DELAY_TICKS`、`CHANCE`、`OFFSET`）加 `EFFECT_PARAMS` 提供，公共绑定读取 `Effect` getter，各效果通过 `plus` 复用同一份绑定。
 6. **历史 wire 字段保留但可隐藏**：`catalyst_present.count`、`fluid_present.fluid` 之类的历史兼容字段仍在声明与 JSON 契约中，只是标记为不参与表单显示，避免表单重复出行。
 7. **客户端侧不再逐类型手写**：内置描述符遍历客户端类型表按 `params()` 投影注册，新建初值按 `initialValues()` 派生；`place_block` 的 `limit` 依赖同对象的半径，是唯一保留的显式动态初值。
 8. **两侧复用 SPI 装配**：服务端启动与客户端首次使用类型表时分别调用 `BuiltinTypeRegistries.create()`；客户端按已安装模组的 `RuleTypeProvider` 发现类型，非空 `params()` 自动投影表单，初值、默认值与条件叶 Codec 共用已冻结类型表。手动预注册的描述符优先，内置无参类型保留说明行。

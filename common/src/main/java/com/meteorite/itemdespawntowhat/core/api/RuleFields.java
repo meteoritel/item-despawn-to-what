@@ -66,6 +66,8 @@ public final class RuleFields {
     public static final String TYPE = "type";
     public static final String DELAY_TICKS = "delay_ticks";
     public static final String CHANCE = "chance";
+    /** 单个行为相对成功触发点的三轴整数偏移。 */
+    public static final String OFFSET = "offset";
 
     // ===== 条件树节点 ===== //
     /** 节点类型字段，取值为 OP_ALL_OF / OP_ANY_OF / OP_INVERTED / OP_LEAF */

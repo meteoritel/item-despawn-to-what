@@ -8,6 +8,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
 import java.util.List;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
 
@@ -26,6 +27,8 @@ final class NestedObjectControl extends FormControl {
     NestedObjectControl(Font font, FormView owner, EditorField field, Runnable onChanged) {
         super(owner.theme(), field);
         this.child = owner.newChildForm(field.name(), field.subFields());
+        this.child.setLabelWidth(Math.min(88, field.subFields().stream()
+                .mapToInt(nested -> font.width(Component.translatable(nested.labelKey())) + 4).max().orElse(0)));
         this.child.setOnChanged(() -> {
             markEdited();
             onChanged.run();

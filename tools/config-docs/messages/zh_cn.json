@@ -91,7 +91,7 @@
     "description": "附近同类物品的总件数上限（按要产出的物品或物品标签统计件数）"
   },
   "nearby_products.item_radius": {
-    "description": "上一项的统计半径（方块）：以源所在方块为中心的立方体，边长 = 2 × 半径 + 1 格"
+    "description": "上一项的统计半径（方块）：以行为产出原点所在方块为中心的立方体，边长 = 2 × 半径 + 1 格"
   },
   "nearby_products.entity_limit": {
     "description": "附近同类实体的个数上限（按要产出的实体产物或实体标签统计）"
@@ -104,5 +104,17 @@
   },
   "nearby_products.experience_radius": {
     "description": "保留字段：只保留在配置文件里，不对应任何实际统计半径"
+  },
+  "max_effect_offset_x": {
+    "description": "单个行为 X 轴触发点偏移的绝对值上限，单位为整格，默认 6；0 将该轴固定为零",
+    "advice": "调整后重新打开编辑器；加载和保存均按当前上限校验，超限规则需改小偏移"
+  },
+  "max_effect_offset_y": {
+    "description": "单个行为 Y 轴触发点偏移的绝对值上限，单位为整格，默认 6；0 将该轴固定为零",
+    "advice": "调整后重新打开编辑器；加载和保存均按当前上限校验，超限规则需改小偏移"
+  },
+  "max_effect_offset_z": {
+    "description": "单个行为 Z 轴触发点偏移的绝对值上限，单位为整格，默认 6；0 将该轴固定为零",
+    "advice": "调整后重新打开编辑器；加载和保存均按当前上限校验，超限规则需改小偏移"
   }
 }

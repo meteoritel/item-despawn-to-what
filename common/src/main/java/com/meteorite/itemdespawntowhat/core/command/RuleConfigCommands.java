@@ -92,7 +92,7 @@ final class RuleConfigCommands {
                     RuleCommandText.of("itemdespawntowhat.command.config.edit.client_unavailable").build());
         }
         // 唯一入口：先取锁，成功才发打开载荷；失败同样要下发 LOCK_BUSY 载荷让客户端提示持有者
-        RuleEditService.OpenOutcome outcome = service.openEditor(player, ctx.getSource().getServer().getTickCount(), editContext.maxPlaceBlockRadius());
+        RuleEditService.OpenOutcome outcome = service.openEditor(player, ctx.getSource().getServer().getTickCount(), editContext.runtimeLimits());
         transport.send(editContext, player, outcome.payload());
         if (!outcome.acquired()) {
             return RuleCommandTree.replyFailure(ctx,

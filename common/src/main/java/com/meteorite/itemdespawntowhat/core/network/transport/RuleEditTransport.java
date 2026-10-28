@@ -70,7 +70,7 @@ public final class RuleEditTransport {
         if (closed) { return; }
         switch (reply) {
             case RuleEditReply.Open value -> context.sendTo(player, new OpenRuleEditorPayload(value.sessionId(), value.targetId(),
-                    RuleEditProtocol.VERSION, value.resultVersion(), value.maxPlaceBlockRadius(), value.status().id(), value.messageArgs(), ""));
+                    RuleEditProtocol.VERSION, value.resultVersion(), value.limits(), value.status().id(), value.messageArgs(), ""));
             case RuleEditReply.Save value -> context.sendTo(player, RuleSaveResultPayload.of(value.sessionId(), value.operationId(), value.status(),
                     RuleEditMessages.key(value.status()), value.messageArgs(), value.resultVersion(), value.writtenToDisk(), value.reloaded(), value.issues()));
             case RuleEditReply.QueryResult value -> context.sendTo(player, new RuleQueryResultPayload(value.kind().name(), value.sessionId(), value.requestId(), value.status().id()));

@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.core.service;
 
+import com.meteorite.itemdespawntowhat.core.api.RuleRuntimeLimits;
 import com.meteorite.itemdespawntowhat.core.type.BuiltinTypeRegistries;
 
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTask;
@@ -65,9 +66,9 @@ public interface RuleAuthoringContext {
     int referenceLifespanTicks();
 
     /**
-     * 读取服务端配置的单次放置半径上限，随开屏载荷下发，仅用于 GUI 半径滑条的取值窗口。
-     * @return max_place_block_radius 的当前取值
+     * 读取当前规则限额，随开屏载荷下发供编辑器设置合法域与交互窗口。
+     * @return 服务端当前规则限额
      */
-    int maxPlaceBlockRadius();
+    RuleRuntimeLimits runtimeLimits();
 
 }

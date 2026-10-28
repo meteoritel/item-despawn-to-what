@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.core.service.edit;
 
+import com.meteorite.itemdespawntowhat.core.api.RuleRuntimeLimits;
 import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalog;
 import java.util.List;
 
@@ -9,7 +10,7 @@ public sealed interface RuleEditReply {
     String sessionId();
 
     /** 开屏取锁结论，协议版本由网络适配器填入。 */
-    record Open(String sessionId, String targetId, int resultVersion, int maxPlaceBlockRadius,
+    record Open(String sessionId, String targetId, int resultVersion, RuleRuntimeLimits limits,
                 RuleSaveStatus status, List<String> messageArgs) implements RuleEditReply { }
     /** 保存终态；幂等表保存此结论，线上诊断裁剪在出站时进行。 */
     record Save(String sessionId, String operationId, RuleSaveStatus status, List<String> messageArgs,

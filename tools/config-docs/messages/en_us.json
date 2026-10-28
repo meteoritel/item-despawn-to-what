@@ -91,7 +91,7 @@
     "description": "The cap on the total number of nearby items of the same kind, counted by the item or item tag that would be produced"
   },
   "nearby_products.item_radius": {
-    "description": "The counting radius in blocks for the limit above, as a cube centered on the source block with an edge length of 2 × radius + 1"
+    "description": "The counting radius in blocks for the limit above, as a cube centered on the action output origin block with an edge length of 2 × radius + 1"
   },
   "nearby_products.entity_limit": {
     "description": "The cap on the number of nearby entities of the same kind, counted by the entity type or entity tag that would be produced"
@@ -104,5 +104,17 @@
   },
   "nearby_products.experience_radius": {
     "description": "A kept field as well. It maps to no counting radius at all"
+  },
+  "max_effect_offset_x": {
+    "description": "Maximum absolute trigger offset on the X axis per action, in whole blocks; defaults to 6. Set 0 to fix this axis at zero",
+    "advice": "Reopen the editor after changing it. Loading and saving validate against the current limits; reduce offsets in rules that exceed them"
+  },
+  "max_effect_offset_y": {
+    "description": "Maximum absolute trigger offset on the Y axis per action, in whole blocks; defaults to 6. Set 0 to fix this axis at zero",
+    "advice": "Reopen the editor after changing it. Loading and saving validate against the current limits; reduce offsets in rules that exceed them"
+  },
+  "max_effect_offset_z": {
+    "description": "Maximum absolute trigger offset on the Z axis per action, in whole blocks; defaults to 6. Set 0 to fix this axis at zero",
+    "advice": "Reopen the editor after changing it. Loading and saving validate against the current limits; reduce offsets in rules that exceed them"
   }
 }

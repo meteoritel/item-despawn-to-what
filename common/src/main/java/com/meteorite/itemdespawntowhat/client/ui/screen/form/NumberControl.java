@@ -65,6 +65,9 @@ final class NumberControl extends FormControl {
     private final boolean percentField;
     private final boolean amplifierField;
     private final boolean ticksField;
+    private final @Nullable NumericDomain.SignedLabels signedLabels;
+    private UiRect lowerLabelBounds = new UiRect(0, 0, 0, 0);
+    private UiRect upperLabelBounds = new UiRect(0, 0, 0, 0);
     // 后端合法域（JSON 单位）
     private final double domainMin;
     private final double domainMax;
@@ -86,6 +89,7 @@ final class NumberControl extends FormControl {
         this.percentField = field.isPercent();
         this.amplifierField = field.isAmplifier();
         this.ticksField = field.isTicks();
+        this.signedLabels = numbers.signedLabels();
         this.domainMin = domainMinOf(field, numbers);
         this.domainMax = domainMaxOf(field, numbers);
         double windowLow = field.sliderMin(domainMin);
@@ -97,18 +101,26 @@ final class NumberControl extends FormControl {
         this.windowMin = windowLow;
         this.windowMax = windowHigh;
 
-        this.slider = new UiSlider(THEME, font, domainMin, domainMax, numbers.step());
+        // 固定数值域保留一条禁用轨道；轨道展示窗口不参与提交合法性。
+        double policyMin = domainMin == domainMax ? domainMin - numbers.step() : domainMin;
+        double policyMax = domainMin == domainMax ? domainMax + numbers.step() : domainMax;
+        if (domainMin == domainMax) {
+            windowMin = policyMin;
+            windowMax = policyMax;
+        }
+        this.slider = new UiSlider(THEME, font, policyMin, policyMax, numbers.step());
         double fine = Math.min(numbers.step(), numbers.shiftStep());
         this.slider.core().setPolicy(integerDomain
-                ? UiNumberPolicy.integer((int) Math.round(domainMin), (int) Math.round(domainMax),
+                ? UiNumberPolicy.integer((int) Math.round(policyMin), (int) Math.round(policyMax),
                         (int) Math.round(numbers.step()), (int) Math.round(fine))
-                : UiNumberPolicy.of(domainMin, domainMax, numbers.step(), fine));
+                : UiNumberPolicy.of(policyMin, policyMax, numbers.step(), fine));
         this.slider.core().setWindow(new UiSliderWindow(windowMin, windowMax));
         // 单位由宿主在轨道外绘制，避免文字与滑块占用同一矩形。
         this.slider.setFormatter(value -> Component.empty());
         // 不消费 PageUp/PageDown，交给 FormView 做整页滚动
         this.slider.core().setPageStep(0.0D);
         this.slider.core().setValue(neutralValue());
+        this.slider.setEnabled(domainMin != domainMax);
 
         Component hint = hint();
         this.input = new UiTextInput(THEME, font, hint == null ? Component.empty() : hint);
@@ -175,7 +187,7 @@ final class NumberControl extends FormControl {
         }
         double min = domainMinOf(field, declared);
         double max = domainMaxOf(field, declared);
-        if (!Double.isFinite(min) || !Double.isFinite(max) || max <= min) {
+        if (!Double.isFinite(min) || !Double.isFinite(max) || max < min) {
             return null;
         }
         if (declared.integer()) {
@@ -237,7 +249,8 @@ final class NumberControl extends FormControl {
             return FieldNumbers.ticksToSecondsText((int) Math.round(jsonValue));
         }
         if (integerDomain) {
-            return UiNumbers.roundedText(jsonValue);
+            String text = UiNumbers.roundedText(jsonValue);
+            return signedLabels != null && jsonValue >= 0 ? "+" + text : text;
         }
         return FieldNumbers.text(jsonValue, field.displayPrecision());
     }
@@ -320,8 +333,13 @@ final class NumberControl extends FormControl {
         Component unit = unitLabel();
         int unitWidth = unit.getString().isEmpty() ? 0 : font.width(unit) + GAP;
         unitBounds = new UiRect(x, y, unitWidth, rowHeight);
-        int sliderX = x + unitWidth;
-        int available = Math.max(24, width - reserved - unitWidth);
+        Component lower = lowerLabel();
+        Component upper = upperLabel();
+        int lowerWidth = lower.getString().isEmpty() ? 0 : font.width(lower) + GAP;
+        int upperWidth = upper.getString().isEmpty() ? 0 : font.width(upper) + GAP;
+        lowerLabelBounds = new UiRect(x + unitWidth, y, lowerWidth, rowHeight);
+        int sliderX = x + unitWidth + lowerWidth;
+        int available = Math.max(24, width - reserved - unitWidth - lowerWidth - upperWidth);
         int inputWidth = inputWidth(available);
         int sliderWidth = available - inputWidth - GAP;
         if (sliderWidth < MIN_SLIDER_WIDTH) {
@@ -330,10 +348,11 @@ final class NumberControl extends FormControl {
             sliderWidth = Math.max(MIN_SLIDER_WIDTH, available - inputWidth - GAP);
         }
         slider.setBounds(sliderX, y, sliderWidth, rowHeight);
-        input.setBounds(sliderX + sliderWidth + GAP, y, inputWidth, rowHeight);
+        upperLabelBounds = new UiRect(sliderX + sliderWidth + GAP, y, upperWidth, rowHeight);
+        input.setBounds(sliderX + sliderWidth + upperWidth + GAP, y, inputWidth, rowHeight);
         // 预设按钮保持默认高度，在加高的行里垂直居中，保证仍可点击
         int buttonY = y + Math.max(0, (rowHeight - DEFAULT_HEIGHT) / 2);
-        int cursor = sliderX + available + GAP;
+        int cursor = sliderX + available + upperWidth + GAP;
         for (UiButton button : presetButtons) {
             int buttonWidth = buttonWidth(button);
             button.setBounds(cursor, buttonY, buttonWidth, DEFAULT_HEIGHT);
@@ -378,11 +397,34 @@ final class NumberControl extends FormControl {
         graphics.drawString(renderFont, unitLabel(), unitBounds.x(),
                 unitBounds.y() + Math.max(0, (unitBounds.height() - renderFont.lineHeight) / 2),
                 THEME.palette().textSecondary(), false);
+        drawEndpoint(graphics, renderFont, lowerLabel(), lowerLabelBounds);
+        drawEndpoint(graphics, renderFont, upperLabel(), upperLabelBounds);
         slider.render(graphics, renderFont, mouseX, mouseY);
+        if (signedLabels != null && windowMin <= 0 && windowMax >= 0) {
+            UiRect bounds = slider.core().bounds();
+            int zeroX = slider.core().trackLeft() + (int) Math.round(
+                    -windowMin / (windowMax - windowMin) * slider.core().trackWidth());
+            graphics.fill(zeroX, bounds.y(), zeroX + 1, bounds.y() + 2, THEME.palette().textSecondary());
+            graphics.fill(zeroX, bounds.bottom() - 2, zeroX + 1, bounds.bottom(), THEME.palette().textSecondary());
+        }
         input.render(graphics, renderFont, mouseX, mouseY);
         for (UiButton button : presetButtons) {
             button.render(graphics, renderFont, mouseX, mouseY);
         }
+    }
+
+    private Component lowerLabel() {
+        return signedLabels == null ? Component.empty() : Component.translatable(signedLabels.lowerKey());
+    }
+
+    private Component upperLabel() {
+        return signedLabels == null ? Component.empty() : Component.translatable(signedLabels.upperKey());
+    }
+
+    private void drawEndpoint(GuiGraphics graphics, Font renderFont, Component text, UiRect bounds) {
+        graphics.drawString(renderFont, text, bounds.x(),
+                bounds.y() + Math.max(0, (bounds.height() - renderFont.lineHeight) / 2),
+                THEME.palette().textSecondary(), false);
     }
 
     @Override
@@ -398,7 +440,7 @@ final class NumberControl extends FormControl {
             return;
         }
         Double number = jsonNumber(loaded);
-        if (number == null) {
+        if (number == null || integerDomain && number != Math.rint(number)) {
             // 非数值形态的既有值：原样显示并标错，提交时保留原值
             this.loadedText = rawText(loaded);
             setInputValue(loadedText);
@@ -406,7 +448,7 @@ final class NumberControl extends FormControl {
             return;
         }
         boolean accepted = slider.core().setValue(number);
-        slider.setError(!accepted);
+        slider.setError(!accepted || !withinDomain(number));
         this.loadedText = displayText(number);
         setInputValue(loadedText);
     }
@@ -520,7 +562,7 @@ final class NumberControl extends FormControl {
     @Override
     void setEnabled(boolean enabled) {
         // 禁用会经统一结束入口回退未提交的预览
-        slider.setEnabled(enabled);
+        slider.setEnabled(enabled && domainMin != domainMax);
         input.setEditable(enabled);
         for (UiButton preset : presetButtons) {
             preset.setEnabled(enabled);

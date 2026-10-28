@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.core.service;
 
+import com.meteorite.itemdespawntowhat.core.api.RuleRuntimeLimits;
 import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalogService;
 import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalog;
 import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalogType;
@@ -151,17 +152,17 @@ public final class RuleEditService {
     /**
      * 「打开编辑器」唯一入口：先原子取锁，成功或失败都要把结论下发给客户端
      */
-    public OpenOutcome openEditor(ServerPlayer player, long tick, int maxPlaceBlockRadius) {
+    public OpenOutcome openEditor(ServerPlayer player, long tick, RuleRuntimeLimits limits) {
         EditSessionManager.AcquireResult acquired =
                 sessions.acquire(player.getUUID(), player.getName().getString(), tick);
         if (acquired.acquired()) {
             RuleEditReply.Open payload = new RuleEditReply.Open(acquired.session().sessionId(),
-                    RuleEditSessionLimits.TARGET_ID, store.version(), maxPlaceBlockRadius, RuleSaveStatus.SUCCESS, List.of());
+                    RuleEditSessionLimits.TARGET_ID, store.version(), limits, RuleSaveStatus.SUCCESS, List.of());
             return new OpenOutcome(true, null, payload);
         }
         String holder = acquired.holderName() == null ? "" : acquired.holderName();
         RuleEditReply.Open payload = new RuleEditReply.Open("", RuleEditSessionLimits.TARGET_ID,
-                store.version(), maxPlaceBlockRadius, RuleSaveStatus.LOCK_BUSY, args(holder));
+                store.version(), limits, RuleSaveStatus.LOCK_BUSY, args(holder));
         return new OpenOutcome(false, holder, payload);
     }
 

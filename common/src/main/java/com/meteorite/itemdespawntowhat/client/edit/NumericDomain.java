@@ -11,7 +11,24 @@ import org.jetbrains.annotations.Nullable;
  */
 public record NumericDomain(@Nullable Double backendMin, @Nullable Double backendMax,
                             @Nullable Double windowMin, @Nullable Double windowMax,
-                            double step, double shiftStep, int displayPrecision, boolean integer) {
+                            double step, double shiftStep, int displayPrecision, boolean integer,
+                            @Nullable SignedLabels signedLabels) {
+
+    /** 正负数值的端点标签；同一声明同时启用显式正号与零位刻度。 */
+    public record SignedLabels(String lowerKey, String upperKey) { }
+
+    /** 未声明端点标签时沿用普通数值展示。 */
+    public NumericDomain(@Nullable Double backendMin, @Nullable Double backendMax,
+                         @Nullable Double windowMin, @Nullable Double windowMax,
+                         double step, double shiftStep, int displayPrecision, boolean integer) {
+        this(backendMin, backendMax, windowMin, windowMax, step, shiftStep, displayPrecision, integer, null);
+    }
+
+    /** 设置带正负号的双端标签与零位标识。 */
+    public NumericDomain withSignedLabels(String lowerKey, String upperKey) {
+        return new NumericDomain(backendMin, backendMax, windowMin, windowMax, step, shiftStep,
+                displayPrecision, integer, new SignedLabels(lowerKey, upperKey));
+    }
 
     public NumericDomain {
         if (!(step > 0.0D)) {
@@ -45,13 +62,13 @@ public record NumericDomain(@Nullable Double backendMin, @Nullable Double backen
 
     // 只换滑块常用窗口，保留后端合法域、步长与显示精度
     public NumericDomain withWindow(double min, double max) {
-        return new NumericDomain(backendMin, backendMax, min, max, step, shiftStep, displayPrecision, integer);
+        return new NumericDomain(backendMin, backendMax, min, max, step, shiftStep, displayPrecision, integer, signedLabels);
     }
 
     // 只换交互步长，保留其余元数据
     public NumericDomain withSteps(double newStep, double newShiftStep) {
         return new NumericDomain(backendMin, backendMax, windowMin, windowMax, newStep, newShiftStep,
-                displayPrecision, integer);
+                displayPrecision, integer, signedLabels);
     }
 
     // 滑块下界（窗口缺省时回落后端域，仍缺省返回 fallback）
