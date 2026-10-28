@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
+import com.meteorite.itemdespawntowhat.client.edit.NumericDomain;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInteractionSession;
@@ -32,6 +33,13 @@ final class NestedObjectControl extends FormControl {
         this.child = owner.newChildForm(field.name(), field.subFields());
         this.child.setLabelWidth(Math.min(88, field.subFields().stream()
                 .mapToInt(nested -> font.width(Component.translatable(nested.labelKey())) + 4).max().orElse(0)));
+        // 带端点标签的数值（如整格偏移的三轴）由控件自述方向，子表单不再重复绘制轴名行
+        for (FormField sub : this.child.fields()) {
+            NumericDomain numbers = sub.descriptor().numbers();
+            if (numbers != null && numbers.signedLabels() != null) {
+                sub.hideLabel();
+            }
+        }
         this.child.setOnChanged(() -> {
             markEdited();
             onChanged.run();

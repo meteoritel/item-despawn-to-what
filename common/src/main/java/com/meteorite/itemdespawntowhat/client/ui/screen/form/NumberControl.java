@@ -56,6 +56,8 @@ final class NumberControl extends FormControl {
     private static final int TEXT_SLACK = 4;
     // 滑杆与输入框之间的间距
     private static final int GAP = 2;
+    // 端点文案与轨道之间的留白：方向名在轨道上方单独成行
+    private static final int ENDPOINT_LABEL_GAP = 1;
     // 单位提示的本地化 key
     private static final String UNIT_SECONDS = TypeLabels.UI_PREFIX + "unit.seconds";
     private static final String UNIT_LEVEL = TypeLabels.UI_PREFIX + "unit.level";
@@ -331,18 +333,27 @@ final class NumberControl extends FormControl {
 
     // ---- FormControl ----
 
-    // 自然高度即默认行高；需要加高时由 FormControl 的行高覆盖（基本页优先级控件）生效
+    // 自然高度即默认行高；端点文案在上方另占一行，轨道本体保持所在密度的行高
     @Override
     int height() {
-        return DEFAULT_HEIGHT;
+        if (signedLabels == null) {
+            return DEFAULT_HEIGHT;
+        }
+        int bodyHeight = usesCardSpacing() ? CARD_CONTROL_HEIGHT : DEFAULT_HEIGHT;
+        return bodyHeight + font.lineHeight + ENDPOINT_LABEL_GAP;
     }
 
     @Override
     void setBounds(int x, int y, int width) {
         // 有效行高：默认 12；被 FormControl 行高覆盖时 slider 与数字输入框一起变高
         int rowHeight = layoutHeight();
+        // 端点文案占轨道上方一行，轨道本体沿用所在密度的行高
+        int labelRowHeight = signedLabels == null ? 0
+                : Math.clamp(font.lineHeight + ENDPOINT_LABEL_GAP, 0, Math.max(0, rowHeight - DEFAULT_HEIGHT));
+        int bodyHeight = rowHeight - labelRowHeight;
+        int bodyY = y + labelRowHeight;
         // 加高行改用宽松档滑块外观：样式与画法成对取自注入主题，避免两套来源混用
-        UiSliderSkin skin = THEME.sliderSkin(rowHeight >= 18 ? UiSliderRole.ROOMY : UiSliderRole.COMPACT);
+        UiSliderSkin skin = THEME.sliderSkin(bodyHeight >= 18 ? UiSliderRole.ROOMY : UiSliderRole.COMPACT);
         slider.core().setStyle(skin.style());
         slider.core().setPainter(skin.painter());
         int reserved = 0;
@@ -351,14 +362,9 @@ final class NumberControl extends FormControl {
         }
         Component unit = unitLabel();
         int unitWidth = unit.getString().isEmpty() ? 0 : font.width(unit) + GAP;
-        unitBounds = new UiRect(x, y, unitWidth, rowHeight);
-        Component lower = lowerLabel();
-        Component upper = upperLabel();
-        int lowerWidth = lower.getString().isEmpty() ? 0 : font.width(lower) + GAP;
-        int upperWidth = upper.getString().isEmpty() ? 0 : font.width(upper) + GAP;
-        lowerLabelBounds = new UiRect(x + unitWidth, y, lowerWidth, rowHeight);
-        int sliderX = x + unitWidth + lowerWidth;
-        int available = Math.max(24, width - reserved - unitWidth - lowerWidth - upperWidth);
+        unitBounds = new UiRect(x, bodyY, unitWidth, bodyHeight);
+        int sliderX = x + unitWidth;
+        int available = Math.max(24, width - reserved - unitWidth);
         int inputWidth = inputWidth(available);
         int sliderWidth = available - inputWidth - GAP;
         if (sliderWidth < MIN_SLIDER_WIDTH) {
@@ -366,12 +372,23 @@ final class NumberControl extends FormControl {
             inputWidth = Math.max(0, available - GAP - MIN_SLIDER_WIDTH);
             sliderWidth = Math.max(MIN_SLIDER_WIDTH, available - inputWidth - GAP);
         }
-        slider.setBounds(sliderX, y, sliderWidth, rowHeight);
-        upperLabelBounds = new UiRect(sliderX + sliderWidth + GAP, y, upperWidth, rowHeight);
-        input.setBounds(sliderX + sliderWidth + upperWidth + GAP, y, inputWidth, rowHeight);
-        // 预设按钮保持默认高度，在加高的行里垂直居中，保证仍可点击
-        int buttonY = y + Math.max(0, (rowHeight - DEFAULT_HEIGHT) / 2);
-        int cursor = sliderX + available + upperWidth + GAP;
+        slider.setBounds(sliderX, bodyY, sliderWidth, bodyHeight);
+        input.setBounds(sliderX + sliderWidth + GAP, bodyY, inputWidth, bodyHeight);
+        // 端点文案贴轨道两端上方：方向名不再挤占滑条的横向空间，三轴滑条因此共享同一左缘
+        if (signedLabels == null) {
+            lowerLabelBounds = new UiRect(0, 0, 0, 0);
+            upperLabelBounds = new UiRect(0, 0, 0, 0);
+        } else {
+            int trackLeft = slider.core().trackLeft();
+            int lowerWidth = font.width(lowerLabel());
+            int upperWidth = font.width(upperLabel());
+            lowerLabelBounds = new UiRect(trackLeft, y, lowerWidth, font.lineHeight);
+            upperLabelBounds = new UiRect(trackLeft + slider.core().trackWidth() - upperWidth, y,
+                    upperWidth, font.lineHeight);
+        }
+        // 预设按钮保持默认高度，在轨道行里垂直居中，保证仍可点击
+        int buttonY = bodyY + Math.max(0, (bodyHeight - DEFAULT_HEIGHT) / 2);
+        int cursor = sliderX + available + GAP;
         for (UiButton button : presetButtons) {
             int buttonWidth = buttonWidth(button);
             button.setBounds(cursor, buttonY, buttonWidth, DEFAULT_HEIGHT);
@@ -416,8 +433,10 @@ final class NumberControl extends FormControl {
         graphics.drawString(renderFont, unitLabel(), unitBounds.x(),
                 unitBounds.y() + Math.max(0, (unitBounds.height() - renderFont.lineHeight) / 2),
                 THEME.palette().textSecondary(), false);
-        drawEndpoint(graphics, renderFont, lowerLabel(), lowerLabelBounds);
-        drawEndpoint(graphics, renderFont, upperLabel(), upperLabelBounds);
+        if (signedLabels != null) {
+            drawEndpoint(graphics, renderFont, lowerLabel(), lowerLabelBounds);
+            drawEndpoint(graphics, renderFont, upperLabel(), upperLabelBounds);
+        }
         slider.render(graphics, renderFont, mouseX, mouseY);
         if (signedLabels != null && windowMin <= 0 && windowMax >= 0) {
             UiRect bounds = slider.core().bounds();
