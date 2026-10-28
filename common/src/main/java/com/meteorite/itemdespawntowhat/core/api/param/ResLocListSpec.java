@@ -28,6 +28,9 @@ public record ResLocListSpec(ParamMeta meta, String registry, boolean nonEmpty) 
         return withMeta(meta.withLabel(suffix));
     }
 
+    /** 设置编辑器展示层级。 */
+    public ResLocListSpec tier(ParamTier value) { return withMeta(meta.withTier(value)); }
+
     public ResLocListSpec hint(String suffix) {
         return withMeta(meta.withHint(suffix));
     }

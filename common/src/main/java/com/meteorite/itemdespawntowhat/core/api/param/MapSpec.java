@@ -24,6 +24,9 @@ public record MapSpec(ParamMeta meta, String keyRegistry, int minValue, int maxV
         return withMeta(meta.withLabel(suffix));
     }
 
+    /** 设置编辑器展示层级。 */
+    public MapSpec tier(ParamTier value) { return withMeta(meta.withTier(value)); }
+
     public MapSpec hint(String suffix) {
         return withMeta(meta.withHint(suffix));
     }

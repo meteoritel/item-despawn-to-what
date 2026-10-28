@@ -5,6 +5,7 @@ import com.meteorite.itemdespawntowhat.core.api.param.DoubleSpec;
 import com.meteorite.itemdespawntowhat.core.api.param.IntSpec;
 import com.meteorite.itemdespawntowhat.core.api.param.ParamList;
 import com.meteorite.itemdespawntowhat.core.api.param.ParamUnit;
+import com.meteorite.itemdespawntowhat.core.api.param.ParamTier;
 
 /**
  * 效果通用字段（延迟、概率）的参数声明。
@@ -28,12 +29,12 @@ public final class CommonFields {
             .unit(ParamUnit.TICKS)
             .window(0, 1200)
             .label("common.delay_ticks")
-            .hint("common.delay_ticks.hint");
+            .hint("common.delay_ticks.hint").tier(ParamTier.ADVANCED);
 
     // 效果概率字段，取值被限制在 [0,1]
     public static final DoubleSpec CHANCE = DoubleSpec.defaulted(RuleFields.CHANCE, DEFAULT_CHANCE, 0.0D, 1.0D)
             .unit(ParamUnit.PERCENT)
-            .label("common.chance");
+            .label("common.chance").tier(ParamTier.ADVANCED);
 
     // 效果参数声明的公共尾部（延迟 + 概率），具体类型按「专属字段 + 公共字段」拼接
     public static final ParamList<Effect> EFFECT_PARAMS = ParamList.of(

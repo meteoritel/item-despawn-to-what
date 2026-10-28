@@ -42,6 +42,9 @@ public record EnumSpec<E extends Enum<E>>(ParamMeta meta, Codec<E> codec, List<E
         return withMeta(meta.withLabel(suffix));
     }
 
+    /** 设置编辑器展示层级。 */
+    public EnumSpec<E> tier(ParamTier value) { return withMeta(meta.withTier(value)); }
+
     public EnumSpec<E> hint(String suffix) {
         return withMeta(meta.withHint(suffix));
     }

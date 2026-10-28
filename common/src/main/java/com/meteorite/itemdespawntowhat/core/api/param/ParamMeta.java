@@ -22,7 +22,8 @@ public record ParamMeta(
         @Nullable Object initialValue,
         boolean editorRequired,
         boolean editorVisible,
-        List<ParamPreset> presets) {
+        List<ParamPreset> presets,
+        ParamTier tier) {
 
     public ParamMeta {
         Objects.requireNonNull(name, "name");
@@ -33,53 +34,68 @@ public record ParamMeta(
         unit = unit == null ? ParamUnit.PLAIN : unit;
         shape = shape == null ? ParamShape.DEFAULT : shape;
         presets = presets == null ? List.of() : List.copyOf(presets);
+        tier = tier == null ? ParamTier.PRIMARY : tier;
+    }
+
+    /** 保持未声明字段层级时的原构造方式，默认归入主区。 */
+    public ParamMeta(String name, ParamPresence presence, ParamUnit unit, ParamShape shape,
+                     @Nullable String labelSuffix, @Nullable String hintSuffix, @Nullable Object initialValue,
+                     boolean editorRequired, boolean editorVisible, List<ParamPreset> presets) {
+        this(name, presence, unit, shape, labelSuffix, hintSuffix, initialValue, editorRequired,
+                editorVisible, presets, ParamTier.PRIMARY);
     }
 
     // 基础元数据：必填参数默认在编辑器里也强制填写
     static ParamMeta of(String name, ParamPresence presence, boolean editorRequired) {
         return new ParamMeta(name, presence, ParamUnit.PLAIN, ParamShape.DEFAULT, null, null, null,
-                editorRequired, true, List.of());
+                editorRequired, true, List.of(), ParamTier.PRIMARY);
     }
 
     public ParamMeta withUnit(ParamUnit value) {
         return new ParamMeta(name, presence, value, shape, labelSuffix, hintSuffix, initialValue,
-                editorRequired, editorVisible, presets);
+                editorRequired, editorVisible, presets, tier);
     }
 
     public ParamMeta withShape(ParamShape value) {
         return new ParamMeta(name, presence, unit, value, labelSuffix, hintSuffix, initialValue,
-                editorRequired, editorVisible, presets);
+                editorRequired, editorVisible, presets, tier);
     }
 
     public ParamMeta withLabel(@Nullable String value) {
         return new ParamMeta(name, presence, unit, shape, value, hintSuffix, initialValue,
-                editorRequired, editorVisible, presets);
+                editorRequired, editorVisible, presets, tier);
     }
 
     public ParamMeta withHint(@Nullable String value) {
         return new ParamMeta(name, presence, unit, shape, labelSuffix, value, initialValue,
-                editorRequired, editorVisible, presets);
+                editorRequired, editorVisible, presets, tier);
     }
 
     public ParamMeta withInitial(@Nullable Object value) {
         return new ParamMeta(name, presence, unit, shape, labelSuffix, hintSuffix, value,
-                editorRequired, editorVisible, presets);
+                editorRequired, editorVisible, presets, tier);
     }
 
     public ParamMeta withEditorRequired(boolean value) {
         return new ParamMeta(name, presence, unit, shape, labelSuffix, hintSuffix, initialValue,
-                value, editorVisible, presets);
+                value, editorVisible, presets, tier);
     }
 
     /** 不在编辑器中展示该参数：仍参与编解码与校验，但界面不提供输入入口。 */
     public ParamMeta withEditorVisible(boolean value) {
         return new ParamMeta(name, presence, unit, shape, labelSuffix, hintSuffix, initialValue,
-                editorRequired, value, presets);
+                editorRequired, value, presets, tier);
     }
 
     public ParamMeta withPresets(ParamPreset... values) {
         return new ParamMeta(name, presence, unit, shape, labelSuffix, hintSuffix, initialValue,
-                editorRequired, editorVisible, List.of(values));
+                editorRequired, editorVisible, List.of(values), tier);
+    }
+
+    /** 返回带指定编辑器展示层级的元数据。 */
+    public ParamMeta withTier(ParamTier value) {
+        return new ParamMeta(name, presence, unit, shape, labelSuffix, hintSuffix, initialValue,
+                editorRequired, editorVisible, presets, value);
     }
 
     /** 从 wire presence 派生非空字段构件；可空字段使用 nullableField。 */

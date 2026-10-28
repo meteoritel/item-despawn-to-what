@@ -49,6 +49,9 @@ public record IntSpec(ParamMeta meta, int min, int max, int codecDefault, boolea
         return withMeta(meta.withUnit(value));
     }
 
+    /** 设置编辑器展示层级。 */
+    public IntSpec tier(ParamTier value) { return withMeta(meta.withTier(value)); }
+
     public IntSpec label(String suffix) {
         return withMeta(meta.withLabel(suffix));
     }

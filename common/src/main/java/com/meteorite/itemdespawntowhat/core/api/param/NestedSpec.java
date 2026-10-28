@@ -39,6 +39,9 @@ public record NestedSpec<T>(ParamMeta meta, Codec<T> codec, ParamList<? super T>
         return new NestedSpec<>(meta.withLabel(suffix), codec, fields);
     }
 
+    /** 设置编辑器展示层级。 */
+    public NestedSpec<T> tier(ParamTier value) { return new NestedSpec<>(meta.withTier(value), codec, fields); }
+
     public NestedSpec<T> hint(String suffix) {
         return new NestedSpec<>(meta.withHint(suffix), codec, fields);
     }

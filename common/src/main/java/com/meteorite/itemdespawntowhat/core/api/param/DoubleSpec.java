@@ -27,6 +27,9 @@ public record DoubleSpec(ParamMeta meta, double min, double max, double codecDef
         return withMeta(meta.withUnit(value));
     }
 
+    /** 设置编辑器展示层级。 */
+    public DoubleSpec tier(ParamTier value) { return withMeta(meta.withTier(value)); }
+
     public DoubleSpec label(String suffix) {
         return withMeta(meta.withLabel(suffix));
     }

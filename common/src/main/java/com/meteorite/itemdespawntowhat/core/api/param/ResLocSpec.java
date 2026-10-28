@@ -21,6 +21,9 @@ public record ResLocSpec(ParamMeta meta) implements ParamSpec<ResourceLocation> 
         return withMeta(meta.withLabel(suffix));
     }
 
+    /** 设置编辑器展示层级。 */
+    public ResLocSpec tier(ParamTier value) { return withMeta(meta.withTier(value)); }
+
     public ResLocSpec hint(String suffix) {
         return withMeta(meta.withHint(suffix));
     }

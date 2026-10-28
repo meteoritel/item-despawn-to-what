@@ -26,6 +26,9 @@ public record FloatSpec(ParamMeta meta, float min, float max, float codecDefault
         return withMeta(meta.withLabel(suffix));
     }
 
+    /** 设置编辑器展示层级。 */
+    public FloatSpec tier(ParamTier value) { return withMeta(meta.withTier(value)); }
+
     public FloatSpec hint(String suffix) {
         return withMeta(meta.withHint(suffix));
     }

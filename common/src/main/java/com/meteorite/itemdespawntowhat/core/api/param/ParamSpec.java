@@ -64,6 +64,11 @@ public sealed interface ParamSpec<V> permits IntSpec, FloatSpec, DoubleSpec, Boo
         return meta().editorVisible();
     }
 
+    /** 参数在编辑器中的展示层级。 */
+    default ParamTier tier() {
+        return meta().tier();
+    }
+
     // 数值字段的常用取值按钮
     default List<ParamPreset> presets() {
         return meta().presets();

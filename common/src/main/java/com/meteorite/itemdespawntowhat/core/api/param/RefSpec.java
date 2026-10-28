@@ -26,6 +26,9 @@ public record RefSpec(ParamMeta meta, String registry) implements ParamSpec<Tagg
         return withMeta(meta.withLabel(suffix));
     }
 
+    /** 设置编辑器展示层级。 */
+    public RefSpec tier(ParamTier value) { return withMeta(meta.withTier(value)); }
+
     public RefSpec hint(String suffix) {
         return withMeta(meta.withHint(suffix));
     }

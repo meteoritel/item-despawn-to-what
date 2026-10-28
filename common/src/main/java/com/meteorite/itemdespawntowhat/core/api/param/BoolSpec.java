@@ -19,6 +19,9 @@ public record BoolSpec(ParamMeta meta, boolean codecDefault) implements ParamSpe
         return withMeta(meta.withLabel(suffix));
     }
 
+    /** 设置编辑器展示层级。 */
+    public BoolSpec tier(ParamTier value) { return withMeta(meta.withTier(value)); }
+
     public BoolSpec hint(String suffix) {
         return withMeta(meta.withHint(suffix));
     }
