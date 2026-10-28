@@ -1,11 +1,11 @@
 package com.meteorite.itemdespawntowhat.client.ui.shared;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiPreviewCache;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalogType;
-import java.util.LinkedHashMap;
-import java.util.Map;
+import java.util.Optional;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -25,7 +25,7 @@ public final class CatalogPreviewIcons {
     // 图标缓存上限：与实体/方块预览缓存同一口径，超出后淘汰最久未用的项
     private static final int MAX_CACHED_ICONS = 256;
     // 物品图标按「类型 + 规范化注册名」复用：目录网格与配方列表共用同一实例，ItemStack 只建一次
-    private static final Map<IconKey, UiIcon> ICONS = new LinkedHashMap<>(32, 0.75F, true);
+    private static final UiPreviewCache<IconKey, Optional<UiIcon>> ICONS = new UiPreviewCache<>(MAX_CACHED_ICONS);
     // 占位标记取宿主灰阶色，不引入状态色
     private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
 
@@ -96,15 +96,14 @@ public final class CatalogPreviewIcons {
         return null;
     }
 
-    // 物品图标有界复用：键是注册名而不是 ItemStack，未注册物品的 null 也缓存，避免每帧重查注册表
+    // 物品图标有界复用：键是注册名而不是 ItemStack，未注册物品以 Optional.empty 缓存，避免每帧重查注册表
     private static @Nullable UiIcon itemIcon(ResourceLocation key) {
+        ICONS.invalidate(PreviewResources.generation());
         IconKey cacheKey = new IconKey(RuleCatalogType.ITEM, key);
-        if (ICONS.containsKey(cacheKey)) return ICONS.get(cacheKey);
-        ItemStack stack = stackOf(BuiltInRegistries.ITEM.getOptional(key).orElse(null));
-        UiIcon icon = stack.isEmpty() ? null : new UiIcon.Item(stack);
-        ICONS.put(cacheKey, icon);
-        while (ICONS.size() > MAX_CACHED_ICONS) ICONS.remove(ICONS.keySet().iterator().next());
-        return icon;
+        return ICONS.getOrLoad(cacheKey, ignored -> {
+            ItemStack stack = stackOf(BuiltInRegistries.ITEM.getOptional(key).orElse(null));
+            return stack.isEmpty() ? Optional.empty() : Optional.of(new UiIcon.Item(stack));
+        }).orElse(null);
     }
 
     private static ItemStack stackOf(@Nullable Item item) {

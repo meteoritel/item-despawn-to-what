@@ -1,13 +1,11 @@
 package com.meteorite.itemdespawntowhat.client.ui.shared;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiPreviewCache;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiBlockPreview;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiModelBounds;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
-import java.util.LinkedHashMap;
-import java.util.Map;
 import net.minecraft.Util;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -16,50 +14,40 @@ import org.jetbrains.annotations.Nullable;
 
 /** 方块预览的宿主缓存；只对可见模型测量一次，资源或世界切换时失效。 */
 public final class BlockPreviewIcons {
-    private static final Map<String, Preview> CACHE = new LinkedHashMap<>(32, 0.75F, true);
+    private static final UiPreviewCache<String, Preview> CACHE = new UiPreviewCache<>(256);
     // 图标 wrapper 有界复用：同一注册名在多行预览与多次重装间共享实例，上限与其它图标缓存一致
-    private static final Map<String, UiIcon> ICONS = new LinkedHashMap<>(32, 0.75F, true);
-    private static Object generation;
-    private static Object world;
+    private static final UiPreviewCache<String, UiIcon> ICONS = new UiPreviewCache<>(256);
     // 没有可见模型（告示牌等由 BlockEntityRenderer 绘制的方块）时的中性占位标记
     private static final UiIcon UNAVAILABLE = CatalogPreviewIcons.unavailableMarker(16, 16);
 
     /** 保存默认方块状态和实际顶点范围，失败不在每一帧重复探测。 */
     private static final class Preview {
-        private final BlockState state;
+        private final @Nullable BlockState state;
         private @Nullable UiModelBounds bounds;
         private boolean measured;
         private boolean failed;
-        private Preview(BlockState state) { this.state = state; }
+        private Preview(@Nullable BlockState state) { this.state = state; failed = state == null; }
     }
 
     private BlockPreviewIcons() { }
-    public static void clear() { CACHE.clear(); ICONS.clear(); generation = null; world = null; }
+    /** 清空模型测量和图标 wrapper，释放本类持有的资源引用。 */
+    public static void clear() { CACHE.clear(); ICONS.clear(); }
 
     public static UiIcon icon(String id) {
         String key = normalized(id);
-        UiIcon icon = ICONS.computeIfAbsent(key,
+        return ICONS.getOrLoad(key,
                 name -> new UiIcon.Rendered(18, 18, (graphics, box) -> draw(graphics, box, name)));
-        while (ICONS.size() > 256) ICONS.remove(ICONS.keySet().iterator().next());
-        return icon;
     }
 
     // wrapper 复用不影响失效：每次绘制都重新取资源代号，世界或资源切换时清空测量缓存
     private static void draw(GuiGraphics graphics, UiRect box, String id) {
-        Object resources = EntityPreviewIcons.generation();
-        Object nextWorld = Minecraft.getInstance().level;
-        if (generation != resources || world != nextWorld) {
-            CACHE.clear();
-            generation = resources;
-            world = nextWorld;
-        }
-        Preview preview = CACHE.computeIfAbsent(id, key -> {
+        CACHE.invalidate(PreviewResources.generation());
+        Preview preview = CACHE.getOrLoad(id, key -> {
             ResourceLocation location = ResourceLocation.tryParse(key);
             var block = location == null ? null : BuiltInRegistries.BLOCK.getOptional(location).orElse(null);
-            return block == null ? null : new Preview(block.defaultBlockState());
+            return new Preview(block == null ? null : block.defaultBlockState());
         });
-        while (CACHE.size() > 256) CACHE.remove(CACHE.keySet().iterator().next());
-        if (preview != null && !preview.failed) {
+        if (preview != null && !preview.failed && preview.state != null) {
             if (!preview.measured) {
                 preview.bounds = UiBlockPreview.measure(preview.state);
                 preview.measured = true;
@@ -83,6 +71,7 @@ public final class BlockPreviewIcons {
      * @return true 表示当前给不出静态预览
      */
     public static boolean unavailable(String id) {
+        CACHE.invalidate(PreviewResources.generation());
         Preview preview = CACHE.get(normalized(id));
         return preview != null && (preview.failed || preview.measured && preview.bounds == null);
     }
