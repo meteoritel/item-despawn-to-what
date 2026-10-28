@@ -8,8 +8,6 @@ import com.meteorite.itemdespawntowhat.core.api.EffectPreparation;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.EffectStep;
 import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
-import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
-import com.meteorite.itemdespawntowhat.core.api.scheduler.StepWorkCounter;
 import com.meteorite.itemdespawntowhat.core.type.effect.PlaceBlockEffect;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -33,47 +31,34 @@ import net.minecraft.world.level.chunk.LevelChunkSection;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 方块效果的执行器：在共享预算内分批完成邻域计数与放置，形状偏移按参数缓存复用。
- * 需要按 limit 计数时，同候选同槽位的各组共用一份邻域账：整次转化只扫一遍方框，
- * 并按区段调色板跳过确定不含目标方块的区段；计数完成前各组都只推进计数、不放置。
- * 同目标的多组共享一个候选游标；区段探测与位置读取共用单步工作量上界，
- * 区块未加载时保留游标并退避等待，不从候选集合中丢弃位置。
- * 每成功放置一个方块通过 {@link EffectContext#reportProgress(int)} 回执 1，真实放置量以逐块回执累加；
- * 终态回执只收束任务，不再重复计入产量。
- * 放置策略：只替换可替换方块（canBeReplaced），并按原版支撑规则为每个候选位置摆正朝向——
- * 先试默认状态，再依次尝试贴地、贴天花板与四向贴墙，取第一个能站稳的朝向；都站不住的位置只跳过并继续下一个候选，
- * 不为凑数突破自身 limit/radius；候选级 fill_origin 关闭时不尝试触发位置本身。
+ * 方块效果的执行器：在共享预算内分批完成邻域计数与放置，摆放结果不依赖执行时机。
+ *
+ * <p>只替换可替换方块，并按原版支撑规则摆正朝向；站不住的位置跳过，不为凑数突破 limit 或 radius。
+ * 同候选同槽位的各组共享候选游标与邻域账，limit 是该方框内所有组的共同上限。
+ * 需要计数时先扫完方框再放置；区块未加载时保留游标等待，不丢弃候选。
+ * 每成功放置一个方块经 {@link EffectContext#reportProgress(int)} 回执 1，终态回执只收束任务。
  */
 public final class PlaceBlockExecutor {
     private static final Map<ShapeKey, List<BlockPos>> OFFSETS = new HashMap<>();
-    /**
-     * 单步工作量上界：区段探测、计数位置读取与放置尝试共同计费。
-     * 实际单步上界取本值与 {@link ServerTickBudget#remainingWorkUnits()} 的较小者，且本 tick 时间或工作量任一耗尽即让出；
-     * 每次区段探测或位置处理按 1 个工作单位回执（见 {@link StepWorkCounter#report(int)}），
-     * 因此该上界同时决定一个调度步骤最多向本 tick 预算计入多少工作单位。
-     */
+    // 单步工作量上界：区段探测、位置读取与放置尝试合计，各计 1 个工作单位。
     private static final int MAX_VISITS_PER_STEP = 128;
-    /** 朝向尝试使用的水平方向顺序：固定顺序让同一位置的摆放结果可复现。 */
+    // 固定水平方向顺序，让同一位置的摆放结果可复现。
     private static final Direction[] HORIZONTALS = {Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST};
-    /** 朝向类属性在方块状态里的固定名字：面朝向（贴地/贴墙/贴天花板）与水平朝向。 */
+    // 朝向属性的固定名字：face 表示贴地、贴墙与贴天花板，facing 表示水平朝向。
     private static final String FACE_PROPERTY = "face";
     private static final String FACING_PROPERTY = "facing";
-    /** 无预算入口的直接执行回执原因：本类型必须经共享预算推进。 */
     private static final String BUDGET_REQUIRED = "budget_required";
-    /** 终态回执说明：真实放置量由逐块进度回执累加，终态不再重复计数。 */
     private static final String PLACED_BY_STEPS = "placed_by_steps";
-    /** 缺少本类型固定输入时的失败原因：到期不得用活源重新抽取，直接以明确失败收束。 */
+    // 到期时源实体已清空，缺少固定输入直接失败，不再重新抽取。
     private static final String MISSING_PREPARATION = "missing_preparation";
-    /** 固定输入里没有解析出目标方块时的兜底失败原因（解析异常本身不带消息时使用）。 */
     private static final String PLACE_TARGET_UNRESOLVED = "place_target_unresolved";
-    /** 不含维度引用的形状缓存键；起点填充开关会改变候选集合，须参与缓存键。 */
+    // 不含维度引用；起点填充开关会改变候选集合，须参与缓存键。
     private record ShapeKey(PlaceBlockEffect.Shape shape, int radius, boolean fillOrigin) {}
     /**
-     * 本类型在成功转化当刻固定的输入：目标方块、候选偏移、limit 上界与解析失败原因。
-     * 前三项只由效果参数与成功转化当刻的源栈快照决定，一次求值后不再随执行时机或源实体状态改变；
-     * 作为 {@link EffectPreparation} 的类型私有负载随任务携带，执行入口按类型取回，不做通用容器。
-     * 目标方块解析失败时保留原因，由该槽位真正执行时产出失败回执：准备阶段会遍历未被选中的候选与尚未启动的组，
-     * 那里的解析失败不应影响其它候选。
+     * 成功转化当刻固定的输入：目标方块、候选偏移、limit 上界与解析失败原因。
+     *
+     * <p>只由效果参数与当时的源栈快照决定，一次求值后不再随执行时机或源实体状态改变。
+     * 解析失败时保留原因，由该槽位执行时产出失败回执，不影响其它候选与组。
      */
     public static class PlacementPlan implements EffectPreparation.GroupedPreparation {
         private final @Nullable Block block;
@@ -125,7 +110,7 @@ public final class PlaceBlockExecutor {
         @Nullable NeighbourCount sharedCount(BlockPos center, int radius, long target) {
             long span = radius * 2L + 1L;
             long cubePositions = span * span * span;
-            // 所有放置位置均在统计方框内；limit 覆盖其总容量时，已有量与新增量之和天然不超限。
+            // 所有放置位置都在统计方框内；limit 覆盖整个方框容量时无需计数。
             if (target <= 0 || limit == null || limit >= cubePositions) {
                 return null;
             }
@@ -136,12 +121,8 @@ public final class PlaceBlockExecutor {
         }
     }
 
-    /**
-     * 可跨组共享的固定输入：同一候选同一槽位的各组拿到同一份实例，于是「方框内已有同类方块」只数一遍，
-     * limit 余额（含本次已放量）也只有一份账，limit 因此是该方框内所有组共同的上限。
-     * 只用于求值不含按组独立随机结果的输入：直接引用与源物品映射都在转化当刻确定；
-     * 标签引用按组独立取定成员、固定输入各自保留，邻域账仍按实际目标方块共享。
-     */
+    // 可跨组共享的固定输入：同候选同槽位拿到同一实例，邻域账因而只有一份，limit 是该方框内所有组的共同上限。
+    // 只有不含按组随机取定的输入可以共享。
     private static final class SharedPlacementPlan extends PlacementPlan
             implements EffectPreparation.SharedPreparation {
         private SharedPlacementPlan(@Nullable Block block, List<BlockPos> candidates, @Nullable Integer limit) {
@@ -149,16 +130,13 @@ public final class PlaceBlockExecutor {
         }
     }
 
-    /**
-     * 同一候选槽位、同一目标方块的结果预算批次。各组的概率与目标已固定，
-     * 共享一次位置扫描，每组仍按自己的到期刻执行并回执自己的成本进度。
-     */
+    /** 同候选同槽位的预算批次：共享一次位置扫描，各组按自己的到期刻推进并回执成本。 */
     public static final class BatchPlan implements EffectPreparation {
         private final PlacementPlan plan;
         private final List<Request> requests = new ArrayList<>();
         private long resultBudget;
 
-        /** 创建一个尚未排期的批次，固定形状、目标与环境上限。 */
+        /** 创建一个尚未排期的批次。 */
         public BatchPlan(PlacementPlan plan) {
             this.plan = plan;
         }
@@ -175,20 +153,19 @@ public final class PlaceBlockExecutor {
     private PlaceBlockExecutor() {}
 
     /**
-     * 拒绝没有共享预算的直接执行：本类型必须按预算分批推进，不能一次同步完成。
+     * 拒绝没有共享预算的直接执行：本类型必须按预算分批推进。
      * @param effect 方块效果参数
      * @param context 本组上下文
-     * @return 表示必须使用预算入口的失败回执，不放置任何方块
+     * @return 要求改用预算入口的失败回执，不放置任何方块
      */
     public static EffectResult execute(PlaceBlockEffect effect, EffectContext context) {
         return EffectResult.failed(BUDGET_REQUIRED + ": " + effect.type() + " @ " + context.ruleId());
     }
 
     /**
-     * 在成功转化当刻一次性固定本次放置的输入：目标方块、候选偏移与 limit。
-     * tag 引用在此刻取定成员，use_source_block 只读传入的源物品栈快照，因此源实体清空后不再影响结果。
-     * 求值不含按组随机取定的输入声明为可共享（见 {@link EffectPreparation.SharedPreparation}），由派发阶段在组间复用首份。
-     * 只读注册表与效果参数，不读取任何需要等待的世界状态。
+     * 在成功转化当刻固定本次放置的输入：目标方块、候选偏移与 limit。
+     * tag 成员与源物品栈都在此刻取定，之后不再受源实体或执行时机影响；
+     * 不含按组随机取定的输入声明为可共享，由派发阶段在组间复用首份。
      * @param effect 方块效果参数
      * @param level 触发维度，提供注册表随机源
      * @param sourceStack 成功转化当刻的源物品栈快照
@@ -202,7 +179,7 @@ public final class PlaceBlockExecutor {
             Block block = effect.block() != null
                     ? EffectTargets.resolveOrThrow(effect.block(), BuiltInRegistries.BLOCK, level.random, PlaceBlockEffect.BLOCK_FIELD)
                     : sourceBlock(effect, sourceStack);
-            // 标签引用按随机源取定成员、各组各自取定，因此只有直接引用与源物品映射的输入可跨组共享
+            // 标签引用按组各自取定成员，只有直接引用与源物品映射可以共享
             return effect.block() == null || !effect.block().tag()
                     ? new SharedPlacementPlan(block, candidates, effect.limit())
                     : new PlacementPlan(block, candidates, effect.limit(), null);
@@ -223,12 +200,12 @@ public final class PlaceBlockExecutor {
     }
 
     /**
-     * 按成功转化当刻固定的输入创建执行状态：计划上限按本组已付轮数缩放并受候选位置数封顶，执行期不再重新抽取。
-     * 已判定跳过的固定输入直接给出该原因的回执，不重判概率，也不做世界写入。
-     * 缺少本类型固定输入时不回退到到期解析：目标方块与候选只在准备阶段固定，重抽会改变结果且此时源实体已清空。
+     * 按固定输入创建执行状态：上限按本组已付轮数缩放并受候选数封顶，执行期不再重新抽取。
+     * 已判定跳过的输入直接回执原因，不重判概率，也不写世界。
+     * 缺少固定输入时不回退到执行期解析：目标方块与候选只在准备阶段固定，此时源实体已清空。
      * @param effect 方块效果参数
      * @param context 本组上下文
-     * @param preparation 本组在成功转化当刻固定的输入；null 表示未固定
+     * @param preparation 成功转化当刻固定的输入；null 表示未固定
      * @return 可跨 tick 续接的放置执行状态，或缺少固定输入时的失败状态
      */
     public static EffectExecution start(PlaceBlockEffect effect, EffectContext context,
@@ -250,7 +227,7 @@ public final class PlaceBlockExecutor {
         return new Placement(effect, context, plan, null);
     }
 
-    // 源物品对应的方块：不同物品栈快照与同一效果参数的组合已由固定输入承载
+    // useSourceBlock 关闭或物品没有对应方块时抛异常，由计划阶段转为槽位级失败
     private static Block sourceBlock(PlaceBlockEffect effect, ItemStack sourceStack) {
         Item item = sourceStack.getItem();
         Block block = Block.byItem(item);
@@ -260,7 +237,7 @@ public final class PlaceBlockExecutor {
         return block;
     }
 
-    // 按属性名取同名属性：朝向类属性在方块状态里名字固定（face / facing），其余方块保持默认状态
+    // 按名字取属性；没有对应属性的方块保持默认状态
     private static @Nullable Property<?> propertyNamed(BlockState state, String name) {
         for (Property<?> property : state.getProperties()) {
             if (property.getName().equals(name)) {
@@ -279,7 +256,7 @@ public final class PlaceBlockExecutor {
         return state.setValue(property, (Comparable) value);
     }
 
-    // 每个坐标只生成一次，按由内向外的层序排序；避免每次转化创建各层列表。
+    // 按形状缓存，坐标只生成一次，并按由内向外的层序排序。
     private static List<BlockPos> offsets(PlaceBlockEffect effect, boolean fillOrigin) {
         return OFFSETS.computeIfAbsent(new ShapeKey(effect.shape(), effect.radius(), fillOrigin), key -> {
             List<BlockPos> result = new ArrayList<>();
@@ -299,12 +276,8 @@ public final class PlaceBlockExecutor {
         });
     }
 
-    /**
-     * 放置的持续游标：每步最多读取 {@link #MAX_VISITS_PER_STEP} 个方块位置，并在本 tick 时间或工作量耗尽时让出。
-     * 每个已处理位置向本 tick 预算回执 1 个工作单位：计数段位置为一次方块读取，放置段位置含读取、放置合法性与 setBlock 写入。
-     * 未完成时返回续接或区块需求，下一次推进从保留的游标继续；区块未加载不改变计划量。
-     * 需要计数时计数游标与已数/已放量都在共享账上（见 {@link NeighbourCount}），本类只持有自己的放置游标。
-     */
+    // 放置游标：每步最多处理 MAX_VISITS_PER_STEP 个位置，时间或工作量任一耗尽即让出。
+    // 未完成时返回续接或区块需求，区块未加载不改变计划量；计数状态在共享的 NeighbourCount 上。
     private static final class Placement extends BoundedExecution {
         private final EffectContext context;
         private final Block block;
@@ -484,7 +457,7 @@ public final class PlaceBlockExecutor {
         }
     }
 
-    /** 同槽位各组共用的环境预算；按区段检查调色板，只遍历含目标方块区段与统计方框的交集。 */
+    // 同槽位各组共用的环境余额：按区段调色板跳过不含目标方块的区段，只遍历其与统计方框的交集。
     private static final class NeighbourCount {
         private final int limit;
         private final BlockPos center;
