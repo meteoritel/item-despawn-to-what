@@ -19,7 +19,7 @@ A rule must answer what it converts into. There are two ways to write that answe
 - Both fields: the rule is rejected, because only one of them is allowed. To turn one outcome into several, move the content of `effects` into `outcomes` as the `effects` of one candidate.
 - With `effects` only you do not write a candidate `id`: the implicit candidate always uses `default`. With `outcomes`, every candidate needs its own `id`.
 - The `effects` array of a candidate cannot be empty, and several effects inside one candidate run together in the same conversion group.
-- A rule can carry at most 32 outcome candidates, a limit it shares with effects. A rule above the limit is rejected.
+- A rule can carry at most 32 outcome candidates, and the effects inside them count against the effect total together with a top-level `effects` array. A rule above either limit is rejected.
 
 ### Outcome Candidate Fields
 

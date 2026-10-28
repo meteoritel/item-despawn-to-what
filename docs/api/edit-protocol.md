@@ -19,7 +19,7 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat/core/network/pro
 
 ## 会话与目标锁
 
-编辑目标由 `RuleEditSessionLimits.TARGET_ID` 标识，全局只有一个。会话状态机由 `EditSessionManager` 持有，修订与文件工作由 `RuleOverlayStore` 持有；它们随本次 `AuthoringHost` 一同创建与退役，准入顺序与拒绝状态码由 `core/service/EditAdmission` 唯一决定；网络入口 `RuleEditServerHandler` 只做就绪判定与转发。
+编辑目标由 `RuleEditSessionLimits.TARGET_ID` 标识，全局只有一个。会话状态机由 `EditSessionManager` 持有，修订与文件工作由 `RuleOverlayStore` 持有；它们随本次 `AuthoringHost` 一同创建与退役，准入顺序与拒绝状态码由 `core/service/EditAdmission` 唯一决定；网络入口 `RuleEditServerHandler` 只做就绪判定、握手版本校验与转发。
 
 ```mermaid
 stateDiagram-v2
@@ -44,7 +44,7 @@ stateDiagram-v2
 
 ## 握手与协议版本
 
-`RuleEditProtocol.VERSION` 是协议版本，当前取值为 10：保存终态、查询失败与会话事件分别使用自己的关联载荷，字段或动作集合变化时递增。打开载荷携带服务端版本与目标标识，客户端在收到打开载荷时比对版本与状态码；确认载荷再把客户端版本回传，服务端在确认入口再次比对。客户端发现版本不一致时以协议不匹配文案结束打开流程；确认入口发现版本不一致时发送 `INVALID_REQUEST` 会话事件；未完成确认的申请按确认窗口回收。
+`RuleEditProtocol.VERSION` 是协议版本，当前取值为 10：保存终态、查询失败与会话事件分别使用自己的关联载荷，字段或动作集合变化时递增。打开载荷携带服务端版本与目标标识，客户端在收到打开载荷时比对版本与状态码；确认载荷再把客户端版本回传，服务端在确认入口再次比对。客户端发现版本不一致时记录告警并放弃打开流程，不进入会话；确认入口发现版本不一致时发送 `INVALID_REQUEST` 会话事件；未完成确认的申请按确认窗口回收。
 
 ## 载荷家族
 

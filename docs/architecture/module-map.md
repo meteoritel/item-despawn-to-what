@@ -33,13 +33,13 @@ authority:
 | 逻辑模块 | 一句话职责 | 覆盖的包与目录 | Gradle 子项目 |
 |---|---|---|---|
 | [platform](../modules/platform.md) | 两端加载器接入、生命周期、平台能力注入与开发工具 | `common/platform`、`common/core/host`、`common/core/config`、`fabric/`、`neoforge/` | `common`、`fabric`、`neoforge` |
-| [core-contract](../modules/core-contract.md) | 跨模块共享的契约：条件与效果执行、类型注册与分发、Issue、预算与观测 | `common/core/api`、`common/core/api/scheduler` | `common` |
+| [core-contract](../modules/core-contract.md) | 跨模块共享的契约：条件与效果执行、类型注册与分发、Issue、预算与观测 | `common/core/api`、`common/core/api/param`、`common/core/api/scheduler` | `common` |
 | [rule-model](../modules/rule-model.md) | 规则的数据形态、不可变约束、Codec 与语义校验 | `common/core/model` | `common` |
 | [type-system](../modules/type-system.md) | 注册与冻结、第三方 SPI、内置条件与效果的落点 | `common/core/registry`、`common/core/extension`、`common/core/type` | `common` |
 | [rule-loading](../modules/rule-loading.md) | 三层来源读取与合并、拒载、候选索引与催化剂投影 | `common/core/load`、`common/core/service` 的加载装配部分 | `common` |
 | [conversion-runtime](../modules/conversion-runtime.md) | 追踪与触发、预检查、完整组结算、恢复与共享预算 | `common/core/runtime`、`common/core/runtime/scheduler`、`common/core/state` | `common` |
 | [authoring](../modules/authoring.md) | 候选目录、编辑会话与落盘、命令与调试场景 | `common/core/catalog`、`common/core/network`、`common/core/service` 的编辑落盘部分、`common/core/command`、`common/src/dev`、`neoforge/src/probe` | `common` |
-| [client-editor](../modules/client-editor.md) | 客户端协议工作区、草稿与撤销、类型编辑器注册表 | `common/client/net`、`common/client/edit` | `common` |
+| [client-editor](../modules/client-editor.md) | 客户端协议工作区、草稿与撤销、类型编辑器注册表 | `common/client/net`、`common/client/edit`、`common/client/edit/draft` | `common` |
 | [ui-kit](../modules/ui-kit.md) | 声明式 UI kit 的公开面与依赖边界 | `common/client/ui/kit` | `common` |
 | [client-ui](../modules/client-ui.md) | 编辑器界面、主题与控件适配 | `common/client/ui/theme`、`common/client/ui/widget`、`common/client/ui/shared`、`common/client/ui/screen`、`common/client/ui/screen/form` | `common` |
 
@@ -99,7 +99,7 @@ flowchart TB
 
 - **构建单元固定为 `common`、`fabric`、`neoforge`**，平台子项目依赖 `common`，产物各自打包；新增逻辑模块时在 `common` 内按包划界，不改构建结构。
 - **platform 是唯一的跨构建单元模块**：`common` 侧提供宿主、配置与平台能力接口，`fabric` 与 `neoforge` 侧只保留适配实现、事件注册与 Mixin。
-- **`common` 内的客户端包在两端都编译**：模组元数据声明双端装载（`fabric.mod.json` 的 `environment` 为 `*`、`neoforge.mods.toml` 的 `side` 为 `BOTH`），客户端入口由各平台的客户端入口点挂载，界面代码只在客户端运行路径上被调用。
+- **`common` 内的客户端包在两端都编译**：模组元数据声明双端装载（`fabric.mod.json` 的 `environment` 为 `*`、`neoforge.mods.toml` 依赖条目的 `side` 为 `BOTH`），客户端入口由各平台的客户端入口点挂载，界面代码只在客户端运行路径上被调用。
 - **服务端能力与客户端能力同包不同源集**：服务端逻辑只落在 `common` 与平台源集的非客户端侧，客户端逻辑落在 `common` 的 `client` 包与平台源集的 `client` 包，端隔离由脚本强制，见 [依赖规则](dependency-rules.md)。
 
 ## 模块依赖方向

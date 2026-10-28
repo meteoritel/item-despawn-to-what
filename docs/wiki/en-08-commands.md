@@ -135,7 +135,6 @@ Syntax: `/idtw rule orphans` lists them, and `/idtw rule orphans clear` removes 
 `/idtw config edit` opens the graphical editor. The server takes the exclusive edit lock before it opens. The editor's enable controls match the enable commands, as described in "Enable Controls in the Editor".
 
 - Only an in-game player can run it. The console sees a message that the subcommand can only be run by a player.
-- Without edit permission, the command reports that you do not have permission to edit the overlay rules.
 - When another player holds the lock, the command names that player and points you to `/idtw config edit-lock status`. When the lock moves to you, it reports that the editor entry was sent to you.
 
 ### Enable Controls in the Editor

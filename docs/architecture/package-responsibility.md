@@ -29,7 +29,7 @@ authority:
 | `common/core` | 服务端逻辑与两端共用契约：规则模型、类型系统、加载、运行时、编辑面、命令与调试 | 除 client 侧以外的全部模块 |
 | `common/platform` | 平台能力接口与服务定位，两端适配只实现这里的契约 | [platform](../modules/platform.md) |
 | `common/client` | 客户端工作区、编辑器界面与 UI kit | [client-editor](../modules/client-editor.md)、[ui-kit](../modules/ui-kit.md)、[client-ui](../modules/client-ui.md) |
-| 根包 `Constants` | 模组标识与日志入口 | [platform](../modules/platform.md) |
+| 根包 `Constants` | 模组标识、命名空间与日志入口；环境级常量，各包可直接读取 | [platform](../modules/platform.md) |
 | `fabric/`、`neoforge/` | 平台源集：`runtime`（事件与生命周期）、`platform`（能力实现）、`network`（载荷注册）、`client`（客户端入口）、`mixin`；NeoForge 侧另有 `debug` 包 | [platform](../modules/platform.md) |
 
 ## core 的分层
@@ -96,7 +96,7 @@ flowchart TB
   - 允许：`core/api`（含 scheduler）、`core/config`、`core/load`、`core/model`、`core/state`、`core/type`。
   - 禁止：依赖 `core/command`、`core/debug`、`core/network`、客户端包。命令与调试是运行时的使用方。
 - **`core/runtime/scheduler`** — 调度器实现：单实例、每 tick 推进一次、时间软预算与工作量上限、维度级队列与统计。
-  - 允许：`core/api/scheduler`。禁止：依赖规则模型与加载。调度器不认识规则，只认识任务。
+  - 允许：`core/api/scheduler`、`core/config`（构造时读取一次预算参数）。禁止：依赖规则模型与加载。调度器不认识规则，只认识任务。
 - **`core/state`** — 挂在实体上的运行期状态：临时保护、临时冷却、永久保护、永久禁转、死亡排除、转化提交与伤害分类。
   - 允许：`core/model`（消失方式分类）、`platform/services`（实体状态读写）。
   - 禁止：依赖 `core/runtime`、`core/service`、客户端包。状态存储不含转化决策。
@@ -107,13 +107,13 @@ flowchart TB
 - **`core/network/protocol`** — 编辑 wire 协议版本。
   - 允许：JDK；业务模型分别由编辑业务与目录包持有。
 - **`core/network/transport`** — 载荷定义、统一通道声明、分片与累加、实例交付、服务端无状态转发与客户端连接绑定。
-  - 允许：`core/api`（含 scheduler）、`core/load`、`core/model`、`core/network/protocol`、`core/catalog`、`core/runtime` 的只读索引类型、`core/service`。
+  - 允许：`core/api`、`core/network/protocol`、`core/service`（含 `core/service/edit`）。
   - 禁止：依赖界面层与客户端包；下行通过连接绑定的中立 receiver 交付。
 - **`core/catalog`** — 候选目录模型、注册表与标签来源、实例分页与过滤缓存。
   - 允许：`core/api` 与原版注册表只读能力；模型、来源与分页同属本包。
   - 禁止：依赖 `core/network`、`core/service`。
 - **`core/command`** — `/idtw` 命令树、子分支与文本输出。
-  - 允许：`core/api`、`core/config`、`core/load`、`core/model`、`core/network/protocol`、`core/network/transport`、`core/service`。
+  - 允许：`core/api`、`core/config`、`core/load`、`core/model`、`core/network/transport`、`core/service`、`core/state`（规则开关查询）。
   - 禁止：依赖客户端包与界面层。
 - **`core/debug`（`common/src/dev`）** — 调试档案、开发场景、管线与运行时观测实现；由 NeoForge 开发源集编译，发布产物只取 main。
   - 允许：`core/api`（含 scheduler）、`core/command`、`core/host` 的诊断视图、`core/config`、`core/load`、`core/model`、`core/runtime`、`core/service`、`core/state`、`platform/Services`。

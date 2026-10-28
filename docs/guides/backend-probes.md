@@ -63,7 +63,7 @@ powershell -ExecutionPolicy Bypass -File tools/dsh-build.ps1 -Tasks build
 | 优先级 / 链路 | 探针类型与输入 | 入口与埋点位置 | 观测指标与通过条件 |
 |---|---|---|---|
 | P0 / `natural` | 声明场景：`priority`、`expiry` | 实体真实入世界 → `RuleRuntimeEvents` / `ConversionRuntime`；`RuntimeObserver.converted`、`outputAdded`；NeoForge `ItemExpireEvent` | 选中预期优先规则；转化和实物数量精确匹配；零提前、重复转化；寿命场景至少一次 `NATURAL_EXPIRY_DEFERRED`，首次转化年龄达到寿命边界 |
-| P0 / `settlement` | 声明场景：`source_cost`、`catalyst_limited`、`delay` | 正式候选判定 → `ConversionSettlementTask` → `SettlementItemOutputs` / `EffectTask`；`SETTLEMENT_COMPLETED` 与产物加入事件 | 已消费源、完整组数、返还与剩余催化剂均匹配声明；世界实物与输出事件双重核对；`pending_delivery=0`、待完成效果为零；延迟产物距接管至少 100 tick |
+| P0 / `settlement` | 声明场景：`source_cost`、`catalyst_limited`、`delay` | 正式候选判定 → `ConversionSettlement` → `SettlementItemOutputs` / `EffectTask`；`SETTLEMENT_COMPLETED` 与产物加入事件 | 已消费源、完整组数、返还与剩余催化剂均匹配声明；世界实物与输出事件双重核对；`pending_delivery=0`、待完成效果为零；延迟产物距接管至少 100 tick |
 | P0 / `damage` | 正式文件规则 + 原版实体伤害调用 | 真实 `ItemEntity.hurt` 的火、岩浆、仙人掌致死分支 → NeoForge `ItemEntityMixin` → 环境转化入口；最终枚举世界实物 | 三个源各毁掉，产物总数精确为三；非致死伤害后源仍存在；其它致死类型的源被毁掉且总产物数仍为三 |
 | P0 / `recovery` | 真实准备/步骤异常 + SavedData 跨进程夹具 | `effectPreparing` / `taskStepStarting` 故障接缝 → 生产补偿和 `SettlementRecovery`；停服前经同包开发夹具登记中断账本，重启走正式恢复器 | 故障必须实际注入；准备失败保留源，结算失败实物返还且具永久保护/禁转；跨重启待返还七件全部交付，账目 `initial=consumed+delivered+pending`；重复重载后仍为七件、pending 为零 |
 | P1 / `loading` | 开发数据包基底 + 真实 config 覆盖文件 + 一个损坏文件 | `RuleRuntimeHost.reloadRules` → 正式读取/解码/发布 → 已存在实体回扫；`reloadApplying` 在发布前注入一次异常 | 正常文件继续应用、损坏文件产生 ERROR；覆盖同 id 后旧实体按新规则产出；随后加载新内容但发布失败时回执拒绝，旧索引继续产出；最终 shard 四件、diamond 零件、源零件 |

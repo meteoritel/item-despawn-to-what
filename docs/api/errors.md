@@ -79,7 +79,7 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat/core/api/Issue.j
 
 面向玩家的文案一律走本地化 key，语言文件位于模组资源的 `lang/` 目录，中文与英文两份同步维护。回执同时携带文案 key 与兜底文案：翻译缺失时展示兜底文案，避免出现裸 key。
 
-客户端在打开阶段使用协议不匹配提示；查询失败按状态码显示，问题清单的通用项与解码失败项保留各自的 key。状态和进度阶段的文案映射集中在 `RuleEditMessages`，业务枚举只表达状态。
+客户端在打开阶段发现版本不一致时记录告警并放弃打开；查询失败按状态码显示，问题清单的通用项与解码失败项保留各自的 key。状态和进度阶段的文案映射集中在 `RuleEditMessages`，业务枚举只表达状态。
 
 ## 相关文档
 

@@ -21,7 +21,7 @@ authority: common/core/runtime、common/core/state
 本模块承担：
 
 - 追踪：为进入世界的掉落物实体建立追踪，按候选规则的最早触发时间与剩余寿命算出首个检查刻。
-- 触发：自然到期由调度器的 `CONDITION_CHECK` 任务推动；环境伤害由两端 `ItemEntityMixin` 经 `RuleRuntimeHost` 转发到 `requestConversion`。
+- 触发：自然到期由调度器的 `CONDITION_CHECK` 任务推动；环境伤害由两端 `ItemEntityMixin` 经 `RuleRuntimeHost` 转发到 `requestEnvironmentalConversion`。
 - 预检查门禁与规则选择：实体有效性、区块 ticking、实体锁、永久禁转、转化冷却、候选存在性，再按排序取首个命中规则。
 - 完整组结算：把整堆转入结算库存，按初始环境预算定组、复核支付条件、分配源成本、派发效果并按实际占用返还剩余；开组前支付受阻按容量、催化剂、门槛、流体四类原因区分，容量或催化剂真的不够才截断整批。
 - 持久化与恢复：结算记录台账、待返还记录的启动补扫与交付。
@@ -99,7 +99,7 @@ flowchart LR
 flowchart TB
     A["ItemEntity 进入世界"] --> B["ConversionRuntime.onItemAdded"]
     B --> C{"排除条件"}
-    C -->|"已移除 / 空堆 / age=-32768 / check_lock / converted 标签"| X["不建立追踪"]
+    C -->|"已移除 / 空堆 / age=-32768 / 死亡排除 / 已提交转化"| X["不建立追踪"]
     C -->|"通过"| D{"该物品存在候选规则"}
     D -->|"无候选"| X
     D -->|"有候选"| E["新建追踪并 scheduleInitial"]

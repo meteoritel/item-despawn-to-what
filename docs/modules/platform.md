@@ -69,7 +69,7 @@ flowchart LR
 | 服务端 tick | `END_SERVER_TICK` 调用一次 `core().tickServer` | `ServerTickEvent.Post` 调用同一共享入口 |
 | 数据包重载 | `END_DATA_PACK_RELOAD`，成功标志为真才重建 | `OnDatapackSyncEvent`，`getPlayer()` 为空时重建（登录同步不重建） |
 | 掉落物进入与离开 | `ServerEntityEvents.ENTITY_LOAD` / `ENTITY_UNLOAD` | `EntityJoinLevelEvent` / `EntityLeaveLevelEvent` |
-| 自然消失 | Mixin 拦截 `ItemEntity#tick` 的 `discard()`，延后判定为真时不丢弃 | `ItemExpireEvent`，延后判定为真时 `addExtraLife`，并在寿命钳制上限前抬升 age |
+| 自然消失 | Mixin 拦截 `ItemEntity#tick` 的 `discard()`，延后判定为真时不丢弃 | `ItemExpireEvent`，延后判定为真时 `addExtraLife`，并在年龄到达钳制边界前重置年龄 |
 | 环境伤害保护 | Mixin 在 `Entity#isInvulnerableTo` 头部按状态直接判免疫 | `EntityInvulnerabilityCheckEvent` 设置免疫 |
 | 死亡背包排除标记 | `EntityMixin` 与 `PlayerMixin` 在掉落物入世界前打标记 | `LivingDropsEvent` 给每个掉落加排除标记 |
 | 实体状态持久化 | Fabric Attachment API 的持久化附件（写入 `fabric:attachments`） | `getPersistentData()` 的 NBT 复合标签 |

@@ -6,7 +6,7 @@ For the other rule fields, see [Rule Fields](en-02-rule-basics). For effects and
 
 ## What Conditions Do
 
-- A condition only decides whether it is satisfied. It consumes no items and no fluids; the consuming effects take the materials.
+- A condition only decides whether it is satisfied. It consumes no items and no fluids; the rule input settings (source items, catalysts, and fluid) are what actually pay materials.
 - Leave out the whole `conditions` field to run a rule with no conditions. The check then passes at any time.
 - The rule is selected and converts only when the result is satisfied. An unsatisfied, unavailable, or error result never triggers it.
 - A condition that stays unsatisfied is not an error. It only means the rule rarely fires.
@@ -445,7 +445,7 @@ The condition decides whether the shared rule radius contains enough of the name
 }
 ```
 
-Typical uses: recipe-style rules that need the materials on site. The condition only decides; consuming the catalyst needs a matching consuming effect, as described in [Effects](en-04-effects).
+Typical uses: recipe-style rules that need the materials on site. The condition only decides; the actual consumption follows `catalyst_cost.consume_counts` in the rule, as described in [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
 
 ## Common Combinations
 

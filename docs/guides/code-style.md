@@ -59,7 +59,7 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat 下的公开类�
 
 线缆取值（状态码、动作、目录类型等）用枚举承载，并成对提供「取值字符串」与「由字符串解析」两个入口，未知取值解析为空值而不是抛异常。新增取值时同步检查客户端分支与语言文件。
 
-面向玩家的文案一律用本地化 key，key 由模组 id 起头按域分层；由枚举名推导的 key 保持推导规则唯一，避免同一状态出现两个 key。
+面向玩家的文案一律用本地化 key，key 按域分层并以模组 id 标注归属；由枚举名推导的 key 保持推导规则唯一，避免同一状态出现两个 key。
 
 ```mermaid
 flowchart LR

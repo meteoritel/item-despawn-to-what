@@ -63,7 +63,7 @@ flowchart LR
 
 1. 加载器 API 前缀只允许出现在对应平台源集；
 2. 平台源集之间禁止互引对方的加载器 API；
-3. 客户端类前缀只允许出现在客户端路径与开发客户端源集，其它路径出现即违规。
+3. 客户端类前缀只允许出现在路径含 `/client/` 的源码，其它路径出现即违规。
 4. `src/main` 只依赖生产契约；禁止引用 `core/debug`、探针实现包及源码索引中仅由开发/工具源集声明的类型，同包开发类型也按声明来源检查。
 5. `core/service` 与 `core/catalog` 禁止引用 `core/network`、`CustomPacketPayload` 与网络 codec。
 6. Fabric 公共/客户端与 NeoForge 注册入口须消费统一通道声明及其中的 type、codec 与处理面。允许循环、方法引用及同文件桥接；逐载荷类型常量回流到 adapter 会被拒绝。此项按注册文件的结构检查。
@@ -73,6 +73,8 @@ flowchart LR
 
 10. 四个编辑分区不持有组合容器；screen 不调用活草稿 getter，`EditSession` 不公开 `RuleDraft` getter，`FormView` 不公开按路径或字段名配置行的旧入口。
 11. `core/load` 禁止引用 `core/model`；`core/api`、`config`、`load`、`model`、`registry`、`extension`、`type`、`runtime`、`state`、`service`、`catalog` 禁止引用 `core/command`、`debug`、`network`、`host`。
+
+根包 `Constants` 只声明模组标识、显示名、命名空间与日志入口，属环境级常量，不受包分层约束。
 
 编辑通道的 id 唯一、处理器齐备、同方向 direct/chunk 配对由 `RuleEditChannels` 初始化校验，平台注册器共同遍历该声明。
 
@@ -106,10 +108,10 @@ Java 编译负责类型可见性和签名，包职责与层次设计由脚本的
 | 例外 | 位置 | 性质 |
 |---|---|---|
 | 效果执行读取区块存在性 | `core/type/effect/exec` → `core/runtime/LoadedChunks` | 只读判定：目标区块是否加载，决定生成还是顺延 |
-| 返还物生成读写实体状态 | `core/type/effect/exec/ReturnItemSpawner` → `core/state/DropStateStore` | 返还物授予永久保护与永久禁转，状态由公共门面写入 |
+| 返还物生成读写实体状态 | `core/type/effect/exec`（`ReturnItemSpawner`、`EffectTargets`）→ `core/state/DropStateStore` | 返还物授予永久保护与永久禁转，状态由公共门面写入 |
 | 保存续接发布预建索引 | `core/service/RuleSaveTask` → `core/runtime/RuleIndex` | 后台解码后按公共 tick 预算发布索引 |
 | 客户端装配本地类型表 | `client/edit/ClientTypeRegistries` → `core/type/BuiltinTypeRegistries` | 仅消费规范装配记录与冻结查询视图 |
-| 传输层取得会话上下文与服务 | `core/network/transport` → `core/runtime/RuleIndex`、`core/service` | 编辑会话需要当前索引与保存服务，权限谓词在构造点注入 |
+| 传输层取得会话上下文与服务 | `core/network/transport` → `core/service` | 编辑会话需要会话上下文与保存服务，权限谓词在构造点注入 |
 | 实体状态与平台能力互引类型 | `core/state/DropStateStore` ↔ `platform/Services`、`platform/services/IPlatformHelper` | 平台能力接口以 `DropState` 为参数；状态由运行时单向持有 |
 | 编辑数据用 kit 的树编辑契约 | `client/edit` → `client/ui/kit` | 复用 `UiTreeEditor`、`UiTreePath`、`UiTreeCodec`，不引用宿主与主题 |
 | 界面与协议读编辑常量 | `client/net`、`client/ui` → `core/service/RuleEditSessionLimits` | 双端共用限额常量与档案类型，避免协议两侧各存一份 |
