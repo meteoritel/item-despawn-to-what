@@ -19,8 +19,7 @@ import java.util.Map;
  */
 public final class RuleDecodeBudget {
 
-    // 规则 JSON 文本允许的最大嵌套深度：最深合法写法（outcomes → effects → conditions →
-    // 16 层 all_of / any_of 条件树，每层占 2 层 JSON）约 40 层，再为类型专属参数留出余量
+    // 规则 JSON 文本允许的最大嵌套深度：为 16 层条件树、规则包装与类型专属参数预留空间
     public static final int MAX_NESTING_DEPTH = 64;
 
     // 条件树最大深度，根节点深度为 1；与解码后的结构校验同口径

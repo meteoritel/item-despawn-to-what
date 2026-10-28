@@ -10,6 +10,10 @@ import com.meteorite.itemdespawntowhat.core.api.TypeDefinition;
  *
  * <p>产出类别是该类型的展示元数据：规则分类器据此判断含该效果的规则归入哪个分类组。
  * 分类只影响列表分组，不参与运行时匹配、结算或优先级。</p>
+ *
+ * <p>注册类型的 {@code params()} 必须包含 {@link CommonFields#EFFECT_PARAMS} 中的同一声明实例，
+ * 类型表装配时检查该契约。类型自身的 codec 负责这些字段的编解码，并与
+ * {@link Effect#delayTicks()}、{@link Effect#chance()} 保持一致。</p>
  */
 public interface EffectType<P extends Effect> extends TypeDefinition<P> {
 

@@ -6,6 +6,7 @@ import java.util.ServiceLoader;
 import java.util.Comparator;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
+import com.meteorite.itemdespawntowhat.core.model.CommonFields;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
 import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
@@ -49,7 +50,17 @@ public record BuiltinTypeRegistries(
         var effects = new SimpleTypeRegistry<EffectType<?>>();
         BuiltinEffectTypes.registerInto(effects);
         providers.forEach(provider -> provider.registerEffects(effects));
+        effects.all().forEach(BuiltinTypeRegistries::validateCommonEffectFields);
         TypeRegistry<EffectType<?>> effectTypes = effects.freeze();
         return new BuiltinTypeRegistries(conditionTypes, effectTypes, expressionCodec);
+    }
+
+    private static void validateCommonEffectFields(EffectType<?> type) {
+        if (type.params().get(CommonFields.DELAY_TICKS.name()) != CommonFields.DELAY_TICKS) {
+            throw new IllegalStateException("效果类型 " + type.id() + " 未声明通用字段 " + CommonFields.DELAY_TICKS.name());
+        }
+        if (type.params().get(CommonFields.CHANCE.name()) != CommonFields.CHANCE) {
+            throw new IllegalStateException("效果类型 " + type.id() + " 未声明通用字段 " + CommonFields.CHANCE.name());
+        }
     }
 }

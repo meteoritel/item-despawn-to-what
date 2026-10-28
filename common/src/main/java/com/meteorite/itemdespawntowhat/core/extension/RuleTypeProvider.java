@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.core.extension;
 import com.meteorite.itemdespawntowhat.core.api.TypeRegistrar;
 
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
+import com.meteorite.itemdespawntowhat.core.model.CommonFields;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
 
 /**
@@ -16,6 +17,10 @@ public interface RuleTypeProvider {
     /** 第一阶段登记条件类型；装配器封口后才构建规则级条件树 Codec。 */
     default void registerConditions(@SuppressWarnings("unused") TypeRegistrar<ConditionType<?>> registry) {}
 
-    /** 第二阶段登记效果类型；注册窗口由装配器关闭。 */
+    /**
+     * 第二阶段登记效果类型；注册窗口由装配器关闭。
+     * <p>每个效果类型的参数声明必须复用 {@link CommonFields#EFFECT_PARAMS}，
+     * 装配器在冻结前检查公共声明实例。效果 codec 由类型实现者负责，需编解码延迟和概率字段。</p>
+     */
     default void registerEffects(@SuppressWarnings("unused") TypeRegistrar<EffectType<?>> registry) {}
 }

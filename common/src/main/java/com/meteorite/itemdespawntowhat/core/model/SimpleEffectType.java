@@ -18,6 +18,8 @@ import java.util.function.Function;
  * productKind 是该类型的产出类别解析器：默认非产出，产出子类随参数变化的类型按实例参数解析。
  * capacityDemand 是该类型的每轮一组容量需求解析器：默认不占容量，产出类型未知的效果按保守下界声明。
  * params 是该类型参数的唯一声明，两个客户端读点（描述符投影与新建初值）都从这里取值。
+ * 省略、传入 null 或空参数声明时使用 {@link CommonFields#EFFECT_PARAMS}；显式非空声明必须包含
+ * 这组公共字段。codec 由调用方提供，负责按相同字段名编解码延迟和概率，并与实例 getter 保持一致。
  */
 public record SimpleEffectType<P extends Effect>(
         ResourceLocation id,
@@ -31,12 +33,13 @@ public record SimpleEffectType<P extends Effect>(
         ParamList<? super P> paramList
 ) implements EffectType<P> {
 
+    /** 统一可选策略默认值；未提供字段声明时使用公共效果字段声明。 */
     public SimpleEffectType {
         validator = validator == null ? (value, issues, path) -> true : validator;
         runtimeLimitValidator = runtimeLimitValidator == null ? (params, limits, issues, fieldPath) -> true : runtimeLimitValidator;
         productKind = productKind == null ? params -> ProductKind.NONE : productKind;
         capacityDemand = capacityDemand == null ? params -> CapacityDemand.NONE : capacityDemand;
-        paramList = paramList == null ? ParamList.empty() : paramList;
+        paramList = paramList == null || paramList.isEmpty() ? CommonFields.EFFECT_PARAMS : paramList;
     }
 
     /** 声明已覆盖全部字段约束，无需额外业务校验的效果。 */
@@ -61,7 +64,7 @@ public record SimpleEffectType<P extends Effect>(
     /** 四参构造：未给出一次性标记时按普通效果处理（oneShot = false） */
     public SimpleEffectType(ResourceLocation id, MapCodec<P> codec, Validator<P> validator,
                             EffectExecutor<P> executor) {
-        this(id, codec, validator, executor, false, ParamList.empty());
+        this(id, codec, validator, executor, false, CommonFields.EFFECT_PARAMS);
     }
 
     /** 六参构造：只声明一次性标记与参数声明，产出类别按非产出处理 */
@@ -75,21 +78,21 @@ public record SimpleEffectType<P extends Effect>(
     public SimpleEffectType(ResourceLocation id, MapCodec<P> codec, Validator<P> validator,
                             EffectExecutor<P> executor, boolean oneShot) {
         this(id, codec, validator, null, executor, oneShot, params -> ProductKind.NONE,
-                params -> CapacityDemand.NONE, ParamList.empty());
+                params -> CapacityDemand.NONE, CommonFields.EFFECT_PARAMS);
     }
 
     /** 五参构造：只声明固定产出类别，按普通效果处理 */
     public SimpleEffectType(ResourceLocation id, MapCodec<P> codec, Validator<P> validator,
                             EffectExecutor<P> executor, ProductKind productKind) {
         this(id, codec, validator, null, executor, false, params -> productKind,
-                params -> CapacityDemand.NONE, ParamList.empty());
+                params -> CapacityDemand.NONE, CommonFields.EFFECT_PARAMS);
     }
 
     /** 六参构造：同时声明一次性标记与固定产出类别 */
     public SimpleEffectType(ResourceLocation id, MapCodec<P> codec, Validator<P> validator,
                             EffectExecutor<P> executor, boolean oneShot, ProductKind productKind) {
         this(id, codec, validator, null, executor, oneShot, params -> productKind,
-                params -> CapacityDemand.NONE, ParamList.empty());
+                params -> CapacityDemand.NONE, CommonFields.EFFECT_PARAMS);
     }
 
     /** 七参构造：同时声明一次性标记、固定产出类别与参数声明 */
@@ -103,7 +106,7 @@ public record SimpleEffectType<P extends Effect>(
     public SimpleEffectType(ResourceLocation id, MapCodec<P> codec, Validator<P> validator,
                             EffectExecutor<P> executor, boolean oneShot, Function<P, ProductKind> productKind) {
         this(id, codec, validator, null, executor, oneShot, productKind, params -> CapacityDemand.NONE,
-                ParamList.empty());
+                CommonFields.EFFECT_PARAMS);
     }
 
     /** 八参构造：同时声明一次性标记、产出类别解析器、容量需求解析器与参数声明 */
@@ -118,7 +121,7 @@ public record SimpleEffectType<P extends Effect>(
                             RuntimeLimitValidator<P> runtimeLimitValidator, EffectExecutor<P> executor,
                             ProductKind productKind) {
         this(id, codec, validator, runtimeLimitValidator, executor, false, params -> productKind,
-                params -> CapacityDemand.NONE, ParamList.empty());
+                params -> CapacityDemand.NONE, CommonFields.EFFECT_PARAMS);
     }
 
     /** 七参构造：声明运行期上限校验器、固定产出类别与参数声明 */
@@ -134,7 +137,7 @@ public record SimpleEffectType<P extends Effect>(
                             EffectExecutor<P> executor, ProductKind productKind,
                             Function<P, CapacityDemand> capacityDemand) {
         this(id, codec, validator, null, executor, false, params -> productKind, capacityDemand,
-                ParamList.empty());
+                CommonFields.EFFECT_PARAMS);
     }
 
     /** 七参构造：声明固定产出类别、容量需求解析器与参数声明 */
@@ -148,7 +151,7 @@ public record SimpleEffectType<P extends Effect>(
     public SimpleEffectType(ResourceLocation id, MapCodec<P> codec, Validator<P> validator,
                             EffectExecutor<P> executor, boolean oneShot, Function<P, ProductKind> productKind,
                             Function<P, CapacityDemand> capacityDemand) {
-        this(id, codec, validator, null, executor, oneShot, productKind, capacityDemand, ParamList.empty());
+        this(id, codec, validator, null, executor, oneShot, productKind, capacityDemand, CommonFields.EFFECT_PARAMS);
     }
 
     @Override

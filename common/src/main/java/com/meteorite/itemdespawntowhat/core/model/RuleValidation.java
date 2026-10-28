@@ -7,7 +7,6 @@ import com.meteorite.itemdespawntowhat.core.api.RuleRuntimeLimits;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.api.TypeDefinition;
-import com.meteorite.itemdespawntowhat.core.api.param.ParamList;
 import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
 import com.meteorite.itemdespawntowhat.core.api.RefChecks;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -105,7 +104,7 @@ public final class RuleValidation {
         validateStructure(rule, issues, origin);
         for (EffectSlot slot : effectSlots(rule)) {
             if (slot.effect().type() != null) {
-                validateCommonEffect(slot.effect(), ParamList.empty(), issues.originScoped(origin), slot.path());
+                validateCommonEffect(slot.effect(), issues.originScoped(origin), slot.path());
             }
         }
         return issues.errors().size() == before;
@@ -155,9 +154,8 @@ public final class RuleValidation {
             return;
         }
         EffectType<?> definition = effectTypes.getOrNull(effect.type());
-        validateCommonEffect(effect, definition == null ? ParamList.empty() : definition.params(),
-                issues.originScoped(origin), path);
         if (definition == null) {
+            validateCommonEffect(effect, issues.originScoped(origin), path);
             issues.error("未注册的效果类型: " + effect.type(), origin, path);
             return;
         }
@@ -302,7 +300,7 @@ public final class RuleValidation {
         }
     }
 
-    // 效果通用字段校验；类型专属参数由注册表感知入口负责
+    // 效果身份结构校验；参数由注册表感知入口或无类型表入口负责
     private static void validateEffect(Effect effect, String path, IssueCollector issues,
                                        @Nullable String origin) {
         if (effect.type() == null) {
@@ -310,16 +308,12 @@ public final class RuleValidation {
         }
     }
 
-    // 公共字段由相同声明校验一次；第三方未复用公共声明时，仍保持效果契约的基础约束。
-    private static void validateCommonEffect(Effect effect, ParamList<?> declared, IssueCollector issues, String path) {
-        if (declared.get(RuleFields.DELAY_TICKS) != CommonFields.DELAY_TICKS) {
-            CommonFields.DELAY_TICKS.check(effect.delayTicks(), issues, path,
-                    "delay_ticks 不能为负数: " + effect.delayTicks());
-        }
-        if (declared.get(RuleFields.CHANCE) != CommonFields.CHANCE) {
-            CommonFields.CHANCE.check(effect.chance(), issues, path,
-                    "chance 必须在 [0,1] 内: " + effect.chance());
-        }
+    // 无类型表或类型未知时校验基础效果契约；已注册类型只走声明校验。
+    private static void validateCommonEffect(Effect effect, IssueCollector issues, String path) {
+        CommonFields.DELAY_TICKS.check(effect.delayTicks(), issues, path,
+                "delay_ticks 不能为负数: " + effect.delayTicks());
+        CommonFields.CHANCE.check(effect.chance(), issues, path,
+                "chance 必须在 [0,1] 内: " + effect.chance());
     }
 
     /** 便捷入口：无来源信息的结构校验 */

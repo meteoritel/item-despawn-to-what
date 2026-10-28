@@ -72,7 +72,7 @@ public sealed interface EntityProduct permits EntityProduct.Item, EntityProduct.
             @Override public <T> DataResult<EntityProduct> decode(DynamicOps<T> ops, MapLike<T> input) {
                 return dispatch.decode(ops, input).flatMap(product -> {
                     Set<T> allowed = new HashSet<>(codecFor(product.variant()).keys(ops).toList());
-                    for (String common : Set.of("type", "variant", "delay_ticks", "chance", "conditions")) {
+                    for (String common : Set.of("type", "variant", "delay_ticks", "chance")) {
                         allowed.add(ops.createString(common));
                     }
                     var unknown = input.entries().map(Pair::getFirst).filter(key -> !allowed.contains(key)).findFirst();
