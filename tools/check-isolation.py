@@ -1,26 +1,8 @@
 #!/usr/bin/env python3
-"""依赖方向校验：平台隔离与端隔离。
+"""校验平台、端、开发源集与业务依赖方向，以及编辑注册和写权限结构。
 
-扫描仓库内所有 Java 源文件，按 import 语句判定依赖违规：
-
-1) 平台隔离：加载器 API（net.fabricmc.*、net.neoforged.*）只允许出现在平台源集
-   fabric/ 与 neoforge/ 中；
-2) 跨加载器依赖：fabric/ 不得 import net.neoforged.*，neoforge/ 不得 import
-   net.fabricmc.*；
-3) 端隔离：客户端类只允许出现在客户端路径，即路径含 /client/ 的源码；其它路径不得
-   import net.minecraft.client.* 与本模组 .client. 包；
-4) 开发源集隔离：src/main 不得 import core.debug 与 probe 实现包。
-5) 编辑业务隔离：core/service 与 core/catalog 不得 import core/network、
-   CustomPacketPayload 或网络 codec；语义模型由业务包持有。
-6) 编辑注册入口遍历 RuleEditChannels，平台 adapter 仅使用声明中的类型和处理器。
-7) 契约只依赖自身，模型只依赖契约与自身；类型装配器位于 core/type。
-8) client/edit 只依赖 UI kit 的公开契约，表单控件留在 client/ui。
-9) client/net 不依赖 edit/ui；screen 根包的业务字段声明统一由 edit 提供。
-
-依赖只判定 import；业务字段工厂只扫描 screen 根包中的代码行，form 内的控件适配不受此约束。
-
-退出码：0 = 通过；1 = 存在违规；2 = 配置错误（未找到 Java 源文件）。
-用法：python tools/check-isolation.py [--root <仓库根目录>]
+静态引用覆盖 import、全限定名和按源码索引可确定的同包类型；忽略注释及字面量。
+退出码：0 通过；1 存在违规；2 仓库配置错误。
 """
 from __future__ import annotations
 
@@ -30,6 +12,8 @@ import re
 import sys
 from pathlib import Path
 
+from java_references import Source, TypeIndex
+
 EXCLUDED_DIRS = {
     "build", ".gradle", ".git", ".local", ".scratch", "node_modules",
     "run", "runs", "logs", ".idea",
@@ -38,7 +22,6 @@ EXCLUDED_DIRS = {
 PLATFORM_LOADERS = {"fabric": "net.fabricmc.", "neoforge": "net.neoforged."}
 # 判定为客户端类的 import 前缀
 CLIENT_IMPORT_PREFIXES = ("net.minecraft.client.", "com.meteorite.itemdespawntowhat.client.")
-IMPORT_RE = re.compile(r"^\s*import\s+(?:static\s+)?([A-Za-z_][A-Za-z0-9_.]*(?:\*)?)\s*;")
 PROJECT_CORE = "com.meteorite.itemdespawntowhat.core."
 PROJECT_UI = "com.meteorite.itemdespawntowhat.client.ui."
 REGISTRAR_DIRECTIONS = {
@@ -70,39 +53,41 @@ def check(root: Path) -> int:
         return 2
 
     violations: list[tuple[str, int, str, str]] = []
-    import_total = 0
+    parsed = [Source.read(source, root) for source in sources]
+    index = TypeIndex(parsed)
+    by_path = {source.path: source for source in parsed}
+    import_total = sum(len(source.imports) for source in parsed)
     modules: set[str] = set()
     for source in sources:
         rel = source.relative_to(root).as_posix()
         module = rel.split("/", 1)[0] if "/" in rel else ""
         modules.add(module)
         client_path = is_client_path(rel)
-        text = source.read_text(encoding="utf-8", errors="replace")
+        entry = by_path[source]
+        code = entry.code
         if rel.endswith("/core/service/BuiltinTypeRegistries.java"):
             violations.append((rel, 1, "类型装配归属", "内置类型装配位于 core/type"))
         if rel in REGISTRAR_DIRECTIONS:
             for direction in REGISTRAR_DIRECTIONS[rel]:
-                if not re.search(r"RuleEditChannels\." + direction + r"\(\)\.forEach\(", text):
+                if not re.search(r"RuleEditChannels\s*\.\s*" + direction + r"\s*\(\s*\)", code):
                     violations.append((rel, 1, "通道声明消费", "注册入口须遍历 RuleEditChannels." + direction + "()"))
             for member in ("type", "codec", "handler"):
-                if "channel." + member + "()" not in text:
+                if not re.search(r"\.\s*" + member + r"\s*\(\s*\)", code):
                     # Fabric 公共入口只注册 S2C 类型，客户端入口仅消费处理器；各自核对实际负责的能力。
                     if member == "codec" and "/client/" in rel:
                         continue
-                    if member == "handler" and "binding.deliver(channel, payload)" in text:
+                    if member == "handler" and re.search(r"\.\s*deliver\s*\(", code):
                         continue
                     violations.append((rel, 1, "通道声明消费", "adapter 须消费 channel." + member + "()"))
-            for line_no, line in enumerate(text.splitlines(), 1):
+            for line_no, line in enumerate(code.splitlines(), 1):
                 if re.search(r"\b\w*Payload\.(?:TYPE|STREAM_CODEC|CHANGE_SET|SNAPSHOT|SOURCE_VIEW)\b", line):
                     violations.append((rel, line_no, "通道声明消费", "载荷类型与 codec 统一在 RuleEditChannels 声明"))
         # screen 负责组装表单，不再声明业务字段；form 的数值子控件适配另有职责。
         if "/client/ui/screen/" in rel and source.parent.name == "screen":
-            code = re.sub(r"/\*.*?\*/|//[^\n]*", lambda match: "\n" * match.group(0).count("\n"), text, flags=re.S)
             for match in re.finditer(r"\bEditorField\.\s*\w+\s*\(", code):
                 violations.append((rel, code.count("\n", 0, match.start()) + 1, "业务字段归属", "固定字段声明由 client/edit 提供"))
         # 编辑页面依赖装配产物与明确协作者，字段配置使用句柄，活草稿仅在会话回调内提供。
         if "/client/" in rel:
-            code = re.sub(r"/\*.*?\*/|//[^\n]*", lambda match: "\n" * match.group(0).count("\n"), text, flags=re.S)
             if source.name in {"RuleEditorInfoSection.java", "RuleEditorInputSection.java",
                                "RuleEditorTriggerSection.java", "RuleEditorResultsSection.java"}:
                 for match in re.finditer(r"\bRuleEditorEditSections\s+\w+", code):
@@ -124,12 +109,15 @@ def check(root: Path) -> int:
                 for match in re.finditer(r"\bpublic\s+(?:@Nullable\s+)?[\w<>?]+\s+" + old_config + r"\s*\(String\s", code):
                     violations.append((rel, code.count("\n", 0, match.start()) + 1,
                                        "字段行身份", "行配置通过 FormField，不使用路径或字段名寻址"))
-        for line_no, line in enumerate(text.splitlines(), 1):
-            match = IMPORT_RE.match(line)
-            if not match:
-                continue
-            target = match.group(1)
-            import_total += 1
+        for line_no, target in index.references(entry):
+            if entry.source_set == "main" and index.development_only(entry, target):
+                violations.append((rel, line_no, "开发源集类型归属", target))
+            if "/core/load/" in rel and target.startswith(PROJECT_CORE + "model."):
+                violations.append((rel, line_no, "加载层依赖方向", target))
+            lower = ("api", "config", "load", "model", "registry", "extension", "type", "runtime", "state", "service", "catalog")
+            if any("/core/" + package + "/" in rel for package in lower):
+                if target.startswith(tuple(PROJECT_CORE + package + "." for package in ("command", "debug", "network", "host"))):
+                    violations.append((rel, line_no, "使用方与宿主方向", target))
             if "/core/api/" in rel and target.startswith(PROJECT_CORE) and not target.startswith(PROJECT_CORE + "api."):
                 violations.append((rel, line_no, "契约依赖方向", target))
             if "/core/model/" in rel and target.startswith(PROJECT_CORE) and not target.startswith((

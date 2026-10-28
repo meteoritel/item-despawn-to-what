@@ -4,6 +4,7 @@ layer: 2
 audience: 修改 import、移动类、新增平台接入或 UI kit 用法的开发者
 authority:
   - tools/check-isolation.py
+  - tools/java_references.py
   - tools/check-ui-kit-boundaries.ps1
   - settings.gradle
   - common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/package-info.java
@@ -13,8 +14,8 @@ authority:
 
 ## TL;DR
 
-- 方向只朝下：契约 `core/api` 被引用、不引用别人；加载层不认识模型；运行时不被命令、调试与网络反向依赖。
-- 平台、端、契约/模型与编辑数据分层由 `tools/check-isolation.py` 校验，UI kit 引用白名单由 `tools/check-ui-kit-boundaries.ps1` 校验；其余方向由编译期 import 直接体现。
+- 方向只朝下：契约 `core/api` 只引用自身；加载层不认识模型；底层实现不依赖命令、调试、网络与宿主。
+- 静态引用与关键结构由 `tools/check-isolation.py` 校验，UI kit 白名单由专用脚本校验；Gradle `checkRepository` 汇总门禁，其余设计方向通过评审核对。
 - 现存跨包只读例外集中在本页表格，新增同类引用先在表内登记。
 
 ## 适用对象
@@ -27,11 +28,11 @@ authority:
 |---|---|---|---|
 | D1 | 契约包只被引用 | `core/api`、`core/api/scheduler`、`core/api/param` 只依赖 JDK、原版契约类型与自身 | `tools/check-isolation.py` |
 | D2 | 模型只依赖契约 | `core/model` → `core/api` | `tools/check-isolation.py` |
-| D3 | 类型系统不依赖编辑面 | `core/registry`、`core/extension`、`core/type` → 契约、模型与只读辅助类型 | 编译期 + [已知例外](#已知例外) |
-| D4 | 加载层不认识模型 | `core/load` → `core/api`；模型以 `RuleDecoder` 注入 | 编译期 + 评审 |
-| D5 | 运行时聚合向下依赖 | `core/runtime` → 契约、配置、加载、模型、状态、类型 | 编译期 + [已知例外](#已知例外) |
-| D6 | 命令、调试、网络是使用方 | `core/command`、`core/debug`、`core/network` → 运行时与编辑服务 | 编译期 + 评审 |
-| D7 | 宿主是唯一向上装配点 | `core/host` → `core` 其余包与 `platform/Services` | 编译期 + 评审 |
+| D3 | 类型系统不依赖编辑面 | `core/registry`、`core/extension`、`core/type` → 契约、模型与只读辅助类型 | 使用方禁边由隔离脚本校验，其余按[已知例外](#已知例外)与评审核对 |
+| D4 | 加载层不认识模型 | `core/load` → `core/api`；模型以 `RuleDecoder` 注入 | `tools/check-isolation.py` 禁止引用 `core/model` |
+| D5 | 运行时聚合向下依赖 | `core/runtime` → 契约、配置、加载、模型、状态、类型 | 使用方禁边由隔离脚本校验，其余按[已知例外](#已知例外)与评审核对 |
+| D6 | 命令、调试、网络是使用方 | `core/command`、`core/debug`、`core/network` → 运行时与编辑服务 | `tools/check-isolation.py` 禁止底层实现反向引用使用方 |
+| D7 | 宿主是唯一向上装配点 | `core/host` → `core` 其余包与 `platform/Services` | `tools/check-isolation.py` 禁止底层实现反向引用宿主 |
 | D8 | 客户端单向分层 | `client/net` → 协议与业务模型；`client/edit` → core 与 `client/ui/kit`；`client/ui` → `client/edit`、`client/net` | `tools/check-isolation.py` + 评审 |
 | D9 | UI kit 不引用本模组其它包 | `client/ui/kit` 只引用自身包与白名单 | `tools/check-ui-kit-boundaries.ps1` |
 | D10 | 平台隔离 | `net.fabricmc.*`、`net.neoforged.*` 只出现在 `fabric/`、`neoforge/` | `tools/check-isolation.py` |
@@ -54,19 +55,24 @@ flowchart LR
 
 ### `tools/check-isolation.py`
 
-扫描仓库内全部 Java 源文件；依赖按 import 判定，注册入口与字段声明归属另外按代码位置检查：
+扫描仓库内 Java 源文件，排除构建、运行和本地工作目录。`java_references.py` 先屏蔽注释、字符串、字符和 text block 并保留行号，再提取 import/static import、全限定引用以及按源码索引可确定的同包/通配导入类型。嵌套类型与静态成员归到其所属顶层类型。
+
+类型索引区分 common/main、各自平台 main、common/dev、NeoForge probe 和 tools；同名的两端类型按各自构建视图解析。规则覆盖静态可识别的引用，动态反射类名按调用点评审。
+
+关键规则：
 
 1. 加载器 API 前缀只允许出现在对应平台源集；
 2. 平台源集之间禁止互引对方的加载器 API；
 3. 客户端类前缀只允许出现在客户端路径与开发客户端源集，其它路径出现即违规。
-4. `src/main` 只依赖生产契约，禁止 import `core/debug` 和探针实现包。
-5. `core/service` 与 `core/catalog` 禁止 import `core/network`、`CustomPacketPayload` 与网络 codec。
-6. Fabric 公共/客户端与 NeoForge 注册入口须遍历统一通道声明，消费其中的 type、codec 与 handler；逐载荷类型常量回流到 adapter 会被拒绝。
+4. `src/main` 只依赖生产契约；禁止引用 `core/debug`、探针实现包及源码索引中仅由开发/工具源集声明的类型，同包开发类型也按声明来源检查。
+5. `core/service` 与 `core/catalog` 禁止引用 `core/network`、`CustomPacketPayload` 与网络 codec。
+6. Fabric 公共/客户端与 NeoForge 注册入口须消费统一通道声明及其中的 type、codec 与处理面。允许循环、方法引用及同文件桥接；逐载荷类型常量回流到 adapter 会被拒绝。此项按注册文件的结构检查。
 7. `core/api` 对本模组 core 代码只引用自身；`core/model` 只引用契约与自身；内置装配器归 `core/type`。
 8. `client/edit` 的 UI 依赖限定为 `client/ui/kit`，控件和表单工厂归 `client/ui`。
 9. `client/net` 禁止依赖 `client/edit` 与 `client/ui`。screen 根包不调用 `EditorField` 工厂声明业务字段；form 内从既有字段派生单项控件的适配保留。
 
 10. 四个编辑分区不持有组合容器；screen 不调用活草稿 getter，`EditSession` 不公开 `RuleDraft` getter，`FormView` 不公开按路径或字段名配置行的旧入口。
+11. `core/load` 禁止引用 `core/model`；`core/api`、`config`、`load`、`model`、`registry`、`extension`、`type`、`runtime`、`state`、`service`、`catalog` 禁止引用 `core/command`、`debug`、`network`、`host`。
 
 编辑通道的 id 唯一、处理器齐备、同方向 direct/chunk 配对由 `RuleEditChannels` 初始化校验，平台注册器共同遍历该声明。
 
@@ -85,13 +91,17 @@ flowchart LR
 
 运行方式：`powershell -ExecutionPolicy Bypass -File tools/check-ui-kit-boundaries.ps1`；通过返回 0，有违规返回 1。
 
-### 编译期
+### 构建与持续集成
 
-脚本未覆盖的方向约束由编译期决定：一个包能引用什么，取决于它实际 import 了什么。改包结构后先编译，再按 [包职责](package-responsibility.md) 核对方向是否符合预期。
+根任务 `checkRepository` 组合隔离、文档、i18n、UI kit 和 `checkConfigReference`，各子项目 `check` 依赖同一根任务。发布包隔离仍由 `checkProbePackaging` 消费各端 assemble 产物；单次 build 中每个根任务执行一次。
+
+PR、`1.21.1` 分支 push 和 release 的 build 使用同一门禁；环境提供 JDK 21、Python 与 PowerShell（Windows 使用 powershell，Linux 使用 pwsh）。Wiki 发布在写入远端前运行 `checkConfigReference`。
+
+Java 编译负责类型可见性和签名，包职责与层次设计由脚本的明确规则及评审共同核对。改包结构后先完成 IDE 检查，再运行 `tools/dsh-build.ps1 -Tasks build` 并对照[包职责](package-responsibility.md)。
 
 ## 已知例外
 
-下表是现存于源码的跨包引用。共同点是只读辅助类型、常量或装配记录，不转移运行时状态所有权；新增同类引用按同样格式登记。
+下表是现存于源码的跨包引用，按各自能力边界保留运行时状态所有权；新增同类引用按同样格式登记。
 
 | 例外 | 位置 | 性质 |
 |---|---|---|
