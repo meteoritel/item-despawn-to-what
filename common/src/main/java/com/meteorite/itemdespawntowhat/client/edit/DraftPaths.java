@@ -79,6 +79,23 @@ public final class DraftPaths {
     }
 
     /**
+     * 返回目标路径相对父路径的首个字段名，用于按对象顶层字段定位展示分区。
+     * <p>字段子路径与数组元素路径都归属该字段；父路径中的字段与下标必须逐段一致。</p>
+     *
+     * @param parentPath 父对象路径
+     * @param path 目标路径
+     * @return 首个字段名；目标不是父路径的后代时返回 {@code null}
+     */
+    public static @Nullable String directChildName(String parentPath, String path) {
+        List<Segment> parent = parse(parentPath);
+        List<Segment> target = parse(path);
+        if (target.size() <= parent.size() || !target.subList(0, parent.size()).equals(parent)) {
+            return null;
+        }
+        return target.get(parent.size()).name();
+    }
+
+    /**
      * 把路径段重新渲染成路径字符串；空列表得到空串。
      * <p>数组重排后由调用方按当前结构更新路径段，本方法不负责重算下标。
      *

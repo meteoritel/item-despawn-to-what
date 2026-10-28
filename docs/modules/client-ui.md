@@ -39,6 +39,7 @@ authority: common/client/ui/theme、common/client/ui/widget、common/client/ui/s
 - **编辑器入口**：`RuleEditorOpener` 注册到 `EditorScreenHooks`，服务端授权成功后由 `client/net` 调用，把 `RuleEditorScreen` 切到前台或关闭；会话的发起与结束由 `client/net` 承担，它只负责切屏与会话就绪后的刷新。链路见 [authoring](authoring.md) 与 [client-editor](client-editor.md)。
 - **主题注入**：`RuleEditorScreen` 选择主主题与画布外壳主题，`EditorShell` 沿页面、分区、表单和弹层装配链传递；嵌套表单继承父主题。具体主题各自持有完整不可变 `UiHostPalette`，默认工厂保持当前配色；树与列表的行高取注入实例。独立 `FormView` 构造可自行选择默认主题。
 - **表单装配**：`FormView` + `FormControl` + `FormControlRegistry`，把类型描述符的字段列表渲染成可滚动的一列控件；`FormField#addAction` 向同一行追加行尾动作按钮，基本信息分区的本服开关与「恢复默认」由此挂到「默认启用」行。
+- **结果页字段层级**：效果参数的主区/高级区由动作顶层 `EditorField` 的层级决定，嵌套字段随所属顶层字段展示；高级折叠状态归结果分区持有。问题定位在表单装配时按所选动作路径下的首个字段确定展开状态，同一次重建完成表单、布局和焦点树更新。
 - **条件树界面**：`ConditionTreeOverlay`（画布页外壳）、`UiConditionGraphEditor`（画布编辑）、`UiConditionTreeSummary`（只读摘要兼入口）、`ConditionTreeContract`（宿主注入契约与选中路径同步）。
 - **控件与弹窗契约**：`UiWidget` 统一渲染与输入转发；`UiModalStack` 负责弹窗层次、遮罩、焦点与输入独占。
 - **排版快照**：`RuleEditorScreen` 与承载控件的 widget、页面、按钮条实现 kit 的 `UiLayoutSource`，把已排版的控件矩形、文案与文本带宽导出为只读快照，供 GUI 探针断言布局不变量与真实文案；快照不参与绘制与命中，也不触发重排。

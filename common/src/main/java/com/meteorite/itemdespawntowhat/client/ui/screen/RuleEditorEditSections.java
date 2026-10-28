@@ -151,6 +151,11 @@ final class RuleEditorEditSections {
 
     /** 重建当前页的全部控件（草稿结构或选择变化后调用） */
     public void rebuild() {
+        rebuild(null);
+    }
+
+    // 定位结果字段时在装配内展开所属分区，布局和焦点树随同一次重建完成
+    private void rebuild(@Nullable String resultRevealPath) {
         reset();
         content = switch (page) {
             case INFO -> infoSection.content;
@@ -166,7 +171,7 @@ final class RuleEditorEditSections {
             case INFO -> infoSection.buildInfo(session);
             case INPUT -> inputSection.buildInput(session);
             case TRIGGER -> triggerSection.buildTrigger(session);
-            case RESULTS -> resultsSection.buildResults(session);
+            case RESULTS -> resultsSection.buildResults(session, resultRevealPath);
         }
         applyEnabled();
         if (lastArea != null) {
@@ -571,8 +576,7 @@ final class RuleEditorEditSections {
         if (ResultStructure.isResultPath(path)) {
             page = EditSection.RESULTS;
             resultsSection.resultStage = path.contains("[") ? 2 : 1;
-            resultsSection.showAdvancedEffects = path.contains("chance") || path.contains("delay_ticks")
-                    || path.contains("conditions");
+            resultsSection.showAdvancedEffects = false;
             int candidate = indexIn(path, RuleFields.OUTCOMES);
             if (candidate >= 0) {
                 resultsSection.candidateIndex = candidate;
@@ -581,7 +585,7 @@ final class RuleEditorEditSections {
             if (effect >= 0) {
                 resultsSection.effectIndex = effect;
             }
-            rebuild();
+            rebuild(path);
             if (resultsSection.effectForm != null) {
                 UiFocusTarget target = resultsSection.effectForm.revealPath(path);
                 return target != null ? target : resultsSection.advancedEffectForm == null ? null

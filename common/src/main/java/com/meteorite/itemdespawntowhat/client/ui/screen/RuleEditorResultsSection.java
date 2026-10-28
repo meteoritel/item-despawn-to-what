@@ -38,6 +38,7 @@ import com.meteorite.itemdespawntowhat.core.config.ServerConfig;
 import com.meteorite.itemdespawntowhat.core.model.CombinationMode;
 import com.meteorite.itemdespawntowhat.core.model.ConditionLimits;
 import com.meteorite.itemdespawntowhat.core.model.OutcomeCandidate;
+import com.meteorite.itemdespawntowhat.core.api.param.ParamTier;
 import com.meteorite.itemdespawntowhat.core.type.effect.PlaceBlockEffect;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -226,7 +227,7 @@ final class RuleEditorResultsSection {
 
     @Nullable UiRect effectNoteRect;
 
-    void buildResults(EditSession session) {
+    void buildResults(EditSession session, @Nullable String revealPath) {
         RuleValue rule = session.root();
         int candidates = Math.max(1, ResultStructure.candidateCount(rule));
         candidateIndex = Math.clamp(candidateIndex, 0, candidates - 1);
@@ -330,14 +331,18 @@ final class RuleEditorResultsSection {
                     content.widgets.add(productButton);
                     content.buttons.add(productButton);
                 }
-                // 消耗参数的主编辑入口在输入页，条件树在触发页：结果页只编辑动作自身的参数与共用补充参数
-                List<EditorField> editable = descriptor.fields().stream()
-                        .filter(field -> !field.isConditionTree())
-                        .toList();
+                // 按动作顶层字段的声明层级分区，嵌套字段随所属顶层字段展示
+                List<EditorField> editable = descriptor.fields();
                 List<EditorField> primary = new ArrayList<>(editable.stream()
-                        .filter(field -> !isCommonActionField(field))
+                        .filter(field -> field.tier() == ParamTier.PRIMARY)
                         .toList());
-                List<EditorField> advanced = editable.stream().filter(RuleEditorResultsSection::isCommonActionField).toList();
+                List<EditorField> advanced = editable.stream()
+                        .filter(field -> field.tier() == ParamTier.ADVANCED)
+                        .toList();
+                if (revealPath != null) {
+                    String fieldName = DraftPaths.directChildName(actionPath, revealPath);
+                    showAdvancedEffects = advanced.stream().anyMatch(field -> field.name().equals(fieldName));
+                }
                 effectForm = forms.create(session, actionPath, new TypeEditorDescriptor(descriptor.id(), descriptor.label(), primary, descriptor.readOnly()));
                 // 卡片放宽后用卡片行距与更窄的标签列：实体与年龄行的控件才拿得到足够宽度
                 effectForm.setLabelWidth(DETAIL_LABEL_WIDTH);
@@ -386,11 +391,6 @@ final class RuleEditorResultsSection {
         else if (widget instanceof UiListView<?> list) list.setVisible(visible);
         else if (widget instanceof FormView form) form.setVisible(visible);
         else if (widget instanceof UiCheckBox box) box.setVisible(visible);
-    }
-
-    // 动作的共用补充参数（概率、延迟）在结果页走高级区，其余参数才是该动作的主编辑面
-    private static boolean isCommonActionField(EditorField field) {
-        return List.of("chance", "delay_ticks").contains(field.name());
     }
 
     /**

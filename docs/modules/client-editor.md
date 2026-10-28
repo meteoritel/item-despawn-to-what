@@ -76,8 +76,8 @@ flowchart LR
 | `RuleValue` / `ResultStructure`（client/edit） | 只读值与结构语义 | 严格读取文本、布尔与文本列表；共用结果形状、路径判定、候选效果定位及条件宿主结构快照 | 会话、表单与摘要 |
 | `DraftPaths`（client/edit） | 路径工具 | 草稿 JSON 的字段与数组路径解析、读写、删除；必要时创建中间容器 | `RuleDraft` |
 | `TypeEditorRegistry` / `EditorRegistries`（client/edit） | 扩展点 | 类型 id 到编辑描述符的注册表；未注册类型返回只读回退描述 | 界面表单、内置类型表 |
-| `ParamProjection`（client/edit） | 参数投影 | 把 core 的类型参数声明投影成 `EditorField` 列表：顺序等于声明顺序，标签 key 由类型 id 与字段名派生，窗口、单位、精度与枚举分组取自声明，不显示的参数跳过 | `BuiltinEditorDescriptors`、`TypeEditorDescriptor` |
-| `EditorField`（client/edit） | 字段契约 | 描述字段名、标签 key、类型、值域与编辑器元数据；以无 default 的枚举 switch 集中分类为形状、数值类别与引用能力；公开谓词回答列表、数值与标签等问题，调用方只问字段 | `ParamProjection`、界面表单控件 |
+| `ParamProjection`（client/edit） | 参数投影 | 把 core 的类型参数声明投影成 `EditorField` 列表：顺序与层级取自声明，标签 key 由类型 id 与字段名派生，窗口、单位、精度与枚举分组同样取自声明，不显示的参数跳过 | `BuiltinEditorDescriptors`、`TypeEditorDescriptor` |
+| `EditorField`（client/edit） | 字段契约 | 描述字段名、标签 key、类型、值域、展示层级与编辑器元数据；以无 default 的枚举 switch 集中分类为形状、数值类别与引用能力；公开谓词回答列表、数值与标签等问题，调用方只问字段 | `ParamProjection`、界面表单控件 |
 | `BuiltinEditorDescriptors` / `BuiltinEditorDefaults`（client/edit） | 描述符与新建初值 | 遍历本地已发现类型表按 `params()` 投影注册描述符，并为少数内置类型补说明行与半径窗口；新建条目按 `initialValues()` 写初值，条件与效果各查自己的默认值表 | `ClientTypeRegistries`、`ParamProjection`、`EditorRegistries` |
 | `ClientTypeRegistries`（client/edit） | 客户端类型表 | 复用 `BuiltinTypeRegistries` 惰性装配内置与本地 SPI 类型，从 `core/type/BuiltinTypeRegistries` 取得冻结查询视图，条件表、效果表与条件 Codec 共用同一实例 | 注册表、条件编解码 |
 | `DraftJournal`（client/edit/draft） | 草稿业务入口 | 决定保留或删除，持有保存基线、捕获快照、节流写盘、显式失败重试与一次性失败上报 | `DraftState`、`RestoredDraft`、包内存储实现 |
@@ -210,8 +210,9 @@ flowchart TD
 
 - 内置类型与客户端已安装的 SPI 类型共用参数投影入口（发现方式见[类型系统](type-system.md#第三方类型-spi)）；非空 `params()` 自动生成描述符、新建初值与省略字段的展示默认值，必填字段的新建预填由 `initialValue` 提供。
 - 定制表单可在自动装配前注册到 `EditorRegistries.CONDITIONS` 或 `EditorRegistries.EFFECTS`；描述符用 `TypeEditorDescriptor.of(id, label, fields...)` 构造，手动描述符优先于自动投影。内置说明行与动态初值保留在客户端装配表。
+- 自动投影保留 `ParamSpec.tier()`；手工描述符中的高级字段使用 `.withTier(ParamTier.ADVANCED)` 标记。结果页仅按动作顶层字段分区，嵌套字段随所属顶层字段展示。
 - 界面层按 `EditorField` 的分类谓词判断字段归类（列表、数值、说明行、可带标签等），不对 `EditorFieldType` 做 switch；新增 `EditorFieldType` 取值时同步补谓词实现。
-- 本地未发现或参数声明为空的第三方类型由 `descriptorFor` 返回只读回退描述，展示原始 JSON 并原样保留未识别字段；内置无参类型保留说明行。
+- 本地未发现的类型与参数声明为空的第三方条件类型由 `descriptorFor` 返回只读回退描述，展示原始 JSON 并原样保留未识别字段；内置无参条件类型保留说明行。已发现的效果类型在装配时检查公共字段声明（见[类型系统](type-system.md#第三方类型-spi)）。
 - 手动重复注册同一 id 抛 `IllegalStateException`；类型表由 `ClientTypeRegistries` 复用核心装配点构建，类型发现以客户端安装的模组为准，与服务端数据包无关。
 - 新增编辑器时同步 `en_us` 与 `zh_cn` 语言文件里的类型标签，回退标签使用注册表构造时传入的 key。
 

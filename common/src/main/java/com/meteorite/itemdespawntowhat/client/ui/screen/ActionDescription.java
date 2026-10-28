@@ -39,8 +39,6 @@ final class ActionDescription {
             descriptor = BuiltinEditorDescriptors.entityDescriptor(action.text("variant", "item"));
         }
         for (EditorField field : descriptor.fields()) {
-            // 条件不在动作说明里重复：条件树由触发页统一编辑与展示
-            if (field.isConditionTree()) continue;
             RuleValue value = action.child(field.name());
             if (value == null) value = BuiltinEditorDefaults.effectiveValue(action, field.name());
             Component description = describe(field, value);
