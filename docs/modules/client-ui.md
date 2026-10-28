@@ -41,7 +41,7 @@ authority: common/client/ui/theme、common/client/ui/widget、common/client/ui/s
 - **表单装配**：`FormView` + `FormControl` + `FormControlRegistry`，把类型描述符的字段列表渲染成可滚动的一列控件；`FormField#addAction` 向同一行追加行尾动作按钮，基本信息分区的本服开关与「恢复默认」由此挂到「默认启用」行。
 - **结果页字段层级**：效果参数的主区/高级区由动作顶层 `EditorField` 的层级决定，嵌套字段随所属顶层字段展示；高级折叠状态归结果分区持有。问题定位在表单装配时按所选动作路径下的首个字段确定展开状态，同一次重建完成表单、布局和焦点树更新。
 - **条件树界面**：`ConditionTreeOverlay`（画布页外壳）、`UiConditionGraphEditor`（画布编辑）、`UiConditionTreeSummary`（只读摘要兼入口）、`ConditionTreeContract`（宿主注入契约与选中路径同步）。
-- **控件与弹窗契约**：`UiWidget` 统一渲染与输入转发；`UiModalStack` 负责弹窗层次、遮罩、焦点与输入独占。
+- **控件与弹窗契约**：`UiWidget` 继承 kit 的统一输入契约；`UiModalStack` 负责层次、遮罩和栈变化通知，每个模态拥有独立输入作用域。
 - **排版快照**：`RuleEditorScreen` 与承载控件的 widget、页面、按钮条实现 kit 的 `UiLayoutSource`，把已排版的控件矩形、文案与文本带宽导出为只读快照，供 GUI 探针断言布局不变量与真实文案；快照不参与绘制与命中，也不触发重排。
 
 ### 依赖方向
@@ -122,7 +122,7 @@ flowchart TD
 | `FormCommit` | 表单提交协议 | 装载与保留文本，按修订守卫提交合法输入；字段及关联更新共用会话回调，非法文本留在会话 | `FormView`、`EditSession` |
 | `FormControl` / `FormControlRegistry` | 字段控件扩展点 | 一个字段一行，负责 JSON 值与控件值的双向搬运与本地校验；无 default 的枚举 switch 将每种字段显式映射到控件工厂 | 描述符引擎、`EditSession` |
 | `UiHostTheme` / `UiHostThemes` / `AbstractHostTheme` | 主题注入入口 | 调色板、度量、文本色、控件样式、滑块皮肤、结构绘制与图标行号；两套主题逐项相同的宿主度量与外壳原语收在 `AbstractHostTheme`，默认入口给出像素外观，扁平外观由调用方显式取用 | 全部控件与屏幕 |
-| `UiWidget` / `UiModalStack` | 控件与弹窗契约 | 控件统一渲染与输入契约，坐标为 GUI 逻辑坐标；弹窗栈只把输入投给最上层，并管理焦点与历史快捷键 | 屏幕、`UiFocusManager` |
+| `UiWidget` / `UiModalStack` | 控件与弹窗契约 | 控件共享 `UiInputTarget`；模态栈维护层次与关闭通知，宿主选择顶层模态作用域，历史回调注入该作用域 | `EditorInputRouter`、`UiInputScope` |
 | `ConditionTreeContract` / `UiConditionGraphEditor` / `UiConditionTreeSummary` / `ConditionTreeOverlay` | 条件树界面家族 | 同一份条件数据与校验的两种展示；契约提供类型选项、叶子工厂、变更监听与选中路径同步 | 条件模型、`FormView`、`ConditionTreeChrome` |
 | `ConditionTreeProjection` / `ConditionTreeViewModel` / `ConditionTreeLabels` | 条件展示快照 | 字段协调器复用结构与诊断版本；共享标签，画布布局生成几何；相对 JSON 地址由 `ConditionTreeNodes` 解释 | 摘要、画布、条件表单 |
 | `UiTreeView` / `UiTreeNode` | 管理树 | 节点仅承载数据，视图拥有投影及选择折叠；管理页用分类/规则业务 key 恢复重建状态 | kit 树投影、状态与导航 |
@@ -156,7 +156,7 @@ flowchart LR
     A["指针或键盘"] --> S["EditorInputRouter：选择独占作用域"]
     S --> B["页内输入分发 / 表单输入分发"]
     B --> C["控件（UiWidget）"]
-    C --> D["kit 输入路由与捕获"]
+    C --> D["kit 输入作用域与持续交互"]
     D --> E["控件预览值"]
     E --> F{"操作结束"}
     F -->|提交| G["FormCommit 写入"]
@@ -176,7 +176,11 @@ flowchart LR
 
 保存、分区和目标切换、返回、刷新及关闭进入 `RuleEditorEditPage.finish(reason)`。完成编辑先保留当前修订输入，再取消未释放预览、提交合法值并通知模型，最后卸载或重建；非法文本保留在会话并参与阻塞校验。快照身份变化前只保留输入；重绑后旧修订控件重新装载并退出该次提交。放弃草稿先释放旧页面再清除记录，关闭与 removed 共用外壳的一次释放标记。保存与应用不关闭编辑页：回执到达后页面留在原处，用户退出、工作区释放或外部切屏才关屏。
 
-屏幕输入优先级为保存遮罩 → 顶层 modal → 页面覆盖层 → 活动页；modal 按键释放只交给本层内容。F1–F12 保持放行，Ctrl+F8 沿用调试入口条件。控件内捕获与焦点遵循 kit 契约，作用域变化结束原页面交互。
+`EditorInputRouter` 只按保存遮罩 → 顶层 modal → 类型选择器 → 活动页选取稳定的 `UiInputScope`，通用派发交给 kit `UiInputRouter`。输入与 hover 使用同一个活动作用域；F1–F12 保持放行，Ctrl+F8 沿用调试入口条件。关屏先取消未完成会话，再冲刷已提交草稿。
+
+各页面、模态、选择器与保存遮罩独立拥有焦点和持续交互；作用域返回恢复合格的旧焦点，旁白与自动滚动连接作用域焦点通知。表单子树隐藏、禁用或卸载时结束本子树交互，数值取消恢复模型与文本快照。
+
+`UiSegmentedControl` 的导航位置与业务选中独立：整组占一个 Tab 位置，方向键、Home、End 移动组内位置，Enter/Space 激活后才切换编辑分区或枚举值。状态、来源、目录范围、组合模式和产物档位等循环取值入口可点击且不参与焦点序列。鼠标与键盘共享唯一逻辑焦点，额外焦点轮廓仅键盘操作显示；文本光标与选区照常显示。
 
 ### 只读条目的编辑页
 
@@ -218,7 +222,7 @@ flowchart LR
 - **新增编辑分区或结果分区动作**：在 `RuleEditorEditSections.EditSection` 增加常量并实现对应分区；面板装配放 `RuleEditorPanelFactory`。页面共享的布局常量（页内留白、行高、表单与对话框的按钮高度）、`UI` 文案前缀与 2 个存在条件叶类型 id 收在 `RuleEditorPageSupport`，3 个页描述符 id 由 `BuiltinEditorDescriptors` 提供；`RuleEditorPageSupport` 不持有界面状态、不装配控件；同一层的业务助手按关注点分开：`PresenceLeaves` 管存在条件叶的构造、扫描与增删，`CatalystQuantities` 管催化剂数量表对账，`EditorQuantityBindings` 管共享数量与存在条件写回；规则结构与严格值读取由 `client/edit` 的 `ResultStructure`、`RuleValue` 提供。
 - **新增行尾动作**：`UiButton` 配 `FormField#addAction` 挂到某个字段行；动作按钮不进入表单字段，读写模型而非草稿 JSON，需要参与保存时在变更集组装处接线。
 - **新增主题**：实现 `UiHostTheme`（它本身就是 kit `UiStyleSource` 的宿主侧入口），在 `UiHostThemes` 暴露取用入口；控件经注入取色，新增皮肤只改主题实现。
-- **新增宿主控件**：实现 `UiWidget`，由屏幕统一转发输入；需要模态行为时放进 `UiModalStack`，需要焦点顺序时登记到 `UiFocusManager`。
+- **新增宿主控件**：实现 `UiWidget`，沿所属作用域的内容树派发输入；需要模态行为时放进 `UiModalStack`，焦点目标登记到该作用域的 `UiFocusManager`。
 - **新增调试能力**：测试规则的身份前缀、分类归属与规则体在 `DebugTestRules` 统一约定，调试页只负责批量填充与按前缀删除。
 
 ### 约束
