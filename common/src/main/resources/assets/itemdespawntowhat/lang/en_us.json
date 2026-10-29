@@ -457,6 +457,7 @@
   "gui.itemdespawntowhat.edit.field.place_block.limit": "Limit",
   "gui.itemdespawntowhat.edit.field.place_block.radius": "Radius",
   "gui.itemdespawntowhat.edit.field.place_block.shape": "Shape",
+  "gui.itemdespawntowhat.edit.field.place_block.shape.hint": "Click to switch to the next shape",
   "gui.itemdespawntowhat.edit.field.place_block.use_source_block": "Use the source block",
   "gui.itemdespawntowhat.edit.field.spawn_entity.age": "Age (ticks)",
   "gui.itemdespawntowhat.edit.field.spawn_entity.count": "Count",

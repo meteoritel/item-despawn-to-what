@@ -120,7 +120,7 @@ flowchart TD
 | `FormView` | 表单聚合根 | 按 `TypeEditorDescriptor` 渲染可滚动控件列；写入统一经 `EditSession`；支持定位高亮、内联选择与行尾动作 | `FormCommit`、`FormInputRouter`、`FormControl` |
 | `FormField` | 行身份与装配入口 | 绑定实际行，配置显隐、默认值、数值窗口、目录过滤、行尾动作与数量配对；路径随 rebase 更新，换描述符或卸载后失效 | `FormView`、字段声明 |
 | `FormCommit` | 表单提交协议 | 装载与保留文本，按修订守卫提交合法输入；字段及关联更新共用会话回调，非法文本留在会话 | `FormView`、`EditSession` |
-| `FormControl` / `FormControlRegistry` | 字段控件扩展点 | 一个字段一行，负责 JSON 值与控件值的双向搬运与本地校验；无 default 的枚举 switch 将每种字段显式映射到控件工厂 | 描述符引擎、`EditSession` |
+| `FormControl` / `FormControlRegistry` | 字段控件扩展点 | 一个字段一行，负责 JSON 值与控件值的双向搬运与本地校验；无 default 的枚举 switch 将每种字段显式映射到控件工厂。枚举控件按字段声明渲染成横排分段或单个轮询按钮，两种形态共用同一份候选与写入路径 | 描述符引擎、`EditSession` |
 | `UiHostTheme` / `UiHostThemes` / `AbstractHostTheme` | 主题注入入口 | 调色板、度量、文本色、控件样式、滑块皮肤、结构绘制与图标行号；两套主题逐项相同的宿主度量与外壳原语收在 `AbstractHostTheme`，默认入口给出像素外观，扁平外观由调用方显式取用 | 全部控件与屏幕 |
 | `UiWidget` / `UiModalStack` | 控件与弹窗契约 | 控件共享 `UiInputTarget`；模态栈维护层次与关闭通知，宿主选择顶层模态作用域，历史回调注入该作用域 | `EditorInputRouter`、`UiInputScope` |
 | `ConditionTreeContract` / `UiConditionGraphEditor` / `UiConditionTreeSummary` / `ConditionTreeOverlay` | 条件树界面家族 | 同一份条件数据与校验的两种展示；契约提供类型选项、叶子工厂、变更监听与选中路径同步 | 条件模型、`FormView`、`ConditionTreeChrome` |

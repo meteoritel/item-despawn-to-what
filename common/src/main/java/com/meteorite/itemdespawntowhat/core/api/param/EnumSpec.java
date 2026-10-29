@@ -45,6 +45,17 @@ public record EnumSpec<E extends Enum<E>>(ParamMeta meta, Codec<E> codec, List<E
     /** 设置编辑器展示层级。 */
     public EnumSpec<E> tier(ParamTier value) { return withMeta(meta.withTier(value)); }
 
+    /**
+     * 声明编辑器的枚举展示形态。
+     *
+     * <p>默认按分段选择投影；候选较多、每行放不下完整文案时声明 {@link ParamShape#ENUM_CYCLE}，
+     * 界面改为一个占满控件列的按钮轮换取值。</p>
+     *
+     * @param value 展示形态
+     * @return 带该形态的声明
+     */
+    public EnumSpec<E> shape(ParamShape value) { return withMeta(meta.withShape(value)); }
+
     public EnumSpec<E> hint(String suffix) {
         return withMeta(meta.withHint(suffix));
     }

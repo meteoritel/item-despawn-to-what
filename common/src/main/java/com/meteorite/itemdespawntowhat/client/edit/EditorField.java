@@ -182,6 +182,16 @@ public record EditorField(String name, String labelKey, EditorFieldType type, Fi
     }
 
     /**
+     * 枚举字段（单个按钮轮换取值）。
+     *
+     * <p>候选文案较长、一行放不下全部候选时使用：控件占满整列，只显示当前取值，
+     * 点击切换到下一个候选，配置数据与 {@link #enumIn} 完全一致。</p>
+     */
+    public static EditorField enumCycle(String name, String labelKey, String enumGroup, String... values) {
+        return create(name, labelKey, EditorFieldType.ENUM, new FieldDomain.Choices(List.of(values), true), false, true, null, enumGroup, null);
+    }
+
+    /**
      * 可带标签的 id 字段
      */
     public static EditorField tag(String name, String labelKey, String registry) {
@@ -512,7 +522,12 @@ public record EditorField(String name, String labelKey, EditorFieldType type, Fi
 
     /** 枚举 wire 值；非枚举字段没有候选。 */
     public List<String> enumValues() {
-        return isEnum() && domain instanceof FieldDomain.Choices(var values) ? values : List.of();
+        return isEnum() && domain instanceof FieldDomain.Choices choices ? choices.values() : List.of();
+    }
+
+    /** 枚举是否用单个按钮轮换取值；分段展示的枚举与非枚举字段返回 false。 */
+    public boolean enumCycling() {
+        return isEnum() && domain instanceof FieldDomain.Choices choices && choices.cycling();
     }
 
     /** JSON 数值合法下界，未声明时使用调用方缺省值。 */

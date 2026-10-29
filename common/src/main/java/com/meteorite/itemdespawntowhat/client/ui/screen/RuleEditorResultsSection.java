@@ -404,12 +404,13 @@ final class RuleEditorResultsSection {
 
     /**
      * place_block 的字段联动：勾选「使用源物品的方块」后清除固定方块并隐藏该行，
-     * 避免隐藏的固定方块仍按服务端优先级生效；radius 变化时把 limit 的滑条窗口改为该半径方框的容量，
+     * 避免隐藏的固定方块仍按服务端优先级生效；shape 或 radius 变化时把 limit 的滑条窗口改为该形状在该半径下的容量，
      * 并把 limit 跟随到新的容量上限——limit 一旦被手动改过就不再跟随，直到切换到别的动作或规则。
      */
     private void bindPlaceBlockVisibility(FormView form, EditSession session, String actionPath) {
         String blockPath = DraftPaths.child(actionPath, PlaceBlockEffect.BLOCK_FIELD);
         String useSourcePath = DraftPaths.child(actionPath, PlaceBlockEffect.USE_SOURCE_BLOCK_FIELD);
+        String shapePath = DraftPaths.child(actionPath, PlaceBlockEffect.SHAPE_FIELD);
         String radiusPath = DraftPaths.child(actionPath, PlaceBlockEffect.RADIUS_FIELD);
         String limitPath = DraftPaths.child(actionPath, PlaceBlockEffect.LIMIT_FIELD);
         // 手工 JSON 可能同时写两个字段；固定方块仍生效时保留该行，避免把生效值藏起来
@@ -431,9 +432,9 @@ final class RuleEditorResultsSection {
                 form.reload();
                 // 重载会按描述符初值重建控件，radius 的窗口需要再按当前草稿补一次
                 updatePlaceBlockWindows(form, session, actionPath);
-            } else if (radiusPath.equals(path)) {
+            } else if (shapePath.equals(path) || radiusPath.equals(path)) {
                 updatePlaceBlockWindows(form, session, actionPath);
-                // 半径变化后上限跟随到新方框的容量；上限被手动改过则不再覆盖
+                // 形状或半径变化后上限跟随到新容量；上限被手动改过则不再覆盖
                 if (limitLink.driverChanged()) form.reload();
                 placeBlockLimitManual = limitLink.manual();
             } else if (limitPath.equals(path)) {
@@ -444,8 +445,8 @@ final class RuleEditorResultsSection {
     }
 
     /**
-     * 构造 place_block 的 radius→limit 联动：驱动值是草稿里的 radius，跟随值是草稿里的 limit，
-     * 目标值是 radius 方框内的位置总数；radius 缺失或越界时不联动。
+     * 构造 place_block 的容量→limit 联动：驱动值是草稿当前形状与半径对应的容量，
+     * 跟随值是草稿里的 limit，目标值就是容量本身，因此改形状与改半径都会让 limit 跟上。
      *
      * @param session    当前编辑会话
      * @param actionPath 动作在草稿中的路径
@@ -457,7 +458,7 @@ final class RuleEditorResultsSection {
             @Override
             public double read() {
                 RuleValue action = session.valueAt(actionPath);
-                int fallback = PlaceBlockEffect.limitUpperBound(draftPlaceBlockRadius(session, actionPath));
+                int fallback = placeBlockCapacity(session, actionPath);
                 return action == null ? fallback : action.integer(PlaceBlockEffect.LIMIT_FIELD, fallback);
             }
 
@@ -466,11 +467,33 @@ final class RuleEditorResultsSection {
                 edits.setAt(limitPath, RuleValue.integer((int) Math.round(value)));
             }
         };
-        return new UiLinkedValues(UiLinkedValues.readOnly(() -> draftPlaceBlockRadius(session, actionPath)),
-                follower, radius -> PlaceBlockEffect.limitUpperBound((int) Math.round(radius)),
-                placeBlockLimitManual)
-                .followWhen(radius -> radius >= PlaceBlockEffect.MIN_RADIUS
-                        && radius <= serverMaxPlaceBlockRadius());
+        return new UiLinkedValues(UiLinkedValues.readOnly(() -> placeBlockCapacity(session, actionPath)),
+                follower, capacity -> capacity, placeBlockLimitManual);
+    }
+
+    /**
+     * 草稿里 place_block 当前形状与半径下的候选位置总数，也就是 limit 的容量上限。
+     *
+     * @param session    当前编辑会话
+     * @param actionPath 动作在草稿中的路径
+     * @return 当前形状在有效半径下的位置总数
+     */
+    private int placeBlockCapacity(EditSession session, String actionPath) {
+        return PlaceBlockEffect.limitUpperBound(draftPlaceBlockShape(session, actionPath),
+                draftPlaceBlockRadius(session, actionPath));
+    }
+
+    /**
+     * 草稿里 place_block 的 shape：缺失或未知取值时按默认形状，保证容量计算始终有确定口径。
+     *
+     * @param session    当前编辑会话
+     * @param actionPath 动作在草稿中的路径
+     * @return 有效形状
+     */
+    private PlaceBlockEffect.Shape draftPlaceBlockShape(EditSession session, String actionPath) {
+        RuleValue action = session.valueAt(actionPath);
+        String value = action == null ? null : action.text(PlaceBlockEffect.SHAPE_FIELD, null);
+        return PlaceBlockEffect.Shape.fromWire(value);
     }
 
     /**
@@ -491,7 +514,7 @@ final class RuleEditorResultsSection {
     }
 
     /**
-     * 按草稿当前 radius 设置 limit 行的滑条窗口上限（方框内位置总数）；radius 缺失或非法时按默认半径计算。
+     * 按草稿当前形状与 radius 设置 limit 行的滑条窗口上限（该形状覆盖的位置总数）；缺失或非法时按默认形状与半径计算。
      * 窗口只影响滑块手感，草稿里已有的 limit 值不随之夹取。
      *
      * @param form       place_block 参数表单
@@ -500,7 +523,7 @@ final class RuleEditorResultsSection {
      */
     private void updatePlaceBlockWindows(FormView form, EditSession session, String actionPath) {
         form.field(PlaceBlockEffect.RADIUS_FIELD).sliderWindow(PlaceBlockEffect.MIN_RADIUS, serverMaxPlaceBlockRadius());
-        form.field(PlaceBlockEffect.LIMIT_FIELD).sliderWindow(PlaceBlockEffect.MIN_LIMIT, PlaceBlockEffect.limitUpperBound(draftPlaceBlockRadius(session, actionPath)));
+        form.field(PlaceBlockEffect.LIMIT_FIELD).sliderWindow(PlaceBlockEffect.MIN_LIMIT, placeBlockCapacity(session, actionPath));
     }
 
     /**
@@ -722,7 +745,7 @@ final class RuleEditorResultsSection {
             if (PlaceBlockEffect.ID.equals(type) && placeRadius < PlaceBlockEffect.DEFAULT_RADIUS) {
                 edits.setAt(DraftPaths.child(effectPath, PlaceBlockEffect.RADIUS_FIELD), RuleValue.integer(placeRadius));
                 edits.setAt(DraftPaths.child(effectPath, PlaceBlockEffect.LIMIT_FIELD),
-                        RuleValue.integer(PlaceBlockEffect.limitUpperBound(placeRadius)));
+                        RuleValue.integer(PlaceBlockEffect.limitUpperBound(PlaceBlockEffect.DEFAULT_SHAPE, placeRadius)));
             }
         })) {
             return;

@@ -220,7 +220,7 @@ flowchart TD
 
 ### 字段值域与固定表单
 
-- `EditorField.domain()` 使用 `FieldDomain.Numeric`、`Choices`、`None`；数字的后端合法域、交互窗口、步长和精度只保存在一份 `NumericDomain` 中，枚举按有序不可变列表保存。
+- `EditorField.domain()` 使用 `FieldDomain.Numeric`、`Choices`、`None`；数字的后端合法域、交互窗口、步长和精度只保存在一份 `NumericDomain` 中，枚举按有序不可变列表保存，并带一个展示形态标记：`Choices.cycling` 为真时界面只显示当前取值，用单个按钮轮换。
 - 值域采用后端单位。amplifier 为 0..255，显示等级为 1..256；百分比、tick/秒的换算由数值适配负责，精确输入仍接受窗口外的合法值。
 - `BuiltinEditorDescriptors` 提供基本信息、延迟、条件树、来源与成本、存在条件精简描述；UI 保留动态寿命窗口、行高、tooltip、本服启停与恢复默认动作。
 - 草稿通用读写统一使用 `valueAt` / `setAt` / `removeAt`；`toJson` 输出独立规则体，删除意图仍由变更集单独表达。条件树与候选结构操作保留业务入口。

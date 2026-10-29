@@ -14,6 +14,7 @@ import com.meteorite.itemdespawntowhat.core.api.param.BoolSpec;
 import com.meteorite.itemdespawntowhat.core.api.param.EnumSpec;
 import com.meteorite.itemdespawntowhat.core.api.param.IntSpec;
 import com.meteorite.itemdespawntowhat.core.api.param.ParamList;
+import com.meteorite.itemdespawntowhat.core.api.param.ParamShape;
 import com.meteorite.itemdespawntowhat.core.api.param.RefSpec;
 import com.meteorite.itemdespawntowhat.core.model.CommonFields;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
@@ -27,6 +28,7 @@ import com.meteorite.itemdespawntowhat.core.type.effect.exec.PlaceBlockExecutor;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import java.util.Locale;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
@@ -40,8 +42,8 @@ import org.jetbrains.annotations.Nullable;
  * block（TaggedId，可空）与 use_source_block 至少需要其一：前者放置指定方块，后者放置源物品对应的方块。
  * radius 是本次放置的最大向外扩散边界：方形、圆形与十字的候选固定在触发位置所在的那一层，
  * 立方体与球体的候选在以触发位置为中心的三维范围内展开。limit（可空，省略表示不限）
- * 是以触发位置为中心、边长为 2 * radius + 1 的立体方框内同类方块的数量上限，只收窄实际放置量，不扩大边界；
- * 球体候选被这个方框完全包含，因此方框也是它的外接上界。
+ * 是该形状覆盖范围内同类方块的数量上限：它按同一个形状判定统计，只收窄实际放置量，不扩大边界，
+ * 因此该形状在当前半径下最多能填多少个位置，就是 limit 的上限。
  * 本类只承载参数模型与参数校验。
  */
 public record PlaceBlockEffect(
@@ -78,23 +80,22 @@ public record PlaceBlockEffect(
     public static final int MIN_LIMIT = 1;
 
     /**
-     * 半径对应方框内的位置总数，用作该半径下 limit 滑块的窗口上限。
+     * 形状与半径对应的候选位置总数，用作该形状下 limit 的取值上限。
      *
-     * <p>方框内最多只能容纳这么多个方块，limit 超过该容量时仍可保存，但实际限不到数量、等价于不限；
-     * 滑块窗口仍按这个容量收窄，窗口外的合法值可以精确输入并保存。radius 自身不设静态上界，
-     * 由服务端配置 max_place_block_radius 在加载与保存校验时限定。立方体的候选数正好等于这个容量，
-     * 球体的候选数少于它，因此对两种三维形状它都仍是保守上界。</p>
+     * <p>统计口径是形状覆盖的整个区域，与执行器的候选判定共用 {@link Shape#accepts}，
+     * 因此编辑器的滑块窗口、运行期可填充的位置数与上限三者一致。limit 超过该容量时仍可保存，
+     * 但区域里本来就装不下那么多同类方块，等价于不限。radius 自身不设静态上界，
+     * 由服务端配置 max_place_block_radius 在加载与保存校验时限定。</p>
      *
+     * @param shape  放置形状；null 按默认形状
      * @param radius 放置半径
-     * @return (2 * radius + 1)³，超出 int 表示范围时取 int 上界
+     * @return 该形状在半径内的位置总数，超出 int 表示范围时取 int 上界
      */
-    public static int limitUpperBound(int radius) {
-        long span = Math.max(radius, MIN_RADIUS) * 2L + 1L;
-        long total = span * span * span;
-        return (int) Math.min(total, Integer.MAX_VALUE);
+    public static int limitUpperBound(@Nullable Shape shape, int radius) {
+        return (shape == null ? DEFAULT_SHAPE : shape).capacity(radius);
     }
 
-    // 放置形状；新增取值会自动进入 codec 与编辑器下拉，执行器的候选判定与排序需要同步补齐
+    // 放置形状；新增取值会自动进入 codec 与编辑器轮询按钮，容量统计与候选判定由同一个 accepts 决定
     public enum Shape {
         SQUARE(false),
         CIRCLE(false),
@@ -104,6 +105,12 @@ public record PlaceBlockEffect(
 
         /** JSON 取值：小写下划线，解析大小写不敏感 */
         public static final Codec<Shape> CODEC = EnumCodecs.lowerCase(Shape.class);
+
+        // 单层形状的位置数不超过边长平方，边长超过它时结果必然超出 int 表示范围
+        private static final long MAX_INT_SQUARE_SIDE = 46340L;
+        // 内接立方体的边长超过它时，体积必然超出 int 表示范围
+        private static final long MAX_INT_CUBE_SIDE = 1291L;
+        private static final double SQRT_3 = Math.sqrt(3.0D);
 
         private final boolean threeDimensional;
 
@@ -122,16 +129,163 @@ public record PlaceBlockEffect(
         public boolean threeDimensional() {
             return threeDimensional;
         }
+
+        /**
+         * 偏移是否落在本形状内：单层形状忽略垂直偏移，圆形与球体按欧氏距离收边。
+         *
+         * <p>执行器的候选生成与 {@link #capacity} 的数量统计共用本判定，界面上的上限才不会与实际可填充位置脱节；
+         * 圆形与球体都用整数平方距离比较，边界点不会因开方的浮点误差被多算或少算。</p>
+         *
+         * @param dx     相对触发位置的水平 x 偏移
+         * @param dy     相对触发位置的垂直偏移；单层形状传 0
+         * @param dz     相对触发位置的水平 z 偏移
+         * @param radius 放置半径
+         * @return 该偏移是否属于本形状
+         */
+        public boolean accepts(int dx, int dy, int dz, int radius) {
+            return switch (this) {
+                case SQUARE, CUBE -> true;
+                case CROSS -> dx == 0 || dz == 0;
+                case CIRCLE -> squaredDistance(dx, 0, dz) < squared(radius + 1L);
+                case SPHERE -> squaredDistance(dx, dy, dz) < squared(radius + 1L);
+            };
+        }
+
+        /**
+         * 该形状在指定半径内的位置总数，也就是 limit 的取值上限。
+         *
+         * <p>方形取边长的平方、十字取两条轴、立方体取边长的立方，圆形与球体按 {@link #accepts} 收边后逐层统计；
+         * 半径大到结果必然超出 int 时直接返回上界，不做逐点枚举。</p>
+         *
+         * @param radius 放置半径
+         * @return 位置总数，超出 int 表示范围时取 int 上界
+         */
+        public int capacity(int radius) {
+            int r = Math.max(radius, MIN_RADIUS);
+            long side = r * 2L + 1L;
+            return switch (this) {
+                case CROSS -> (int) Math.min(4L * r + 1L, Integer.MAX_VALUE);
+                case SQUARE -> side > MAX_INT_SQUARE_SIDE ? Integer.MAX_VALUE : (int) (side * side);
+                case CUBE -> cubeCapacity(side);
+                case CIRCLE -> circleCapacity(r, side);
+                case SPHERE -> sphereCapacity(r, side);
+            };
+        }
+
+        /** JSON 取值：枚举名的小写形式。 */
+        public String wireName() {
+            return name().toLowerCase(Locale.ROOT);
+        }
+
+        /**
+         * 解析 JSON 取值；空值与未知取值回落到默认形状。
+         *
+         * @param value wire 取值，大小写不敏感
+         * @return 对应形状
+         */
+        public static Shape fromWire(@Nullable String value) {
+            if (value == null) {
+                return DEFAULT_SHAPE;
+            }
+            for (Shape shape : values()) {
+                if (shape.wireName().equalsIgnoreCase(value)) {
+                    return shape;
+                }
+            }
+            return DEFAULT_SHAPE;
+        }
+
+        // 立方体容量：边长立方，先按边长排除越过 int 上界的乘法
+        private static int cubeCapacity(long side) {
+            if (side > MAX_INT_SQUARE_SIDE) {
+                return Integer.MAX_VALUE;
+            }
+            long square = side * side;
+            return square > Integer.MAX_VALUE / side ? Integer.MAX_VALUE : (int) (square * side);
+        }
+
+        // 圆形容量：按行累加满足 dx² + dz² < (radius + 1)² 的位置数
+        private static int circleCapacity(int radius, long side) {
+            if (side > MAX_INT_SQUARE_SIDE) {
+                return Integer.MAX_VALUE;
+            }
+            long limitSquared = squared(radius + 1L);
+            long total = 0L;
+            for (int dx = -radius; dx <= radius; dx++) {
+                total += spanWidth(limitSquared - (long) dx * dx);
+                if (total > Integer.MAX_VALUE) {
+                    return Integer.MAX_VALUE;
+                }
+            }
+            return (int) total;
+        }
+
+        // 球体容量：逐层累加满足 dx² + dy² + dz² < (radius + 1)² 的位置数
+        private static int sphereCapacity(int radius, long side) {
+            if (side > MAX_INT_SQUARE_SIDE) {
+                return Integer.MAX_VALUE;
+            }
+            long limit = radius + 1L;
+            // 内接立方体已超过 int 上界：不必逐点枚举即可断定容量取上界
+            if ((long) (limit / SQRT_3) * 2L + 1L > MAX_INT_CUBE_SIDE) {
+                return Integer.MAX_VALUE;
+            }
+            long limitSquared = limit * limit;
+            long total = 0L;
+            for (int dy = -radius; dy <= radius; dy++) {
+                long plane = limitSquared - (long) dy * dy;
+                if (plane <= 0L) {
+                    continue;
+                }
+                long layer = 0L;
+                for (int dx = -radius; dx <= radius; dx++) {
+                    layer += spanWidth(plane - (long) dx * dx);
+                }
+                total += layer;
+                if (total > Integer.MAX_VALUE) {
+                    return Integer.MAX_VALUE;
+                }
+            }
+            return (int) total;
+        }
+
+        // 剩余平方距离内可容纳的整数坐标个数：|t|² < remaining 的解数
+        private static long spanWidth(long remaining) {
+            return remaining <= 0L ? 0L : integerSqrt(remaining - 1L) * 2L + 1L;
+        }
+
+        // 向下取整的整数平方根：浮点开方只作起点，再按整数比较夹逼，避免边界误差
+        private static long integerSqrt(long value) {
+            long root = (long) Math.sqrt((double) value);
+            while (root > 0L && root * root > value) {
+                root--;
+            }
+            while ((root + 1L) * (root + 1L) <= value) {
+                root++;
+            }
+            return root;
+        }
+
+        // 圆形与球体共用的整数平方距离
+        private static long squaredDistance(int dx, int dy, int dz) {
+            return (long) dx * dx + (long) dy * dy + (long) dz * dz;
+        }
+
+        private static long squared(long value) {
+            return value * value;
+        }
     }
 
-    /** 参数声明：类型专属字段在前，通用字段复用 CommonFields 的声明；limit 的滑块窗口按默认半径的方框容量取上限 */
+    /** 参数声明：类型专属字段在前，通用字段复用 CommonFields 的声明；limit 的滑块窗口按默认形状与半径的容量取上限 */
     public static final RefSpec BLOCK = RefSpec.nullable(BLOCK_FIELD, "minecraft:block");
     public static final BoolSpec USE_SOURCE_BLOCK = BoolSpec.defaulted(USE_SOURCE_BLOCK_FIELD, DEFAULT_USE_SOURCE_BLOCK)
             .initial(DEFAULT_USE_SOURCE_BLOCK);
     public static final EnumSpec<Shape> SHAPE = EnumSpec
             .defaulted(SHAPE_FIELD, Shape.CODEC, DEFAULT_SHAPE, "place_block_shape", Shape.values())
             .editorRequired(false)
-            .initial(DEFAULT_SHAPE);
+            .initial(DEFAULT_SHAPE)
+            .shape(ParamShape.ENUM_CYCLE)
+            .hint("place_block.shape.hint");
     public static final IntSpec COUNT = IntSpec.defaulted(COUNT_FIELD, DEFAULT_COUNT, MIN_COUNT, MAX_COUNT)
             .initial(DEFAULT_COUNT);
     public static final IntSpec RADIUS = IntSpec
@@ -140,7 +294,7 @@ public record PlaceBlockEffect(
             .window(MIN_RADIUS, Integer.MAX_VALUE);
     public static final IntSpec LIMIT = IntSpec.nullable(LIMIT_FIELD, MIN_LIMIT, Integer.MAX_VALUE)
             .bounded()
-            .window(MIN_LIMIT, limitUpperBound(DEFAULT_RADIUS));
+            .window(MIN_LIMIT, limitUpperBound(DEFAULT_SHAPE, DEFAULT_RADIUS));
     public static final ParamList<PlaceBlockEffect> PARAMS = ParamList.of(BLOCK.bind(PlaceBlockEffect::block), USE_SOURCE_BLOCK.bind(PlaceBlockEffect::useSourceBlock), SHAPE.bind(PlaceBlockEffect::shape), COUNT.bind(PlaceBlockEffect::count), RADIUS.bind(PlaceBlockEffect::radius), LIMIT.bind(PlaceBlockEffect::limit)).plus(CommonFields.EFFECT_PARAMS);
 
     /** 类型专属参数编解码器；通用字段复用 CommonFields 片段，可空字段经 Optional 进入 codec */

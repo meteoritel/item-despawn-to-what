@@ -9,5 +9,8 @@ public enum ParamShape {
     DEFAULT,
 
     /** 气候区间：对象只含可空的 min/max 两端，界面按区间控件展示。 */
-    CLIMATE_RANGE
+    CLIMATE_RANGE,
+
+    /** 枚举轮询：候选共用一个按钮轮换，界面只显示当前取值，点击切换到下一个。 */
+    ENUM_CYCLE
 }

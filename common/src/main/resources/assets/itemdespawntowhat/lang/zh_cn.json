@@ -457,6 +457,7 @@
   "gui.itemdespawntowhat.edit.field.place_block.limit": "上限",
   "gui.itemdespawntowhat.edit.field.place_block.radius": "半径",
   "gui.itemdespawntowhat.edit.field.place_block.shape": "形状",
+  "gui.itemdespawntowhat.edit.field.place_block.shape.hint": "点击切换到下一个形状",
   "gui.itemdespawntowhat.edit.field.place_block.use_source_block": "使用源物品的方块",
   "gui.itemdespawntowhat.edit.field.spawn_entity.age": "年龄（刻）",
   "gui.itemdespawntowhat.edit.field.spawn_entity.count": "数量",

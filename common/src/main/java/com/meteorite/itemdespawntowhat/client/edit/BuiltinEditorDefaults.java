@@ -58,9 +58,9 @@ public final class BuiltinEditorDefaults {
             }
         }
         if (PlaceBlockEffect.ID.equals(type)) {
-            // 上限初值取当前半径方框的容量：滑条停在最大值，半径变化时由界面联动改写
-            body.addProperty(PlaceBlockEffect.LIMIT_FIELD,
-                    PlaceBlockEffect.limitUpperBound(PlaceBlockEffect.DEFAULT_RADIUS));
+            // 上限初值取默认形状在默认半径下的容量：滑条停在最大值，形状或半径变化时由界面联动改写
+            body.addProperty(PlaceBlockEffect.LIMIT_FIELD, PlaceBlockEffect.limitUpperBound(
+                    PlaceBlockEffect.DEFAULT_SHAPE, PlaceBlockEffect.DEFAULT_RADIUS));
         }
         return RuleValue.wrap(body);
     }

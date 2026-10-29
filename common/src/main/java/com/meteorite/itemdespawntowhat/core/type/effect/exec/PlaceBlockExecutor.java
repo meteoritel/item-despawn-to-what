@@ -12,7 +12,6 @@ import com.meteorite.itemdespawntowhat.core.type.effect.PlaceBlockEffect;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import net.minecraft.core.BlockPos;
@@ -27,7 +26,6 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.AttachFace;
 import net.minecraft.world.level.block.state.properties.Property;
-import net.minecraft.world.level.chunk.LevelChunkSection;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -35,8 +33,8 @@ import org.jetbrains.annotations.Nullable;
  *
  * <p>只替换可替换方块，并按原版支撑规则摆正朝向；站不住的位置跳过，不为凑数突破 limit 或 radius。
  * 立方体与球体在触发位置上下展开，候选落到世界高度之外时直接跳过。
- * 同候选同槽位的各组共享候选游标与邻域账，limit 是该方框内所有组的共同上限。
- * 需要计数时先扫完方框再放置；区块未加载时保留游标等待，不丢弃候选。
+ * 同候选同槽位的各组共享候选游标与邻域账，limit 是该形状候选范围内所有组的共同上限。
+ * 需要计数时先扫完候选再放置；区块未加载时保留游标等待，不丢弃候选。
  * 每成功放置一个方块经 {@link EffectContext#reportProgress(int)} 回执 1，终态回执只收束任务。
  */
 public final class PlaceBlockExecutor {
@@ -108,17 +106,15 @@ public final class PlaceBlockExecutor {
         }
 
         // 邻域账按实际目标方块区分；同类方块跨组只有一份余额。
-        @Nullable NeighbourCount sharedCount(BlockPos center, int radius, long target) {
-            long span = radius * 2L + 1L;
-            long cubePositions = span * span * span;
-            // 所有放置位置都在统计方框内；limit 覆盖整个方框容量时无需计数。
-            if (target <= 0 || limit == null || limit >= cubePositions) {
+        @Nullable NeighbourCount sharedCount(BlockPos center, long target) {
+            // 候选位置就是 limit 的统计范围：上限覆盖全部候选时，区域里装不下更多同类方块，无需计数。
+            if (target <= 0 || limit == null || limit >= candidates.size()) {
                 return null;
             }
             if (counts == null) {
                 counts = new HashMap<>();
             }
-            return counts.computeIfAbsent(block, ignored -> new NeighbourCount(limit, center, radius));
+            return counts.computeIfAbsent(block, ignored -> new NeighbourCount(limit, center, candidates));
         }
     }
 
@@ -267,7 +263,7 @@ public final class PlaceBlockExecutor {
                     for (int z = -key.radius; z <= key.radius; z++) {
                         // 起点填充关闭时跳过触发位置本身，其余候选与顺序保持不变
                         if (!key.fillOrigin && x == 0 && y == 0 && z == 0) { continue; }
-                        if (!accepts(key.shape, x, y, z, key.radius)) { continue; }
+                        if (!key.shape.accepts(x, y, z, key.radius)) { continue; }
                         result.add(new BlockPos(x, y, z));
                     }
                 }
@@ -277,16 +273,6 @@ public final class PlaceBlockExecutor {
                     .thenComparingInt(BlockPos::getX).thenComparingInt(BlockPos::getY).thenComparingInt(BlockPos::getZ));
             return List.copyOf(result);
         });
-    }
-
-    // 形状的候选判定：单层形状忽略垂直偏移，球体沿欧氏距离收边（与圆形的水平口径一致）
-    private static boolean accepts(PlaceBlockEffect.Shape shape, int dx, int dy, int dz, int radius) {
-        return switch (shape) {
-            case SQUARE, CUBE -> true;
-            case CROSS -> dx == 0 || dz == 0;
-            case CIRCLE -> Math.hypot(dx, dz) < radius + 1;
-            case SPHERE -> squaredDistance(dx, dy, dz) < squared(radius + 1);
-        };
     }
 
     // 由内向外的排序键：切比雪夫距离用于方形、十字与立方体，欧氏距离用于圆形与球体。
@@ -303,10 +289,6 @@ public final class PlaceBlockExecutor {
     // 球体用整数平方距离比较，避免开方的浮点误差
     private static long squaredDistance(int dx, int dy, int dz) {
         return (long) dx * dx + (long) dy * dy + (long) dz * dz;
-    }
-
-    private static long squared(int value) {
-        return (long) value * value;
     }
 
     // 放置游标：每步最多处理 MAX_VISITS_PER_STEP 个位置，时间或工作量任一耗尽即让出。
@@ -333,7 +315,7 @@ public final class PlaceBlockExecutor {
             // 结果预算独立于环境容量，半径耗尽只终止扫描，不抹掉未消耗的结果预算。
             this.batch = batch;
             this.target = batch == null ? (long) effect.count() * context.rounds() : batch.resultBudget;
-            this.count = plan.sharedCount(center, effect.radius(), target);
+            this.count = plan.sharedCount(center, target);
         }
 
         // 结果预算与共享环境余额分别检查；共享余额已经扣除了本批成功量。
@@ -496,81 +478,55 @@ public final class PlaceBlockExecutor {
         }
     }
 
-    // 同槽位各组共用的环境余额：按区段调色板跳过不含目标方块的区段，只遍历其与统计方框的交集。
+    // 同槽位各组共用的环境余额：沿该形状的候选位置逐个读取，命中同类方块即计入已用量。
     private static final class NeighbourCount {
         private final int limit;
         private final BlockPos center;
-        private final int radius;
-        private @Nullable Iterator<BlockPos> sections;
-        private @Nullable Iterator<BlockPos> positions;
+        private final List<BlockPos> candidates;
         private @Nullable BlockPos pending;
+        private int cursor;
         private int existing;
         private int placed;
         private boolean done;
 
-        private NeighbourCount(int limit, BlockPos center, int radius) {
+        private NeighbourCount(int limit, BlockPos center, List<BlockPos> candidates) {
             this.limit = limit;
             this.center = center;
-            this.radius = radius;
+            this.candidates = candidates;
         }
 
         private boolean counting() { return !done; }
         private int allowance() { return done ? Math.max(0, limit - existing - placed) : 0; }
         private void recordPlaced() { placed++; }
 
-        // 区段探测和方块读取各计一次工作量；当前区段保留为跨刻的区块等待锚点。
+        // 方块读取计一次工作量；待读位置保留为跨刻的区块等待锚点，区块未加载时不推进游标。
         private @Nullable ChunkRequirement advance(ServerLevel level, Block block, StepBudget budget) {
             while (!done) {
+                if (cursor >= candidates.size()) {
+                    done = true;
+                    break;
+                }
                 if (budget.exhausted()) {
                     break;
                 }
                 if (pending == null) {
-                    if (sections == null) {
-                        int minY = Math.max(center.getY() - radius, level.getMinBuildHeight());
-                        int maxY = Math.min(center.getY() + radius, level.getMaxBuildHeight() - 1);
-                        if (minY > maxY) {
-                            done = true;
-                            break;
-                        }
-                        sections = BlockPos.betweenClosed(
-                                new BlockPos((center.getX() - radius) >> 4, minY >> 4, (center.getZ() - radius) >> 4),
-                                new BlockPos((center.getX() + radius) >> 4, maxY >> 4, (center.getZ() + radius) >> 4)).iterator();
+                    BlockPos pos = center.offset(candidates.get(cursor));
+                    // 越界位置既不能读也不能写，与放置阶段同样直接跳过
+                    if (level.isOutsideBuildHeight(pos.getY())) {
+                        cursor++;
+                        continue;
                     }
-                    if (!sections.hasNext()) {
-                        done = true;
-                        break;
-                    }
-                    BlockPos section = sections.next();
-                    pending = new BlockPos(section.getX() << 4, section.getY() << 4, section.getZ() << 4);
+                    pending = pos;
                 }
                 if (!ChunkPresence.contains(level, pending)) {
                     return ChunkRequirement.at(pending);
                 }
-                if (positions == null) {
-                    LevelChunkSection section = level.getChunk(pending.getX() >> 4, pending.getZ() >> 4)
-                            .getSection(level.getSectionIndex(pending.getY()));
-                    budget.spend();
-                    if (!section.maybeHas(state -> state.is(block))) {
-                        pending = null;
-                        continue;
-                    }
-                    BlockPos min = new BlockPos(Math.max(center.getX() - radius, pending.getX()),
-                            Math.max(Math.max(center.getY() - radius, pending.getY()), level.getMinBuildHeight()),
-                            Math.max(center.getZ() - radius, pending.getZ()));
-                    BlockPos max = new BlockPos(Math.min(center.getX() + radius, pending.getX() + 15),
-                            Math.min(Math.min(center.getY() + radius, pending.getY() + 15), level.getMaxBuildHeight() - 1),
-                            Math.min(center.getZ() + radius, pending.getZ() + 15));
-                    positions = BlockPos.betweenClosed(min, max).iterator();
-                    continue;
-                }
                 budget.spend();
-                if (level.getBlockState(positions.next()).is(block) && ++existing >= limit) {
+                if (level.getBlockState(pending).is(block) && ++existing >= limit) {
                     done = true;
                 }
-                if (!positions.hasNext()) {
-                    positions = null;
-                    pending = null;
-                }
+                cursor++;
+                pending = null;
             }
             return null;
         }

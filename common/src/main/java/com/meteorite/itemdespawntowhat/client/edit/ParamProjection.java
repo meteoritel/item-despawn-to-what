@@ -131,10 +131,12 @@ public final class ParamProjection {
         return requiredByEditor(EditorField.decimal(name, label, min, max), required);
     }
 
-    // 枚举：wire 取值（小写名）作为选项，组名决定每项文案
+    // 枚举：wire 取值（小写名）作为选项，组名决定每项文案；声明为轮询形态时改用单个按钮轮换取值
     private static EditorField enumField(EnumSpec<?> spec, String label) {
-        EditorField field = EditorField.enumIn(spec.name(), label, spec.enumGroup(),
-                spec.wireValues().toArray(String[]::new));
+        String[] values = spec.wireValues().toArray(String[]::new);
+        EditorField field = spec.shape() == ParamShape.ENUM_CYCLE
+                ? EditorField.enumCycle(spec.name(), label, spec.enumGroup(), values)
+                : EditorField.enumIn(spec.name(), label, spec.enumGroup(), values);
         return requiredByEditor(field, spec.editorRequired());
     }
 
