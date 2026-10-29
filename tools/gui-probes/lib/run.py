@@ -24,7 +24,7 @@ LANG_DIR = os.path.join(REPO_ROOT, "common", "src", "main", "resources", "assets
                         "itemdespawntowhat", "lang")
 PRELUDE_PATH = os.path.join(LIB_DIR, "prelude.js")
 # prelude 里 __gp.__version 必须与这里一致：版本不同说明会话里装的是旧原语，需要重装。
-PRELUDE_VERSION = 7
+PRELUDE_VERSION = 8
 
 
 sys.path.insert(0, LIB_DIR)

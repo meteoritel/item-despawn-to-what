@@ -3,7 +3,7 @@
 // 版本号与 run.py 的 PRELUDE_VERSION 一一对应：驱动发现会话里装的是旧版本会重装，
 // 复用同一个客户端会话换 RunDir 时才能同时换掉证据目录与新增原语。
 var __gp = (function () {
-  var VERSION = 7;
+  var VERSION = 8;
   var MC = Java.loadClass('net.minecraft.client.Minecraft').getInstance();
   var SS = Java.loadClass('net.minecraft.client.Screenshot');
   var File = Java.loadClass('java.io.File');
@@ -257,7 +257,7 @@ var __gp = (function () {
     var screen = screenName();
     if (screen === 'RuleEditorScreen') return { done: true, screen: screen };
     if (!inWorld()) return { done: false, action: 'not-in-world', screen: screen };
-    var state = String(Workspace.instance().state());
+    var state = String(Workspace.instance().session().state());
     if (state === 'FREE') {
       openEditor();
       return { done: false, action: 'command-sent', screen: screen };
@@ -397,27 +397,24 @@ var __gp = (function () {
       screen: s === null ? 'null' : String(s).split('@')[0].split('.').pop(),
       player: MC.player === null ? 'null' : String(MC.player.getName().getString()),
       connected: MC.getConnection() !== null,
-      workspace: String(Workspace.instance().state())
+      workspace: String(Workspace.instance().session().state())
     };
     var server = MC.getSingleplayerServer();
     out.singleplayerServer = server === null ? 'null' : String(server.isRunning());
     return out;
   }
 
-  // 客户端工作区是运行时单例；这里只读它的公开状态，任何一项取不到都不影响其它项。
+  // 从工作区发布的会话与保存快照读取状态，接口失败由探针正常报告。
   function workspace() {
     var ws = Workspace.instance();
-    var out = {};
-    try { out.state = String(ws.state()); } catch (e) { out.state = 'UNKNOWN'; }
-    try { out.sessionId = String(ws.sessionId()); } catch (e) { out.sessionId = null; }
-    try { out.resultSeq = ws.resultSeq(); } catch (e) { out.resultSeq = null; }
-    try {
-      var snap = ws.snapshot();
-      out.entries = snap === null ? -1 : snap.entries().size();
-    } catch (e) {
-      out.entries = -1;
-    }
-    return out;
+    var session = ws.session();
+    var snap = session.snapshot();
+    return {
+      state: String(session.state()),
+      sessionId: String(session.sessionId()),
+      resultSeq: ws.saving().outcome().sequence(),
+      entries: snap === null ? -1 : snap.entries().size()
+    };
   }
 
   function openEditor() {
