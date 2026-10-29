@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.client.edit.draft;
 
 import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.Constants;
+import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -59,7 +60,7 @@ public final class DraftJournal {
             }
             restored.add(new RestoredDraft(draft.targetId(), draft.created(), draft.deleted(), draft.enableIntent(),
                     draft.baseline() == null ? null : RuleDraft.of(draft.baseline()).root(),
-                    draft.draft().isEmpty() ? null : RuleDraft.of(draft.draft()).root()));
+                    draft.draft().isEmpty() ? null : RuleDraft.of(draft.draft()).root(), draft.pendingInputs()));
         }
         return restored;
     }
@@ -85,16 +86,17 @@ public final class DraftJournal {
     }
 
     private @Nullable PersistedDraft snapshotOf(DraftState state) {
-        com.meteorite.itemdespawntowhat.client.edit.EditSession content = state.content();
+        EditSession content = state.content();
         boolean writableContent = !state.readOnly() && content != null;
-        boolean keepContent = writableContent && (content.contentDirty() || state.created() || state.unresolvedConflict());
+        boolean keepContent = writableContent && (content.isDirty() || state.created() || state.unresolvedConflict());
         boolean keepIntent = state.enableIntent() != null && (writableContent || state.readOnly());
         if (!keepContent && !keepIntent) {
             return null;
         }
         return new PersistedDraft(state.targetId(), writableContent && state.created(),
                 writableContent && content.isDeleted(), state.enableIntent(), this.baselines.get(state.targetId()),
-                writableContent ? content.snapshot() : new JsonObject(), System.currentTimeMillis());
+                writableContent ? content.snapshot() : new JsonObject(),
+                writableContent ? content.pendingInputSnapshot() : Map.of(), System.currentTimeMillis());
     }
 
     /**

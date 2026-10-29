@@ -38,9 +38,8 @@ record DraftStore(Path directory) {
     // 写盘临时文件后缀：与正式文件同目录，失败时立即清理，不留半截内容
     private static final String TEMP_SUFFIX = ".tmp";
 
-    // 落盘格式：紧凑输出（不缩进）以减少草稿体积与序列化开销，不转义 HTML 字符；
-    // 读取按 JSON 结构解析，旧版带缩进的草稿文件仍能直接读入
-    private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().create();
+    // 紧凑输出以减少草稿体积与序列化开销，不转义 HTML 字符并保留显式 null。
+    private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().serializeNulls().create();
 
     public DraftStore() {
         this(Paths.get(DIRECTORY));
@@ -88,7 +87,6 @@ record DraftStore(Path directory) {
                 PersistedDraft draft = read(file);
                 if (draft != null) {
                     drafts.add(draft);
-                    migrate(file, draft);
                 }
             }
         } catch (IOException exception) {
@@ -122,21 +120,6 @@ record DraftStore(Path directory) {
             }
         } catch (IOException exception) {
             Constants.LOG.warn("清空编辑草稿目录失败：{}", this.directory, exception);
-        }
-    }
-
-    // 旧命名（无短哈希）迁移：按新文件名重写后删掉旧文件；内容里有 target_id，迁移不丢数据
-    private void migrate(Path file, PersistedDraft draft) {
-        if (file.getFileName().toString().equals(fileName(draft.targetId()))) {
-            return;
-        }
-        if (!save(draft)) {
-            return;
-        }
-        try {
-            Files.deleteIfExists(file);
-        } catch (IOException exception) {
-            Constants.LOG.warn("清理编辑草稿旧文件失败：{}", file, exception);
         }
     }
 

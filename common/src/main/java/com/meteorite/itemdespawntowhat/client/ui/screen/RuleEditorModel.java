@@ -738,6 +738,7 @@ public final class RuleEditorModel {
             draft.replaceWith(stored.content());
             draft.setDeleted(stored.deleted());
             EditSession session = new EditSession(id, draft);
+            session.restorePendingInputs(stored.pendingInputs());
             if (stored.created()) {
                 this.createdIds.add(id);
             }

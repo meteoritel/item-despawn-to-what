@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.LinkedHashSet;
+import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -69,7 +70,7 @@ public final class EditSession {
 
     public long revision() { return revision; }
 
-    /** 会话内输入文本独立于已接受的规则 JSON，不写入磁盘或网络。 */
+    /** 未完成文本独立于规则 JSON；本地草稿保留文本，网络提交只使用已接受的规则值。 */
     public record PendingInput(long identity, List<String> text, List<FormIssue> issues) {
         public PendingInput {
             text = List.copyOf(text);
@@ -77,18 +78,44 @@ public final class EditSession {
         }
     }
 
+    /** 保留字段输入；只有文本或校验结果变化时才通知草稿日志，避免逐帧重复捕获快照。 */
     public void retainPendingInput(String path, List<String> text, List<FormIssue> issues) {
         PendingInput previous = pendingInputs.get(path);
+        if (previous != null && previous.text().equals(text) && previous.issues().equals(issues)) return;
         long identity = previous == null ? ++nextInputIdentity : previous.identity();
         pendingInputs.put(path, new PendingInput(identity, text, issues));
+        notifyListeners();
+    }
+
+    /** 捕获按字段路径组织的独立文本快照，供本地草稿保存；输入身份与界面问题由会话重建。 */
+    public Map<String, List<String>> pendingInputSnapshot() {
+        Map<String, List<String>> snapshot = new LinkedHashMap<>();
+        pendingInputs.forEach((path, input) -> snapshot.put(path, input.text()));
+        return Map.copyOf(snapshot);
+    }
+
+    /**
+     * 恢复本地草稿的输入文本；表单装载后重新校验，此前阻止从列表提交最近接受的旧值。
+     *
+     * @param inputs 字段路径与控件顺序对应的文本快照
+     */
+    public void restorePendingInputs(Map<String, List<String>> inputs) {
+        pendingInputs.clear();
+        inputs.forEach((path, text) -> {
+            FormIssue issue = FormIssue.error(path, Component.literal(path),
+                    Component.translatable(TypeLabels.UI_PREFIX + "tree.pending_input"));
+            pendingInputs.put(path, new PendingInput(++nextInputIdentity, text, List.of(issue)));
+        });
+        notifyListeners();
     }
 
     public @Nullable PendingInput pendingInput(String path) {
         return pendingInputs.get(path);
     }
 
+    /** 移除已接受或已还原的字段输入，并同步本地草稿保留状态。 */
     public void clearPendingInput(String path) {
-        pendingInputs.remove(path);
+        if (pendingInputs.remove(path) != null) notifyListeners();
     }
 
     public List<FormIssue> pendingInputIssues() {
@@ -101,7 +128,7 @@ public final class EditSession {
 
     /** 删除节点时移除其输入；移动节点时由宿主同步迁移路径。 */
     public void clearPendingInputs(String scope) {
-        pendingInputs.keySet().removeIf(path -> within(path, scope));
+        if (pendingInputs.keySet().removeIf(path -> within(path, scope))) notifyListeners();
     }
 
     public void remapPendingInputs(String from, String to) {
@@ -183,7 +210,7 @@ public final class EditSession {
 
     // 是否有未应用改动（含删除标记）
     public boolean isDirty() {
-        return draft.isDirty() || draft.isDeleted() || !pendingInputs.isEmpty();
+        return contentDirty() || !pendingInputs.isEmpty();
     }
 
     // ---- 统一编辑入口 ----

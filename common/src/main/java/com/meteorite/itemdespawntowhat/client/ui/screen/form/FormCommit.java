@@ -68,8 +68,7 @@ final class FormCommit {
             // 控件外露的是复用缓冲，基线必须复制，否则后续扫描会覆盖已装载文本
             row.loadedInputs = List.copyOf(row.control.inputText());
             row.loaded = true;
-            EditSession.PendingInput pending = view.session.pendingInput(row.path);
-            if (pending != null) row.control.restoreInputText(pending.text());
+            restorePendingInput(row);
         }
     }
 
@@ -111,9 +110,16 @@ final class FormCommit {
             row.control.rememberLoaded(value);
             row.loadedInputs = List.copyOf(row.control.inputText());
             row.loaded = true;
-            EditSession.PendingInput pending = view.session.pendingInput(row.path);
-            if (pending != null) row.control.restoreInputText(pending.text());
+            restorePendingInput(row);
         }
+    }
+
+    // 磁盘只存文本；控件装载后用当前字段规则替换恢复期间的占位问题。
+    private void restorePendingInput(FormRow row) {
+        EditSession.PendingInput pending = view.session.pendingInput(row.path);
+        if (pending == null) return;
+        row.control.restoreInputText(pending.text());
+        retainRowInput(row);
     }
 
     /**
