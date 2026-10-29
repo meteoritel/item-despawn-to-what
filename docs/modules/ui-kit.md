@@ -26,7 +26,7 @@ authority: common/client/ui/kit、common/client/ui/kit/package-info.java
 - **输入与操作生命周期**：输入上下文与目标契约、作用域选择与派发、唯一持续交互与统一结束原因、值快照、唯一焦点与键盘导航、文本局部历史优先。
 - **数值与文本契约**：合法域与吸附策略、轨道显示窗口、数值文本的显示与解析、数值与精确文本的双向绑定、标量/区间/循环滑条、文本值能力、码点接纳、文本选择与局部历史。
 - **树与画布原语**：不可变树的编解码注入、结构操作与移动预览、结构投影、独立视图状态与导航、tidy 布局、点阵网格、正交连线、框选。
-- **预览与层次**：实体/方块/模型预览、图标图集与图标条、浮动面板、灯箱、悬停指针门禁。
+- **预览与层次**：统一物品、方块、流体、实体、方块实体与结构场景图标、图标图集与图标条、浮动面板、灯箱、悬停指针门禁。
 
 kit 是记录来源与差异的维护副本，按可独立发布的库 API 维护（[ADR-0025](../adr/0025-reusable-client-ui-kit-boundary.md)、[ADR-0030](../adr/0030-ui-kit-as-standalone-library-api.md)）；新增公开类需要在 `package-info.java` 登记（[ADR-0033](../adr/0033-kit-zero-reference-public-api-retention.md)）。输入所有权的取舍见 [ADR-0055](../adr/0055-ui-input-scope-ownership.md)。
 
@@ -74,13 +74,13 @@ flowchart LR
     EDIT --> KIT
 ```
 
-边界由脚本强制：`powershell -ExecutionPolicy Bypass -File tools/check-ui-kit-boundaries.ps1`，白名单为 `java.*`、`javax.*`、`net.minecraft.*`、`org.jetbrains.*`、`org.joml.*`、`org.lwjgl.*`，另精确放行 `com.mojang.blaze3d.platform.Lighting`、`com.mojang.blaze3d.vertex.PoseStack`、`com.mojang.blaze3d.vertex.VertexConsumer`；同包互引允许，其余本项目包、loader 包与 Gson 一律不在白名单内。退出码 0 通过、1 存在违规、2 配置错误。
+边界由脚本强制：`powershell -ExecutionPolicy Bypass -File tools/check-ui-kit-boundaries.ps1`，白名单为 `java.*`、`javax.*`、`net.minecraft.*`、`org.jetbrains.*`、`org.joml.*`、`org.lwjgl.*`，另按脚本的 `$allowedClasses` 精确放行光照、顶点构建、GPU 缓冲与 RenderSystem 类型。preview 单向引用基础 kit，公开面逐目录登记。退出码 0 通过、1 存在违规、2 配置错误。
 
 ### 被谁依赖
 
 - `client/ui/theme`：把主题色与度量映射成 kit 的样式值后注入，是 `UiStyleSource` 在本项目的实现侧。
 - `client/ui/widget`：把可复用控件委托给 kit 核心（数值、文本、树、图标条），原版文本模型由宿主适配。滚动控件的行宽、屏幕到内容的纵向换算与固定行高命中共用本层 `RowGeometry`，滚动条预留宽度直接取 `UiScrollView.SCROLLBAR_WIDTH`；两个区间宿主控件（`UiCyclicTimeBar`、`UiRangeBar`）共用 `AbstractBarShell`，其内核 `AbstractRangeCore` 在 kit 内为包内可见，不进 kit 公开面。
-- `client/ui/shared`：目录图标与条件摘要复用 kit 的图标、滚动与布局原语；预览缓存消费 `UiPreviewCache`，资源世代、类型加载、失败值与清理由宿主拥有。
+- `client/ui/shared`：目录图标与条件摘要复用 kit 的图标、滚动与布局原语；宿主把业务对象转换成 `PreviewSubject`，注入资源世代、线程池、时钟、平台几何与诊断；`preview/PreviewScenes` 持有场景、实例与 CPU/GPU 资源。
 - `client/ui/screen` 与 `client/ui/screen/form`：装配控件与稳定输入作用域，接入历史、退出、旁白和焦点滚动。
 - `client/edit`：条件树的编解码与节点适配引用 `UiTreeCodec`、`UiTreeEditor`、`UiTreePath`。
 
@@ -115,7 +115,10 @@ kit 的形态由宿主的注入决定，缺一不可：
 | `UiTreeProjection` / `UiTreeViewState` / `UiTreeNavigation` / `UiTreeRowMarker` | 树展示原语 | 每个结构版本建立先序索引；每个视图独立保存选择与折叠；可见行统一导航与标记命中，完整旧新路径映射迁移状态 | 管理树、条件摘要、`UiTreeEditor` |
 | `UiTextValue` / `UiTextAcceptance` | 文本契约 | 程序回填静默保留原文；按码点整体接纳或回退；原版输入与历史由适配器负责 | 单行、多行文本与字段控件 |
 | `UiScrollbarGeometry` | 纯几何 | 共用轨道、比例、最小滑块与偏移映射；滚动偏移由视口唯一持有 | `UiScrollView`、多行文本 |
-| `UiPreviewCache` | 有界状态容器 | 客户端线程使用的 LRU；显式世代变化清空，非 null 结果及加载失败含义由宿主提供 | `client/ui/shared` 预览类 |
+| `preview/PreviewScenes` | 场景所有者 | 有界请求、异步几何交接、实例准备、逐帧上传与释放 | 宿主 `PreviewIcons`、平台 `Geometry` |
+| `preview/PreviewSubject` / `PreviewStructure` | 内容契约 | 物品、状态与 NBT 快照，原版结构解码与完整占位 | 场景缓存与资源读取 |
+| `preview/UiSceneView` | 绘制入口 | 模型空间包围、固定整圈适框、旋转、深度与裁剪恢复 | `PreviewScene`、相机与样式值 |
+| `UiPreviewCache` | 有界状态容器 | 客户端线程使用的 LRU；显式世代变化清空，非 null 结果及加载失败含义由宿主提供 | 宿主图标 wrapper 与目录索引 |
 | `UiTreeMoveInteraction` | 树移动值模型 | 预览不写绑定、正常释放提交一次、其它结束原因取消 | `UiTreeEditor`、`UiInteractionSession` |
 | `UiNumberPolicy` / `UiSliderWindow` / `UiNumbers` | 数值契约值 | 合法域与粗细步长吸附、轨道显示窗口、数值文本显示与解析各由唯一实现承担 | 滑条、精确输入、宿主字段 |
 | `UiValueTextBinding` | 双向绑定 | 统一数值预览/提交/取消与程序回填的重入保护；解析暂不可用时保留原文并停在最近有效值 | 数值控件、精确输入行 |
@@ -174,6 +177,14 @@ sequenceDiagram
 
 新文本、树与缓存 API 的最小接入示例、null/失败含义、线程与生命周期说明在各类型 JavaDoc 中维护。
 
+### 统一预览场景
+
+宿主通过 `PreviewScenes.request` 查询状态或 `icon` 接回 `UiIcon.Rendered`，每帧绘制前调用 `beginFrame`。物品委托原版 GUI 绘制；方块／流体按 RenderType 合并静态几何，实体与方块实体持有独立实例并调用原版 renderer。结构在局部坐标组合这两层，液体补区段原点，静态提交经过邻面与外部可达性剔除，完整占位仍供 AO、邻居与着色查询。
+
+默认 GPU 总预算 32 MiB、单场景 8 MiB，待上传与任务预留共用独立 32 MiB 上限；请求容量 256。每帧上传最多两场景并采用 1.5 ms 软预算，预算等待保持 PREPARING。半透明保留 quad 中心与索引类型，按预览视角每 15° yaw 档更新索引；同内容同相位共享缓存。实体与方块实体在渲染线程加载载荷、测量真实输出；平台适配直接装配 Display 的冻结渲染快照。
+
+`UiSceneView` 统一适框、相机、满亮、裁剪与绘制状态恢复。实体默认 10 秒一圈、结构 20 秒一圈，其他类型 yaw 45° 静态，默认 pitch 22°；时间与开关由宿主注入。关闭所有者取消旧任务并释放 CPU/GPU 资源，晚到结果在交接处释放。架构取舍见 [ADR-0056](../adr/0056-unified-preview-scene-contract.md)。
+
 ### 样式注入到渲染
 
 ```mermaid
@@ -194,7 +205,7 @@ flowchart LR
 - **新增数值字段**：`UiNumberPolicy` 描述合法域、粗细步长与整数策略，`UiSliderWindow` 描述这一段域映射到轨道的哪一截，`UiNumbers` 负责显示与解析，精确输入用 `UiValueTextBinding` 绑定。窗口只影响几何，超出窗口但仍在合法域内的值继续精确显示与编辑。
 - **新增树或树操作**：提供 `UiTreeEditor.Adapter`（不可变节点、容量、可接受子节点）与 `UiTreeCodec`；结构操作统一走 `UiTreeEditor`，拖动走 `UiTreeMoveInteraction`，一次拖动只提交一次。
 - **新增文本适配**：实现 `UiTextValue`，每个控件持有一份 `UiTextAcceptance`；回填在静默作用域内写入原版模型并 reset 实际值，历史恢复后显式通知。现有单行下限为 1、多行为 0；原生模型差异留在适配器。
-- **新增预览缓存**：用 `UiPreviewCache` 明确容量，加载器返回非 null 的成功或失败结果；读取前同步宿主世代，卸载时 clear。renderer 异常保护留在实际渲染边界。
+- **新增展示输入**：转换为 `PreviewSubject` 后复用 `PreviewScenes`；平台差异通过 `Geometry` 注入，状态与文案由宿主适配。独立库调用方同样每帧推进预算并显式 close。
 - **新增画布能力**：tidy 布局、点阵网格、正交连线、框选各有单一入口；图标统一从 `UiIconSheet` 的图集切片取，图标条按同一格子尺寸重排。
 
 ### 约束

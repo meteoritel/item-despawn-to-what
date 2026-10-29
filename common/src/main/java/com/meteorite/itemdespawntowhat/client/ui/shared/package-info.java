@@ -3,8 +3,6 @@
  *
  * <p><b>职责</b>：承载两侧都需要、且不依赖任一方的展示逻辑——
  * 目录图标分发与各目录类型的预览图标（{@link com.meteorite.itemdespawntowhat.client.ui.shared.CatalogPreviewIcons}、
- * {@link com.meteorite.itemdespawntowhat.client.ui.shared.EntityPreviewIcons}、
- * {@link com.meteorite.itemdespawntowhat.client.ui.shared.BlockPreviewIcons}、
  * {@link com.meteorite.itemdespawntowhat.client.ui.shared.FluidPreviewIcons}、
  * {@link com.meteorite.itemdespawntowhat.client.ui.shared.TagPreviewIcons}）、
  * 展示名称查询（{@link com.meteorite.itemdespawntowhat.client.ui.shared.RuleDisplayLabels}）、
@@ -27,7 +25,6 @@
  * <p><b>扩展落点</b>：新增可被目录选择的类型时，在
  * {@link com.meteorite.itemdespawntowhat.client.ui.shared.FieldCatalogTypes#catalogTypeOf} 增加字段名兜底、
  * 在 {@link com.meteorite.itemdespawntowhat.client.ui.shared.CatalogPreviewIcons#iconFor} 增加图标分支；
- * 新增一种可预览的注册表时，按现有 {@code XxxPreviewIcons} 的形态在本包新增宿主缓存类，
- * 并只在 {@code CatalogPreviewIcons} 接线。</p>
+ * 新增展示主体时由 {@code PreviewIcons} 接入统一场景；结构资源由 {@code StructurePreviewResources} 枚举和读取。</p>
  */
 package com.meteorite.itemdespawntowhat.client.ui.shared;

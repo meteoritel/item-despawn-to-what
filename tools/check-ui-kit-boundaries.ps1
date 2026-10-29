@@ -44,7 +44,7 @@ if ([string]::IsNullOrEmpty($ProjectRoot)) {
 $kitPackage = 'com.meteorite.itemdespawntowhat.client.ui.kit'
 # import 白名单前缀
 $allowedPrefixes = @('java.', 'javax.', 'net.minecraft.', 'org.jetbrains.', 'org.joml.', 'org.lwjgl.')
-$allowedClasses = @('com.mojang.blaze3d.platform.Lighting', 'com.mojang.blaze3d.vertex.PoseStack', 'com.mojang.blaze3d.vertex.VertexConsumer')
+$allowedClasses = @('com.mojang.blaze3d.platform.Lighting', 'com.mojang.blaze3d.vertex.PoseStack', 'com.mojang.blaze3d.vertex.VertexConsumer', 'com.mojang.blaze3d.systems.RenderSystem', 'com.mojang.blaze3d.vertex.BufferBuilder', 'com.mojang.blaze3d.vertex.ByteBufferBuilder', 'com.mojang.blaze3d.vertex.DefaultVertexFormat', 'com.mojang.blaze3d.vertex.MeshData', 'com.mojang.blaze3d.vertex.VertexBuffer', 'com.mojang.blaze3d.vertex.VertexFormat', 'com.mojang.blaze3d.vertex.VertexSorting')
 # 明确禁用前缀（即使落在白名单里也禁用）
 $forbiddenPrefixes = @('net.fabricmc.', 'net.neoforged.', 'com.google.gson.')
 
@@ -58,7 +58,7 @@ if (-not (Test-Path -LiteralPath $KitPath -PathType Container)) {
 
 $rootFull = (Resolve-Path -LiteralPath $ProjectRoot).Path
 $kitFull = (Resolve-Path -LiteralPath $KitPath).Path
-$files = @(Get-ChildItem -LiteralPath $kitFull -Filter '*.java' -File | Sort-Object Name)
+$files = @(Get-ChildItem -LiteralPath $kitFull -Filter '*.java' -File -Recurse | Sort-Object Name)
 if ($files.Count -eq 0) {
     Write-Host ('[配置错误] kit 目录下没有 .java 文件：' + $kitFull)
     exit 2
@@ -85,13 +85,16 @@ foreach ($file in $files) {
 
         # 三、顶层 public 类型：此处只收集，循环结束后与 package-info 对账
         if ($raw -match $typePattern) {
-            $publicTypes.Add($Matches[1])
+            $publicTypes.Add($file.DirectoryName + '|' + $Matches[1])
         }
 
         # 一、import 行：按白名单 / 禁用集合逐条判定
         if ($raw -match $importPattern) {
             $scannedImports++
             $target = $Matches[1]
+            if ($file.DirectoryName -eq $kitFull -and $target.StartsWith($kitPackage + '.preview.')) {
+                $violations.Add(('{0}:{1} [基础 kit 反向引用 preview] {2}' -f $relative, $lineNo, $target))
+            }
             if ($target -eq $kitPackage -or $target.StartsWith($kitPackage + '.')) {
                 continue
             }
@@ -118,6 +121,9 @@ foreach ($file in $files) {
         # 二、非 import 行：检查全限定引用（含 javadoc 里的 FQ 名）
         foreach ($match in [regex]::Matches($raw, $fqPattern)) {
             $fq = $match.Value
+            if ($file.DirectoryName -eq $kitFull -and $fq.StartsWith($kitPackage + '.preview.')) {
+                $violations.Add(('{0}:{1} [基础 kit 反向引用 preview] {2}' -f $relative, $lineNo, $fq))
+            }
             if ($fq -eq $kitPackage -or $fq.StartsWith($kitPackage + '.')) {
                 continue
             }
@@ -131,30 +137,28 @@ foreach ($file in $files) {
     }
 }
 
-# 三、公开面登记：package-info 是本包公开面的权威登记
-$packageInfo = Join-Path -Path $kitFull -ChildPath 'package-info.java'
-if (-not (Test-Path -LiteralPath $packageInfo -PathType Leaf)) {
-    Write-Host ('[配置错误] kit 缺少 package-info.java：' + $packageInfo)
-    exit 2
-}
-$packageInfoText = Get-Content -LiteralPath $packageInfo -Raw -Encoding UTF8
-$rolePattern = '<li>\{@code ([A-Za-z_][A-Za-z0-9_]*)\}: (host|library|example)</li>'
+# 三、逐目录对账公开面，不允许在根 package-info 代登记子包。
 $roles = @{}
-foreach ($entry in [regex]::Matches($packageInfoText, $rolePattern)) {
-    $name = $entry.Groups[1].Value
-    if ($roles.ContainsKey($name)) {
-        $violations.Add(('package-info.java [角色重复] ' + $name))
-    } else {
-        $roles[$name] = $entry.Groups[2].Value
+$rolePattern = '<li>\{@code ([A-Za-z_][A-Za-z0-9_]*)\}: (host|library|example)</li>'
+foreach ($directory in @($files | Select-Object -ExpandProperty DirectoryName -Unique)) {
+    $packageInfo = Join-Path $directory 'package-info.java'
+    if (-not (Test-Path -LiteralPath $packageInfo -PathType Leaf)) {
+        $violations.Add(('缺少 package-info.java：' + $directory))
+        continue
     }
-    if (-not $publicTypes.Contains($name)) {
-        $violations.Add(('package-info.java [过期登记] ' + $name))
+    $packageInfoText = Get-Content -LiteralPath $packageInfo -Raw -Encoding UTF8
+    foreach ($entry in [regex]::Matches($packageInfoText, $rolePattern)) {
+        $name = $entry.Groups[1].Value
+        $key = $directory + '|' + $name
+        if ($roles.ContainsKey($key)) { $violations.Add(('角色重复：' + $key)) }
+        else { $roles[$key] = $entry.Groups[2].Value }
+        if (-not $publicTypes.Contains($key)) { $violations.Add(('过期登记：' + $key)) }
     }
 }
 foreach ($typeName in $publicTypes) {
     if (-not $roles.ContainsKey($typeName)) {
         $unregisteredTypes.Add($typeName)
-        $violations.Add(('package-info.java [角色缺失] 顶层 public 类型 ' + $typeName + ' 未登记 host/library/example'))
+        $violations.Add(('角色缺失：' + $typeName))
     }
 }
 

@@ -38,7 +38,7 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat/platform、core/
 - **平台能力**：`Services.PLATFORM`，即 `IPlatformHelper` 的唯一实例；默认行为逐项定义，连接通道查询未实现时返回 `false` 并关闭编辑入口，`sendToPlayer` 未实现时抛出 `UnsupportedOperationException`，状态读取返回 `DropState.NONE`、写入为空操作。
 - **差异适配面**：`RuleRuntimeHostCore.PlatformAdapter`，两端唯一需要实现的差异集合（寿命提供者、包层判定、参考寿命采样与复位）。
 - **配置聚合**：`ServerConfig` 与 `NearbyProductLimits`，字段语义与默认值见 [服务器配置](../ops/configuration.md)。
-- **客户端接线**：Fabric 的 `client.ItemDespawnToWhatClient` 与 NeoForge 的 `client.register.ClientSetup`。
+- **客户端接线**：Fabric 的 `client.ItemDespawnToWhatClient` 与 NeoForge 的 `client.register.ClientSetup` 分别注入预览 Geometry，客户端 tick 观察预览资源世代。Display 的客户端 Accessor 在两端直接装配冻结渲染快照。
 
 ### 依赖方向
 

@@ -126,7 +126,10 @@ flowchart TD
 | `ConditionTreeContract` / `UiConditionGraphEditor` / `UiConditionTreeSummary` / `ConditionTreeOverlay` | 条件树界面家族 | 同一份条件数据与校验的两种展示；契约提供类型选项、叶子工厂、变更监听与选中路径同步 | 条件模型、`FormView`、`ConditionTreeChrome` |
 | `ConditionTreeProjection` / `ConditionTreeViewModel` / `ConditionTreeLabels` | 条件展示快照 | 字段协调器复用结构与诊断版本；共享标签，画布布局生成几何；相对 JSON 地址由 `ConditionTreeNodes` 解释 | 摘要、画布、条件表单 |
 | `UiTreeView` / `UiTreeNode` | 管理树 | 节点仅承载数据，视图拥有投影及选择折叠；管理页用分类/规则业务 key 恢复重建状态 | kit 树投影、状态与导航 |
-| `PreviewResources` | 资源生命周期所有者 | 世界、语言与模型身份决定资源世代；实体、方块、物品及目录名称索引平级消费；屏幕关闭与 removed 统一释放 | `shared` 预览类、`RuleEditorPanelFactory` |
+| `PreviewResources` | 资源生命周期所有者 | 世界、语言与模型身份决定资源世代；客户端 tick 观察变化，屏幕关闭与 removed 统一释放 | `PreviewIcons`、目录名称索引 |
+| `PreviewIcons` | 图标宿主门面 | 注册名、age、NBT 与结构输入统一转换，转台参数、状态文案与 kit 适配 | `CatalogPreviewIcons`、`RulePreviewIcons`、`TagPreviewIcons` |
+| `StructurePreviewResources` | 资源读取 | 枚举 assets 结构，异步有界 NBT 解码并保留资源诊断 | 资源管理器、`PreviewStructure` |
+| `PreviewExamplesScreen` | 开发入口 | 枚举结构与载荷示例，展示多个尺寸和预算 | 正式 `PreviewIcons` 入口 |
 | `UiFlatText` | 文本绘制原语 | 无阴影的居中、折行文本与悬停提示面板；GUI 不使用字体阴影与加粗，标题只靠颜色、缩进与分区间距区分层次 | kit 的 `UiRenderLayers`、各控件与页面 |
 | `UiSlider` / `UiRangeBar` / `UiTextInput` | 控件适配 | 原版输入模型留在宿主，文本值操作经 `UiTextValue`，码点接纳与回填抑制经 `UiTextAcceptance`，数值交互委托给 kit；提交时机由宿主回调决定 | kit 数值/文本契约、主题 |
 
@@ -209,6 +212,12 @@ flowchart LR
 - 列表底排的「应用」按钮与编辑页底排的保存按钮都按脏标记合成：有改动时显示「应用改动（N）」并可点，没有时显示「无改动」并禁用；启停意图与内容改动同批提交。
 - 变更清单里一条规则可同时列出内容动作与启停动作，两段用「 + 」连接。
 
+### 图标开发验收入口
+
+开发环境在规则编辑器按 **Ctrl+F9** 打开 `PreviewExamplesScreen`。列表从资源管理器枚举本模组的 `assets/itemdespawntowhat/structures/<path>.nbt`，逻辑 id 保留子目录；资源包覆盖同路径后用 F3+T 重载。随包 `preview/icon_gallery` 包含跨 x=16 的水体、玻璃围合、箱子、告示牌文字与实体载荷。每个结构以 16、48、80 像素绘制，显示准备状态、失败原因与 GPU／待上传预算。滚轮浏览，空格切换转台，R 清理并重读，Esc 关闭。
+
+结构解码读取 size、palette／palettes、blocks、entities，多 palette 固定首组；压缩 NBT 使用 16 MiB 读取限额，尺寸体积在分配前检查。静态几何使用完整只读占位；需要世界的实例使用当前客户端 Level。实体与方块实体独立创建、不入世界、不 tick，方块实体邻居联动按独立实例展示。开发列表另外提供幼年实体、带物品实体、Display 与空实体，使用相同正式入口。
+
 ## 5. 扩展点与约束
 
 ### 扩展点
@@ -217,7 +226,7 @@ flowchart LR
 - **新增字段控件**：实现 `FormControl` 子类，并在 `FormControlRegistry` 的穷举 switch 增加工厂分支。数值字段先走 `FormControl#create` 的“滑杆 + 行内精确输入”，域元数据不足时才落到注册表；第三方只读描述符使用显式 `RAW_JSON` 类型；新增已知字段漏接控件会在编译期报错。字段归类用 `EditorField` 的分类谓词（列表、数值、说明行、可带标签等）判断，不对 `EditorFieldType` 做 switch。
 - **新增界面标记图标**：标记图集是 `textures/gui/editor/marks.png`，由 `tools/image_generator/generate-editor-marks.py` 生成，字形为纯白、按调用方给定的主题色染色；在 `theme` 的 `UiMarkIcons.Mark` 登记行号与尺寸，用 `UiMarkIcons.icon(mark, color)` 取得图标后交给控件的 `setIcon` 或直接渲染。
 - **新增事件图标**：事件图集是 `textures/gui/editor/events.png`，由 `tools/image_generator/generate-event-icons.py` 生成，每格 32×32 彩色成品、按 16 像素槽位缩放绘制，不做主题染色；在 `theme` 的 `UiEventIcons.Event` 登记行号，动作到事件的判定收在 `shared/EventPreviewIcons`，新增天象类动作在那里补一支分支。
-- **新增目录类型或预览图标**：在 `shared` 的 `FieldCatalogTypes` 增加字段名兜底、在 `CatalogPreviewIcons` 增加分发分支；新增可预览注册表时在 `shared` 实现类型加载与失败值，在 `CatalogPreviewIcons` 接线；长期缓存用容量 256 的 `UiPreviewCache`，并列消费 `PreviewResources.generation()`。实体/方块 wrapper 每次绘制读取当前世代模型，失败测量同世代复用；物品以 Optional 缓存未知 id。Fluid/Tag/Event 按现有路径创建或解析。世界/语言当帧失效，模型探测按客户端 tick 合并；关闭统一走 `PreviewResources.release()`。
+- **新增目录类型或预览图标**：在 `FieldCatalogTypes` 与 `CatalogPreviewIcons` 保留目录语义，展示内容统一送入 `PreviewIcons`。场景资源由 kit `preview` 持有，`PreviewResources` 统一世代和关闭；流体名称与过滤留在 `FluidPreviewIcons`，标签展开与事件图集留在各宿主。实体 age、方块实体 NBT 与完整实体 NBT 参与场景身份。
 - **新增条件类型**：数据与校验在 `client/edit` 的条件模型上落点（见 [client-editor](client-editor.md)），界面侧在 `ConditionTreeContract` 的类型选项与叶子工厂登记；画布与缩进摘要消费字段级 `ConditionTreeViewModel` 的结构诊断投影；字体、语言和宽度只影响各渲染器的文本与几何缓存。
 - **新增编辑分区或结果分区动作**：在 `RuleEditorEditSections.EditSection` 增加常量并实现对应分区；面板装配放 `RuleEditorPanelFactory`。页面共享的布局常量（页内留白、行高、表单与对话框的按钮高度）、`UI` 文案前缀与 2 个存在条件叶类型 id 收在 `RuleEditorPageSupport`，3 个页描述符 id 由 `BuiltinEditorDescriptors` 提供；`RuleEditorPageSupport` 不持有界面状态、不装配控件；同一层的业务助手按关注点分开：`PresenceLeaves` 管存在条件叶的构造、扫描与增删，`CatalystQuantities` 管催化剂数量表对账，`EditorQuantityBindings` 管共享数量与存在条件写回；规则结构与严格值读取由 `client/edit` 的 `ResultStructure`、`RuleValue` 提供。
 - **新增行尾动作**：`UiButton` 配 `FormField#addAction` 挂到某个字段行；动作按钮不进入表单字段，读写模型而非草稿 JSON，需要参与保存时在变更集组装处接线。

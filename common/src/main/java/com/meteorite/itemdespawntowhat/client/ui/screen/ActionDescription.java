@@ -10,7 +10,7 @@ import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine;
 import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine.Tone;
-import com.meteorite.itemdespawntowhat.client.ui.shared.EntityPreviewIcons;
+import com.meteorite.itemdespawntowhat.client.ui.shared.PreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.shared.FieldCatalogTypes;
 import com.meteorite.itemdespawntowhat.client.ui.shared.RuleDisplayLabels;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
@@ -47,7 +47,7 @@ final class ActionDescription {
                         toneOf(field), 0));
             }
         }
-        if (action.has("entity") && EntityPreviewIcons.unavailable(action.text("entity", ""), action.integer("age", 0))) {
+        if (action.has("entity") && PreviewIcons.entityUnavailable(action.text("entity", ""), action.integer("age", 0))) {
             lines.add(DescriptionLine.note(Component.translatable(UI + "preview.unavailable"), 0));
         }
         return lines;

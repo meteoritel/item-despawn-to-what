@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.shared;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.Util;
 import net.minecraft.locale.Language;
 import net.minecraft.world.level.block.Blocks;
 
@@ -25,8 +26,8 @@ public final class PreviewResources {
             probedTick = Long.MIN_VALUE;
             epoch = new Object();
         }
-        long tick = minecraft.level == null ? Long.MIN_VALUE : minecraft.level.getGameTime();
-        if (tick != Long.MIN_VALUE && tick != probedTick) {
+        long tick = Util.getMillis() / 50;
+        if (tick != probedTick) {
             Object nextModels = minecraft.getBlockRenderer().getBlockModelShaper().getBlockModel(Blocks.STONE.defaultBlockState());
             probedTick = tick;
             if (models != nextModels) { models = nextModels; epoch = new Object(); }
@@ -34,10 +35,12 @@ public final class PreviewResources {
         return epoch;
     }
 
+    /** 客户端 tick 观察世界与资源世代，及时释放旧实例和异步交接。 */
+    public static void observe() { PreviewIcons.observeGeneration(generation()); }
+
     /** 关闭或离开世界时统一释放资源缓存；外部持有的 wrapper 下次绘制会按新世代取值。 */
     public static void release() {
-        EntityPreviewIcons.clear();
-        BlockPreviewIcons.clear();
+        PreviewIcons.clear();
         CatalogPreviewIcons.clear();
         world = null;
         language = null;

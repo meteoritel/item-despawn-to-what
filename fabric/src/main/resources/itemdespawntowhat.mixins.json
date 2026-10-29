@@ -8,6 +8,7 @@
         "ItemLifespanReferenceMixin",
         "EntityMixin"
     ],
+    "client": ["client.DisplayPreviewAccessor"],
     "injectors": {
         "defaultRequire": 1
     }

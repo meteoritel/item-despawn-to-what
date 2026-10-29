@@ -1,6 +1,9 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.ui.shared.PreviewResources;
+import com.meteorite.itemdespawntowhat.client.ui.shared.PreviewIcons;
+import com.meteorite.itemdespawntowhat.platform.Services;
+import org.lwjgl.glfw.GLFW;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiConditionTreeSummary;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
@@ -112,6 +115,7 @@ public final class RuleEditorScreen extends Screen implements UiLayoutSource {
     // 每帧重算布局并绘制
     @Override
     public void render(@NotNull GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        PreviewIcons.beginFrame();
         // 实时尺寸由外壳持有：页与外壳都按它排版
         shell.setScreenSize(this.width, this.height);
         this.renderBackground(graphics, mouseX, mouseY, partialTick);
@@ -294,6 +298,11 @@ public final class RuleEditorScreen extends Screen implements UiLayoutSource {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (!shell.saving() && keyCode == GLFW.GLFW_KEY_F9 && (modifiers & GLFW.GLFW_MOD_CONTROL) != 0
+                && Services.PLATFORM.isDevelopmentEnvironment()) {
+            Minecraft.getInstance().setScreen(new PreviewExamplesScreen());
+            return true;
+        }
         return input.keyPressed(keyCode, scanCode, modifiers);
     }
 

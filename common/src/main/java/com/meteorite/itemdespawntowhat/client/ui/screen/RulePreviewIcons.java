@@ -4,7 +4,7 @@ import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogPreviewIcons;
-import com.meteorite.itemdespawntowhat.client.ui.shared.EntityPreviewIcons;
+import com.meteorite.itemdespawntowhat.client.ui.shared.PreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.shared.EventPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.shared.TagPreviewIcons;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
@@ -38,8 +38,8 @@ public final class RulePreviewIcons {
     private static final String FIELD_AGE = "age";
     private static final String FIELD_USE_SOURCE_BLOCK = "use_source_block";
     // 固定图标只建一次：同一动作类型共享同一实例，无需参与任何键查找
-    private static final UiIcon LOOT_TABLE_ICON = new UiIcon.Item(new ItemStack(Items.CHEST));
-    private static final UiIcon EXPLOSION_ICON = new UiIcon.Item(new ItemStack(Items.TNT));
+    private static final UiIcon LOOT_TABLE_ICON = PreviewIcons.item(new ItemStack(Items.CHEST));
+    private static final UiIcon EXPLOSION_ICON = PreviewIcons.item(new ItemStack(Items.TNT));
     private RulePreviewIcons() { }
 
     // 图标与文本分别处理禁用色；缓冲必须在调色前后提交，避免污染相邻的启用条目。
@@ -66,7 +66,7 @@ public final class RulePreviewIcons {
      *
      * <p>动作在每次重装快照时都是新的 RuleValue 句柄，节点身份不能跨重装复用；而内容键
      * 需要把六段参数拼成字符串并在每次调用时付费。因此这里不做键查找，图标实例复用交给
-     * 各类型自己的有界缓存（物品/方块/实体图标缓存上限同为 256）。</p>
+     * 统一门面的有界图标与场景缓存。</p>
      *
      * @param action 动作节点
      * @return 对应图标；未知类型返回 null
@@ -84,9 +84,9 @@ public final class RulePreviewIcons {
                     String entity = text(action, FIELD_ENTITY);
                     yield entity.startsWith(TAG_PREFIX)
                             ? TagPreviewIcons.resolve(RuleCatalogType.ENTITY, entity).icon()
-                            : EntityPreviewIcons.icon(entity, age(action));
+                            : PreviewIcons.entity(entity, age(action));
                 }
-                case "experience" -> EntityPreviewIcons.icon(EXPERIENCE_ORB, DEFAULT_AGE);
+                case "experience" -> PreviewIcons.entity(EXPERIENCE_ORB, DEFAULT_AGE);
                 default -> null;
             };
         }
@@ -135,8 +135,8 @@ public final class RulePreviewIcons {
         }
         if (first == null || !text(first, RuleFields.TYPE).equals(SPAWN_ENTITY_TYPE)) return false;
         return switch (text(first, FIELD_VARIANT)) {
-            case "entity", "mob" -> EntityPreviewIcons.unavailable(text(first, FIELD_ENTITY), age(first));
-            case "experience" -> EntityPreviewIcons.unavailable(EXPERIENCE_ORB, DEFAULT_AGE);
+            case "entity", "mob" -> PreviewIcons.entityUnavailable(text(first, FIELD_ENTITY), age(first));
+            case "experience" -> PreviewIcons.entityUnavailable(EXPERIENCE_ORB, DEFAULT_AGE);
             default -> false;
         };
     }

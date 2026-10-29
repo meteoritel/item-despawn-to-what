@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.event;
 
 import com.meteorite.itemdespawntowhat.client.net.RuleEditClientWorkspace;
+import com.meteorite.itemdespawntowhat.client.ui.shared.PreviewResources;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 
 /**
@@ -12,6 +13,7 @@ public class InputEvents {
     public static void register() {
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             RuleEditClientWorkspace.instance().tick();
+            PreviewResources.observe();
         });
     }
 }

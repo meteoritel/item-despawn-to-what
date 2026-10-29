@@ -67,14 +67,13 @@
  *   <li>灯箱：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiLightbox}（含 Content / Gallery / Labels）、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiImageView}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.LightboxImage}</li>
- *   <li>实体与加载预览：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiEntityPreview}、
+ *   <li>加载预览：
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon.Rendered}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiSpinner}；
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiPreviewCache} 提供有界 LRU 与显式世代失效，
- *       实体创建、资源世代、失败值和关闭清理由宿主负责</li>
+ *       资源世代由宿主注入，三维预览由 preview 子包持有实例和资源</li>
  *   <li>进度：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiProgressBar}（宿主时间与样式驱动的平滑计数进度与未知总量往返动画）</li>
  *   <li>模型与图标轮播：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiModelBounds}（实际顶点测量与整圈适框）、
- *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiBlockPreview}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiCarousel}；数据解析与测量缓存由宿主负责</li>
  *   <li>绘制与悬停作用域：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiRenderLayers}（补偿原版物品深度、前景和模态层）、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiFlatText}（无阴影的居中、折行文本与悬停提示面板）、
@@ -106,7 +105,6 @@
  *   <li>{@code TextMeasurer}: library</li>
  *   <li>{@code TextScroll}: host</li>
  *   <li>{@code UiAction}: host</li>
- *   <li>{@code UiBlockPreview}: host</li>
  *   <li>{@code UiCarousel}: host</li>
  *   <li>{@code UiControl}: host</li>
  *   <li>{@code UiControlGroup}: library</li>
@@ -115,7 +113,6 @@
  *   <li>{@code UiCyclicRange}: host</li>
  *   <li>{@code UiDocument}: library</li>
  *   <li>{@code UiDotGrid}: host</li>
- *   <li>{@code UiEntityPreview}: host</li>
  *   <li>{@code UiFlatText}: host</li>
  *   <li>{@code UiFloatingPanel}: library</li>
  *   <li>{@code UiFlowLayout}: host</li>
@@ -194,12 +191,14 @@
  *
  * <p><b>依赖方向</b>：本包只依赖 Minecraft 客户端通用类型、Java 标准库、JOML、LWJGL（按键常量）与
  * JetBrains annotations，并精确允许 {@code com.mojang.blaze3d.platform.Lighting}、
- * {@code com.mojang.blaze3d.vertex.PoseStack} 与 {@code com.mojang.blaze3d.vertex.VertexConsumer}——不 import 任何项目包、不 import 两端 loader API、不引用 {@code Constants.MOD_ID}；
+ * {@code com.mojang.blaze3d.vertex.PoseStack} 与 {@code com.mojang.blaze3d.vertex.VertexConsumer}；
+ * 子包使用的顶点构建、GPU 缓冲与 RenderSystem 类型按边界脚本逐类放行。依赖方向为子包到基础 kit，基础 kit 不引用子包。
+ * kit 不 import 任何项目包、不 import 两端 loader API、不引用 {@code Constants.MOD_ID}；
  * {@code client/} 以外的代码不得引用本包。该约束由 {@code tools/check-ui-kit-boundaries.ps1} 检查，
  * 运行方式：{@code powershell -ExecutionPolicy Bypass -File tools/check-ui-kit-boundaries.ps1}
  * （退出码 0 通过、1 有违规、2 配置错误）。脚本扫描本目录全部 {@code .java} 的 import 与全限定引用：
  * import 白名单为 {@code java.*} / {@code javax.*} / {@code net.minecraft.*} / {@code org.jetbrains.*} /
- * {@code org.joml.*} / {@code org.lwjgl.*}，另精确允许上述三个渲染类，不放开其父包；同一 kit 包内互相引用允许；本模组其它包与
+ * {@code org.joml.*} / {@code org.lwjgl.*}，另精确允许脚本登记的渲染类，不放开其父包；同一 kit 包内互相引用允许；本模组其它包与
  * {@code net.fabricmc.*} / {@code net.neoforged.*} / {@code com.google.gson.*} 一律禁用；
  * 同一脚本还核对本文件的登记清单：kit 顶层 {@code public} 类型缺少唯一的 host/library/example 角色登记即失败。</p>
  *

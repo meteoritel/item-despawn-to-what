@@ -5,6 +5,7 @@
     "mixins": [
         "ItemEntityMixin"
     ],
+    "client": ["client.DisplayPreviewAccessor"],
     "injectors": {
         "defaultRequire": 1
     }

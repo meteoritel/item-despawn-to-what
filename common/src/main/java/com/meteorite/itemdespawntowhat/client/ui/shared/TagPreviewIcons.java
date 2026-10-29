@@ -30,7 +30,7 @@ public final class TagPreviewIcons {
             return tip.append("\n").append(Component.translatable(UI + "expand", members.size()));
         }
         public UiIcon icon() {
-            if (members.isEmpty()) return new UiIcon.Item(new ItemStack(Items.NAME_TAG));
+            if (members.isEmpty()) return PreviewIcons.item(new ItemStack(Items.NAME_TAG));
             return new UiIcon.Rendered(18, 18, (graphics, box) -> carousel.render(graphics, box, Util.getMillis()));
         }
     }
@@ -51,13 +51,13 @@ public final class TagPreviewIcons {
                     .orElse(List.of());
             case ENTITY -> BuiltInRegistries.ENTITY_TYPE.getTag(TagKey.create(Registries.ENTITY_TYPE, id))
                     .map(set -> set.stream().map(holder -> new Member(holder.value().getDescription(),
-                            EntityPreviewIcons.icon(BuiltInRegistries.ENTITY_TYPE.getKey(holder.value()).toString(), 0))).toList())
+                            PreviewIcons.entity(BuiltInRegistries.ENTITY_TYPE.getKey(holder.value()).toString(), 0))).toList())
                     .orElse(List.of());
             case FLUID -> BuiltInRegistries.FLUID.getTag(TagKey.create(Registries.FLUID, id))
                     .map(set -> set.stream().filter(holder -> !holder.value().defaultFluidState().isEmpty()
                                     && holder.value().defaultFluidState().isSource())
                             .map(holder -> new Member(FluidPreviewIcons.label(BuiltInRegistries.FLUID.getKey(holder.value())),
-                                    FluidPreviewIcons.icon(BuiltInRegistries.FLUID.getKey(holder.value()).toString()))).toList())
+                                    PreviewIcons.fluid(BuiltInRegistries.FLUID.getKey(holder.value()).toString()))).toList())
                     .orElse(List.of());
             default -> List.of();
         };
@@ -69,9 +69,9 @@ public final class TagPreviewIcons {
     // 且放大绘制时的非等比缩放会改变法线朝向，使同一模型在不同尺寸下打光不同；方块模型预览不做方向光。
     private static UiIcon previewIcon(Item item) {
         if (item instanceof BlockItem blockItem) {
-            return BlockPreviewIcons.icon(BuiltInRegistries.BLOCK.getKey(blockItem.getBlock()).toString());
+            return PreviewIcons.block(BuiltInRegistries.BLOCK.getKey(blockItem.getBlock()).toString());
         }
-        return new UiIcon.Item(new ItemStack(item));
+        return PreviewIcons.item(new ItemStack(item));
     }
 
     // 使用源物品对应方块时，将物品标签映射成真正的方块模型，而不是名称牌或空气物品。
@@ -80,7 +80,7 @@ public final class TagPreviewIcons {
         List<Member> members = id == null ? List.of() : BuiltInRegistries.ITEM.getTag(TagKey.create(Registries.ITEM, id))
                 .map(set -> set.stream().map(Holder::value).filter(item -> item instanceof BlockItem)
                         .map(item -> ((BlockItem) item).getBlock())
-                        .map(block -> new Member(block.getName(), BlockPreviewIcons.icon(BuiltInRegistries.BLOCK.getKey(block).toString()))).toList())
+                        .map(block -> new Member(block.getName(), PreviewIcons.block(BuiltInRegistries.BLOCK.getKey(block).toString()))).toList())
                 .orElse(List.of());
         return snapshot(RuleCatalogType.ITEM, raw, members);
     }

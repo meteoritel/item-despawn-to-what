@@ -7,7 +7,7 @@ import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.client.edit.ClientTypeRegistries;
 import com.meteorite.itemdespawntowhat.client.edit.RuleNaming;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
-import com.meteorite.itemdespawntowhat.client.ui.shared.BlockPreviewIcons;
+import com.meteorite.itemdespawntowhat.client.ui.shared.PreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.shared.RuleDisplayLabels;
 import com.meteorite.itemdespawntowhat.client.ui.shared.TagPreviewIcons;
@@ -506,7 +506,7 @@ public final class RuleRecipeView {
         ResourceLocation id = ResourceLocation.tryParse(raw);
         var item = id == null ? null : BuiltInRegistries.ITEM.getOptional(id).orElse(null);
         return item instanceof BlockItem blockItem
-                ? BlockPreviewIcons.icon(BuiltInRegistries.BLOCK.getKey(blockItem.getBlock()).toString()) : null;
+                ? PreviewIcons.block(BuiltInRegistries.BLOCK.getKey(blockItem.getBlock()).toString()) : null;
     }
 
     // 标签不能伪装成同名普通物品；实体/方块名称只查对应注册表。

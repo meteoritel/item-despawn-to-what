@@ -22,7 +22,7 @@ public final class CatalogPreviewIcons {
 
     // 占位标记的边长上限（与图标槽一致）
     private static final int MARKER_MAX_SIZE = 16;
-    // 图标缓存上限：与实体/方块预览缓存同一口径，超出后淘汰最久未用的项
+    // 图标缓存上限：与统一场景请求容量同一口径，超出后淘汰最久未用的项
     private static final int MAX_CACHED_ICONS = 256;
     // 物品图标按「类型 + 规范化注册名」复用：目录网格与配方列表共用同一实例，ItemStack 只建一次
     private static final UiPreviewCache<IconKey, Optional<UiIcon>> ICONS = new UiPreviewCache<>(MAX_CACHED_ICONS);
@@ -88,11 +88,11 @@ public final class CatalogPreviewIcons {
         if (key == null) {
             return null;
         }
-        if (type == RuleCatalogType.ENTITY && !id.startsWith("#")) return EntityPreviewIcons.icon(key.toString(), 0);
-        if (type == RuleCatalogType.BLOCK && !id.startsWith("#")) return BlockPreviewIcons.icon(key.toString());
-        if (type == RuleCatalogType.FLUID && !id.startsWith("#")) return FluidPreviewIcons.icon(key.toString());
+        if (type == RuleCatalogType.ENTITY && !id.startsWith("#")) return PreviewIcons.entity(key.toString(), 0);
+        if (type == RuleCatalogType.BLOCK && !id.startsWith("#")) return PreviewIcons.block(key.toString());
+        if (type == RuleCatalogType.FLUID && !id.startsWith("#")) return PreviewIcons.fluid(key.toString());
         if (type == RuleCatalogType.ITEM) return itemIcon(key);
-        // 方块/实体/流体已在上面走各自缓存；其余目录类型没有图标槽，回落文字展示
+        // 可预览目录已接入统一场景；其余目录类型回落文字展示
         return null;
     }
 
@@ -102,7 +102,7 @@ public final class CatalogPreviewIcons {
         IconKey cacheKey = new IconKey(RuleCatalogType.ITEM, key);
         return ICONS.getOrLoad(cacheKey, ignored -> {
             ItemStack stack = stackOf(BuiltInRegistries.ITEM.getOptional(key).orElse(null));
-            return stack.isEmpty() ? Optional.empty() : Optional.of(new UiIcon.Item(stack));
+            return stack.isEmpty() ? Optional.empty() : Optional.of(PreviewIcons.item(stack));
         }).orElse(null);
     }
 
