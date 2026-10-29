@@ -736,11 +736,23 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
     @Override
     public void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
         syncSource();
+        prepareIcons();
         indexAt(mouseX, mouseY);
         drawToolbar(graphics, mouseX, mouseY);
         drawList(graphics);
         drawFooter(graphics, mouseX, mouseY);
         renderTooltip(graphics, mouseX, mouseY);
+    }
+
+    private void prepareIcons() {
+        if (cellsRect.width() <= 0 || cellsRect.height() <= 0) return;
+        int columns = columns();
+        int from = Math.max(0, scrollRow - 1) * columns;
+        int to = Math.min(entries.size(), (scrollRow + visibleRows() + 1) * columns);
+        for (int index = from; index < to; index++) {
+            UiIcon icon = entries.get(index).icon();
+            if (icon != null) icon.prepare();
+        }
     }
 
     // 悬停提示按行交给原版：单个 Component 的 renderTooltip 重载不处理换行

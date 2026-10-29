@@ -61,6 +61,18 @@ public final class CatalogPreviewIcons {
         });
     }
 
+    /** 准备中的中性槽位，与不可用状态的问号标记区分。 */
+    public static UiIcon preparingMarker(int width, int height) {
+        return new UiIcon.Rendered(width, height, (graphics, box) -> {
+            int size = Math.min(MARKER_MAX_SIZE, Math.min(box.width(), box.height()));
+            int x = box.x() + (box.width() - size) / 2;
+            int y = box.y() + (box.height() - size) / 2;
+            int color = THEME.palette().controlFill();
+            int inset = Math.min(2, size / 3);
+            graphics.fill(x + inset, y + inset, x + size - inset, y + size - inset, color);
+        });
+    }
+
     // 1px 描边方框 + 居中问号：不依赖主题的填充细节，任何主题下都读得出「无预览」
     private static void drawMarker(GuiGraphics graphics, int x, int y, int size) {
         int border = THEME.palette().textDisabled();

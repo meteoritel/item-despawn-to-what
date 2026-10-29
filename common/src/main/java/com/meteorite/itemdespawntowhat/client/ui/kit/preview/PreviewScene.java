@@ -19,8 +19,11 @@ public final class PreviewScene {
     @Nullable SceneMeshes.Prepared prepared;
     boolean started;
     boolean instancesReady;
-    long usedFrame;
+    long usedFrame = Long.MIN_VALUE;
+    long prefetchedFrame = Long.MIN_VALUE;
     long bytes;
+    long pendingBytes;
+    boolean released;
 
     PreviewScene(String id, PreviewSubject subject) { this.id = id; this.subject = subject; }
     /** 当前准备或绘制状态。 */
@@ -31,7 +34,6 @@ public final class PreviewScene {
     public @Nullable String reason() { return reason; }
 
     void release() {
-        if (task != null) task.cancel(true);
         if (prepared != null) { prepared.close(); prepared = null; }
         layers.forEach(SceneMeshes.Layer::close); layers.clear();
         instances.blocks.clear(); instances.entities.clear();

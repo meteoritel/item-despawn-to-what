@@ -77,7 +77,7 @@ powershell -ExecutionPolicy Bypass -File tools/gui-probes/run-gui-probes.ps1 -Ru
 
 ### 客户端原语常驻
 
-`lib/prelude.js` 整份在会话里安装一次（`__gp.__version = 7`，与 `lib/run.py` 的 `PRELUDE_VERSION` 对应）。开跑前先做一次状态求值，比对「已安装 / 证据目录 / 版本号」三项，任一项不符才重装整份原语。证据目录以 `var __gpRunDir` 注入并每次调用现读，因此同一个客户端会话可以连续跑不同 `-RunDir`。
+`lib/prelude.js` 整份在会话里安装一次（`__gp.__version = 8`，与 `lib/run.py` 的 `PRELUDE_VERSION` 对应）。开跑前先做一次状态求值，比对「已安装 / 证据目录 / 版本号」三项，任一项不符才重装整份原语。证据目录以 `var __gpRunDir` 注入并每次调用现读，因此同一个客户端会话可以连续跑不同 `-RunDir`。
 
 求值结果统一经 `JSON.stringify` 收口再逐层解包，布尔与数字能还原成真实类型。
 

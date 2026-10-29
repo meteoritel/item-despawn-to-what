@@ -38,7 +38,13 @@ public final class PreviewResources {
     /** 客户端 tick 观察世界与资源世代，及时释放旧实例和异步交接。 */
     public static void observe() { PreviewIcons.observeGeneration(generation()); }
 
-    /** 关闭或离开世界时统一释放资源缓存；外部持有的 wrapper 下次绘制会按新世代取值。 */
+    /** 界面关闭时短期保留近期就绪场景；世界和模型世代观察继续生效。 */
+    public static void screenClosed() {
+        PreviewIcons.retainRecent();
+        CatalogPreviewIcons.clear();
+    }
+
+    /** 显式清理资源缓存；外部持有的 wrapper 下次绘制会按新世代取值。 */
     public static void release() {
         PreviewIcons.clear();
         CatalogPreviewIcons.clear();

@@ -126,7 +126,7 @@ flowchart TD
 | `ConditionTreeContract` / `UiConditionGraphEditor` / `UiConditionTreeSummary` / `ConditionTreeOverlay` | 条件树界面家族 | 同一份条件数据与校验的两种展示；契约提供类型选项、叶子工厂、变更监听与选中路径同步 | 条件模型、`FormView`、`ConditionTreeChrome` |
 | `ConditionTreeProjection` / `ConditionTreeViewModel` / `ConditionTreeLabels` | 条件展示快照 | 字段协调器复用结构与诊断版本；共享标签，画布布局生成几何；相对 JSON 地址由 `ConditionTreeNodes` 解释 | 摘要、画布、条件表单 |
 | `UiTreeView` / `UiTreeNode` | 管理树 | 节点仅承载数据，视图拥有投影及选择折叠；管理页用分类/规则业务 key 恢复重建状态 | kit 树投影、状态与导航 |
-| `PreviewResources` | 资源生命周期所有者 | 世界、语言与模型身份决定资源世代；客户端 tick 观察变化，屏幕关闭与 removed 统一释放 | `PreviewIcons`、目录名称索引 |
+| `PreviewResources` | 资源生命周期所有者 | 世界、语言与模型身份决定资源世代；客户端 tick 观察变化；关屏保留近期 READY 场景，超时或世代变化释放 | `PreviewIcons`、目录名称索引 |
 | `PreviewIcons` | 图标宿主门面 | 注册名、age、NBT 与结构输入统一转换，转台参数、状态文案与 kit 适配 | `CatalogPreviewIcons`、`RulePreviewIcons`、`TagPreviewIcons` |
 | `StructurePreviewResources` | 资源读取 | 枚举 assets 结构，异步有界 NBT 解码并保留资源诊断 | 资源管理器、`PreviewStructure` |
 | `PreviewExamplesScreen` | 开发入口 | 枚举结构与载荷示例，展示多个尺寸和预算 | 正式 `PreviewIcons` 入口 |
@@ -211,6 +211,12 @@ flowchart LR
 - 内容里的「默认启用」被改动时，本服开关的标签跟着刷新：生效状态按「意图 ?? 本服覆盖 ?? 默认启用」重新计算，这一同步每帧随编辑页刷新。
 - 列表底排的「应用」按钮与编辑页底排的保存按钮都按脏标记合成：有改动时显示「应用改动（N）」并可点，没有时显示「无改动」并禁用；启停意图与内容改动同批提交。
 - 变更清单里一条规则可同时列出内容动作与启停动作，两段用「 + 」连接。
+
+### 图标准备与短期驻留
+
+目录只登记可见行及上下相邻一行的预取，标签轮播登记当前与下一成员；实际绘制优先消耗共享准备预算，帧末再处理预取。准备态使用低对比度中性槽位，不可用终态使用问号标记。方块与方块实体沿共用视图绕模型中心旋转，与实体使用同一周期和相位，取景使用整圈固定包围。
+
+`PreviewResources.screenClosed` 在关闭与 removed 路径保留最近实际展示的 READY 场景，最多保留 64 个场景和 64 个 renderer 实例，15 秒后释放；重复关闭通知共用同一到期时间。几何继续受场景所有者的 GPU 预算约束。客户端 tick 在关屏后继续观察到期、世界、语言和模型世代，失效时立即释放；重新打开恢复逐帧推进。
 
 ### 图标开发验收入口
 

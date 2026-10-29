@@ -27,12 +27,16 @@ public final class PreviewIcons {
     });
     private static final UiPreviewCache<Key, UiIcon> ICONS = new UiPreviewCache<>(256);
     private static final PreviewMotion STATIC = new PreviewMotion(45, 0);
-    private static final PreviewMotion ENTITY = new PreviewMotion(0, 10_000);
+    private static final PreviewMotion TURNTABLE = new PreviewMotion(0, 10_000);
     private static final PreviewMotion STRUCTURE = new PreviewMotion(0, 20_000);
     private static @Nullable PreviewScenes.Geometry geometry;
     private static @Nullable PreviewScenes scenes;
     private static Object generation;
     private static boolean rotating = true;
+    private static final long RETAIN_MILLIS = 15_000;
+    private static final int RETAIN_SCENES = 64;
+    private static final int RETAIN_INSTANCES = 64;
+    private static long retainedUntil;
     private record Key(String id, PreviewSubject subject, int size, PreviewMotion motion) { }
     private PreviewIcons() { }
 
@@ -40,6 +44,7 @@ public final class PreviewIcons {
     public static void install(PreviewScenes.Geometry renderer) { geometry = renderer; }
 
     private static PreviewScenes scenes() {
+        expireRetained();
         Object current = PreviewResources.generation();
         if (scenes == null || generation != current) {
             clear();
@@ -52,10 +57,31 @@ public final class PreviewIcons {
     }
 
     /** 每个宿主屏幕在绘制第一枚图标前调用一次。 */
-    public static void beginFrame() { scenes().beginFrame(); }
+    public static void beginFrame() {
+        PreviewScenes owner = scenes();
+        retainedUntil = 0;
+        owner.beginFrame();
+    }
+
+    /** 可见图标绘制完毕后，用剩余的共享预算推进预取。 */
+    public static void endFrame() { if (scenes != null) scenes.endFrame(); }
+
+    /** 关屏保留近期就绪内容，重复关闭通知沿用同一到期时间。 */
+    public static void retainRecent() {
+        if (scenes == null || retainedUntil != 0) return;
+        scenes.retainRecent(RETAIN_SCENES, RETAIN_INSTANCES);
+        ICONS.clear();
+        StructurePreviewResources.clear();
+        retainedUntil = Util.getMillis() + RETAIN_MILLIS;
+    }
+
+    private static void expireRetained() {
+        if (retainedUntil != 0 && Util.getMillis() >= retainedUntil) clear();
+    }
 
     /** 已创建场景在世界或模型资源世代改变时立即释放。 */
     public static void observeGeneration(Object current) {
+        expireRetained();
         if (scenes != null && generation != current) clear();
     }
 
@@ -64,16 +90,21 @@ public final class PreviewIcons {
         if (scenes != null) { scenes.close(); scenes = null; }
         ICONS.clear();
         StructurePreviewResources.clear();
+        retainedUntil = 0;
     }
 
     /** 任意完整主体的图标入口；同内容与相位复用场景。 */
     public static UiIcon icon(String id, PreviewSubject subject, int size, PreviewMotion motion) {
         Key key = new Key(id, subject, size, motion);
-        return ICONS.getOrLoad(key, ignored -> new UiIcon.Rendered(size, size, (graphics, box) -> {
+        return ICONS.getOrLoad(key, ignored -> {
             UiIcon fallback = CatalogPreviewIcons.unavailableMarker(size, size);
-            PreviewMotion effective = rotating ? motion : new PreviewMotion(motion.startYawDegrees(), 0);
-            scenes().icon(id, subject, size, effective, UiSceneStyle.icon(), fallback).render(graphics, box.x(), box.y());
-        }));
+            UiIcon preparing = CatalogPreviewIcons.preparingMarker(size, size);
+            return new UiIcon.Rendered(size, size, (graphics, box) -> {
+                PreviewMotion effective = rotating ? motion : new PreviewMotion(motion.startYawDegrees(), 0);
+                scenes().icon(id, subject, size, effective, UiSceneStyle.icon(), preparing, fallback)
+                        .render(graphics, box.x(), box.y());
+            }, () -> scenes().prefetch(id, subject));
+        });
     }
 
     /** 保留物品数量与组件，内部仍使用原版 GUI 物品绘制。 */
@@ -81,9 +112,9 @@ public final class PreviewIcons {
         return icon(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(), new PreviewSubject.Item(stack), 16, STATIC);
     }
 
-    /** 放置态方块与可选方块实体载荷。 */
+    /** 放置态方块与可选方块实体载荷，与实体共用转台周期和相位。 */
     public static UiIcon block(BlockState state, @Nullable CompoundTag data) {
-        return icon(BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString(), new PreviewSubject.Block(state, data), 18, STATIC);
+        return icon(BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString(), new PreviewSubject.Block(state, data), 18, TURNTABLE);
     }
 
     /** 目录默认方块态。 */
@@ -108,10 +139,10 @@ public final class PreviewIcons {
     }
 
     /** 规则已有 age 展示参数进入实体内容身份。 */
-    public static UiIcon entity(String id, int age) { return icon(id, entitySubject(id, age), 18, ENTITY); }
+    public static UiIcon entity(String id, int age) { return icon(id, entitySubject(id, age), 18, TURNTABLE); }
 
     /** 实体完整载荷入口，可展示有效物品、展示实体和其他可见数据。 */
-    public static UiIcon entity(CompoundTag data) { return icon(data.getString("id"), new PreviewSubject.Entity(data), 18, ENTITY); }
+    public static UiIcon entity(CompoundTag data) { return icon(data.getString("id"), new PreviewSubject.Entity(data), 18, TURNTABLE); }
 
     /** 统一查询实体终态，准备中不提示失败。 */
     public static boolean entityUnavailable(String id, int age) {
@@ -127,11 +158,18 @@ public final class PreviewIcons {
 
     /** 结构资源异步读取后通过同一场景入口生成转台图标。 */
     public static UiIcon structure(ResourceLocation id, int size) {
+        UiIcon preparing = CatalogPreviewIcons.preparingMarker(size, size);
+        UiIcon fallback = CatalogPreviewIcons.unavailableMarker(size, size);
         return new UiIcon.Rendered(size, size, (graphics, box) -> {
             scenes();
             var resource = StructurePreviewResources.get(id, WORKERS);
             if (resource.subject() != null) icon(id.toString(), resource.subject(), size, STRUCTURE).render(graphics, box.x(), box.y());
-            else if (resource.state().unavailable()) CatalogPreviewIcons.unavailableMarker(size, size).render(graphics, box.x(), box.y());
+            else if (resource.state() == PreviewState.PREPARING) preparing.render(graphics, box.x(), box.y());
+            else if (resource.state().unavailable()) fallback.render(graphics, box.x(), box.y());
+        }, () -> {
+            PreviewScenes owner = scenes();
+            var resource = StructurePreviewResources.get(id, WORKERS);
+            if (resource.subject() != null) owner.prefetch(id.toString(), resource.subject());
         });
     }
 

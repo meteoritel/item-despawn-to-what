@@ -62,8 +62,17 @@ public final class UiCarousel {
      */
     public void step(int direction, long milliseconds) { select(index(milliseconds) + direction, milliseconds); }
 
+    /** 预热当前与下一成员，固定选择时只准备所选项。 */
+    public void prepare(long milliseconds) {
+        int index = index(milliseconds);
+        if (index < 0) return;
+        icons.get(index).prepare();
+        if (!pinned && icons.size() > 1) icons.get((index + 1) % icons.size()).prepare();
+    }
+
     /** 绘制当前项；图标按区域等比缩放并居中。 */
     public void render(GuiGraphics graphics, UiRect box, long milliseconds) {
+        prepare(milliseconds);
         int index = index(milliseconds);
         if (index < 0) return;
         UiIcon icon = icons.get(index);

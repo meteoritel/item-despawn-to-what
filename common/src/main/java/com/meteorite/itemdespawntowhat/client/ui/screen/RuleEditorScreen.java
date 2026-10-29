@@ -157,6 +157,8 @@ public final class RuleEditorScreen extends Screen implements UiLayoutSource {
             int overlayMouseY = mouseY;
             UiRenderLayers.draw(graphics, UiRenderLayers.MODAL_STEP,
                     () -> saveOverlay().render(graphics, width, height, overlayMouseX, overlayMouseY, Util.getMillis()));
+            graphics.flush();
+            PreviewIcons.endFrame();
             return;
         }
         shell.modals().render(graphics, font, mouseX, mouseY);
@@ -183,6 +185,8 @@ public final class RuleEditorScreen extends Screen implements UiLayoutSource {
                 renderTooltip(graphics, tip, mouseX, mouseY);
             }
         }
+        graphics.flush();
+        PreviewIcons.endFrame();
     }
 
     // Component 的单行 tooltip 重载不处理换行；按窗口宽度折行后交给无阴影提示面板定位。
@@ -321,7 +325,7 @@ public final class RuleEditorScreen extends Screen implements UiLayoutSource {
     public void removed() {
         input.close();
         shell.flushDrafts();
-        PreviewResources.release();
+        PreviewResources.screenClosed();
         super.removed();
     }
 
@@ -332,7 +336,7 @@ public final class RuleEditorScreen extends Screen implements UiLayoutSource {
             return;
         }
         input.close();
-        PreviewResources.release();
+        PreviewResources.screenClosed();
         shell.flushDrafts();
         super.onClose();
     }

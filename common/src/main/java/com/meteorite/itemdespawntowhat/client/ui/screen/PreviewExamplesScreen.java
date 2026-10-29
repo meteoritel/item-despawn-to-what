@@ -36,8 +36,8 @@ final class PreviewExamplesScreen extends Screen {
         super(Component.translatable(UI + "title"));
         structures = StructurePreviewResources.list();
         examples.add(new Example("minecraft:diamond", new PreviewSubject.Item(new ItemStack(Items.DIAMOND)), false));
-        examples.add(new Example("minecraft:chest", new PreviewSubject.Block(Blocks.CHEST.defaultBlockState(), null), false));
-        examples.add(new Example("minecraft:oak_sign", new PreviewSubject.Block(Blocks.OAK_SIGN.defaultBlockState(), sign()), false));
+        examples.add(new Example("minecraft:chest", new PreviewSubject.Block(Blocks.CHEST.defaultBlockState(), null), true));
+        examples.add(new Example("minecraft:oak_sign", new PreviewSubject.Block(Blocks.OAK_SIGN.defaultBlockState(), sign()), true));
         examples.add(new Example("minecraft:water", new PreviewSubject.Fluid(Blocks.WATER.defaultBlockState().getFluidState()), false));
         examples.add(new Example("minecraft:pig / Age=-24000", new PreviewSubject.Entity(entity("minecraft:pig", -24000)), true));
         CompoundTag item = entity("minecraft:item", 0);
@@ -97,7 +97,7 @@ final class PreviewExamplesScreen extends Screen {
                     }
                 }
             }
-        } finally { graphics.disableScissor(); }
+        } finally { graphics.disableScissor(); graphics.flush(); PreviewIcons.endFrame(); }
     }
 
     /** 鼠标滚轮浏览当前资源目录。 */
@@ -114,8 +114,8 @@ final class PreviewExamplesScreen extends Screen {
         return super.keyPressed(key, scan, modifiers);
     }
 
-    /** 关闭开发入口时释放全部预览资源。 */
-    @Override public void removed() { PreviewIcons.setRotating(true); PreviewResources.release(); }
+    /** 关闭开发入口时恢复转台设置并短期保留近期就绪场景。 */
+    @Override public void removed() { PreviewIcons.setRotating(true); PreviewResources.screenClosed(); }
     /** 图标验收使用持续推进的客户端界面时间。 */
     @Override public boolean isPauseScreen() { return false; }
 }

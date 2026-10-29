@@ -12,12 +12,22 @@ public sealed interface UiIcon permits UiIcon.Item, UiIcon.Sprite, UiIcon.Render
     int height();
     void render(GuiGraphics graphics, int x, int y);
 
+    /** 提前登记即将展示的内容；准备工作由图标所有者按共享预算推进。 */
+    default void prepare() { }
+
     /** 固定测量尺寸的受控自定义绘制入口，生命周期与失败处理由宿主负责。 */
-    record Rendered(int width, int height, Painter painter) implements UiIcon {
+    record Rendered(int width, int height, Painter painter, Runnable preparation) implements UiIcon {
+        /** 普通自绘图标只提供绘制回调。 */
+        public Rendered(int width, int height, Painter painter) { this(width, height, painter, () -> { }); }
+
+        /** 带预热回调的图标在实际绘制前按需登记内容，回调由客户端线程调用。 */
         public Rendered {
             if (width <= 0 || height <= 0) throw new IllegalArgumentException("Invalid icon size");
             Objects.requireNonNull(painter);
+            Objects.requireNonNull(preparation);
         }
+        /** 登记即将可见的内容，不在这里执行无预算的实例或 GPU 准备。 */
+        @Override public void prepare() { preparation.run(); }
         @Override public void render(GuiGraphics graphics, int x, int y) {
             painter.render(graphics, new UiRect(x, y, width, height));
         }
