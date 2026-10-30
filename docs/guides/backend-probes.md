@@ -9,10 +9,10 @@ authority: tools/run-probes.ps1、neoforge/build.gradle、common/src/dev、neofo
 
 ## TL;DR
 
-- 运行 `powershell -ExecutionPolicy Bypass -File tools/run-probes.ps1`，在独立存档验证精选核心后端链路，报告失败时退出非零。
+- 按本次改动选择单场景或专项 `-Chain`，在独立存档核对业务结果；先用 `-List` 查看可选入口。省略 `-Chain` 时默认运行 `core`。
 - 探针只在 NeoForge 开发类目录装载；正式 `main` 保留空观测契约，发布物由打包检查约束。
 - GUI 自动输入与截图见 [GUI 探针](gui-probes.md)，显示手感交用户实机确认。
-- `-Chain performance` 运行空基线、千实体空白对照、转化与重载回扫，生成可直接打开的 `performance.html`，显示阶段耗时、CPU、heap、GC 和调度分类曲线。
+- 性能排查按所需负载选择 `bench/<name>` 或性能序列，生成 `performance.html`；`performance` 包含空基线、实体对照、转化与重载负载。
 
 ## 适用对象
 
@@ -20,34 +20,37 @@ authority: tools/run-probes.ps1、neoforge/build.gradle、common/src/dev、neofo
 
 ## 按改动选择验证
 
-先确定改动影响的业务结果，再选择能观察该结果的最小集合；链路与判据见下文核心链路表。
+先确定改动影响的业务结果，再选择能观察该结果的最小集合。单场景能覆盖目标时选单场景，涉及同一链路的多个环节时选专项，跨核心链路的公共改动再选 `core`。`core` 是精选核心集合，所有场景的可达路径见 `--coverage`。
 
 | 改动或目标 | 选择与执行时机 |
 |---|---|
-| 单条核心后端链路的行为修改或问题修复 | 改动稳定并完成 IDEA 与构建检查后，运行对应 `-Chain`；涉及数条独立链路时取相关专项的并集 |
+| 单场景行为、特定条件或效果的修改 | 完成 IDEA 与构建检查后，选 `run/<name>` 或 `bench/<name>`；现有场景未覆盖目标时补定向场景 |
+| 单条核心后端链路的行为修改或问题修复 | 运行对应专项 `-Chain`；涉及数条独立链路时取相关专项的并集 |
 | 跨链路公共逻辑，如共享调度、服务端生命周期或观测接线 | 运行一轮 `core`，复用其中已包含的专项结果 |
 | 后端性能排查或优化 | 复用相关功能通过报告，按性能工作流采集同配置基线与修改后结果；需要区分运行波动与变化趋势时再重复采样 |
-| 探针实现或工作流维护 | 运行能触达改动的最小集合；重启编排选 `recovery`，性能采样或曲线报告选 `performance`；修改断言或退出码处理时加一次 `-Negative` |
-| 纯文档、语言或 GUI 改动，以及只影响 Fabric 的平台改动 | 执行对应机械校验或平台验证；GUI 交由用户手测 |
+| 探针实现或工作流维护 | 运行能触达改动的最小集合；重启编排选 `recovery`，性能门禁选 `p0`，特定采样负载选对应 `bench/<name>`；仅改曲线渲染时离线重绘已有记录，修改断言或退出码时加一次 `-Negative` |
+| 纯文档或语言改动 | 执行对应机械校验 |
+| GUI 或只影响 Fabric 的平台改动 | GUI 按 [GUI 探针](gui-probes.md)选择工作台或编辑器用例；Fabric 改动执行相应平台验证 |
 
-所选集合满足报告通过条件、获得任务所需证据后结束验证；负控以预期失败和非零退出为完成条件。代码、配置、负载和验证目标未变化时复用已有报告。后续修改影响已验证链路时重跑相关集合；出现新失败、影响范围扩大或用户明确要求时再扩测。交付节点本身不增加 `core` 或性能运行。
+所选集合满足报告通过条件、获得任务所需证据后结束验证；负控以预期失败和非零退出为完成条件。代码、配置、负载和验证目标未变化时复用已有报告。后续修改影响已验证链路时重跑相关集合；出现新失败、影响范围扩大或用户明确要求时再扩测。交付节点本身不增加 `core`、`performance` 或压力档位运行；完整性能序列与 `p3` / `p4` 按负载覆盖需求选择。
 
 ## 运行工作流
 
 在仓库根目录运行：
 
 ```powershell
-# 全部精选核心链路，恢复验证会自动停服并用同一存档启动第二个进程
-powershell -ExecutionPolicy Bypass -File tools/run-probes.ps1
+# 查看入口，不启动服务端
+powershell -ExecutionPolicy Bypass -File tools/run-probes.ps1 -List
 
-# 修改某条链路时先跑相关专项
+# 单场景或对应专项
+powershell -ExecutionPolicy Bypass -File tools/run-probes.ps1 -Chain run/convert
 powershell -ExecutionPolicy Bypass -File tools/run-probes.ps1 -Chain settlement
 
-# 验证失败通道：第一步附加一个故意错误的预期，期望进程退出 1
-powershell -ExecutionPolicy Bypass -File tools/run-probes.ps1 -Chain save -Negative
+# 公共改动涉及多条核心链路时运行精选集合；其中 recovery 使用同存档第二进程
+powershell -ExecutionPolicy Bypass -File tools/run-probes.ps1 -Chain core
 
-# 发布前构建；check 会编译开发探针并扫描发布 jar
-powershell -ExecutionPolicy Bypass -File tools/dsh-build.ps1 -Tasks build
+# 断言或退出路径修改时验证负控，预期退出 1
+powershell -ExecutionPolicy Bypass -File tools/run-probes.ps1 -Chain save -Negative
 ```
 
 `-Chain` 从 `common/src/dev/resources/idtw-debug/sequences/catalog.json` 读取序列，`-List` 输出入口。除 core 与专项外，可选择 p0–p4 或任意 manifest 中的 `run/<name>`、`bench/<name>` 单场景。`python tools/probe-catalog.py --coverage` 输出静态归属；声明归属和本次报告结果分别记录。`-TimeoutSeconds` 是每次进程等待上限，默认 900 秒。Gradle 通过构建互斥脚本串行运行。
@@ -117,18 +120,20 @@ powershell -ExecutionPolicy Bypass -File tools/dsh-build.ps1 -Tasks build
 
 ## 性能工作流
 
-```powershell
-# 首次保存基线，目录由脚本输出的 artifacts 给出
-powershell -ExecutionPolicy Bypass -File tools/run-probes.ps1 -Chain performance
+按问题选择负载：单项成本用对应 `bench/<name>`，性能门禁用 `p0`，需要对照空载、实体成本、条件检查、转化与重载时再用完整 `performance`。基线与修改后使用同一选择。
 
-# 修改后沿用相同集合，与已保存的运行目录比较
-powershell -ExecutionPolicy Bypass -File tools/run-probes.ps1 -Chain performance -CompareTo neoforge/build/probe-runs/<基线目录>
+```powershell
+# 只采集转化负载，目录由脚本输出的 artifacts 给出
+powershell -ExecutionPolicy Bypass -File tools/run-probes.ps1 -Chain bench/convert
+
+# 修改后沿用同一负载，与已保存的运行目录比较
+powershell -ExecutionPolicy Bypass -File tools/run-probes.ps1 -Chain bench/convert -CompareTo neoforge/build/probe-runs/<基线目录>
 
 # 仅重绘已有结果，无需再次启动服务端
 python tools/probe-performance-report.py neoforge/build/probe-runs/<本次目录> --compare-to neoforge/build/probe-runs/<基线目录>
 ```
 
-每次运行使用固定 seed 的独立平坦存档。`run-metadata.json` 记录 Git revision、工作区变更、集合与基线目录。完整的 `core` 和单条功能链路也采集性能，适合定位保存、准备或恢复的阶段成本；吞吐比较使用 `performance`，避免逐实体功能日志扰动。
+每次运行使用固定 seed 的独立平坦存档。`run-metadata.json` 记录 Git revision、工作区变更、集合与基线目录。完整的 `core` 和单条功能链路也采集性能，适合定位保存、准备或恢复的阶段成本；吞吐比较选对应 `bench/<name>` 或 `performance` 序列，避免逐实体功能日志扰动。
 
 | 代表负载 | 规模与测量窗口 | 核心业务判据 |
 |---|---|---|
@@ -146,7 +151,7 @@ python tools/probe-performance-report.py neoforge/build/probe-runs/<本次目录
 
 | 指标 | 埋点与计算 | 阅读方式 |
 |---|---|---|
-| 阶段墙钟 / 服务端 CPU ms | 步骤启动前开始，`DebugScenarioRun` 切换 SETUP / WARMUP / MEASURE / ASSERT / CLEANUP；世界链路区分准备、等待、检查与清理；保存另外记录初写、回滚、重试及会话；重载用 RELOAD 段 | 墙钟包含跨 tick 等待，CPU 使用服务端线程累计时间差值；阶段互斥，短操作结束恢复父阶段 |
+| 阶段墙钟 / 服务端 CPU ms | `DebugSequenceRun` 在步骤准备前标记 SETUP，`DebugScenarioRun` 推进 WARMUP / MEASURE / ASSERT / CLEANUP；世界链路区分准备、等待、检查与清理；保存另外记录初写、回滚、重试及会话；重载用 RELOAD 段 | 墙钟包含跨 tick 等待，CPU 使用服务端线程累计时间差值；阶段互斥，短操作结束恢复父阶段 |
 | JVM 进程 CPU % | 独立线程每 200 ms 读取 `OperatingSystemMXBean.getProcessCpuTime` 的增量，除以实际墙钟间隔 | 100% 为占用一个逻辑核，包含 JIT、GC、后台 I/O 与探针线程；可超过 100% |
 | 服务端线程 CPU % | 同间隔读取 `ThreadMXBean` 中服务端线程累计 CPU 时间 | 与进程 CPU 并列定位主线程和后台成本；Windows CPU 时钟粒度会使短阶段出现 0 ms |
 | heap / non-heap MiB | `MemoryMXBean` 的 heap used、committed、max 以及 non-heap used | 曲线显示 used / committed / non-heap，容量上限单列；heap 口径用于比较 JVM 堆占用 |
@@ -165,13 +170,14 @@ JMX 线程只读取管理指标；世界和 scheduler 数据由服务端线程�
 
 通过要求：业务断言全部通过，资源与阶段非空；超过一秒的步骤有 tick 与有效 CPU 样本，tick 运行时计时完整；性能场景有全部生命周期阶段，采样线程未报错。脚本对功能失败、采样缺失或异常均返回非零，并保留已有结果。性能数值展示为观测值，统一功能入口使用机器无关的业务断言。
 
-历史比较按进程阶段和步骤配对，核对版本环境、处理器数、heap 容量、tick rate、seed、配置、工作负载和业务 PASS。匹配后展示 runtime p95、总 tick p95、进程 CPU 均值和 heap 峰值的增幅；配置不同明确列出差异。优化前后沿用同一 JVM 参数与负载，分别重复运行，再比较同一指标。曲线采样密度为 200 ms，短时尖峰结合逐 tick 和阶段表定位。
+历史比较按进程阶段和步骤配对，核对版本环境、处理器数、heap 容量、tick rate、seed、配置、工作负载和业务 PASS。匹配后展示 runtime p95、总 tick p95、进程 CPU 均值和 heap 峰值的增幅；配置不同明确列出差异。优化前后沿用同一 JVM 参数与负载比较同一指标；需要区分运行波动与变化趋势时，再补重复采样。曲线采样密度为 200 ms，短时尖峰结合逐 tick 和阶段表定位。
 
-## 本集合排除的范围
+## 验证分工
 
-| 范围 | 原因与验证归属 |
+| 目标 | 验证方式 |
 |---|---|
-| GUI 控件、布局、输入焦点、提示文案、草稿交互、S2C 显示与客户端网络分片 | 用户指定手动测试；后端集合集中验证状态与实物 |
+| GUI 控件、布局、输入焦点、提示文案与草稿交互 | 按 [GUI 探针](gui-probes.md)选择工作台或编辑器用例；手感由用户实机确认 |
+| 客户端网络分片、取锁与保存回执 | 按编辑协议选择真实客户端与服务端的集成链路 |
 | Fabric 原生事件与加载行为 | 本集合统一 NeoForge；Fabric 参与正常构建和发布隔离检查 |
 | 每个物品、每种条件叶、效果类型和规则字段的所有组合 | 核心场景用代表输入验证选择、接管、结算和交付；修改特定类型时追加一个命中其风险的定向场景 |
 | 随机概率分布、长时间压力、所有预算值与硬件矩阵 | 功能集合采用确定输入；性能集合采用有限代表负载与空白对照，数值随环境与负载解释 |
