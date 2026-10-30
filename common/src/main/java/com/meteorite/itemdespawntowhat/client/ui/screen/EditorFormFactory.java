@@ -40,7 +40,7 @@ final class EditorFormFactory {
         form.setOnChanged(shell::draftChanged);
         // 输入超过长度上限时立即提示，格式为「字段名：原因」
         form.setOnRejectedNotice(message -> shell.setNotice(message,EditorShell.NoticeLevel.DANGER));
-        form.setSelectionCatalogOpener((field, path, tags, selected, onPicked) -> {
+        form.setSelectionCatalogOpener((field, path, tags, multiple, selected, onPicked) -> {
             if (RuleFields.SOURCE.equals(basePath) && RuleFields.SOURCE_EXCLUDE.equals(field.name())) {
                 if (shell.editable()) modals.push(SourceBlacklistPicker.modal(font, shell, session.root(),
                         shell.screenWidth(), shell.screenHeight(), onPicked));
@@ -48,10 +48,9 @@ final class EditorFormFactory {
             }
             RuleCatalogType type = tags ? RuleCatalogType.TAG : FieldCatalogTypes.catalogTypeOf(field);
             if (type == null || !shell.editable()) return;
-            boolean multi = field.isMultiCatalog();
             // 目录过滤条件按行配置；复合控件转发的子字段没有独立行，因此不加过滤
             FormField row = form.findField(field.name());
-            modals.push(RuleEditorPanelFactory.fieldCatalogModal(font, shell, workspace, type, multi,
+            modals.push(RuleEditorPanelFactory.fieldCatalogModal(font, shell, workspace, type, multiple,
                     Component.translatable(field.labelKey()), shell.screenWidth(), shell.screenHeight(), onPicked,
                     field, session.root(), path, selected, row == null ? null : row.catalogFilter()));
         });

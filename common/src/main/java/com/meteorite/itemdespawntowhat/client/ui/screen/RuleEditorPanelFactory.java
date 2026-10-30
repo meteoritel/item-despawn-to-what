@@ -559,8 +559,8 @@ public final class RuleEditorPanelFactory {
             extras.add(bar);
             reloadValues.add(() -> bar.core().setValue(integerRange(session, min, max, basePath)));
         }
-        form.setSelectionCatalogOpener((field, path, tags, selected, picked) -> pushModal.accept(fieldCatalogModal(font, shell, workspace,
-                tags ? RuleCatalogType.TAG : FieldCatalogTypes.catalogTypeOf(field), field.isListShaped(),
+        form.setSelectionCatalogOpener((field, path, tags, multiple, selected, picked) -> pushModal.accept(fieldCatalogModal(font, shell, workspace,
+                tags ? RuleCatalogType.TAG : FieldCatalogTypes.catalogTypeOf(field), multiple,
                 Component.translatable(field.labelKey()), screenWidth, screenHeight, picked, field, session.root(), path, selected)));
         LeafPanel panel = new LeafPanel(font, form, extras, buttons, reloadValues);
         int extraIndex = 0;

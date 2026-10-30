@@ -20,6 +20,7 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalogType;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 
 import net.minecraft.client.gui.Font;
@@ -109,13 +110,20 @@ final class CardListControl extends FormControl {
 
     // ---- 结构 ----
 
-    // 新增条目：先选引用，确认后才真正插入，避免留下点开目录就消失的空卡片
+    // 新增条目：目录按多选打开并回填已有引用，确认一次即可补齐多张卡片
     private void addEntry() {
         if (choiceField == null) {
             insertEntry(null);
             return;
         }
-        owner.openReferenceChoice(choiceField, entryChoicePath(entries.size()), null, this::insertEntry);
+        List<String> current = new ArrayList<>();
+        for (Entry entry : entries) {
+            if (entry.reference != null) {
+                current.add(entry.reference);
+            }
+        }
+        // 选择范围是整段列表，目录策略按列表字段自身的路径解析
+        owner.openMultiReferenceChoice(choiceField, owner.childPath(field.name()), current, this::applyReferences);
     }
 
     private void insertEntry(@Nullable String reference) {
@@ -123,6 +131,37 @@ final class CardListControl extends FormControl {
         entry.reference = reference;
         refreshChoice(entry);
         mutate(() -> entries.add(entry));
+    }
+
+    // 目录确认的选择快照即卡片集合：留下的卡片保留原有数值，新勾选的补默认值，取消勾选的移除
+    private void applyReferences(List<String> picked) {
+        mutate(() -> {
+            List<Entry> pool = new ArrayList<>(entries);
+            List<Entry> next = new ArrayList<>();
+            for (String reference : new LinkedHashSet<>(picked)) {
+                Entry matched = takeReference(pool, reference);
+                next.add(matched != null ? matched : newEntry(reference));
+            }
+            entries.clear();
+            entries.addAll(next);
+        });
+    }
+
+    private static @Nullable Entry takeReference(List<Entry> pool, String reference) {
+        for (Entry candidate : pool) {
+            if (reference.equals(candidate.reference)) {
+                pool.remove(candidate);
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private Entry newEntry(@Nullable String reference) {
+        Entry entry = createEntry(null);
+        entry.reference = reference;
+        refreshChoice(entry);
+        return entry;
     }
 
     // 已存在条目换引用：只改这张卡的首行，数值保持不动

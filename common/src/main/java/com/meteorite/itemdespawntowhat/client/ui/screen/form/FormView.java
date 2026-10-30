@@ -77,10 +77,12 @@ public final class FormView implements UiWidget, UiLayoutSource {
          * @param field    字段描述符
          * @param path     字段在草稿中的确切路径
          * @param tags     是否只浏览标签
-         * @param selected 当前字段中的引用
+         * @param multiple 是否按多选打开目录
+         * @param selected 当前字段中的引用，多选时作为已勾选项回填
          * @param onPicked 确认后的完整选择回调
          */
-        void open(EditorField field, String path, boolean tags, List<String> selected, Consumer<List<String>> onPicked);
+        void open(EditorField field, String path, boolean tags, boolean multiple, List<String> selected,
+                  Consumer<List<String>> onPicked);
     }
 
     /**
@@ -335,7 +337,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
         RuleValue existing = session.valueAt(row.path);
         List<String> selected = existing == null ? List.of()
                 : existing.isList() ? existing.textItems() : existing.isText() ? List.of(existing.asText()) : List.of();
-        catalogOpener.open(row.field, row.path, tags, selected, ids -> {
+        catalogOpener.open(row.field, row.path, tags, row.field.isMultiCatalog(), selected, ids -> {
             if (!enabled || !row.attached || loadedRevision != session.revision()) return;
             RuleValue value;
             if (row.field.isMultiCatalog()) {
@@ -374,11 +376,35 @@ public final class FormView implements UiWidget, UiLayoutSource {
         }
         commitPendingInputs();
         List<String> selected = current == null || current.isBlank() ? List.of() : List.of(current);
-        catalogOpener.open(field, path, false, selected, ids -> {
+        catalogOpener.open(field, path, false, false, selected, ids -> {
             if (!enabled || ids.isEmpty() || loadedRevision != session.revision()) {
                 return;
             }
             onPicked.accept(ids.getFirst());
+        });
+    }
+
+    /**
+     * 复合控件内的多值目录选择：确认后把完整选择交给调用方。
+     *
+     * <p>与行级多选目录一致，目录里回填当前引用作为已勾选项，因此调用方拿到的是「本次要保留的全部引用」，
+     * 而不是增量。守卫条件与 {@link #openReferenceChoice} 相同；空选择不回调，避免误清空整段。</p>
+     *
+     * @param field    目录引用字段描述符
+     * @param path     该引用在草稿中的完整路径
+     * @param selected 当前已选中的引用，作为目录的初始勾选项
+     * @param onPicked 确认后的回调，接收完整选择快照
+     */
+    void openMultiReferenceChoice(EditorField field, String path, List<String> selected, Consumer<List<String>> onPicked) {
+        if (!enabled || catalogOpener == null) {
+            return;
+        }
+        commitPendingInputs();
+        catalogOpener.open(field, path, false, true, List.copyOf(selected), ids -> {
+            if (!enabled || ids.isEmpty() || loadedRevision != session.revision()) {
+                return;
+            }
+            onPicked.accept(List.copyOf(ids));
         });
     }
 

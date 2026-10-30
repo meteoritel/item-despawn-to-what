@@ -150,11 +150,10 @@ final class EditorConditionForms {
         form.setOnChanged(shell::draftChanged);
         // 输入被长度上限拒绝时立刻显示一条可读提示（字段名：问题）
         form.setOnRejectedNotice(message -> shell.setNotice(message,EditorShell.NoticeLevel.DANGER));
-        form.setSelectionCatalogOpener((field, fieldPath, tags, selected, onPicked) -> {
+        form.setSelectionCatalogOpener((field, fieldPath, tags, multiple, selected, onPicked) -> {
             RuleCatalogType type = tags ? RuleCatalogType.TAG : FieldCatalogTypes.catalogTypeOf(field);
             if (type == null || !shell.editable()) return;
-            boolean multi = field.isMultiCatalog();
-            modals.push(RuleEditorPanelFactory.fieldCatalogModal(font, shell, workspace, type, multi,
+            modals.push(RuleEditorPanelFactory.fieldCatalogModal(font, shell, workspace, type, multiple,
                     Component.translatable(field.labelKey()), shell.screenWidth(), shell.screenHeight(), onPicked,
                     field, session.root(), fieldPath, selected));
         });
