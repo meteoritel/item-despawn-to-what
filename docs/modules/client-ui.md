@@ -117,6 +117,7 @@ flowchart TD
 | `RuleEditorDebugPage` | 调试页 | 按输入数量填充测试规则、一次性删除测试规则；只写草稿，落盘仍由管理页的“应用全部”决定 | `DebugTestRules` |
 | `RuleEditorPageInput` | 页内输入分发 | 把按下、释放、拖动、滚动与键盘输入派发给当前页控件，并维护结果分区动作列表的拖动排序；按下归属决定释放只发给谁 | 编辑页控件、`FormView` |
 | `RuleEditorPanelFactory` | 面板装配 | 把 kit 控件与目录链路接到规则草稿上；写入一律经调用方给定的 `applyChange` | 叶子面板、`shared` 图标、数值控件 |
+| `UiCatalogGrid` | 目录网格 | 以一次发布的 `View` 读取条目、选择、分页、加载/错误与可用状态；只向宿主发送搜索、分页、范围和选择意图 | `RuleEditorPanelFactory`、`SourceBlacklistPicker`、弹窗 footer |
 | `FormView` | 表单聚合根 | 按 `TypeEditorDescriptor` 渲染可滚动控件列；写入统一经 `EditSession`；支持定位高亮、内联选择与行尾动作 | `FormCommit`、`FormInputRouter`、`FormControl` |
 | `FormField` | 行身份与装配入口 | 绑定实际行，配置显隐、默认值、数值窗口、目录过滤、行尾动作与数量配对；路径随 rebase 更新，换描述符或卸载后失效 | `FormView`、字段声明 |
 | `FormCommit` | 表单提交协议 | 装载与保留文本，按修订守卫提交合法输入；字段及关联更新共用会话回调，非法文本留在会话 | `FormView`、`EditSession` |
@@ -230,10 +231,11 @@ flowchart LR
 
 - **规则固定表单**：基本信息、延迟、条件树和输入精简字段从 `BuiltinEditorDescriptors` 获取；screen 保留布局、tooltip、动态窗口与动作，`EditorField` 的值域使用 `FieldDomain`，数值与枚举直接读取类型化数据。
 - **新增字段控件**：实现 `FormControl` 子类，并在 `FormControlRegistry` 的穷举 switch 增加工厂分支。数值字段先走 `FormControl#create` 的“滑杆 + 行内精确输入”，域元数据不足时才落到注册表；第三方只读描述符使用显式 `RAW_JSON` 类型；新增已知字段漏接控件会在编译期报错。字段归类用 `EditorField` 的分类谓词（列表、数值、说明行、可带标签等）判断，不对 `EditorFieldType` 做 switch。
-- **嵌套对象列表的卡片形态**：参数声明标 `ParamShape.CARD_LIST` 时，`ParamProjection` 把该列表投影成 `EditorField.cardList`，界面交给 `CardListControl`。控件自绘字段标题与「添加」入口，每条元素是一张卡片：首行是目录引用胶囊（图标 + 显示名，点开目录替换单个条目），下方是数值行里并排的数值控件。点「添加」以多选目录勾选引用：目录里把当前条目回填为已勾选，确认后按勾选结果补齐或移除卡片，已有卡片的数值保持不动，因此连续添加多个引用只需一次确认。
+- **嵌套对象列表的卡片形态**：参数声明标 `ParamShape.CARD_LIST` 时，`ParamProjection` 把该列表投影成 `EditorField.cardList`，界面交给 `CardListControl`。控件自绘字段标题与「添加」入口，每条元素是一张卡片：首行是目录引用胶囊（图标 + 显示名，点开目录替换单个条目），下方是数值行里并排的数值控件。点「添加」以多选目录勾选引用：目录里把当前条目回填为已勾选，确认后按勾选结果补齐或移除卡片，已有卡片的数值保持不动；更新卡片时以原对象为底稿保留扩展字段，未知非对象数组项保持原位。
+- **目录宿主**：平铺目录与源黑名单选择器向 `UiCatalogGrid` 提供同一份不可变 `View`，网格集中消费条目和页面状态，宿主持有查询、选择与提交；焦点在列表刷新时按条目 id 恢复。
 - **新增界面标记图标**：标记图集是 `textures/gui/editor/marks.png`，由 `tools/image_generator/generate-editor-marks.py` 生成，字形为纯白、按调用方给定的主题色染色；在 `theme` 的 `UiMarkIcons.Mark` 登记行号与尺寸，用 `UiMarkIcons.icon(mark, color)` 取得图标后交给控件的 `setIcon` 或直接渲染。
 - **新增事件图标**：事件图集是 `textures/gui/editor/events.png`，由 `tools/image_generator/generate-event-icons.py` 生成，每格 32×32 彩色成品、按 16 像素槽位缩放绘制，不做主题染色；在 `theme` 的 `UiEventIcons.Event` 登记行号，动作到事件的判定收在 `shared/EventPreviewIcons`，新增天象类动作在那里补一支分支。
-- **新增目录类型或预览图标**：在 `FieldCatalogTypes` 与 `CatalogPreviewIcons` 保留目录语义，展示内容统一送入 `PreviewIcons`。场景资源由 kit `preview` 持有，`PreviewResources` 统一世代和关闭；流体名称与过滤留在 `FluidPreviewIcons`，标签展开与事件图集留在各宿主。实体 age、方块实体 NBT 与完整实体 NBT 参与场景身份。
+- **新增目录类型或预览图标**：在 `CatalogTypePresentation` 为每种 `RuleCatalogType` 穷举登记范围文案、名称、图标、标签注册表／成员与默认隐藏策略；字段目录类型由精确 registry 键映射。展示内容统一送入 `PreviewIcons`，物品场景身份由完整 `ItemStack` 主体缓存。场景资源由 kit `preview` 持有，`PreviewResources` 统一世代和关闭；流体名称与过滤留在 `FluidPreviewIcons`，标签展开与事件图集留在各宿主。实体 age、方块实体 NBT 与完整实体 NBT 参与场景身份。
 - **新增条件类型**：数据与校验在 `client/edit` 的条件模型上落点（见 [client-editor](client-editor.md)），界面侧在 `ConditionTreeContract` 的类型选项与叶子工厂登记；画布与缩进摘要消费字段级 `ConditionTreeViewModel` 的结构诊断投影；字体、语言和宽度只影响各渲染器的文本与几何缓存。
 - **新增编辑分区或结果分区动作**：在 `RuleEditorEditSections.EditSection` 增加常量并实现对应分区；面板装配放 `RuleEditorPanelFactory`。页面共享的布局常量（页内留白、行高、表单与对话框的按钮高度）、`UI` 文案前缀与 2 个存在条件叶类型 id 收在 `RuleEditorPageSupport`，3 个页描述符 id 由 `BuiltinEditorDescriptors` 提供；`RuleEditorPageSupport` 不持有界面状态、不装配控件；同一层的业务助手按关注点分开：`PresenceLeaves` 管存在条件叶的构造、扫描与增删，`CatalystQuantities` 管催化剂数量表对账，`EditorQuantityBindings` 管共享数量与存在条件写回；规则结构与严格值读取由 `client/edit` 的 `ResultStructure`、`RuleValue` 提供。
 - **新增行尾动作**：`UiButton` 配 `FormField#addAction` 挂到某个字段行；动作按钮不进入表单字段，读写模型而非草稿 JSON，需要参与保存时在变更集组装处接线。

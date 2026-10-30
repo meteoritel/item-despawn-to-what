@@ -24,6 +24,7 @@ final class CatalogDirectory {
         final LinkedHashMap<String, RuleCatalogEntry> entries = new LinkedHashMap<>();
         int page;
         int revision = -1;
+        int revisionRestarts;
         boolean complete;
         boolean validating;
         @Nullable RuleCatalog snapshot;
@@ -42,6 +43,7 @@ final class CatalogDirectory {
         Load load = loads.get(type);
         if (load == null || !load.complete || load.request.waiting()) { request(type, sender); return; }
         load.validating = true;
+        load.revisionRestarts = 0;
         load.page = 0;
         sendPage(type, load, sender);
     }
@@ -49,6 +51,7 @@ final class CatalogDirectory {
     void retry(RuleCatalogType type, Sender sender) {
         Load load = loads.computeIfAbsent(type, ignored -> new Load());
         load.request.complete();
+        load.revisionRestarts = 0;
         sendPage(type, load, sender);
     }
 
@@ -82,9 +85,14 @@ final class CatalogDirectory {
         if (load.validating && load.revision == catalog.revision()) { load.validating = false; return; }
         load.validating = false;
         if (load.revision >= 0 && load.revision != catalog.revision()) {
+            if (load.revisionRestarts > 0) {
+                load.request.fail();
+                return;
+            }
+            load.revisionRestarts++;
             load.entries.clear();
             load.page = 0;
-            load.revision = -1;
+            load.revision = catalog.revision();
             load.snapshot = null;
             load.complete = false;
             if (canQuery) sendPage(type, load, sender);

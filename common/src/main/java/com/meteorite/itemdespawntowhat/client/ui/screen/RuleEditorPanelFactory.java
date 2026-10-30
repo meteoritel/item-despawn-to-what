@@ -7,6 +7,7 @@ import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.net.RuleEditClientWorkspace;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
+import com.meteorite.itemdespawntowhat.core.api.param.SelectionIntent;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiCyclicRange;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiNumberPolicy;
@@ -17,6 +18,8 @@ import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.LeafPanel;
 import com.meteorite.itemdespawntowhat.client.ui.shared.PreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogPreviewIcons;
+import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogTypePresentation;
+import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogDisplayQuery;
 import com.meteorite.itemdespawntowhat.client.ui.shared.FieldCatalogChoices;
 import com.meteorite.itemdespawntowhat.client.ui.shared.FieldCatalogTypes;
 import com.meteorite.itemdespawntowhat.client.ui.shared.FluidPreviewIcons;
@@ -32,6 +35,7 @@ import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalog;
 import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalogEntry;
 import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalogType;
+import com.meteorite.itemdespawntowhat.core.type.condition.BiomeCondition;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -153,17 +157,7 @@ public final class RuleEditorPanelFactory {
     }
 
     private static Component catalogScopeLabel(RuleCatalogType type) {
-        return Component.translatable(UI + switch (type) {
-            case ITEM -> "pick.scope_item_label";
-            case BLOCK -> "pick.scope_block_label";
-            case FLUID -> "pick.scope_fluid_label";
-            case ENTITY -> "pick.scope_entity_label";
-            case BIOME -> "pick.scope_biome_label";
-            case LOOT_TABLE -> "pick.scope_loot_table_label";
-            case DIMENSION -> "pick.scope_dimension_label";
-            case MOB_EFFECT -> "pick.scope_mob_effect_label";
-            case TAG -> "pick.scope_tag_label";
-        });
+        return Component.translatable(UI + CatalogTypePresentation.of(type).scopeLabel());
     }
 
     // 目录标签可能是翻译键或原文：无空格、无冒号且含点号时按翻译键解析
@@ -213,12 +207,15 @@ public final class RuleEditorPanelFactory {
         mapper.includeTags = includeTags;
         mapper.policy = policy;
         mapper.entryFilter = entryFilter;
+        List<String> selectedState = new ArrayList<>(selected);
         UiModal modal = UiModal.create(THEME, font);
         // 确认按钮可用态由目录每帧刷新：值不变时不再重配按钮（重配会复制文本并重建命中目标）
         ConfirmGate confirmGate = new ConfirmGate();
         UiCatalogGrid grid = new UiCatalogGrid(THEME, font, multiSelect, catalogTexts(type, includeTags), new UiCatalogGrid.Listener() {
             @Override
             public void onSelectionChanged(List<String> selection) {
+                selectedState.clear();
+                selectedState.addAll(selection);
                 refreshCatalogConfirm(modal, shell.editable(), selection, unavailableReason, confirmGate);
             }
 
@@ -240,40 +237,35 @@ public final class RuleEditorPanelFactory {
                 mapper.page = Math.max(0, mapper.page + delta);
                 
             }
+
+            @Override
+            public void onScopeChanged(UiCatalogGrid.Scope scope) {
+                mapper.scope = scope;
+                mapper.page = 0;
+            }
+
+            @Override
+            public void onConfirm() {
+                if (!modal.buttons().isEmpty()) modal.buttons().getFirst().activate();
+            }
         });
-        grid.setEntryPolicy(policy);
-        grid.setSelection(selected);
-        grid.setUnavailableReason(unavailableReason);
-        grid.setEntrySource(() -> {
+        grid.setViewSource(() -> {
             boolean active = shell.editable();
-            refreshCatalogConfirm(modal, active, grid.selection(), unavailableReason, confirmGate);
-            if (active != mapper.active) {
-                mapper.active = active;
-                grid.setEnabled(active);
-            }
             List<UiCatalogGrid.Entry> mapped = mapper.map(workspace, type);
-            grid.setPage(mapper.page, mapper.pageCount);
-            grid.setPageLimits(mapper.page > 0, mapper.hasNext);
-            // 总数与语言不变时复用同一份状态文案；未知状态的加载/失败提示只在真值变化时下发
-            Object language = Language.getInstance();
-            if (mapper.notedTotal != mapper.total || mapper.notedLanguage != language) {
-                mapper.notedTotal = mapper.total;
-                mapper.notedLanguage = language;
-                grid.setStatusNote(Component.translatable(UI + "pick.total", mapper.total));
-            }
-            grid.setLoading(mapper.cached == null || !mapper.cached.lastPage()
-                    || includeTags && (mapper.cachedTags == null || !mapper.cachedTags.lastPage()));
+            refreshCatalogConfirm(modal, active, selectedState, unavailableReason, confirmGate);
+            boolean loading = mapper.cached == null || !mapper.cached.lastPage()
+                    || includeTags && (mapper.cachedTags == null || !mapper.cachedTags.lastPage());
             String errorState = workspace.directory(type).failed()
                     || includeTags && workspace.directory(RuleCatalogType.TAG).failed() ? "retry" : active ? "" : "frozen";
-            if (!errorState.equals(mapper.errorState)) {
-                mapper.errorState = errorState;
-                grid.setError(switch (errorState) {
-                    case "retry" -> Component.translatable(UI + "pick.retry_hint");
-                    case "frozen" -> Component.translatable(UI + "pick.frozen");
-                    default -> null;
-                });
-            }
-            return mapped;
+            Component status = Component.translatable(UI + "pick.total", mapper.total);
+            Component error = switch (errorState) {
+                case "retry" -> Component.translatable(UI + "pick.retry_hint");
+                case "frozen" -> Component.translatable(UI + "pick.frozen");
+                default -> null;
+            };
+            return new UiCatalogGrid.View(mapped == null ? List.of() : mapped, selectedState, policy, mapper.scope,
+                    unavailableReason, mapper.page, mapper.pageCount, mapper.page > 0, mapper.hasNext,
+                    null, status, loading, error, active);
         });
         grid.setOnRetry(() -> {
             workspace.retryDirectory(type);
@@ -291,21 +283,18 @@ public final class RuleEditorPanelFactory {
             }
             return null;
         });
-        if (!shell.editable()) {
-            grid.setEnabled(false);
-            grid.setError(Component.translatable(UI + "pick.frozen"));
-        }
         modal.title(title);
         modal.preferredWidth(pickerWidth(screenWidth));
         // 翻页与状态排到确认/取消同一行的左侧，省下独立一行的底部空间
         modal.inlineFooter();
         modal.contentWidget(grid, pickerBodyHeight(shell.theme(), screenHeight));
         modal.confirm(Component.translatable(UI + "button.confirm"), () -> {
-            List<String> selection = grid.selection();
+            List<String> selection = List.copyOf(selectedState);
             if (shell.editable() && selection.stream().noneMatch(id -> unavailableReason.apply(id) != null))
                 onPicked.accept(selection);
         });
-        refreshCatalogConfirm(modal, shell.editable(), grid.selection(), unavailableReason, confirmGate);
+        confirmGate.enabled = null;
+        refreshCatalogConfirm(modal, shell.editable(), selectedState, unavailableReason, confirmGate);
         modal.cancel(Component.translatable(UI + "button.cancel"));
         modal.layoutCentered(screenWidth, screenHeight);
         return modal;
@@ -352,19 +341,15 @@ public final class RuleEditorPanelFactory {
         // 条目可见范围：只作用于资源条目，标签条目不受限制
         private @Nullable Predicate<String> entryFilter;
         private @Nullable List<UiCatalogGrid.Entry> entries;
-        private boolean active = true;
         private int page;
         private int pageCount;
         private int total;
         private boolean hasNext;
         private String filter = "";
+        private UiCatalogGrid.Scope scope = UiCatalogGrid.Scope.BOTH;
 
         private Object language;
         private Object resources;
-        // 状态文案与失败提示的已下发值：目录刷新按帧执行，值未变时不重复构造 Component
-        private int notedTotal = -1;
-        private Object notedLanguage;
-        private String errorState = "";
         private String mappedFilter = "";
         private int mappedPage = -1;
         private UiCatalogGrid.Scope mappedScope = UiCatalogGrid.Scope.BOTH;
@@ -376,16 +361,14 @@ public final class RuleEditorPanelFactory {
             Object nextResources = PreviewResources.generation();
             Object nextLanguage = Language.getInstance();
             if (resources != null && (resources != nextResources || language != nextLanguage)) {
-                workspace.invalidateDirectories(); cached = null;
-                workspace.requestDirectory(type);
-                if (includeTags) workspace.requestDirectory(RuleCatalogType.TAG);
+                cached = null;
+                mappedPage = -1;
             }
             resources = nextResources; language = nextLanguage;
             RuleCatalog catalog = workspace.directory(type).value();
             RuleCatalog tags = includeTags ? workspace.directory(RuleCatalogType.TAG).value() : null;
             boolean changed = catalog != cached || tags != cachedTags;
             // 范围变化同样要让映射结果失效，否则工具栏的范围按钮不会生效
-            UiCatalogGrid.Scope scope = policy == null ? UiCatalogGrid.Scope.BOTH : policy.scope();
             if (changed || mappedScope != scope) {
                 tagPreviews.clear();
                 cached = catalog;
@@ -401,11 +384,13 @@ public final class RuleEditorPanelFactory {
                     if (policy != null && policy.hidden(entry.id())) continue;
                     if (validTags != null && !validTags.contains(entry.id())) continue;
                     if (entryFilter != null && !entryFilter.test(entry.id())) continue;
-                    if (type == RuleCatalogType.ENTITY && field != null && FieldCatalogChoices.isGenericProduct(field)
+                    if (type == RuleCatalogType.ENTITY && field != null
+                            && field.selectionIntent() == SelectionIntent.ENTITY_TYPES_EXCLUDING_PRODUCTS
                             && (entry.id().equals("minecraft:item") || entry.id().equals("minecraft:experience_orb"))) continue;
                     if (type == RuleCatalogType.TAG) {
-                        RuleCatalogType memberType = field == null ? RuleCatalogType.ITEM : FieldCatalogTypes.catalogTypeOf(field);
-                        var tag = TagPreviewIcons.resolve(memberType == null ? RuleCatalogType.ITEM : memberType, entry.id());
+                        RuleCatalogType memberType = field == null ? null : FieldCatalogTypes.catalogTypeOf(field);
+                        if (memberType == null) continue;
+                        var tag = TagPreviewIcons.resolve(memberType, entry.id());
                         tagPreviews.put(entry.id(), tag);
                         mapped.add(new UiCatalogGrid.Entry(entry.id(), tag.label(), null, tag.icon()));
                     } else {
@@ -428,18 +413,16 @@ public final class RuleEditorPanelFactory {
                 full = List.copyOf(mapped);
             }
             if (mappedPage != page || !mappedFilter.equals(filter)) {
-                String query = filter.toLowerCase(Locale.ROOT).trim();
+                String query = CatalogDisplayQuery.normalize(filter);
                 boolean tagsOnly = includeTags && query.startsWith("#");
                 String needle = tagsOnly ? query.substring(1) : query;
                 List<UiCatalogGrid.Entry> filtered = full.stream().filter(entry -> !tagsOnly || entry.id().startsWith("#"))
-                        .filter(entry -> entry.id().toLowerCase(Locale.ROOT).contains(needle)
-                        || entry.label().getString().toLowerCase(Locale.ROOT).contains(needle)
-                        || entry.subLabel() != null && entry.subLabel().getString().toLowerCase(Locale.ROOT).contains(needle)).toList();
+                        .filter(entry -> CatalogDisplayQuery.matches(needle, entry.id(), entry.label(), entry.subLabel())).toList();
                 total = filtered.size();
-                pageCount = Math.max(1, (total + UiCatalogGrid.PAGE_SIZE - 1) / UiCatalogGrid.PAGE_SIZE);
-                page = Math.clamp(page, 0, pageCount - 1);
-                int from = page * UiCatalogGrid.PAGE_SIZE;
-                entries = List.copyOf(filtered.subList(from, Math.min(filtered.size(), from + UiCatalogGrid.PAGE_SIZE)));
+                CatalogDisplayQuery.PageRange range = CatalogDisplayQuery.range(total, page, UiCatalogGrid.PAGE_SIZE);
+                pageCount = range.pageCount();
+                page = range.from() / UiCatalogGrid.PAGE_SIZE;
+                entries = List.copyOf(filtered.subList(range.from(), range.to()));
                 hasNext = page + 1 < pageCount;
                 mappedPage = page; mappedFilter = filter;
             }
@@ -486,7 +469,7 @@ public final class RuleEditorPanelFactory {
     private static boolean isClimateCondition(RuleValue body) {
         String type = RuleValue.typeOf(body);
         RuleValue mode = body.child("mode");
-        return type != null && type.endsWith("biome")
+        return BiomeCondition.ID.toString().equals(type)
                 && mode != null && mode.isText() && "climate".equals(mode.asText());
     }
 

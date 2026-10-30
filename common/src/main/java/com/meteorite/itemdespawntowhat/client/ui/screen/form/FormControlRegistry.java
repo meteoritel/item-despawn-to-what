@@ -2,7 +2,12 @@ package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
+import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
+import com.meteorite.itemdespawntowhat.client.ui.shared.FieldCatalogTypes;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphics;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * 字段类型到控件工厂的完整映射；新增类型必须为穷举 switch 提供控件。
@@ -87,6 +92,42 @@ final class FormControlRegistry {
      * @return 该字段对应的控件，绝不为 null
      */
     static FormControl create(Font font, FormView owner, EditorField field, Runnable onChanged) {
+        if (field.isCatalogReference() && FieldCatalogTypes.catalogTypeOf(field) == null) {
+            return new UnavailableCatalogControl(owner.theme(), field);
+        }
         return factory(field.type()).create(font, owner, field, onChanged);
+    }
+
+    private static final class UnavailableCatalogControl extends FormControl {
+        private int x;
+        private int y;
+        private int width;
+
+        private UnavailableCatalogControl(UiHostTheme theme,
+                                          EditorField field) {
+            super(theme, field);
+        }
+
+        @Override int height() { return DEFAULT_HEIGHT; }
+
+        @Override void setBounds(int x, int y, int width) {
+            this.x = x;
+            this.y = y;
+            this.width = width;
+        }
+
+        @Override void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+            String text = net.minecraft.network.chat.Component.translatable(TypeLabels.UI_PREFIX + "catalog.unavailable").getString();
+            String visible = com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll.trimToWidth(font, text, Math.max(0, width - 4));
+            graphics.drawString(font, visible, x + 2, y + 2, THEME.palette().textSecondary(), false);
+        }
+
+        @Override void load(@Nullable com.meteorite.itemdespawntowhat.client.edit.RuleValue value) {
+            rememberLoaded(value);
+        }
+
+        @Override @Nullable com.meteorite.itemdespawntowhat.client.edit.RuleValue store() {
+            return originalValue();
+        }
     }
 }

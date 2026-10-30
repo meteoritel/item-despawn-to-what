@@ -905,6 +905,7 @@
   "gui.itemdespawntowhat.edit.pick.scope_mob_effect_label": "Effects",
   "gui.itemdespawntowhat.edit.pick.scope_tag_label": "Tags",
   "gui.itemdespawntowhat.edit.pick.scope_both_label": "Both",
+  "gui.itemdespawntowhat.edit.catalog.unavailable": "No directory is available for this field",
   "gui.itemdespawntowhat.edit.pick.total": "%s total",
   "gui.itemdespawntowhat.edit.pick.clear": "Clear selection",
   "gui.itemdespawntowhat.edit.pick.source_conflict": "! Overlaps source items and cannot be a catalyst; deselect existing conflicts",

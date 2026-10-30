@@ -49,6 +49,7 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
     // 删除叉的命中与绘制区域：贴住 chip 右端
     private static final int REMOVE_HIT_WIDTH = 16;
     private final Font font;
+    private final RuleCatalogType catalogType;
     private final UiScrollView scroll = new UiScrollView();
     private final List<Selection> values = new ArrayList<>();
     private final List<UiRect> chips = new ArrayList<>();
@@ -68,6 +69,8 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
     CatalogSelectionControl(UiHostTheme theme, Font font, EditorField field, Runnable onChanged) {
         super(theme, field);
         this.font = font;
+        this.catalogType = java.util.Objects.requireNonNull(FieldCatalogTypes.catalogTypeOf(field),
+                "Catalog selection requires a declared registry");
         this.onChanged = onChanged;
         scroll.setStep(CHIP_HEIGHT + GAP);
     }
@@ -182,8 +185,7 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
     }
 
     private RuleCatalogType catalogType() {
-        RuleCatalogType type = FieldCatalogTypes.catalogTypeOf(field);
-        return type == null ? RuleCatalogType.ITEM : type;
+        return catalogType;
     }
 
     @Override

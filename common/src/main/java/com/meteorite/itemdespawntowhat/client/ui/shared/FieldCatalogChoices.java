@@ -1,14 +1,10 @@
 package com.meteorite.itemdespawntowhat.client.ui.shared;
 
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
-import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
+import com.meteorite.itemdespawntowhat.core.api.param.SelectionIntent;
 import java.util.Set;
 import java.util.stream.Collectors;
-import net.minecraft.client.Minecraft;
 import net.minecraft.core.Registry;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.core.registries.Registries;
-import net.minecraft.world.entity.EntityType;
 
 /** 用客户端已同步的真实标签归属过滤字段选择，不依赖目录的首次命中说明。 */
 public final class FieldCatalogChoices {
@@ -17,25 +13,15 @@ public final class FieldCatalogChoices {
     public static Set<String> tags(EditorField field) {
         var type = FieldCatalogTypes.catalogTypeOf(field);
         if (type == null) return Set.of();
-        var level = Minecraft.getInstance().level;
-        return switch (type) {
-            case ITEM -> tags(BuiltInRegistries.ITEM, false);
-            case BLOCK -> tags(BuiltInRegistries.BLOCK, false);
-            case ENTITY -> tags(BuiltInRegistries.ENTITY_TYPE, isGenericProduct(field));
-            case FLUID -> tags(BuiltInRegistries.FLUID, false);
-            case BIOME -> level == null ? Set.of()
-                    : tags(level.registryAccess().registryOrThrow(Registries.BIOME), false);
-            default -> Set.of();
-        };
+        Registry<?> registry = CatalogTypePresentation.of(type).tagRegistry();
+        if (registry == null) return Set.of();
+        return tags(registry, field.selectionIntent() == SelectionIntent.ENTITY_TYPES_EXCLUDING_PRODUCTS);
     }
 
-    public static boolean isGenericProduct(EditorField field) {
-        return field.labelKey().equals(TypeLabels.UI_PREFIX + "field.spawn_entity.entity");
-    }
-
-    private static <T> Set<String> tags(Registry<T> registry, boolean genericProduct) {
-        return registry.getTagNames().filter(tag -> !genericProduct || registry.getTag(tag).map(holders ->
-                        holders.stream().noneMatch(holder -> holder.value() == EntityType.ITEM || holder.value() == EntityType.EXPERIENCE_ORB))
+    private static <T> Set<String> tags(Registry<T> registry, boolean excludeProducts) {
+        return registry.getTagNames().filter(tag -> !excludeProducts || registry.getTag(tag).map(holders ->
+                        holders.stream().noneMatch(holder -> holder.value() == net.minecraft.world.entity.EntityType.ITEM
+                                || holder.value() == net.minecraft.world.entity.EntityType.EXPERIENCE_ORB))
                         .orElse(false)).map(tag -> "#" + tag.location()).collect(Collectors.toSet());
     }
 }

@@ -30,9 +30,7 @@ final class RegistryCatalogSource implements RuleCatalogSource {
     private final Function<MinecraftServer, Set<ResourceLocation>> idSupplier;
     private final EntryFactory factory;
 
-    // 缓存：修订号与对应条目；初始哨兵值保证首次调用一定重建
-    private int cachedRevision = Integer.MIN_VALUE;
-    private List<RuleCatalogEntry> cachedEntries = List.of();
+    private Snapshot snapshot = new Snapshot(Integer.MIN_VALUE, Set.of(), List.of());
 
     RegistryCatalogSource(MinecraftServer server, RuleCatalogType type,
                           Function<MinecraftServer, Set<ResourceLocation>> idSupplier, EntryFactory factory) {
@@ -49,32 +47,33 @@ final class RegistryCatalogSource implements RuleCatalogSource {
 
     @Override
     public int revision() {
-        return revisionOf(this.idSupplier.apply(this.server));
+        return snapshot().revision();
     }
 
     @Override
     public List<RuleCatalogEntry> all() {
-        Set<ResourceLocation> ids = this.idSupplier.apply(this.server);
-        int revision = revisionOf(ids);
-        synchronized (this) {
-            if (revision != this.cachedRevision) {
-                List<RuleCatalogEntry> built = new ArrayList<>(ids.size());
-                for (ResourceLocation id : ids) {
-                    RuleCatalogEntry entry = this.factory.create(id);
-                    if (entry != null) {
-                        built.add(entry);
-                    }
-                }
-                built.sort(Comparator.comparing(RuleCatalogEntry::id));
-                this.cachedEntries = List.copyOf(built);
-                this.cachedRevision = revision;
-            }
-            return this.cachedEntries;
-        }
+        return snapshot().entries();
     }
 
-    // 内容哈希：Set.hashCode 与顺序无关，故同一内容始终得到同一修订号
-    static int revisionOf(Set<ResourceLocation> ids) {
-        return 31 * ids.size() + ids.hashCode();
+    private synchronized Snapshot snapshot() {
+        Set<ResourceLocation> ids = this.idSupplier.apply(this.server);
+        if (ids.equals(snapshot.ids())) return snapshot;
+        List<RuleCatalogEntry> built = new ArrayList<>(ids.size());
+        for (ResourceLocation id : ids) {
+            RuleCatalogEntry entry = this.factory.create(id);
+            if (entry != null) built.add(entry);
+        }
+        built.sort(Comparator.comparing(RuleCatalogEntry::id));
+        List<RuleCatalogEntry> entries = List.copyOf(built);
+        int revision = revisionOf(entries);
+        snapshot = new Snapshot(revision, Set.copyOf(ids), entries);
+        return snapshot;
     }
+
+    // 修订覆盖实际下发字段；排序后的 DTO 列表使结果与来源枚举顺序无关。
+    private static int revisionOf(List<RuleCatalogEntry> entries) {
+        return entries.hashCode();
+    }
+
+    private record Snapshot(int revision, Set<ResourceLocation> ids, List<RuleCatalogEntry> entries) { }
 }

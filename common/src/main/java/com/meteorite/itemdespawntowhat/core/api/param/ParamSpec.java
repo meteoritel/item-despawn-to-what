@@ -69,6 +69,10 @@ public sealed interface ParamSpec<V> permits IntSpec, FloatSpec, DoubleSpec, Boo
         return meta().tier();
     }
 
+    default SelectionIntent selectionIntent() {
+        return meta().selectionIntent();
+    }
+
     // 数值字段的常用取值按钮
     default List<ParamPreset> presets() {
         return meta().presets();

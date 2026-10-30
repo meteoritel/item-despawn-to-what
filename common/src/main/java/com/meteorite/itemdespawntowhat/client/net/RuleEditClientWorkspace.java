@@ -149,11 +149,6 @@ public final class RuleEditClientWorkspace {
         return directories.view(type);
     }
 
-    /** 显式启动或继续尚未完成的目录加载。 */
-    public synchronized void requestDirectory(RuleCatalogType type) {
-        if (lease.canQuery(connected())) directories.request(type, this::sendCatalog);
-    }
-
     /** 重新打开目录时验证首屏修订，未变化继续复用完整缓存。 */
     public synchronized void refreshDirectory(RuleCatalogType type) {
         if (type != null && lease.canQuery(connected())) directories.refresh(type, this::sendCatalog);
@@ -163,9 +158,6 @@ public final class RuleEditClientWorkspace {
     public synchronized void retryDirectory(RuleCatalogType type) {
         if (type != null && lease.canQuery(connected())) directories.retry(type, this::sendCatalog);
     }
-
-    /** 资源或语言变化后使目录缓存失效。 */
-    public synchronized void invalidateDirectories() { directories.clear(); }
 
     /** ACTIVE 会话显式请求快照，旧请求与分片同时失效。 */
     public synchronized void requestSnapshot() {
@@ -491,6 +483,10 @@ public final class RuleEditClientWorkspace {
         RuleCatalogType type = RuleCatalogType.fromId(payload.catalogType());
         if (type == null || directories.stale(type, payload.requestId())) return;
         RuleCatalog parsed = RuleCatalog.parse(payload.json()).result().orElse(null);
+        if (parsed != null && (parsed.type() != type || parsed.revision() != payload.revision()
+                || parsed.lastPage() != payload.lastPage())) {
+            parsed = null;
+        }
         if (parsed == null) LOGGER.warn("规则目录解析失败: type={} bytes={}", payload.catalogType(), payload.json().length());
         directories.accept(type, payload.requestId(), parsed, lease.canQuery(connected()), this::sendCatalog);
     }

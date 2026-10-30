@@ -72,7 +72,8 @@ public final class ParamProjection {
             case NestedSpec<?> nestedSpec -> nestedField(nestedSpec, label, typeId);
             case NestedListSpec<?> nestedListSpec -> nestedListField(nestedListSpec, label, typeId);
         };
-        field = field.withTier(spec.tier()).withDefaultValue(BuiltinEditorDefaults.defaultValue(spec));
+        field = field.withTier(spec.tier()).withSelectionIntent(spec.selectionIntent())
+                .withDefaultValue(BuiltinEditorDefaults.defaultValue(spec));
         if (spec.hintSuffix() != null) {
             field = field.withHint(FIELD + spec.hintSuffix());
         }

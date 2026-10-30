@@ -47,9 +47,8 @@ import org.lwjgl.glfw.GLFW;
  * （宿主据此走既有目录请求链路），快速切换时由宿主丢弃过时响应。</p>
  *
  * <p>条目策略由宿主通过 {@link EntryPolicy} 注入：宿主在分页前按 {@link EntryPolicy#hidden(String)} 排除
- * 技术性条目与空/流动流体，并按 {@link EntryPolicy#scope()} 取主分类或标签；页面只负责范围按钮的轮询与回写，
- * 因此页码、总数与可见条目始终一致。条目源通过 {@link #setEntrySource(Supplier)} 注入，
- * 宿主返回同一缓存实例时不会重建列表。</p>
+ * 技术性条目与空/流动流体；范围值由宿主视图提供，切换只发出意图回调，
+ * 因此页码、总数与可见条目始终一致。宿主每次提供一份 {@link View}，网格从同一快照读取条目和状态。</p>
  */
 public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidget, UiFocusTarget, UiFooterHost {
 
@@ -75,6 +74,13 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
         // 激活条目（Enter 或双击）
         default void onActivate(String id) {
         }
+
+        // Enter 确认当前选择；宿主复用弹窗确认按钮的校验与提交动作
+        default void onConfirm() {
+        }
+
+        default void onScopeChanged(Scope scope) {
+        }
     }
 
     /**
@@ -85,19 +91,13 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
     }
 
     /**
-     * 条目策略：默认不展示哪些条目，以及工具栏上「主分类 / 标签 / 一起」的当前范围。
-     * <p>宿主在分页前用 {@link #hidden(String)} 过滤并按 {@link #scope()} 取主分类或标签，
-     * 范围状态由页面按钮回写，双方看到同一份事实。</p>
+     * 条目策略：默认不展示哪些条目，以及是否显示范围控件。
+     * <p>宿主在分页前用 {@link #hidden(String)} 过滤条目；范围值由 {@link View} 提供，页面按钮只发出切换意图。</p>
      */
     public interface EntryPolicy {
 
         // 该 id 是否属于默认不展示的内容（技术性条目、空与流动流体…）
         boolean hidden(String id);
-
-        Scope scope();
-
-        // 工具栏范围按钮回写
-        void setScope(Scope scope);
 
         // 是否出现范围按钮：只有同时存在主分类与标签的目录页才需要
         default boolean scoped() {
@@ -110,6 +110,20 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
      * {@code subLabel} 只供宿主搜索匹配、页面不渲染。
      */
     public record Entry(String id, Component label, @Nullable Component subLabel, @Nullable UiIcon icon) {
+    }
+
+    /** 宿主一次发布的目录视图；列表与状态字段属于同一刷新结果。 */
+    public record View(List<Entry> entries, List<String> selection, @Nullable EntryPolicy policy, Scope scope,
+                       Function<String, @Nullable Component> unavailableReason,
+                       int page, int pageCount, boolean canPrev, boolean canNext,
+                       @Nullable Component pageLabel, @Nullable Component statusNote,
+                       boolean loading, @Nullable Component error, boolean enabled) {
+        public View {
+            entries = entries == null ? List.of() : List.copyOf(entries);
+            selection = selection == null ? List.of() : List.copyOf(selection);
+            scope = scope == null ? Scope.BOTH : scope;
+            unavailableReason = unavailableReason == null ? ignored -> null : unavailableReason;
+        }
     }
 
     /**
@@ -180,9 +194,10 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
     private final Map<Entry, String> rowLabels = new IdentityHashMap<>();
     private @Nullable Object rowLabelsLanguage;
 
-    private @Nullable Supplier<@Nullable List<Entry>> entrySource;
-    private @Nullable List<Entry> sourceCache;
+    private @Nullable Supplier<View> viewSource;
+    private @Nullable View sourceCache;
     private @Nullable EntryPolicy policy;
+    private Scope scope = Scope.BOTH;
     private @Nullable Runnable onRetry;
     private Function<String, Component> tooltipSuffix = ignored -> null;
     private Function<String, @Nullable Component> unavailableReason = ignored -> null;
@@ -225,7 +240,6 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
     // 状态文案缓存：只有真实依赖（错误/加载/空结果/页码标签/附加说明/已选数/语言）变化才重建
     private @Nullable Component statusTextCache;
     private @Nullable Component statusTextError;
-    private boolean statusTextLoading;
     private boolean statusTextExplicitLoading;
     private int statusTextEntriesVersion = -1;
     private @Nullable Component statusTextPageLabel;
@@ -252,7 +266,6 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
     private boolean enabled = true;
     private boolean visible = true;
     private final UiFocusState focusState = new UiFocusState();
-    private boolean loading;
     private boolean explicitLoading;
     private @Nullable Component error;
     private @Nullable Component statusNote;
@@ -269,12 +282,12 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
     private @Nullable UiInteractionSession interaction;
 
     // 宿主可显示标签分组的页名，普通目录继续使用数字页码。
-    public void setPageLabel(@Nullable Component label) {
+    private void setPageLabel(@Nullable Component label) {
         pageLabel = retainSameText(pageLabel, label);
     }
 
     // 宿主的附加状态文字（例如「共 1204 项」），填空表示不显示。
-    public void setStatusNote(@Nullable Component note) {
+    private void setStatusNote(@Nullable Component note) {
         statusNote = retainSameText(statusNote, note);
     }
 
@@ -309,23 +322,21 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
     }
 
     // 注入条目策略：null 表示页面不隐藏任何条目，也不出现范围按钮
-    public void setEntryPolicy(@Nullable EntryPolicy next) {
+    private void setEntryPolicy(@Nullable EntryPolicy next) {
         this.policy = next;
         layout(bounds.x(), bounds.y(), bounds.width(), bounds.height());
     }
 
-    // 注入条目源：宿主返回同一缓存实例时只在内容变化后重建列表
-    public UiCatalogGrid setEntrySource(@Nullable Supplier<@Nullable List<Entry>> source) {
-        this.entrySource = source;
+    // 注入宿主视图：一次读取取得同一刷新周期内的条目和所有展示状态
+    public void setViewSource(@Nullable Supplier<View> source) {
+        this.viewSource = source;
         this.sourceCache = null;
-        syncSource();
-        return this;
+        syncView();
     }
 
     // 直接设置条目（测试或宿主已就绪的缓存）
     public UiCatalogGrid setEntries(List<Entry> next) {
-        this.entrySource = null;
-        this.sourceCache = next;
+        this.viewSource = null;
         this.entries.clear();
         if (next != null) {
             this.entries.addAll(next);
@@ -338,12 +349,12 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
 
     // 条目列表（当前已同步的视图）
     public List<Entry> entries() {
-        syncSource();
+        syncView();
         return List.copyOf(entries);
     }
 
     public int size() {
-        syncSource();
+        syncView();
         return entries.size();
     }
 
@@ -356,7 +367,7 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
      *
      * @param ids 当前字段引用，单选模式只采用第一项
      */
-    public void setSelection(List<String> ids) {
+    private void setSelection(List<String> ids) {
         selection.clear();
         for (String id : ids) {
             if (id == null || id.isBlank() || selection.contains(id)) continue;
@@ -370,7 +381,7 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
      *
      * @param reason 按条目 ID 查询原因，返回 null 表示可选
      */
-    public void setUnavailableReason(Function<String, @Nullable Component> reason) {
+    private void setUnavailableReason(Function<String, @Nullable Component> reason) {
         unavailableReason = Objects.requireNonNull(reason, "reason");
     }
 
@@ -387,28 +398,24 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
         return search.value();
     }
 
-    public UiCatalogGrid setError(@Nullable Component error) {
+    private void setError(@Nullable Component error) {
         this.error = retainSameText(this.error, error);
-        return this;
     }
 
-    public UiCatalogGrid setLoading(boolean loading) {
+    private void setLoading(boolean loading) {
         explicitLoading = loading;
-        return this;
     }
 
-    public UiCatalogGrid setOnRetry(Runnable retry) {
+    public void setOnRetry(@Nullable Runnable retry) {
         onRetry = retry;
-        return this;
     }
 
-    public UiCatalogGrid setTooltipSuffix(Function<String, Component> suffix) {
+    public void setTooltipSuffix(Function<String, Component> suffix) {
         tooltipSuffix = suffix == null ? ignored -> null : suffix;
-        return this;
     }
 
     // 页码状态：page 从 0 开始；pageCount <= 0 表示未知（只显示当前页号）
-    public UiCatalogGrid setPage(int page, int pageCount) {
+    private void setPage(int page, int pageCount) {
         int nextPage = Math.max(0, page);
         int nextPageCount = Math.max(0, pageCount);
         if (nextPage != this.page) {
@@ -423,17 +430,15 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
             // 页码宽度参与底栏布局：页码真正变化时显式重排一次，不再依赖每帧重排兜底
             layout(bounds.x(), bounds.y(), bounds.width(), bounds.height());
         }
-        return this;
     }
 
     // 分页边界：由宿主按目录缓存的 lastPage / 返回条数判定，边界外不响应翻页
-    public UiCatalogGrid setPageLimits(boolean canPrev, boolean canNext) {
+    private void setPageLimits(boolean canPrev, boolean canNext) {
         this.canPrev = canPrev;
         this.canNext = canNext;
-        return this;
     }
 
-    public UiCatalogGrid setEnabled(boolean enabled) {
+    private void setEnabled(boolean enabled) {
         this.enabled = enabled;
         if (!enabled) {
             if (interaction != null) interaction.end(this, UiInteractionSession.EndReason.DISABLED);
@@ -442,7 +447,6 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
                 search.focusState().clear();
             }
         }
-        return this;
     }
 
     public boolean isEnabled() {
@@ -621,29 +625,48 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
         return visible;
     }
 
-    private void syncSource() {
-        Supplier<@Nullable List<Entry>> source = entrySource;
+    private void syncView() {
+        Supplier<View> source = viewSource;
         if (source == null) {
             return;
         }
-        List<Entry> next = source.get();
-        this.loading = next == null;
-        if (next == sourceCache) {
+        View next = source.get();
+        View previous = sourceCache;
+        if (next == previous) {
             return;
         }
         sourceCache = next;
-        entries.clear();
-        if (next != null) {
-            entries.addAll(next);
+        if (previous == null || next.entries() != previous.entries()) {
+            String focusedId = cursor >= 0 && cursor < entries.size() ? entries.get(cursor).id() : null;
+            entries.clear();
+            entries.addAll(next.entries());
+            entriesVersion++;
+            rowLabels.clear();
+            rowLabelsLanguage = null;
+            hoveredIndex = -1;
+            hoverScrollTicks = 0;
+            cursor = focusedId == null ? -1 : indexOf(focusedId);
+            clampCursor();
+            clampScroll();
         }
-        entriesVersion++;
-        // 条目集合换过一批：旧标签缓存以条目对象身份为键，直接丢弃
-        rowLabels.clear();
-        rowLabelsLanguage = null;
-        hoveredIndex = -1;
-        hoverScrollTicks = 0;
-        clampCursor();
-        clampScroll();
+        setSelection(next.selection());
+        setEntryPolicy(next.policy());
+        scope = next.scope();
+        setUnavailableReason(next.unavailableReason());
+        setPage(next.page(), next.pageCount());
+        setPageLimits(next.canPrev(), next.canNext());
+        setPageLabel(next.pageLabel());
+        setStatusNote(next.statusNote());
+        setLoading(next.loading());
+        setError(next.error());
+        setEnabled(next.enabled());
+    }
+
+    private int indexOf(String id) {
+        for (int index = 0; index < entries.size(); index++) {
+            if (entries.get(index).id().equals(id)) return index;
+        }
+        return -1;
     }
 
     // ---- 网格几何 ----
@@ -735,7 +758,7 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
 
     @Override
     public void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
-        syncSource();
+        syncView();
         prepareIcons();
         indexAt(mouseX, mouseY);
         drawToolbar(graphics, mouseX, mouseY);
@@ -783,7 +806,7 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
         graphics.fill(scopeRect.x(), scopeRect.y(), scopeRect.right(), scopeRect.bottom(),
                 hovered ? theme.palette().controlHover() : theme.palette().controlFill());
         theme.drawBevel(graphics, scopeRect, theme.palette().controlBevelLight(), theme.palette().controlBevelDark());
-        String label = scopeLabel(policy.scope()).getString();
+        String label = scopeLabel(scope).getString();
         graphics.drawString(font, label, scopeRect.x() + Math.max(0, (scopeRect.width() - font.width(label)) / 2),
                 scopeRect.y() + Math.max(0, (scopeRect.height() - font.lineHeight) / 2),
                 enabled ? theme.palette().textPrimary() : theme.palette().textDisabled(), false);
@@ -913,7 +936,7 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
         }
         theme.drawDivider(graphics, bounds.x(), footerRect.y() - 1, bounds.width());
         Component status = statusText();
-        boolean busy = (loading || explicitLoading) && error == null;
+        boolean busy = explicitLoading && error == null;
         if (busy) {
             UiSpinner.render(graphics, statusRect.x(), statusRect.y() + Math.max(0, (statusRect.height() - 10) / 2),
                     Util.getMillis(), theme.secondaryTextColor());
@@ -961,7 +984,7 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
     private Component statusText() {
         Object language = Language.getInstance();
         if (statusTextCache != null && statusTextLanguage == language
-                && statusTextError == error && statusTextLoading == loading
+                && statusTextError == error
                 && statusTextExplicitLoading == explicitLoading
                 && statusTextEntriesVersion == entriesVersion
                 && statusTextPageLabel == pageLabel && statusTextNote == statusNote
@@ -971,7 +994,6 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
         Component text = buildStatusText();
         statusTextCache = text;
         statusTextError = error;
-        statusTextLoading = loading;
         statusTextExplicitLoading = explicitLoading;
         statusTextEntriesVersion = entriesVersion;
         statusTextPageLabel = pageLabel;
@@ -985,7 +1007,7 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
         if (error != null) {
             return texts.error().copy().append(" ").append(error);
         }
-        if (loading || explicitLoading) {
+        if (explicitLoading) {
             return texts.loading();
         }
         if (entries.isEmpty() && pageLabel == null && statusNote == null) {
@@ -1087,7 +1109,7 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
         }
         if (policy != null && policy.scoped() && scopeRect.contains(mouseX, mouseY)) {
             context.scope().pointerHit(null);
-            policy.setScope(nextScope(policy.scope()));
+            listener.onScopeChanged(nextScope(scope));
             scrollRow = 0;
             cursor = -1;
             hoveredIndex = -1;
@@ -1099,7 +1121,7 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
             search.focusState().clear();
             context.scope().pointerHit(null);
             interaction = context.scope().interaction();
-            interaction.begin(this, UiInteractionSession.Source.POINTER, context.button());
+            interaction.begin(this, UiInteractionSession.Source.POINTER, 0);
             scrollToPointer(mouseY);
             return true;
         }
@@ -1250,7 +1272,10 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
             return;
         }
         String id = entries.get(cursor).id();
-        if (unavailableReason.apply(id) == null) listener.onActivate(id);
+        if (unavailableReason.apply(id) != null) return;
+        if (!multiSelect && !selection.contains(id)) toggle(id);
+        listener.onActivate(id);
+        listener.onConfirm();
     }
 
     // 选择切换：单选模式替换旧选择，多选模式切换单项
@@ -1304,7 +1329,7 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
     // 悬停提示的每一行：条目只给显示名与注册名，宿主附加说明（标签成员、预览不可用）另起一行
     private List<Component> tooltipLines(double mouseX, double mouseY) {
         if (policy != null && policy.scoped() && scopeRect.contains(mouseX, mouseY)) {
-            return List.of(scopeText(policy.scope()));
+            return List.of(scopeText(scope));
         }
         if (enabled && canPrev && prevRect.contains(mouseX, mouseY)) {
             return List.of(texts.prevPage());

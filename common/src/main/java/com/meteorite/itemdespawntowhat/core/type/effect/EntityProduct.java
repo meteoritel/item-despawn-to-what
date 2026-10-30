@@ -8,6 +8,7 @@ import com.meteorite.itemdespawntowhat.core.api.param.IntSpec;
 import com.meteorite.itemdespawntowhat.core.api.param.ParamList;
 import com.meteorite.itemdespawntowhat.core.api.param.ParamPreset;
 import com.meteorite.itemdespawntowhat.core.api.param.RefSpec;
+import com.meteorite.itemdespawntowhat.core.api.param.SelectionIntent;
 import com.meteorite.itemdespawntowhat.core.model.ProductKind;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
@@ -133,7 +134,8 @@ public sealed interface EntityProduct permits EntityProduct.Item, EntityProduct.
         public static final String ENTITY_FIELD = "entity";
         public static final String COUNT_FIELD = "count";
         public static final RefSpec ENTITY = RefSpec.required(ENTITY_FIELD, "minecraft:entity_type")
-                .label("spawn_entity.entity");
+                .label("spawn_entity.entity")
+                .selectionIntent(SelectionIntent.ENTITY_TYPES_EXCLUDING_PRODUCTS);
         public static final IntSpec COUNT = IntSpec.defaulted(COUNT_FIELD, 1, 1, 64)
                 .initial(1)
                 .label("spawn_entity.count");

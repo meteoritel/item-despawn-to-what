@@ -26,6 +26,11 @@ public record RefSpec(ParamMeta meta, String registry) implements ParamSpec<Tagg
         return withMeta(meta.withLabel(suffix));
     }
 
+    /** 声明该引用字段的目录候选业务约束。 */
+    public RefSpec selectionIntent(SelectionIntent value) {
+        return withMeta(meta.withSelectionIntent(value));
+    }
+
     /** 设置编辑器展示层级。 */
     public RefSpec tier(ParamTier value) { return withMeta(meta.withTier(value)); }
 

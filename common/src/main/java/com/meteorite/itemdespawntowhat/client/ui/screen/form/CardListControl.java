@@ -113,7 +113,7 @@ final class CardListControl extends FormControl {
     // 新增条目：目录按多选打开并回填已有引用，确认一次即可补齐多张卡片
     private void addEntry() {
         if (choiceField == null) {
-            insertEntry(null);
+            insertEntry();
             return;
         }
         List<String> current = new ArrayList<>();
@@ -126,9 +126,8 @@ final class CardListControl extends FormControl {
         owner.openMultiReferenceChoice(choiceField, owner.childPath(field.name()), current, this::applyReferences);
     }
 
-    private void insertEntry(@Nullable String reference) {
+    private void insertEntry() {
         Entry entry = createEntry(null);
-        entry.reference = reference;
         refreshChoice(entry);
         mutate(() -> entries.add(entry));
     }
@@ -173,7 +172,7 @@ final class CardListControl extends FormControl {
         if (index < 0) {
             return;
         }
-        owner.openReferenceChoice(choiceField, entryChoicePath(index), entry.reference, picked -> mutate(() -> {
+        owner.openReferenceChoice(choiceField, entryChoicePath(choiceField, index), entry.reference, picked -> mutate(() -> {
             entry.reference = picked;
             refreshChoice(entry);
         }));
@@ -217,6 +216,7 @@ final class CardListControl extends FormControl {
 
     // 一条卡片的取值装载：引用取自首行字段，数值缺省时显示声明的默认值
     private void loadEntry(Entry entry, @Nullable RuleValue raw) {
+        entry.original = raw == null ? null : raw.deepCopy();
         RuleValue object = raw != null && raw.isMapping() ? raw : null;
         entry.reference = choiceField == null || object == null ? null : referenceText(object.child(choiceField.name()));
         for (int i = 0; i < entry.values.size(); i++) {
@@ -276,7 +276,7 @@ final class CardListControl extends FormControl {
     // 标题栏 + 每张卡片（首行胶囊与删除、第二行数值并排），顺带算出总高度
     private void layoutAt(int x, int y, int width) {
         int cursor = y;
-        int addWidth = Math.min(width, Math.max(36, addButton.preferredWidth(6)));
+        int addWidth = Math.clamp(Math.max(36, addButton.preferredWidth(6)), 0, width);
         addButton.setBounds(x + width - addWidth, cursor, addWidth, HEADER_HEIGHT);
         titleBounds = new UiRect(x, cursor, Math.max(0, width - addWidth - COLUMN_GAP), HEADER_HEIGHT);
         cursor += HEADER_HEIGHT + CARD_GAP;
@@ -296,9 +296,9 @@ final class CardListControl extends FormControl {
     private int layoutCard(Entry entry, int x, int cardTop, int width) {
         int innerLeft = x + CARD_PADDING;
         int innerWidth = Math.max(0, width - CARD_PADDING * 2);
-        int removeWidth = Math.min(innerWidth, Math.max(REMOVE_BUTTON_WIDTH, entry.remove.preferredWidth(4)));
+        int removeWidth = Math.clamp(Math.max(REMOVE_BUTTON_WIDTH, entry.remove.preferredWidth(4)), 0, innerWidth);
         int choiceRoom = Math.max(0, innerWidth - removeWidth - COLUMN_GAP);
-        int choiceWidth = Math.min(Math.max(MIN_CHOICE_WIDTH, entry.choice.preferredWidth(6)), choiceRoom);
+        int choiceWidth = Math.clamp(Math.max(MIN_CHOICE_WIDTH, entry.choice.preferredWidth(6)), 0, choiceRoom);
         entry.choice.setBounds(innerLeft, cardTop + CARD_PADDING, choiceWidth, CHOICE_HEIGHT);
         entry.remove.setBounds(x + width - CARD_PADDING - removeWidth, cardTop + CARD_PADDING,
                 removeWidth, CHOICE_HEIGHT);
@@ -308,7 +308,7 @@ final class CardListControl extends FormControl {
         entry.captions.clear();
         if (count > 0) {
             int caption = captionHeight();
-            int columns = Math.max(1, Math.min(count, (innerWidth + COLUMN_GAP) / (MIN_VALUE_WIDTH + COLUMN_GAP)));
+            int columns = Math.clamp((innerWidth + COLUMN_GAP) / (MIN_VALUE_WIDTH + COLUMN_GAP), 1, count);
             int columnWidth = Math.max(0, (innerWidth - (columns - 1) * COLUMN_GAP) / columns);
             int rows = (count + columns - 1) / columns;
             for (int i = 0; i < count; i++) {
@@ -398,7 +398,10 @@ final class CardListControl extends FormControl {
     }
 
     private RuleValue storeEntry(Entry entry) {
-        RuleValue.Mapping object = RuleValue.mapping();
+        if (entry.original != null && !entry.original.isMapping()) {
+            return entry.original.deepCopy();
+        }
+        RuleValue.Mapping object = RuleValue.mapping(entry.original);
         if (choiceField != null && entry.reference != null && !entry.reference.isBlank()) {
             object.put(choiceField.name(), RuleValue.text(entry.reference));
         }
@@ -610,7 +613,7 @@ final class CardListControl extends FormControl {
     }
 
     // 条目在草稿里的引用字段路径：目录入口需要完整路径
-    private String entryChoicePath(int index) {
+    private String entryChoicePath(EditorField choiceField, int index) {
         return DraftPaths.child(owner.childPath(DraftPaths.indexPath(field.name(), index)), choiceField.name());
     }
 
@@ -627,6 +630,7 @@ final class CardListControl extends FormControl {
         // 每个数值控件的上方标题行，与 values 同序
         private final List<UiRect> captions = new ArrayList<>();
         private @Nullable String reference;
+        private @Nullable RuleValue original;
         private @Nullable UiRect card;
     }
 }

@@ -28,17 +28,16 @@ public final class CatalogPreviewIcons {
     private static final int EFFECT_ICON_SIZE = 18;
     // 图标缓存上限：与统一场景请求容量同一口径，超出后淘汰最久未用的项
     private static final int MAX_CACHED_ICONS = 256;
-    // 物品图标按「类型 + 规范化注册名」复用：目录网格与配方列表共用同一实例，ItemStack 只建一次
+    // 状态效果贴图按注册名缓存；物品与场景主体的缓存由 PreviewIcons 按完整 PreviewSubject 持有
     private static final UiPreviewCache<IconKey, Optional<UiIcon>> ICONS = new UiPreviewCache<>(MAX_CACHED_ICONS);
     // 占位标记取宿主灰阶色，不引入状态色
     private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
 
-    /** 物品图标缓存键；ResourceLocation 自带值语义，两种 id 写法先规范成同一注册名。 */
     private record IconKey(RuleCatalogType type, ResourceLocation id) { }
 
     private CatalogPreviewIcons() { }
 
-    /** 清空物品图标缓存；物品注册表在运行期不变，资源重载后由宿主按缓存生命周期调用。 */
+    /** 清空状态效果贴图缓存；物品主体缓存由 PreviewIcons 管理。 */
     public static void clear() {
         ICONS.clear();
     }
@@ -95,26 +94,15 @@ public final class CatalogPreviewIcons {
         if (type == null || id == null || id.isBlank()) {
             return null;
         }
-        if (id.startsWith("#") && (type == RuleCatalogType.ITEM || type == RuleCatalogType.BLOCK
-                || type == RuleCatalogType.ENTITY || type == RuleCatalogType.FLUID))
-            return TagPreviewIcons.resolve(type, id).icon();
-        String normalized = id.startsWith("#") ? id.substring(1) : id;
-        ResourceLocation key = ResourceLocation.tryParse(
-                normalized.indexOf(':') >= 0 ? normalized : "minecraft:" + normalized);
-        if (key == null) {
-            return null;
+        if (id.startsWith("#")) {
+            return CatalogTypePresentation.of(type).supportsTags()
+                    ? TagPreviewIcons.resolve(type, id).icon() : null;
         }
-        if (type == RuleCatalogType.ENTITY && !id.startsWith("#")) return PreviewIcons.entity(key.toString(), 0);
-        if (type == RuleCatalogType.BLOCK && !id.startsWith("#")) return PreviewIcons.block(key.toString());
-        if (type == RuleCatalogType.FLUID && !id.startsWith("#")) return PreviewIcons.fluid(key.toString());
-        if (type == RuleCatalogType.ITEM) return itemIcon(key);
-        if (type == RuleCatalogType.MOB_EFFECT && !id.startsWith("#")) return effectIcon(key);
-        // 可预览目录已接入统一场景；其余目录类型回落文字展示
-        return null;
+        return CatalogTypePresentation.of(type).icon(id);
     }
 
     // 状态效果图标有界复用：贴图来自 mob_effects 图集，缺项的第三方效果以 Optional.empty 缓存
-    private static @Nullable UiIcon effectIcon(ResourceLocation key) {
+    static @Nullable UiIcon mobEffectIcon(ResourceLocation key) {
         ICONS.invalidate(PreviewResources.generation());
         IconKey cacheKey = new IconKey(RuleCatalogType.MOB_EFFECT, key);
         return ICONS.getOrLoad(cacheKey, ignored -> Optional.ofNullable(effectSprite(key))).orElse(null);
@@ -132,17 +120,27 @@ public final class CatalogPreviewIcons {
                 (graphics, box) -> graphics.blit(box.x(), box.y(), 0, box.width(), box.height(), sprite));
     }
 
-    // 物品图标有界复用：键是注册名而不是 ItemStack，未注册物品以 Optional.empty 缓存，避免每帧重查注册表
-    private static @Nullable UiIcon itemIcon(ResourceLocation key) {
-        ICONS.invalidate(PreviewResources.generation());
-        IconKey cacheKey = new IconKey(RuleCatalogType.ITEM, key);
-        return ICONS.getOrLoad(cacheKey, ignored -> {
-            ItemStack stack = stackOf(BuiltInRegistries.ITEM.getOptional(key).orElse(null));
-            return stack.isEmpty() ? Optional.empty() : Optional.of(PreviewIcons.item(stack));
-        }).orElse(null);
+    // 物品场景按完整 ItemStack 身份缓存，组件变化不会被注册名级 wrapper 合并
+    static @Nullable UiIcon itemIcon(ResourceLocation key) {
+        Item item = BuiltInRegistries.ITEM.getOptional(key).orElse(null);
+        ItemStack stack = stackOf(item);
+        return stack.isEmpty() ? null : PreviewIcons.item(stack);
     }
 
     private static ItemStack stackOf(@Nullable Item item) {
         return item == null || item == Items.AIR ? ItemStack.EMPTY : new ItemStack(item);
     }
+
+    static @Nullable UiIcon blockIcon(ResourceLocation id) {
+        return PreviewIcons.block(id.toString());
+    }
+
+    static @Nullable UiIcon entityIcon(ResourceLocation id) {
+        return PreviewIcons.entity(id.toString(), 0);
+    }
+
+    static @Nullable UiIcon fluidIcon(ResourceLocation id) {
+        return PreviewIcons.fluid(id.toString());
+    }
+
 }

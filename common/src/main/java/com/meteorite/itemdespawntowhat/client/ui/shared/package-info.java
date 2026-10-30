@@ -9,6 +9,7 @@
  * 字段到目录类型的映射与可选标签过滤
  * （{@link com.meteorite.itemdespawntowhat.client.ui.shared.FieldCatalogTypes}、
  * {@link com.meteorite.itemdespawntowhat.client.ui.shared.FieldCatalogChoices}）、
+ * 目录展示搜索与分页区间（{@link com.meteorite.itemdespawntowhat.client.ui.shared.CatalogDisplayQuery}）、
  * 条件摘要的通用格式化与内建条件摘要
  * （{@link com.meteorite.itemdespawntowhat.client.ui.shared.SummaryFormats}、
  * {@link com.meteorite.itemdespawntowhat.client.ui.shared.BuiltinConditionSummaries}）、
@@ -22,9 +23,8 @@
  * 本包不含界面状态与交互逻辑：屏幕、表单与叶子面板分别留在 {@code screen} 与 {@code screen/form}；
  * 说明行只描述「这是什么信息」，两列对齐、缩进与配色由 {@code client.ui.widget.UiDescriptionTooltip} 负责。</p>
  *
- * <p><b>扩展落点</b>：新增可被目录选择的类型时，在
- * {@link com.meteorite.itemdespawntowhat.client.ui.shared.FieldCatalogTypes#catalogTypeOf} 增加字段名兜底、
- * 在 {@link com.meteorite.itemdespawntowhat.client.ui.shared.CatalogPreviewIcons#iconFor} 增加图标分支；
+ * <p><b>扩展落点</b>：新增目录类型时，在
+ * {@link com.meteorite.itemdespawntowhat.client.ui.shared.CatalogTypePresentation} 完成客户端展示策略的穷举登记；
  * 新增展示主体时由 {@code PreviewIcons} 接入统一场景；结构资源由 {@code StructurePreviewResources} 枚举和读取。</p>
  */
 package com.meteorite.itemdespawntowhat.client.ui.shared;

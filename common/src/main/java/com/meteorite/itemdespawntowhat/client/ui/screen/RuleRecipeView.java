@@ -37,12 +37,9 @@ import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.BlockItem;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.level.block.Block;
 import org.jetbrains.annotations.Nullable;
 
 /** 配方行的只读展示快照：保留数组顺序，复用图标，角标与完整说明使用同一份数据。 */
@@ -518,16 +515,9 @@ public final class RuleRecipeView {
             return part;
         }
         ResourceLocation id = ResourceLocation.tryParse(raw);
-        Component name = id == null ? Component.translatable(UI + "object_missing") : switch (type) {
-            case ITEM -> BuiltInRegistries.ITEM.getOptional(id).map(Item::getDescription).orElse(Component.literal(raw));
-            case BLOCK -> BuiltInRegistries.BLOCK.getOptional(id).map(Block::getName).orElse(Component.literal(raw));
-            case ENTITY -> BuiltInRegistries.ENTITY_TYPE.getOptional(id).map(EntityType::getDescription).orElse(Component.literal(raw));
-            case FLUID -> {
-                Component label = RuleDisplayLabels.catalogLabel(type, id);
-                yield label == null ? Component.literal(raw) : label;
-            }
-            default -> Component.literal(raw);
-        };
+        Component label = id == null ? null : RuleDisplayLabels.catalogLabel(type, id);
+        Component name = id == null ? Component.translatable(UI + "object_missing")
+                : label == null ? Component.literal(raw) : label;
         return new ObjectPart(name, CatalogPreviewIcons.iconFor(type, raw), quantity);
     }
 

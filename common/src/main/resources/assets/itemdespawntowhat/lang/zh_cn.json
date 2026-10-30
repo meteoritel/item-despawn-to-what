@@ -905,6 +905,7 @@
   "gui.itemdespawntowhat.edit.pick.scope_mob_effect_label": "状态效果",
   "gui.itemdespawntowhat.edit.pick.scope_tag_label": "标签",
   "gui.itemdespawntowhat.edit.pick.scope_both_label": "全部",
+  "gui.itemdespawntowhat.edit.catalog.unavailable": "此字段没有可用目录",
   "gui.itemdespawntowhat.edit.pick.total": "共 %s 项",
   "gui.itemdespawntowhat.edit.pick.clear": "清空已选",
   "gui.itemdespawntowhat.edit.pick.source_conflict": "! 与源物品范围重叠，不能作为催化剂；已选冲突项可取消",

@@ -1,13 +1,14 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
-import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.EditorRegistries;
+import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine;
 import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine.Tone;
 import com.meteorite.itemdespawntowhat.client.ui.shared.SummaryFormats;
+import com.meteorite.itemdespawntowhat.client.ui.shared.FieldCatalogTypes;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalogType;
@@ -71,7 +72,7 @@ public final class ConditionDescription {
             return generic(condition, type, indent);
         }
         return switch (type.getPath()) {
-            case "dimension" -> refEntries(condition.child(RuleFields.CONDITION_DIMENSIONS), RuleCatalogType.DIMENSION, indent);
+            case "dimension" -> refEntries(condition, RuleFields.CONDITION_DIMENSIONS, type, indent);
             case "biome" -> biome(condition, type, indent);
             case "weather" -> weather(condition, type, indent);
             case "outdoor" -> List.of(note(SUMMARY + "cond.outdoor", indent));
@@ -105,6 +106,15 @@ public final class ConditionDescription {
         return lines;
     }
 
+    private static List<DescriptionLine> refEntries(RuleValue condition, String fieldName,
+                                                     ResourceLocation conditionType, int indent) {
+        TypeEditorDescriptor descriptor = EditorRegistries.CONDITIONS.find(conditionType);
+        EditorField field = descriptor == null ? null : descriptor.field(fieldName);
+        RuleCatalogType catalogType = field == null ? null : FieldCatalogTypes.catalogTypeOf(field);
+        return catalogType == null ? List.of(note(UNREADABLE_KEY, indent))
+                : refEntries(condition.child(fieldName), catalogType, indent);
+    }
+
     // 群系：先显示模式，再按模式显示群系列表或气候区间
     private static List<DescriptionLine> biome(RuleValue condition, ResourceLocation type, int indent) {
         List<DescriptionLine> lines = new ArrayList<>();
@@ -124,7 +134,7 @@ public final class ConditionDescription {
                 lines.add(field(Component.translatable(RANGE_LABEL_KEY), null, Tone.NOTE, indent));
             }
         } else {
-            lines.addAll(refEntries(condition.child(RuleFields.CONDITION_BIOMES), RuleCatalogType.BIOME, indent));
+            lines.addAll(refEntries(condition, RuleFields.CONDITION_BIOMES, type, indent));
         }
         return lines;
     }

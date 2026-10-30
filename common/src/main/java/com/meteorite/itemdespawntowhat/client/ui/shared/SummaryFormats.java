@@ -117,7 +117,7 @@ public final class SummaryFormats {
      * @param type 目录类型，决定显示名的查询方式
      * @return 引用文本；空引用返回空文本，绝不返回 {@code null}
      */
-    public static Component ref(@Nullable String raw, RuleCatalogType type) {
+    public static Component ref(@Nullable String raw, @Nullable RuleCatalogType type) {
         String value = raw == null ? "" : raw.trim();
         if (value.isEmpty()) {
             return Component.empty();
@@ -126,7 +126,7 @@ public final class SummaryFormats {
         if (tagged == null) {
             return Component.literal(value);
         }
-        if (!tagged.tag()) {
+        if (!tagged.tag() && type != null) {
             Component label = RuleDisplayLabels.catalogLabel(type, tagged.id());
             if (label != null) {
                 return label;

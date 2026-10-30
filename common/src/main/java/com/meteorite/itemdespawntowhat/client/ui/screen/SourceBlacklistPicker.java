@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogPreviewIcons;
+import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogDisplayQuery;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCatalogGrid;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
@@ -13,7 +14,6 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.function.Consumer;
 import net.minecraft.client.gui.Font;
@@ -55,28 +55,34 @@ final class SourceBlacklistPicker {
         Pages pages = new Pages(sourceTags(rule), policy);
         UiCatalogGrid.Texts texts = RuleEditorPanelFactory.catalogTexts()
                 .withEmpty(Component.translatable(UI + "blacklist.empty"));
+        UiModal modal = UiModal.create(THEME, font).title(Component.translatable(UI + "rule.source.exclude"));
+        RuleValue source = rule == null ? null : rule.child(RuleFields.SOURCE);
+        List<String> selected = new ArrayList<>(source == null ? List.of()
+                : RuleValue.textItems(source.child(RuleFields.SOURCE_EXCLUDE)));
         UiCatalogGrid grid = new UiCatalogGrid(THEME, font, true, texts, new UiCatalogGrid.Listener() {
                     @Override public void onSearch(String filter) { pages.filter(filter); }
                     @Override public void onPageChange(int delta) { pages.index = Math.clamp(pages.index + delta, 0, Math.max(0, pages.filtered.size() - 1)); }
+                    @Override public void onSelectionChanged(List<String> selection) {
+                        selected.clear();
+                        selected.addAll(selection);
+                    }
+                    @Override public void onConfirm() {
+                        if (!modal.buttons().isEmpty()) modal.buttons().getFirst().activate();
+                    }
                 });
-        grid.setEntryPolicy(policy);
-        RuleValue source = rule == null ? null : rule.child(RuleFields.SOURCE);
-        grid.setSelection(source == null ? List.of() : RuleValue.textItems(source.child(RuleFields.SOURCE_EXCLUDE)));
-        grid.setEntrySource(() -> {
-            grid.setEnabled(shell.editable());
-            if (pages.filtered.isEmpty()) return List.of();
-            Page page = pages.filtered.get(pages.index);
-            grid.setPage(pages.index, pages.filtered.size());
-            grid.setPageLimits(pages.index > 0, pages.index + 1 < pages.filtered.size());
-            grid.setPageLabel(Component.translatable(UI + "blacklist.page", page.tag(), page.part() + 1, page.parts()));
-            return page.items();
+        grid.setViewSource(() -> {
+            Page page = pages.filtered.isEmpty() ? null : pages.filtered.get(pages.index);
+            return new UiCatalogGrid.View(page == null ? List.of() : page.items(), selected, policy, UiCatalogGrid.Scope.BOTH,
+                    ignored -> null, pages.index, pages.filtered.size(), pages.index > 0,
+                    pages.index + 1 < pages.filtered.size(),
+                    page == null ? null : Component.translatable(UI + "blacklist.page", page.tag(), page.part() + 1, page.parts()),
+                    null, false, null, shell.editable());
         });
-        UiModal modal = UiModal.create(THEME, font).title(Component.translatable(UI + "rule.source.exclude"));
         modal.preferredWidth(RuleEditorPanelFactory.pickerWidth(width));
         modal.inlineFooter();
         modal.contentWidget(grid, RuleEditorPanelFactory.pickerBodyHeight(THEME, height));
         modal.confirm(Component.translatable(UI + "button.confirm"), () -> {
-            if (shell.editable()) onPicked.accept(grid.selection());
+            if (shell.editable()) onPicked.accept(List.copyOf(selected));
         });
         modal.cancel(Component.translatable(UI + "button.cancel"));
         modal.layoutCentered(width, height);
@@ -125,8 +131,7 @@ final class SourceBlacklistPicker {
                 }
                 if (!needle.isEmpty()) {
                     UiCatalogGrid.Entry entry = entry(itemId);
-                    if (!itemId.toLowerCase(Locale.ROOT).contains(needle)
-                            && !entry.label().getString().toLowerCase(Locale.ROOT).contains(needle)) {
+                    if (!CatalogDisplayQuery.matches(needle, itemId, entry.label(), entry.subLabel())) {
                         continue;
                     }
                 }
@@ -211,15 +216,15 @@ final class SourceBlacklistPicker {
         }
 
         void filter(String text) {
-            String needle = text == null ? "" : text.toLowerCase(Locale.ROOT).trim();
+            String needle = CatalogDisplayQuery.normalize(text);
             List<Page> result = new ArrayList<>();
             for (Group group : groups) {
                 List<String> visible = group.visibleIds(needle, policy);
-                int parts = Math.max(1, (visible.size() + UiCatalogGrid.PAGE_SIZE - 1) / UiCatalogGrid.PAGE_SIZE);
+                int parts = CatalogDisplayQuery.range(visible.size(), 0, UiCatalogGrid.PAGE_SIZE).pageCount();
                 for (int part = 0; part < parts; part++) {
-                    int from = part * UiCatalogGrid.PAGE_SIZE;
-                    int to = Math.min(visible.size(), from + UiCatalogGrid.PAGE_SIZE);
-                    result.add(new Page(group, visible, part, parts, from, to));
+                    CatalogDisplayQuery.PageRange range = CatalogDisplayQuery.range(
+                            visible.size(), part, UiCatalogGrid.PAGE_SIZE);
+                    result.add(new Page(group, visible, part, parts, range.from(), range.to()));
                 }
             }
             filtered = List.copyOf(result);

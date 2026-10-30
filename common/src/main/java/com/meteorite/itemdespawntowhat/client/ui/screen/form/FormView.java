@@ -350,8 +350,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
                 remaining.forEach(id -> array.add(RuleValue.text(id)));
                 value = array.build();
             } else {
-                if (ids.isEmpty()) return;
-                value = RuleValue.text(ids.getFirst());
+                value = ids.isEmpty() ? null : RuleValue.text(ids.getFirst());
             }
             writeField(row, value);
             reload();
@@ -377,10 +376,10 @@ public final class FormView implements UiWidget, UiLayoutSource {
         commitPendingInputs();
         List<String> selected = current == null || current.isBlank() ? List.of() : List.of(current);
         catalogOpener.open(field, path, false, false, selected, ids -> {
-            if (!enabled || ids.isEmpty() || loadedRevision != session.revision()) {
+            if (!enabled || loadedRevision != session.revision()) {
                 return;
             }
-            onPicked.accept(ids.getFirst());
+            onPicked.accept(ids.isEmpty() ? null : ids.getFirst());
         });
     }
 
@@ -401,7 +400,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
         }
         commitPendingInputs();
         catalogOpener.open(field, path, false, true, List.copyOf(selected), ids -> {
-            if (!enabled || ids.isEmpty() || loadedRevision != session.revision()) {
+            if (!enabled || loadedRevision != session.revision()) {
                 return;
             }
             onPicked.accept(List.copyOf(ids));

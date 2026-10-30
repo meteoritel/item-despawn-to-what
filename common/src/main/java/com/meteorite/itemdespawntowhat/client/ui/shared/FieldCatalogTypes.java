@@ -2,62 +2,38 @@ package com.meteorite.itemdespawntowhat.client.ui.shared;
 
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalogType;
-import java.util.Locale;
+import java.util.Map;
 import org.jetbrains.annotations.Nullable;
 
-/** 字段到目录类型的映射：注册表提示优先，其后按字段名兜底，只覆盖能落到目录面板的类型。 */
+/** 按字段显式声明的 registry 精确解析目录类型。 */
 public final class FieldCatalogTypes {
+    private static final Map<String, RuleCatalogType> REGISTRIES = Map.ofEntries(
+            Map.entry("minecraft:item", RuleCatalogType.ITEM),
+            Map.entry("item", RuleCatalogType.ITEM),
+            Map.entry("items", RuleCatalogType.ITEM),
+            Map.entry("minecraft:block", RuleCatalogType.BLOCK),
+            Map.entry("block", RuleCatalogType.BLOCK),
+            Map.entry("blocks", RuleCatalogType.BLOCK),
+            Map.entry("minecraft:entity_type", RuleCatalogType.ENTITY),
+            Map.entry("entity", RuleCatalogType.ENTITY),
+            Map.entry("minecraft:loot_table", RuleCatalogType.LOOT_TABLE),
+            Map.entry("loot_table", RuleCatalogType.LOOT_TABLE),
+            Map.entry("minecraft:worldgen/biome", RuleCatalogType.BIOME),
+            Map.entry("biome", RuleCatalogType.BIOME),
+            Map.entry("minecraft:dimension", RuleCatalogType.DIMENSION),
+            Map.entry("dimension", RuleCatalogType.DIMENSION),
+            Map.entry("level", RuleCatalogType.DIMENSION),
+            Map.entry("minecraft:fluid", RuleCatalogType.FLUID),
+            Map.entry("fluid", RuleCatalogType.FLUID),
+            Map.entry("minecraft:mob_effect", RuleCatalogType.MOB_EFFECT),
+            Map.entry("mob_effect", RuleCatalogType.MOB_EFFECT),
+            Map.entry("potion", RuleCatalogType.MOB_EFFECT));
 
     private FieldCatalogTypes() { }
 
-    // 字段的注册表提示 -> 目录类型（只覆盖能落到目录面板的类型）
+    /** 返回字段声明的目录类型；未知或未声明 registry 时返回 null。 */
     public static @Nullable RuleCatalogType catalogTypeOf(EditorField field) {
         String registry = field.registry();
-        if (registry != null && !registry.isBlank()) {
-            RuleCatalogType byRegistry = registryType(registry);
-            if (byRegistry != null) {
-                return byRegistry;
-            }
-        }
-        return switch (field.name()) {
-            case "biomes", "biome" -> RuleCatalogType.BIOME;
-            case "items", "item" -> RuleCatalogType.ITEM;
-            case "blocks", "block" -> RuleCatalogType.BLOCK;
-            case "entity_types", "entity" -> RuleCatalogType.ENTITY;
-            case "fluids", "fluid" -> RuleCatalogType.FLUID;
-            case "loot_table" -> RuleCatalogType.LOOT_TABLE;
-            case "dimension" -> RuleCatalogType.DIMENSION;
-            case "potion_effects", "effect", "mob_effect" -> RuleCatalogType.MOB_EFFECT;
-            default -> null;
-        };
-    }
-
-    private static @Nullable RuleCatalogType registryType(String registry) {
-        String name = registry.toLowerCase(Locale.ROOT);
-        if (name.equals("item") || name.equals("items") || name.endsWith(":item")) {
-            return RuleCatalogType.ITEM;
-        }
-        if (name.equals("block") || name.equals("blocks") || name.endsWith(":block")) {
-            return RuleCatalogType.BLOCK;
-        }
-        if (name.contains("entity_type") || name.equals("entity")) {
-            return RuleCatalogType.ENTITY;
-        }
-        if (name.contains("fluid")) {
-            return RuleCatalogType.FLUID;
-        }
-        if (name.contains("loot_table")) {
-            return RuleCatalogType.LOOT_TABLE;
-        }
-        if (name.contains("biome")) {
-            return RuleCatalogType.BIOME;
-        }
-        if (name.contains("dimension") || name.equals("level")) {
-            return RuleCatalogType.DIMENSION;
-        }
-        if (name.contains("mob_effect") || name.contains("potion")) {
-            return RuleCatalogType.MOB_EFFECT;
-        }
-        return null;
+        return registry == null ? null : REGISTRIES.get(registry);
     }
 }

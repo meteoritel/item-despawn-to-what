@@ -26,7 +26,7 @@ public final class TagPreviewIcons {
     public record Tag(RuleCatalogType type, String id, List<Member> members, UiCarousel carousel) {
         public Component label() { return RuleDisplayLabels.tagLabel(id); }
         public Component tooltip() {
-            var tip = Component.translatable(UI + "supports." + kind(type), id);
+            var tip = Component.translatable(UI + "supports." + CatalogTypePresentation.of(type).tagDescription(), id);
             return tip.append("\n").append(Component.translatable(UI + "expand", members.size()));
         }
         public UiIcon icon() {
@@ -41,27 +41,7 @@ public final class TagPreviewIcons {
 
     public static Tag resolve(RuleCatalogType type, String raw) {
         ResourceLocation id = ResourceLocation.tryParse(raw.startsWith("#") ? raw.substring(1) : raw);
-        List<Member> members = id == null ? List.of() : switch (type) {
-            case ITEM -> BuiltInRegistries.ITEM.getTag(TagKey.create(Registries.ITEM, id))
-                    .map(set -> set.stream().filter(holder -> holder.value() != Items.AIR)
-                            .map(holder -> new Member(holder.value().getDescription(), previewIcon(holder.value()))).toList())
-                    .orElse(List.of());
-            case BLOCK -> BuiltInRegistries.BLOCK.getTag(TagKey.create(Registries.BLOCK, id))
-                    .map(set -> set.stream().map(holder -> new Member(holder.value().getName(),
-                            CatalogPreviewIcons.iconFor(RuleCatalogType.BLOCK, BuiltInRegistries.BLOCK.getKey(holder.value()).toString()))).toList())
-                    .orElse(List.of());
-            case ENTITY -> BuiltInRegistries.ENTITY_TYPE.getTag(TagKey.create(Registries.ENTITY_TYPE, id))
-                    .map(set -> set.stream().map(holder -> new Member(holder.value().getDescription(),
-                            PreviewIcons.entity(BuiltInRegistries.ENTITY_TYPE.getKey(holder.value()).toString(), 0))).toList())
-                    .orElse(List.of());
-            case FLUID -> BuiltInRegistries.FLUID.getTag(TagKey.create(Registries.FLUID, id))
-                    .map(set -> set.stream().filter(holder -> !holder.value().defaultFluidState().isEmpty()
-                                    && holder.value().defaultFluidState().isSource())
-                            .map(holder -> new Member(FluidPreviewIcons.label(BuiltInRegistries.FLUID.getKey(holder.value())),
-                                    PreviewIcons.fluid(BuiltInRegistries.FLUID.getKey(holder.value()).toString()))).toList())
-                    .orElse(List.of());
-            default -> List.of();
-        };
+        List<Member> members = id == null ? List.of() : CatalogTypePresentation.of(type).tagMembers(id);
         members = members.stream().filter(member -> member.icon() != null).toList();
         return snapshot(type, raw, members);
     }
@@ -91,13 +71,35 @@ public final class TagPreviewIcons {
                 new UiCarousel(members.stream().map(Member::icon).toList()));
     }
 
-    private static String kind(RuleCatalogType type) {
-        return switch (type) {
-            case BLOCK -> "blocks";
-            case ENTITY -> "entities";
-            case FLUID -> "fluids";
-            case BIOME -> "biomes";
-            default -> "items";
-        };
+    static List<Member> itemMembers(ResourceLocation id) {
+        return BuiltInRegistries.ITEM.getTag(TagKey.create(Registries.ITEM, id))
+                .map(set -> set.stream().filter(holder -> holder.value() != Items.AIR)
+                        .map(holder -> new Member(holder.value().getDescription(), previewIcon(holder.value()))).toList())
+                .orElse(List.of());
     }
+
+    static List<Member> blockMembers(ResourceLocation id) {
+        return BuiltInRegistries.BLOCK.getTag(TagKey.create(Registries.BLOCK, id))
+                .map(set -> set.stream().map(holder -> new Member(holder.value().getName(),
+                        CatalogPreviewIcons.iconFor(RuleCatalogType.BLOCK,
+                                BuiltInRegistries.BLOCK.getKey(holder.value()).toString()))).toList())
+                .orElse(List.of());
+    }
+
+    static List<Member> entityMembers(ResourceLocation id) {
+        return BuiltInRegistries.ENTITY_TYPE.getTag(TagKey.create(Registries.ENTITY_TYPE, id))
+                .map(set -> set.stream().map(holder -> new Member(holder.value().getDescription(),
+                        PreviewIcons.entity(BuiltInRegistries.ENTITY_TYPE.getKey(holder.value()).toString(), 0))).toList())
+                .orElse(List.of());
+    }
+
+    static List<Member> fluidMembers(ResourceLocation id) {
+        return BuiltInRegistries.FLUID.getTag(TagKey.create(Registries.FLUID, id))
+                .map(set -> set.stream().filter(holder -> !holder.value().defaultFluidState().isEmpty()
+                                && holder.value().defaultFluidState().isSource())
+                        .map(holder -> new Member(FluidPreviewIcons.label(BuiltInRegistries.FLUID.getKey(holder.value())),
+                                PreviewIcons.fluid(BuiltInRegistries.FLUID.getKey(holder.value()).toString()))).toList())
+                .orElse(List.of());
+    }
+
 }

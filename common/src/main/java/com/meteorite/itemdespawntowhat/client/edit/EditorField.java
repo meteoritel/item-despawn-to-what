@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.client.edit;
 
 import com.meteorite.itemdespawntowhat.core.api.param.ClimateDomain;
 import com.meteorite.itemdespawntowhat.core.api.param.ParamTier;
+import com.meteorite.itemdespawntowhat.core.api.param.SelectionIntent;
 
 import java.util.EnumMap;
 import java.util.List;
@@ -18,7 +19,7 @@ public record EditorField(String name, String labelKey, EditorFieldType type, Fi
                           boolean nullable, boolean required, @Nullable String registry,
                           @Nullable String enumGroup, @Nullable String hintKey,
                           List<EditorField> subFields, List<EditorPreset> presets, ParamTier tier,
-                          @Nullable RuleValue defaultValue) {
+                          @Nullable RuleValue defaultValue, SelectionIntent selectionIntent) {
 
     /** 固定声明集合；值域通过类型表达，不接受待回解的字符串。 */
     public EditorField {
@@ -32,6 +33,17 @@ public record EditorField(String name, String labelKey, EditorFieldType type, Fi
         subFields = subFields == null ? List.of() : List.copyOf(subFields);
         presets = presets == null ? List.of() : List.copyOf(presets);
         tier = tier == null ? ParamTier.PRIMARY : tier;
+        selectionIntent = selectionIntent == null ? SelectionIntent.DEFAULT : selectionIntent;
+    }
+
+    /** 保持原完整构造入口，选择意图默认为 DEFAULT。 */
+    public EditorField(String name, String labelKey, EditorFieldType type, FieldDomain domain,
+                       boolean nullable, boolean required, @Nullable String registry,
+                       @Nullable String enumGroup, @Nullable String hintKey,
+                       List<EditorField> subFields, List<EditorPreset> presets, ParamTier tier,
+                       @Nullable RuleValue defaultValue) {
+        this(name, labelKey, type, domain, nullable, required, registry, enumGroup, hintKey,
+                subFields, presets, tier, defaultValue, SelectionIntent.DEFAULT);
     }
 
     /** 保持未声明参数层级时的原构造方式，默认归入主区。 */
@@ -40,7 +52,7 @@ public record EditorField(String name, String labelKey, EditorFieldType type, Fi
                        @Nullable String enumGroup, @Nullable String hintKey,
                        List<EditorField> subFields, List<EditorPreset> presets) {
         this(name, labelKey, type, domain, nullable, required, registry, enumGroup, hintKey,
-                subFields, presets, ParamTier.PRIMARY, null);
+                subFields, presets, ParamTier.PRIMARY, null, SelectionIntent.DEFAULT);
     }
 
     /** 保持未声明展示默认值时的构造方式。 */
@@ -49,19 +61,19 @@ public record EditorField(String name, String labelKey, EditorFieldType type, Fi
                        @Nullable String enumGroup, @Nullable String hintKey,
                        List<EditorField> subFields, List<EditorPreset> presets, ParamTier tier) {
         this(name, labelKey, type, domain, nullable, required, registry, enumGroup, hintKey,
-                subFields, presets, tier, null);
+                subFields, presets, tier, null, SelectionIntent.DEFAULT);
     }
 
     /** 替换嵌套字段，保留对象字段的其余声明。 */
     public EditorField withSubFields(List<EditorField> fields) {
         return new EditorField(name, labelKey, type, domain, nullable, required, registry, enumGroup, hintKey,
-                fields, presets, tier, defaultValue);
+                fields, presets, tier, defaultValue, selectionIntent);
     }
 
     /** 省略字段的展示默认值；未编辑时仍保留原有省略形态。 */
     public EditorField withDefaultValue(@Nullable RuleValue value) {
         return new EditorField(name, labelKey, type, domain, nullable, required, registry, enumGroup, hintKey,
-                subFields, presets, tier, value);
+                subFields, presets, tier, value, selectionIntent);
     }
 
     // ---- 构造工厂 ----
@@ -279,7 +291,7 @@ public record EditorField(String name, String labelKey, EditorFieldType type, Fi
                                       boolean nullable, boolean required, @Nullable String registry,
                                       @Nullable String enumGroup, @Nullable List<EditorField> subFields) {
         return new EditorField(name, labelKey, type, domain, nullable, required, registry, enumGroup, null,
-                subFields, null, ParamTier.PRIMARY, null);
+                subFields, null, ParamTier.PRIMARY, null, SelectionIntent.DEFAULT);
     }
 
     // 类型的独立事实集中于穷举分类；字段自身仍持有 nullable、registry 和取值域。
@@ -474,7 +486,7 @@ public record EditorField(String name, String labelKey, EditorFieldType type, Fi
      */
     public EditorField optional() {
         return new EditorField(name, labelKey, type, domain, true, false, registry, enumGroup, hintKey,
-                subFields, presets, tier, defaultValue);
+                subFields, presets, tier, defaultValue, selectionIntent);
     }
 
     /**
@@ -482,7 +494,7 @@ public record EditorField(String name, String labelKey, EditorFieldType type, Fi
      */
     public EditorField asRequired() {
         return new EditorField(name, labelKey, type, domain, false, true, registry, enumGroup, hintKey,
-                subFields, presets, tier, defaultValue);
+                subFields, presets, tier, defaultValue, selectionIntent);
     }
 
     /**
@@ -490,7 +502,7 @@ public record EditorField(String name, String labelKey, EditorFieldType type, Fi
      */
     public EditorField withHint(String key) {
         return new EditorField(name, labelKey, type, domain, nullable, required, registry, enumGroup, key,
-                subFields, presets, tier, defaultValue);
+                subFields, presets, tier, defaultValue, selectionIntent);
     }
 
     /**
@@ -498,19 +510,19 @@ public record EditorField(String name, String labelKey, EditorFieldType type, Fi
      */
     public EditorField withPresets(EditorPreset... values) {
         return new EditorField(name, labelKey, type, domain, nullable, required, registry, enumGroup, hintKey,
-                subFields, List.of(values), tier, defaultValue);
+                subFields, List.of(values), tier, defaultValue, selectionIntent);
     }
 
     /** 替换数值声明；其余字段元数据保持，移除数值域用 null 表达。 */
     public EditorField withNumbers(@Nullable NumericDomain newNumbers) {
         FieldDomain replacement = newNumbers == null ? FieldDomain.None.INSTANCE : new FieldDomain.Numeric(newNumbers);
         return new EditorField(name, labelKey, type, replacement, nullable, required, registry, enumGroup, hintKey,
-                subFields, presets, tier, defaultValue);
+                subFields, presets, tier, defaultValue, selectionIntent);
     }
 
     /** 只改展示标签，不重建或丢失字段声明。 */
     public EditorField withLabel(String key) {
-        return new EditorField(name, key, type, domain, nullable, required, registry, enumGroup, hintKey, subFields, presets, tier, defaultValue);
+        return new EditorField(name, key, type, domain, nullable, required, registry, enumGroup, hintKey, subFields, presets, tier, defaultValue, selectionIntent);
     }
 
     /** 编辑器字段的展示层级。 */
@@ -519,7 +531,13 @@ public record EditorField(String name, String labelKey, EditorFieldType type, Fi
     /** 返回带指定展示层级的字段声明。 */
     public EditorField withTier(ParamTier value) {
         return new EditorField(name, labelKey, type, domain, nullable, required, registry, enumGroup, hintKey,
-                subFields, presets, value, defaultValue);
+                subFields, presets, value, defaultValue, selectionIntent);
+    }
+
+    /** 返回带参数声明选择意图的字段描述。 */
+    public EditorField withSelectionIntent(SelectionIntent value) {
+        return new EditorField(name, labelKey, type, domain, nullable, required, registry, enumGroup, hintKey,
+                subFields, presets, tier, defaultValue, value);
     }
 
     /** 数值声明；非数值域返回 null。 */
