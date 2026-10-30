@@ -47,32 +47,7 @@ public final class DebugScenarioManager {
     /** 开发指令直接创建场景，不读取历史日志，也不写入用户配置。 */
     public static int start(CommandSourceStack source, RuleRuntimeDiagnosticsContext context, String name,
                             boolean benchmark, int entities, int seconds) {
-        if (DebugPipelineManager.active(source.getServer())) { return failure(source, "pipeline_busy"); }
-        return startScene(source, context, name, benchmark, entities, seconds, null, null);
-    }
-
-    /** 性能与功能无人值守运行共用场景生命周期，参数取自对应声明。 */
-    public static int startHeadless(CommandSourceStack source, RuleRuntimeDiagnosticsContext context, String name, boolean benchmark) {
-        REPORTS.remove(source.getServer());
-        var spec = DebugScenarioCatalog.find(name, benchmark);
-        DebugProbePerformance.phase("SETUP");
-        int result = startScene(source, context, name, benchmark, spec.sources(), spec.seconds(), source.getPosition(), null);
-        DebugScenarioRun run = ACTIVE.get(source.getServer());
-        var runtime = context.runtime();
-        if (result == 1 && run != null && runtime != null) {
-            // 断言仍检查真实累计值；同进程前序场景的已完成记录作为明确基线加入预期。
-            JsonObject expected = run.definition.expected.getAsJsonObject("metrics");
-            JsonObject baseline = new JsonObject();
-            baseline.addProperty("ledger_records", com.meteorite.itemdespawntowhat.core.runtime.SettlementLedger.get(run.level).size());
-            baseline.addProperty("recovery_attempts", runtime.settlementRecoveryStats().attempts());
-            baseline.addProperty("recovery_abandoned", runtime.settlementRecoveryStats().abandoned());
-            baseline.addProperty("recovery_alerts", runtime.settlementRecoveryStats().alerts());
-            for (String key : baseline.keySet()) {
-                if (expected.has(key)) { expected.addProperty(key, expected.get(key).getAsLong() + baseline.get(key).getAsLong()); }
-            }
-            run.log("COUNTER_BASELINE", baseline);
-        }
-        return result;
+        return DebugPipelineManager.startSingle(source, context, name, benchmark, entities, seconds);
     }
 
     /** 取走已封存的本轮结果；尚未结束时返回 null。 */
@@ -85,9 +60,6 @@ public final class DebugScenarioManager {
                              boolean benchmark, int entities, int seconds, Vec3 origin, String pipelineId) {
         return startScene(source, context, name, benchmark, entities, seconds, origin, pipelineId);
     }
-
-    // 流水线读取本轮编号，不暴露或修改业务运行时状态。
-    static @Nullable DebugScenarioRun activeRun(MinecraftServer server) { return ACTIVE.get(server); }
 
     // 中止流水线拥有的场景，防止误结束独立手动场景。
     static void stopPipelineScene(MinecraftServer server, RuleRuntimeDiagnosticsContext context, String reason) {
@@ -112,8 +84,9 @@ public final class DebugScenarioManager {
             var run = new DebugScenarioRun(name, benchmark, source.getLevel(), player == null ? null : player.getUUID(),
                     origin, seconds, definition, pipelineId);
             // 故障在场景启动时武装：声明之后安排的检查与效果任务才可能命中
-            run.armFaults();
             ACTIVE.put(source.getServer(), run);
+            run.captureBaseline(context);
+            run.armFaults();
             JsonObject data = DebugLog.config(context.serverConfig());
             data.addProperty("format", Constants.ID_NAMESPACE + "-scene-v3");
             data.addProperty("tick_cost_scope", "vanilla_tick_plus_" + Constants.ID_NAMESPACE + "_runtime");
@@ -291,7 +264,7 @@ public final class DebugScenarioManager {
 
     /** 手动停止只结束本轮负载，提前停止的结果明确为INCOMPLETE。 */
     public static int stop(CommandSourceStack source, RuleRuntimeDiagnosticsContext context) {
-        if (DebugPipelineManager.active(source.getServer())) { return DebugPipelineManager.stop(source, context); }
+        if (DebugPipelineManager.active(source.getServer())) { return DebugPipelineManager.stop(source); }
         if (!ACTIVE.containsKey(source.getServer())) { return failure(source, "not_running"); }
         return finish(source.getServer(), context, "manual_stop");
     }
@@ -326,10 +299,8 @@ public final class DebugScenarioManager {
     private static int finish(MinecraftServer server, RuleRuntimeDiagnosticsContext context, String reason) {
         DebugScenarioRun run = ACTIVE.remove(server);
         if (run == null) { return 0; }
-        String verdict = "INCOMPLETE";
         try {
-            verdict = run.finish(context, reason);
-            String displayVerdict = verdict;
+            String displayVerdict = run.finish(context, reason);
             var player = run.initiator == null ? null : server.getPlayerList().getPlayer(run.initiator);
             var recipient = player == null ? server.createCommandSourceStack() : player.createCommandSourceStack();
             recipient.sendSuccess(() -> Component.translatable(PREFIX + "finished", run.name, run.id,
@@ -341,7 +312,7 @@ public final class DebugScenarioManager {
         } finally {
             unbind(run);
             if (run.completedReport != null) { REPORTS.put(server, run.completedReport.deepCopy()); }
-            DebugPipelineManager.sceneFinished(server, run, verdict);
+
         }
     }
 

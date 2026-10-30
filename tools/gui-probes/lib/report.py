@@ -1,34 +1,4 @@
-"""把一次 GUI 探针运行渲染成自包含单文件 HTML 报告。
-
-用途：给人工复核和归档提供一份离线可打开的页面——截图 base64 内嵌，结构化数据放进
-<script type="application/json">，在 file:// 下也不依赖任何外部脚本、样式或网络。
-
-边界：只做渲染，不读文件、不写文件、不取时间和机器信息；路径、时间、环境都由调用方
-传入。所有函数无副作用，每次调用返回新字符串。
-
-输入：
-- run_metadata：运行级键值（title / started_at / git_revision / build 之类），原样成表。
-- cases：用例列表，每项形如
-  {
-    "name": str,
-    "verdict": "pass" | "warn" | "fail" | "skip" | "error",
-    "detail": str,                                  # 可选说明
-    "checks": [{"name": str, "expected": str, "actual": str, "pass": bool}],
-    "artifacts": [{                                 # 可选证据文件
-        "name": str,
-        "path": str,
-        "png_bytes": bytes,                         # 只给拼图用，不进报告
-        "kind": "screenshot" | "json",
-    }],
-  }
-- env：环境一致性块（os / java / 分辨率 / gui_scale / 截图时间等）。
-- shots：截图证据块（contact sheet 字节 + 截图清单），只列证据，不判定图像异同。
-
-输出：(html, summary)。summary["verdict"] 是 pass / warn / fail / skip 之一，供编排层换算
-退出码；明细计数见 passed / warned / failed / skipped / errors / total_checks / passed_checks。
-
-渲染能力只在 render_report 里，且它本身不做 IO；读图与路径拼装由编排层负责。
-"""
+"""消费 RunRecord 与截图投影渲染自包含 HTML，判定与证据身份由记录持有。"""
 
 import base64
 import html
@@ -37,7 +7,6 @@ import os
 from typing import Any
 
 _VERDICT_LABELS = {"pass": "通过", "warn": "警告", "fail": "失败", "skip": "跳过", "error": "异常"}
-_COUNT_KEYS = {"pass": "passed", "warn": "warned", "fail": "failed", "skip": "skipped", "error": "errors"}
 _RUNNER_VERDICTS = {"pass": "pass", "warn": "warn", "fail": "fail", "error": "error", "skip": "skip"}
 
 _STYLE = """
@@ -315,46 +284,6 @@ def _case_section(index: int, case: dict[str, Any]) -> str:
     return "\n".join(parts)
 
 
-def _summarize(cases: list[dict[str, Any]]) -> dict[str, Any]:
-    """统计用例与细项判定，给出整体 verdict。"""
-    counts = {"passed": 0, "warned": 0, "failed": 0, "skipped": 0, "errors": 0}
-    total_checks = passed_checks = 0
-    rows = []
-    for case in cases:
-        verdict = _verdict(case)
-        counts[_COUNT_KEYS[verdict]] += 1
-        checks = case.get("checks") or []
-        passed = sum(1 for check in checks if check.get("pass") is True)
-        total_checks += len(checks)
-        passed_checks += passed
-        rows.append({
-            "name": str(case.get("name", "")),
-            "verdict": verdict,
-            "passed_checks": passed,
-            "total_checks": len(checks),
-        })
-    if counts["failed"] or counts["errors"]:
-        overall = "fail"
-    elif counts["warned"]:
-        overall = "warn"
-    elif counts["passed"]:
-        overall = "pass"
-    else:
-        overall = "skip"
-    return {
-        "verdict": overall,
-        "total_cases": len(cases),
-        "passed": counts["passed"],
-        "warned": counts["warned"],
-        "failed": counts["failed"],
-        "skipped": counts["skipped"],
-        "errors": counts["errors"],
-        "total_checks": total_checks,
-        "passed_checks": passed_checks,
-        "cases": rows,
-    }
-
-
 def _hero(run_metadata: dict[str, Any], summary: dict[str, Any]) -> str:
     title = _escape(run_metadata.get("title", "GUI 探针报告"))
     overall = summary["verdict"]
@@ -414,14 +343,10 @@ def _data_script(run_metadata: dict[str, Any], env: dict[str, Any],
     return '<script type="application/json" id="gui-probe-data">\n' + text + "\n</script>"
 
 
-def render_report(run_metadata: dict[str, Any], cases: list[dict[str, Any]],
-                  env: dict[str, Any], shots: dict[str, Any] | None = None,
-                  metrics: dict[str, Any] | None = None) -> tuple[str, dict[str, Any]]:
-    """渲染自包含 HTML 并汇总判定，返回 (html, summary)。
-
-    shots / metrics 为可选证据块：缺省时渲染结果与只有用例明细的旧报告一致。
-    """
-    summary = _summarize(cases)
+def render_report(record, shots=None) -> str:
+    """从运行记录渲染自包含 HTML，判定由运行记录提供。"""
+    run_metadata, cases, env, metrics = record.metadata, record.cases, record.env, record.metrics
+    summary = record.summary()
     body = "\n".join(_case_section(index, case) for index, case in enumerate(cases, start=1))
     document = "\n".join([
         "<!DOCTYPE html>",
@@ -447,4 +372,4 @@ def render_report(run_metadata: dict[str, Any], cases: list[dict[str, Any]],
         "</html>",
         "",
     ])
-    return document, summary
+    return document

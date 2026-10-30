@@ -1,0 +1,160 @@
+{
+  "name": "workbench-gallery",
+  "description": "Ctrl+F8 进入工具目录，验证真实多组件、禁用、输入、模态和重置。",
+  "start": {
+    "kind": "workbench"
+  },
+  "window": {
+    "width": 1600,
+    "height": 1000,
+    "scale": 2
+  },
+  "steps": [
+    {
+      "assert": {
+        "name": "gui.itemdespawntowhat.debug.workbench.gallery",
+        "kind": "text_present",
+        "selector": {
+          "lang": "gui.itemdespawntowhat.debug.workbench.gallery"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "gui.itemdespawntowhat.debug.workbench.interactions",
+        "kind": "text_present",
+        "selector": {
+          "lang": "gui.itemdespawntowhat.debug.workbench.interactions"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.gallery"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "gui.itemdespawntowhat.debug.workbench.text",
+        "kind": "text_present",
+        "selector": {
+          "lang": "gui.itemdespawntowhat.debug.workbench.text"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.increment"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "禁用按钮",
+        "kind": "node_enabled",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.disabled"
+        },
+        "expected": false
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "TEXT_INPUT",
+          "within": {
+            "lang": "gui.itemdespawntowhat.debug.workbench.text"
+          }
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "clear"
+      }
+    },
+    {
+      "action": {
+        "kind": "type",
+        "text": "hello_probe"
+      }
+    },
+    {
+      "capture": "changed",
+      "query": {
+        "source": "text",
+        "selector": {
+          "kind": "TEXT_INPUT",
+          "within": {
+            "lang": "gui.itemdespawntowhat.debug.workbench.text"
+          }
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.modal"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "模态遮住场景按钮",
+        "kind": "text_absent",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.increment"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.close"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.reset"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "重置文本",
+        "kind": "value_equals",
+        "query": {
+          "source": "text",
+          "selector": {
+            "kind": "TEXT_INPUT",
+            "within": {
+              "lang": "gui.itemdespawntowhat.debug.workbench.text"
+            }
+          }
+        },
+        "expected": "debug"
+      }
+    },
+    {
+      "shot": "60-gallery.png"
+    }
+  ]
+}

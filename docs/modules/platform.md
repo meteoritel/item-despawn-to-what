@@ -223,3 +223,7 @@ NeoForge 开发场景在正式 tick 后以 `LOWEST` 优先级推进；停服前�
 - [编辑器界面](client-ui.md)
 - [服务器配置](../ops/configuration.md)
 - 决策：[ADR-0029](../adr/0029-client-dependency-boundary-and-shared-subpackage.md)、[ADR-0030](../adr/0030-ui-kit-as-standalone-library-api.md)、[ADR-0035](../adr/0035-runtime-observation-seam.md)
+
+## 开发探针宿主
+
+NeoForge probe 服务端装配通用序列的世界步骤，实现保留在开发源集；命令与无人进程共用 common dev 的目录、生命周期和报告。客户端 DebugWorkbenchClient 仅在 Dist.CLIENT 装配 Ctrl+F8，正式 main 通过 DebugWorkbenchHooks 传递打开动作。发布构建校验开发类、客户端工具和开发语言资源隔离。运行方法见 [后端探针](../guides/backend-probes.md) 与 [GUI 探针](../guides/gui-probes.md)。

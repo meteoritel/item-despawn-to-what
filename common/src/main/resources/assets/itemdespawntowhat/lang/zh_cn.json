@@ -1013,14 +1013,12 @@
   "gui.itemdespawntowhat.edit.field.common.offset.up": "上",
   "gui.itemdespawntowhat.edit.field.common.offset.north": "北",
   "gui.itemdespawntowhat.edit.field.common.offset.south": "南",
-  "gui.itemdespawntowhat.edit.preview.examples.title": "图标预览示例",
-  "gui.itemdespawntowhat.edit.preview.examples.budget": "GPU：%s KiB  |  待上传／预留：%s KiB",
-  "gui.itemdespawntowhat.edit.preview.examples.controls": "滚轮浏览 · 空格切换转台旋转 · R 清理并重读 · Esc 关闭",
   "gui.itemdespawntowhat.edit.preview.state.preparing": "准备中",
   "gui.itemdespawntowhat.edit.preview.state.ready": "就绪",
   "gui.itemdespawntowhat.edit.preview.state.empty": "无可见内容",
   "gui.itemdespawntowhat.edit.preview.state.missing_subject": "资源缺失",
   "gui.itemdespawntowhat.edit.preview.state.no_level": "需要客户端世界",
   "gui.itemdespawntowhat.edit.preview.state.too_large": "场景超限",
-  "gui.itemdespawntowhat.edit.preview.state.failed": "准备或绘制失败"
+  "gui.itemdespawntowhat.edit.preview.state.failed": "准备或绘制失败",
+  "gui.itemdespawntowhat.edit.debug.button.tools": "调试工具"
 }

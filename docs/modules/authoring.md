@@ -42,7 +42,7 @@ authority: common/core/catalog、common/core/network、common/core/service、com
 - 目录入口：`RuleCatalogService` 的分页查询与失效，数据来自 `RuleCatalogSources`。
 - 落盘入口：`RuleOverlayWriter.apply(...)`，由 `RuleSaveTask` 编排调用；启用状态入口：`RuleEnableApplyService`，保存与命令共用。
 - 正式命令通过 `RuleCommandContext` 读取就绪状态、配置与编辑能力；开发入口通过宿主的 `RuleRuntimeDiagnosticsContext` 取得诊断所需运行时。
-- 调试入口：`RuleDebugCommands`，背后是 `DebugScenarioManager`、`DebugPipelineManager` 与场景、流水线各自的声明目录。
+- 调试入口：`RuleDebugCommands`，背后是 `DebugScenarioManager`、`DebugPipelineManager` 与场景清单、统一序列目录及共享运行器。
 
 ### 依赖方向
 
@@ -186,10 +186,10 @@ flowchart TB
 ### 4.6 调试场景与流水线
 
 - 实现与资源位于 `common/src/dev`，由 NeoForge `src/probe` 装配并追加开发命令；发布物只使用 main。自动运行和精选链路见[后端探针](../guides/backend-probes.md)。手动命令要求开发环境和编辑权限；场景与流水线的字面量命令由声明目录生成，命令树不硬编码。
-- 声明文件是唯一注册来源：场景清单声明运行参数、初始布置、动作、故障与预期；流水线清单描述阶段、数量与轮次。字段按严格白名单解析，未知字段、越界值与重复登记直接报错。
+- 声明文件是唯一注册来源：场景清单声明运行参数、初始布置、动作、故障与预期；统一序列目录描述 scene/bench/world 步骤、数量、轮次和重启阶段。字段按严格白名单解析，未知字段、越界值与重复登记直接报错。
 - 场景规则用正式编解码与语义校验构建独立索引，变量替换只支持固定数值；产物实体与用户规则链路隔离，避免互相干扰。
 - 场景每服务器至多一轮，启动前校验开发环境、运行时就绪与无进行中场景；自动后端入口使用固定位置，手动流水线使用玩家位置；维度卸载与异常都会收尾并记录原因，停止记为未完成。
-- 流水线启动前校验 tick 速率、场景入口占用与残留夹具，运行中玩家离开、维度变化或 tick 速率变化即中止；每个阶段按真实场景结果决定继续或判失败。
+- 流水线启动前校验 tick 速率、场景入口占用与残留夹具，运行中玩家离开、维度变化或 tick 速率变化即中止；单场景命令、流水线和无人宿主共用 DebugSequenceRun，每个步骤按真实结果决定继续或停止。
 - 观测走调试探针与运行时观测入口，输出含平台、版本、机器信息、预期与实际指标，便于横向对比。
 - 故障注入是场景声明的一部分：`faults` 条目按故障类型、任务分类、追踪名或效果类型选中真实链路中的任务，在步骤执行、取消回调、效果准备或规则重载应用阶段抛出受控异常。故障只在调试包实现并挂在运行时观测接缝上，未启用调试时生产路径不加载、不分支、不引用。
 - 故障事件进场景日志：`FAULT_ARMED` 记录生效的声明，`FAULT_STEP_EXCEPTION` / `FAULT_CANCEL_EXCEPTION` / `FAULT_PREPARE_EXCEPTION` / `FAULT_RELOAD_FAILURE` 记录每次注入，收尾时未命中的声明记 `FAULT_UNUSED`；预期里用 `events/<事件名>` 断言事件次数，用 `faults_declared` / `faults_injected` / `faults_remaining` 断言注入账目。

@@ -13,7 +13,7 @@
   "faults": [
     {
       "type": "prepare_exception",
-      "name": "itemdespawntowhat:spawn_entity",
+      "name": "idtw:spawn_entity",
       "count": 1
     }
   ],

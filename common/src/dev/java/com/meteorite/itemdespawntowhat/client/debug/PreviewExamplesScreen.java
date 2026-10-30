@@ -1,6 +1,9 @@
-package com.meteorite.itemdespawntowhat.client.ui.screen;
+package com.meteorite.itemdespawntowhat.client.debug;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.preview.PreviewMotion;
 import com.meteorite.itemdespawntowhat.client.ui.kit.preview.PreviewSubject;
 import com.meteorite.itemdespawntowhat.client.ui.shared.PreviewIcons;
@@ -22,18 +25,21 @@ import org.jetbrains.annotations.NotNull;
 import org.lwjgl.glfw.GLFW;
 
 /** 开发环境图标验收入口，资源枚举与所有示例共同消费正式预览门面。 */
-final class PreviewExamplesScreen extends Screen {
+final class PreviewExamplesScreen extends Screen implements UiLayoutSource {
     private static final String UI = "gui.itemdespawntowhat.edit.preview.examples.";
     private static final int ROW_HEIGHT = 100;
     private final List<Example> examples = new ArrayList<>();
     private final List<ResourceLocation> structures;
+    private final Runnable back;
+    private final List<UiLayoutNode> nodes = new ArrayList<>();
     private int scroll;
     private boolean rotating = true;
 
     private record Example(String label, PreviewSubject subject, boolean turntable) { }
 
-    PreviewExamplesScreen() {
+    PreviewExamplesScreen(Runnable back) {
         super(Component.translatable(UI + "title"));
+        this.back = back;
         structures = StructurePreviewResources.list();
         examples.add(new Example("minecraft:diamond", new PreviewSubject.Item(new ItemStack(Items.DIAMOND)), false));
         examples.add(new Example("minecraft:chest", new PreviewSubject.Block(Blocks.CHEST.defaultBlockState(), null), true));
@@ -64,6 +70,7 @@ final class PreviewExamplesScreen extends Screen {
 
     /** 一帧只推进一次预算；同一行显示多个尺寸以核对缓存和固定适框。 */
     @Override public void render(@NotNull GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        nodes.clear();
         PreviewIcons.beginFrame();
         renderBackground(graphics, mouseX, mouseY, partialTick);
         graphics.fill(0, 0, width, height, 0xEE171B23);
@@ -77,6 +84,9 @@ final class PreviewExamplesScreen extends Screen {
             for (int row = 0; row < total; row++) {
                 int y = 56 + row * ROW_HEIGHT - scroll;
                 if (y + ROW_HEIGHT < 53 || y >= height) continue;
+                String label = row < structures.size() ? structures.get(row).toString() : examples.get(row - structures.size()).label();
+                nodes.add(new UiLayoutNode(UiLayoutNode.Kind.ROW, new UiRect(8, Math.max(53, y), width - 16, Math.min(ROW_HEIGHT, height - Math.max(53, y))),
+                        Component.literal(label), font.width(label), width - 16, true, true, List.of()));
                 if (row < structures.size()) {
                     ResourceLocation id = structures.get(row);
                     graphics.drawString(font, font.plainSubstrByWidth(id.toString(), Math.max(0, width - 210)), 8, y, 0xFFFFFF, false);
@@ -99,6 +109,11 @@ final class PreviewExamplesScreen extends Screen {
             }
         } finally { graphics.disableScissor(); graphics.flush(); PreviewIcons.endFrame(); }
     }
+
+    /** 返回目录时重建工作台场景。 */
+    @Override public void onClose() { back.run(); }
+    /** 只读导出当前可见预览行。 */
+    @Override public List<UiLayoutNode> layoutNodes() { return List.copyOf(nodes); }
 
     /** 鼠标滚轮浏览当前资源目录。 */
     @Override public boolean mouseScrolled(double mouseX, double mouseY, double horizontal, double vertical) {

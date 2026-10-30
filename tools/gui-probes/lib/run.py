@@ -15,7 +15,7 @@ import math
 import os
 import sys
 import time
-import traceback
+from pathlib import Path
 
 LIB_DIR = os.path.dirname(os.path.abspath(__file__))
 TOOLS_DIR = os.path.dirname(os.path.dirname(LIB_DIR))
@@ -24,13 +24,14 @@ LANG_DIR = os.path.join(REPO_ROOT, "common", "src", "main", "resources", "assets
                         "itemdespawntowhat", "lang")
 PRELUDE_PATH = os.path.join(LIB_DIR, "prelude.js")
 # prelude 里 __gp.__version 必须与这里一致：版本不同说明会话里装的是旧原语，需要重装。
-PRELUDE_VERSION = 8
+PRELUDE_VERSION = 9
 
 
 sys.path.insert(0, LIB_DIR)
 import autojs  # noqa: E402
 import report  # noqa: E402
 import sheet  # noqa: E402
+from record import RunRecord, FILES, case_verdict  # noqa: E402
 
 
 class ProbeError(RuntimeError):
@@ -43,6 +44,8 @@ def load_lang():
     for name in ("en_us", "zh_cn"):
         with open(os.path.join(LANG_DIR, name + ".json"), encoding="utf-8") as handle:
             langs[name] = json.load(handle)
+        dev = Path(REPO_ROOT) / "common/src/dev/resources/assets/idtw_probe/lang" / (name + ".json")
+        langs[name].update(json.loads(dev.read_text(encoding="utf-8")))
     return langs
 
 
@@ -53,14 +56,10 @@ def unwrap(raw):
             if key in raw:
                 raw = raw[key]
                 break
-    # eval 外壳本身会 JSON.stringify 一次，纯字符串结果因此多一层引号：逐层剥到非字符串为止。
-    # 标量（true/false/null/数字）同样是合法 JSON，布尔与计数检查依赖这一步还原成 Python 值。
-    while isinstance(raw, str):
-        text = raw.strip()
-        if not text:
-            return raw
+    # 驱动统一输出一次 JSON.stringify；只解码传输层，保留 "null"、"true" 和数字文本。
+    if isinstance(raw, str):
         try:
-            raw = json.loads(text)
+            return json.loads(raw)
         except json.JSONDecodeError:
             return raw
     return raw
@@ -190,22 +189,6 @@ class Probe:
         if fps:
             self.fps = fps
 
-    def batch(self, expressions):
-        """一次 eval 批量求值多条表达式，同时取回批次后的布局指纹。"""
-        payload = json.dumps([str(expression) for expression in expressions])
-        code = ("__gp.begin(); JSON.stringify((function(){"
-                "var items = __gp.evalAll(" + payload + ");"
-                "var k = __gp.probeKey(); " + self.KEY_SUFFIX +
-                "return {items: items, k: k};})())")
-        value = self._eval_raw(code)
-        if not isinstance(value, dict) or not isinstance(value.get("items"), list):
-            raise ProbeError("批量求值返回异常: %r" % (value,))
-        if len(value["items"]) != len(expressions):
-            raise ProbeError("批量求值条数不符: 期望 %d 实际 %d"
-                             % (len(expressions), len(value["items"])))
-        self._remember_key(value.get("k"))
-        return value["items"]
-
     # ---- 自适应 settle ----
 
     def frame_ms(self):
@@ -301,197 +284,189 @@ def wait_for_client(deadline_seconds):
     raise ProbeError("客户端 MCP 在 %ss 内没有就绪: %s" % (deadline_seconds, last_error))
 
 
-def reach_editor(probe, world_name, deadline_seconds=180):
-    """把客户端推到「进入世界 + 编辑器打开」；每次只推进一个界面，让每个界面真实渲染过。
-
-    编辑器就绪的那一次求值顺手带回环境快照，省掉一条单独的 eval。
-    """
-    deadline = time.time() + deadline_seconds
-    selector = json.dumps(world_name) if world_name else "undefined"
-    log = []
-    while time.time() < deadline:
-        payload = probe._eval_raw(
-            "JSON.stringify((function(){"
-            "var m = __gp.menuStep(" + selector + ");"
-            "if (m && m.done) {"
-            " var e = __gp.editorStep();"
-            " if (e && e.done) { return {menu: m, editor: e, env: " + env_snapshot_js() + "}; }"
-            " return {menu: m, editor: e};"
-            "}"
-            "return {menu: m};})())")
-        if isinstance(payload, dict) and "env" in payload:
-            probe._absorb_env(payload)
-            return log
-        log.append(payload)
-        time.sleep(0.4)
-    raise ProbeError("未能在 %ss 内进入编辑器: %s"
-                     % (deadline_seconds, json.dumps(log[-6:], ensure_ascii=False)))
+def reach(probe, target, world=None):
+    """每条用例通过公开输入路径重建自己的起点。"""
+    deadline = time.monotonic() + target.get("timeout_seconds", 180)
+    target = dict(target, world=target.get("world", world))
+    recent = []
+    while time.monotonic() < deadline:
+        value = probe.evaluate("__gp.reachStep(%s)" % json.dumps(target))
+        recent.append(value)
+        if isinstance(value, dict) and value.get("done"):
+            return
+        time.sleep(0.2)
+    raise ProbeError("导航超时 target=%r recent=%r state=%r" % (target, recent[-5:], probe.evaluate("__gp.state()")))
 
 
-def finish_check(check, result, langs):
-    """把一条批量求值结果折算成检查记录；期望值逻辑与单条求值时一致。"""
-    name = check["name"]
+class CaseState:
+    """跨步骤只持有 JSON 值，缺少前置采样即失败。"""
+    def __init__(self):
+        self.values = {}
+
+    def capture(self, name, value):
+        if value is None:
+            raise ProbeError("capture 没有观测值: " + name)
+        self.values[name] = value
+
+    def get(self, name):
+        if name not in self.values:
+            raise ProbeError("缺少 capture: " + name)
+        return self.values[name]
+
+    def clear(self):
+        self.values.clear()
+
+
+def read_query(probe, query):
+    return probe.evaluate("__gp.read(%s)" % json.dumps(query, ensure_ascii=False))
+
+
+def assertion_query(check):
+    kind = check["kind"]
+    if kind in ("text_present", "text_absent", "text_count"):
+        return {"source": "count", "selector": check["selector"]}
+    if kind == "node_enabled":
+        return {"source": "enabled", "selector": check["selector"]}
+    if kind == "geometry_inside":
+        return {"source": "rect", "selector": check["selector"]}
+    return check["query"]
+
+
+def json_equal(actual, expected):
+    """JSON number 共用数值语义，集合内部同样区分 boolean 与 number。"""
+    if isinstance(actual, bool) or isinstance(expected, bool): return type(actual) is type(expected) and actual == expected
+    if isinstance(actual, (int, float)) and isinstance(expected, (int, float)): return actual == expected
+    if type(actual) is not type(expected): return False
+    if isinstance(actual, list): return len(actual) == len(expected) and all(json_equal(a, b) for a, b in zip(actual, expected))
+    if isinstance(actual, dict): return actual.keys() == expected.keys() and all(json_equal(actual[key], expected[key]) for key in actual)
+    return actual == expected
+
+
+def finish_check(check, result, langs, state):
+    """唯一断言解释器保留 JSON 原生期望与实际值。"""
+    kind = check["kind"]
+    expected = state.get(check["expected_capture"]) if "expected_capture" in check else check.get("expected")
     if "expected_lang" in check:
         key = check["expected_lang"]
-        lang = check.get("lang", "zh_cn")
-        # 期望文案必须两份语言文件都有：缺一边说明 i18n 没同步，这条本身就该失败。
-        missing = [code for code in ("en_us", "zh_cn") if key not in langs[code]]
-        if missing:
-            return {"name": name, "expected": key,
-                    "actual": "语言文件缺少 key: " + ", ".join(missing), "pass": False}
-        expected = langs[lang][key]
-    else:
-        expected = check.get("expected")
-    if not result.get("ok"):
-        return {"name": name, "expected": expected,
-                "actual": "eval 失败: %s" % result.get("error"), "pass": False}
+        for language in ("en_us", "zh_cn"):
+            if key not in langs[language]:
+                raise ProbeError("语言文件缺少 key: " + key)
+        expected = result.get("language_value")
+    if kind == "text_present": expected = {"min": 1}
+    elif kind == "text_absent": expected = 0
+    elif kind == "geometry_inside": expected = True
+    elif kind == "value_changed": expected = {"different_from": state.get(check["capture"])}
     actual = result.get("value")
-    passed = actual == expected
-    if not passed and check.get("contains"):
-        passed = str(expected) in str(actual)
-    record = {"name": name, "expected": expected, "actual": actual, "pass": passed}
-    if check.get("soft"):
-        record["soft"] = True
+    passed = False
+    if result.get("ok"):
+        if kind == "text_present": passed = actual >= 1
+        elif kind == "geometry_inside":
+            w = actual["window"]
+            passed = actual["x"] >= 0 and actual["y"] >= 0 and actual["x"] + actual["width"] <= w["logicalWidth"] and actual["y"] + actual["height"] <= w["logicalHeight"]
+        elif kind == "value_changed": passed = not json_equal(actual, state.get(check["capture"]))
+        else: passed = json_equal(actual, expected)
+    record = {"name": check["name"], "kind": kind, "target": check.get("selector", check.get("query")),
+              "expected": expected, "actual": actual, "pass": passed}
+    if not result.get("ok"): record["error"] = result.get("error")
     return record
 
 
-def shot_expression(name, rects):
-    """截图表达式：一次求值同时拿截图元数据与元素矩形叠层。"""
-    name_json = json.dumps(name)
-    if rects:
-        return ("(function(){var s = __gp.shot(%s); s.rects = %s; return s;})()"
-                % (name_json, rects))
-    return "__gp.shot(%s)" % name_json
+def perform_action(probe, action):
+    action = dict(action)
+    if action.get("unique_text"):
+        action["text"] = "probe_" + str(time.time_ns())
+        action.pop("unique_text")
+    value, before = probe.perform("__gp.action(%s)" % json.dumps(action, ensure_ascii=False))
+    if isinstance(value, dict) and value.get("handled") is False and action["kind"] != "release":
+        raise ProbeError("输入未处理: %r => %r" % (action, value))
+    return before
+
+
+def create_rule(probe):
+    perform_action(probe, {"kind": "click", "selector": {"kind": "CONTROL", "lang": "gui.itemdespawntowhat.edit.button.new"}})
+    probe.settle()
+    perform_action(probe, {"kind": "click", "selector": {"kind": "TEXT_INPUT"}})
+    perform_action(probe, {"kind": "clear"})
+    perform_action(probe, {"kind": "type", "unique_text": True})
+    perform_action(probe, {"kind": "click", "selector": {"kind": "CONTROL", "lang": "gui.itemdespawntowhat.edit.button.confirm"}})
+    probe.settle()
 
 
 def run_case(probe, case, langs, settle_timeout_ms):
     started = time.perf_counter()
-    case_settle = case.get("settle") or {}
-    settle_enabled = case_settle.get("enabled", True)
-    settle_limit = case_settle.get("timeout_ms", settle_timeout_ms)
-    checks = []
-    artifacts = []
-    pending = []          # 连续的 check/shot/dump 合成一次 eval，保持用例里的顺序
-    pending_shot = False
+    state = CaseState()
+    checks, artifacts = [], []
     evals_started = probe.eval_count
     stats = {"settle_ms": 0, "shot_ms": 0, "shots": 0}
+    def register_artifact(artifact):
+        artifact.update(id=f"{case['name']}/{len(artifacts) + 1}", case=case["name"], index=len(artifacts) + 1)
+        artifacts.append(artifact)
+
     error = None
-
-    def flush():
-        nonlocal pending, pending_shot
-        if not pending:
-            return
-        items = pending
-        pending = []
-        if pending_shot:
-            # 截图取上一帧帧缓冲，先在渲染线程外侧等两帧。
-            probe.wait_frame()
-            pending_shot = False
-        try:
-            values = probe.batch([item["expr"] for item in items])
-        except Exception:
-            # 慢路径：批量求值整体失败时逐条重跑，避免一条坏表达式连坐整批检查。
-            values = []
-            for item in items:
-                try:
-                    values.append({"ok": True, "value": probe.evaluate(item["expr"])})
-                except Exception as failure:
-                    values.append({"ok": False, "error": str(failure)})
-        for item, result in zip(items, values):
-            kind = item["kind"]
-            if kind == "check":
-                checks.append(finish_check(item["check"], result, langs))
-            elif kind == "shot":
-                if not result.get("ok"):
-                    raise ProbeError("截图失败: " + str(result.get("error")))
-                value = result.get("value") or {}
-                path = value.get("path") or os.path.join(probe.run_dir, item["name"])
-                if not os.path.exists(path):
-                    raise ProbeError("截图没有落盘: " + path)
-                with open(path, "rb") as handle:
-                    png_bytes = handle.read()
-                shot_ms = int(value.get("shot_ms") or 0)
-                stats["shots"] += 1
-                stats["shot_ms"] += shot_ms
-                probe.shot_count += 1
-                probe.shot_ms += shot_ms
-                artifacts.append({
-                    "kind": "screenshot", "name": item["name"], "path": path,
-                    "png_bytes": png_bytes, "rects": value.get("rects"),
-                    "thumb": value.get("thumb"), "width": value.get("width"),
-                    "height": value.get("height"), "scale": value.get("scale"),
-                })
-            elif kind == "dump":
-                if not result.get("ok"):
-                    raise ProbeError("导出证据失败: " + str(result.get("error")))
-                value = result.get("value") or {}
-                artifacts.append({"kind": "json", "name": item["name"],
-                                  "path": value.get("path")
-                                  or os.path.join(probe.run_dir, item["name"])})
-            else:
-                raise ProbeError("未知步骤类型: " + str(kind))
-
-    def settle_after(before, limit):
-        settled = probe.settle(before_key=before, timeout_ms=limit)
-        stats["settle_ms"] += settled["waited_ms"]
-
+    pointer_held = False
+    settle_limit = (case.get("settle") or {}).get("timeout_ms", settle_timeout_ms)
     try:
         window = case.get("window")
         if window:
-            probe.perform("__gp.resize(%d, %d, %d)"
-                          % (window["width"], window["height"], window["scale"]))
-            if settle_enabled:
-                settle_after(None, settle_limit)
-        for step in case.get("steps", []):
-            step_settle = step.get("settle", None)
-            if "do" in step:
-                flush()
-                before = probe.last_key
-                probe.perform(step["do"])
-                want_settle = settle_enabled if step_settle is None else bool(step_settle)
-                if want_settle:
-                    limit = settle_limit
-                    if isinstance(step_settle, dict) and step_settle.get("timeout_ms"):
-                        limit = step_settle["timeout_ms"]
-                    settle_after(before, limit)
-            elif "wait_ms" in step:
-                # 只有动画需要固定等待时用例才保留这一步，其余动作靠自适应 settle 收敛。
-                flush()
-                time.sleep(step["wait_ms"] / 1000.0)
+            perform_action(probe, dict(window, kind="resize"))
+            probe.settle()
+        reach(probe, case["start"], getattr(probe, "world", None))
+        if case["start"].get("new_rule"):
+            create_rule(probe)
+        for index, step in enumerate(case["steps"], 1):
+            if "action" in step:
+                action = step["action"]
+                if action["kind"] == "press": pointer_held = True
+                before = perform_action(probe, action)
+                if action["kind"] == "release": pointer_held = False
+                if step.get("settle", True): stats["settle_ms"] += probe.settle(before, settle_limit)["waited_ms"]
+            elif "capture" in step:
+                state.capture(step["capture"], read_query(probe, step["query"]))
+            elif "assert" in step or "wait_for" in step:
+                check = step.get("assert", step.get("wait_for"))
+                deadline = time.monotonic() + (step.get("timeout_ms", 2500) / 1000 if "wait_for" in step else 0)
+                while True:
+                    try:
+                        value = read_query(probe, assertion_query(check))
+                        result = {"ok": True, "value": value}
+                        if "expected_lang" in check: result["language_value"] = probe.evaluate("__gp.lang(%s)" % json.dumps(check["expected_lang"]))
+                    except Exception as failure:
+                        result = {"ok": False, "error": str(failure)}
+                    outcome = finish_check(check, result, langs, state)
+                    if outcome["pass"] or time.monotonic() >= deadline: break
+                    time.sleep(0.05)
+                checks.append(outcome)
             elif "shot" in step:
-                pending.append({"kind": "shot", "name": step["shot"],
-                                "expr": shot_expression(step["shot"], step.get("rects"))})
-                pending_shot = True
+                probe.wait_frame()
+                value = probe.evaluate("__gp.shot(%s)" % json.dumps(step["shot"]))
+                path = value["path"]
+                if not os.path.isfile(path) or os.path.getsize(path) == 0: raise ProbeError("截图未落盘: " + path)
+                artifact = dict(value, kind="screenshot", name=step["shot"], step=index)
+                register_artifact(artifact)
+                stats["shots"] += 1; stats["shot_ms"] += value["shot_ms"]
+                probe.shot_count += 1; probe.shot_ms += value["shot_ms"]
             elif "dump" in step:
-                pending.append({"kind": "dump", "name": step["dump"],
-                                "expr": "__gp.dumpJson(%s, %s)"
-                                        % (json.dumps(step["dump"]), step["expr"])})
-            elif "check" in step:
-                pending.append({"kind": "check", "check": step["check"],
-                                "expr": step["check"]["expr"]})
-            else:
-                raise ProbeError("未知步骤: %s" % json.dumps(step, ensure_ascii=False))
-        flush()
+                value = read_query(probe, step["query"])
+                path = os.path.join(probe.run_dir, step["dump"])
+                with open(path, "w", encoding="utf-8") as handle: json.dump(value, handle, ensure_ascii=False, indent=2)
+                register_artifact({"kind":"json", "name":step["dump"], "path":path, "step":index})
+            else: raise ProbeError("未知步骤: %r" % step)
     except Exception as failure:
         error = "%s: %s" % (type(failure).__name__, failure)
-        checks.append({"name": "用例执行未中断", "expected": "无异常",
-                       "actual": error + " | " + traceback.format_exc(limit=2).replace("\n", " "),
-                       "pass": False})
-    if error:
-        verdict = "error"
-    elif any(not check["pass"] and not check.get("soft") for check in checks):
-        verdict = "fail"
-    elif checks:
-        verdict = "pass"
-    else:
-        verdict = "skip"
-    result = {"name": case["name"], "verdict": verdict, "detail": case.get("description", ""),
-              "checks": checks, "artifacts": artifacts,
-              "duration_ms": int((time.perf_counter() - started) * 1000)}
-    metrics = {"name": case["name"], "duration_ms": result["duration_ms"],
-               "evals": probe.eval_count - evals_started, "checks": len(checks),
-               "shots": stats["shots"], "settle_ms": stats["settle_ms"],
-               "shot_ms": stats["shot_ms"]}
+        checks.append({"name":"用例执行完整", "kind":"execution", "expected":"completed", "actual":error, "pass":False})
+    finally:
+        state.clear()
+        if pointer_held:
+            try:
+                perform_action(probe, {"kind": "release"})
+            except Exception as failure:
+                cleanup_error = "%s: %s" % (type(failure).__name__, failure)
+                error = error or cleanup_error
+                checks.append({"name":"释放用例拖动", "kind":"cleanup", "expected":"released", "actual":cleanup_error, "pass":False})
+    result = {"name": case["name"], "verdict": case_verdict(checks, error), "detail":case.get("description", ""),
+              "checks": checks, "artifacts":artifacts, "duration_ms":int((time.perf_counter()-started)*1000)}
+    metrics = {"name":case["name"], "duration_ms":result["duration_ms"], "evals":probe.eval_count-evals_started,
+               "checks":len(checks), "shots":stats["shots"], "settle_ms":stats["settle_ms"], "shot_ms":stats["shot_ms"]}
     return result, metrics
 
 
@@ -506,6 +481,42 @@ def load_cases(cases_dir, only):
         if only and case["name"] not in only:
             continue
         cases.append(case)
+    missing = set(only) - {case["name"] for case in cases}
+    if missing: raise ProbeError("未知 --only: " + ", ".join(sorted(missing)))
+    langs = load_lang()
+    assertion_kinds = {"text_present", "text_absent", "text_count", "node_enabled", "geometry_inside", "value_equals", "value_changed"}
+    actions = {"click", "type", "clear", "key", "resize", "scroll", "drag", "press", "release"}
+    sources = {"screen_title", "window", "layout", "workspace", "nodes", "count", "text", "enabled", "rect"}
+    def validate_keys(value):
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if key in ("lang", "expected_lang"):
+                    if any(item not in langs[language] for language in langs): raise ProbeError("语言 key 缺失: " + item)
+                elif key == "lang_any":
+                    for item_key in item:
+                        if any(item_key not in langs[language] for language in langs): raise ProbeError("语言 key 缺失: " + item_key)
+                else: validate_keys(item)
+        elif isinstance(value, list):
+            for item in value: validate_keys(item)
+    for case in cases:
+        target = case.get("start", {})
+        if target.get("kind") not in ("editor", "workbench", "scene") or target.get("kind") == "scene" and target.get("scene") not in ("gallery", "interactions", "previews"):
+            raise ProbeError("未知 start target: " + case["name"])
+        captures = set()
+        for step in case["steps"]:
+            kinds = set(step) & {"action", "capture", "assert", "wait_for", "shot", "dump"}
+            if len(kinds) != 1 or set(step) & {"do", "expr", "check"}: raise ProbeError("未知步骤: " + str(step))
+            if "action" in step and step["action"].get("kind") not in actions: raise ProbeError("未知动作: " + str(step))
+            check = step.get("assert", step.get("wait_for"))
+            if check:
+                if check.get("kind") not in assertion_kinds: raise ProbeError("未知断言: " + str(check))
+                if "expected_capture" in check and check["expected_capture"] not in captures: raise ProbeError("缺少 capture: " + check["expected_capture"])
+                if check["kind"] == "value_changed" and check.get("capture") not in captures: raise ProbeError("缺少 capture: " + str(check.get("capture")))
+                if check["kind"] in ("value_equals", "text_count", "node_enabled") and "expected" not in check and "expected_lang" not in check and "expected_capture" not in check: raise ProbeError("断言缺少期望: " + str(check))
+            query = step.get("query", (check or {}).get("query"))
+            if query and query.get("source") not in sources: raise ProbeError("未知 query: " + str(query))
+            if "capture" in step: captures.add(step["capture"])
+            validate_keys(step)
     return cases
 
 
@@ -561,11 +572,16 @@ def main(argv):
     parser.add_argument("--only", action="append", default=[], help="只跑指定用例名，可重复")
     parser.add_argument("--world", default=None, help="要进入的存档名；省略则选列表第一个")
     parser.add_argument("--wait-client", type=int, default=240, help="等待 MCP 就绪的秒数")
-    parser.add_argument("--skip-setup", action="store_true", help="跳过进入世界与打开编辑器")
     parser.add_argument("--timeout-ms", type=int, default=90000)
     parser.add_argument("--settle-timeout-ms", type=int, default=1500,
                         help="自适应 settle 的等待上限（毫秒）")
+    parser.add_argument("--validate", action="store_true", help="离线校验用例与目标")
     args = parser.parse_args(argv)
+    cases = load_cases(args.cases, args.only)
+    if not cases: raise ProbeError("没有匹配用例")
+    if args.validate:
+        print("validated %d cases" % len(cases))
+        return 0
 
     run_dir = os.path.abspath(args.run_dir)
     os.makedirs(run_dir, exist_ok=True)
@@ -590,13 +606,9 @@ def main(argv):
         probe.install()
         phases["install_ms"] = int((time.perf_counter() - install_started) * 1000)
         setup_started = time.perf_counter()
-        if not args.skip_setup:
-            reach_editor(probe, args.world)
+        probe.world = args.world
         phases["setup_ms"] = int((time.perf_counter() - setup_started) * 1000)
         env = build_env(probe)
-        cases = load_cases(args.cases, args.only)
-        if not cases:
-            raise ProbeError("没有找到用例: " + args.cases)
         cases_started = time.perf_counter()
         for case in cases:
             result, metrics = run_case(probe, case, langs, args.settle_timeout_ms)
@@ -614,44 +626,30 @@ def main(argv):
         setup_error = "%s: %s" % (type(failure).__name__, failure)
         print("[error] 前置阶段失败: " + setup_error)
 
+    metrics = build_metrics(probe, phases, case_metrics, int((time.perf_counter()-started)*1000))
+    record = RunRecord(run_dir, metadata, env, results, metrics, setup_error)
     shots = None
     if results:
         sheet_started = time.perf_counter()
         try:
-            shots = sheet.build(run_dir, results)
-            print("[shots] %d 张 %dms" % (shots["count"], shots["sheet_ms"]))
-            if shots.get("contact_sheet"):
-                print("contact sheet: " + shots["contact_sheet"])
+            shots = sheet.build(record)
+            record.derived = shots
+            print("[shots] %d 张 %dms" % (len(record.screenshots()), shots["sheet_ms"]))
         except Exception as failure:
-            # 拼图只是证据整理：失败时照常出报告，但要在终端留痕。
-            shots = None
-            print("[shots] 拼图失败: %s: %s" % (type(failure).__name__, failure))
-        phases["sheet_ms"] = int((time.perf_counter() - sheet_started) * 1000)
-
-    # 先渲染一次量出 report_ms，再用最终 metrics 重渲染：报告里的总耗时不漏掉报告本身。
+            record.artifact_errors.append({"role":"sheet", "error":str(failure)})
+            print("[shots] 拼图失败: " + str(failure))
+        phases["sheet_ms"] = int((time.perf_counter()-sheet_started)*1000)
+    metrics.update(build_metrics(probe, phases, case_metrics, int((time.perf_counter()-started)*1000)))
     report_started = time.perf_counter()
-    metrics = build_metrics(probe, phases, case_metrics,
-                            int((time.perf_counter() - started) * 1000))
-    document, summary = report.render_report(metadata, results, env,
-                                             shots=shots, metrics=metrics)
-    phases["report_ms"] = int((time.perf_counter() - report_started) * 1000)
-    metrics = build_metrics(probe, phases, case_metrics,
-                            int((time.perf_counter() - started) * 1000))
-    document, summary = report.render_report(metadata, results, env,
-                                             shots=shots, metrics=metrics)
-    summary["setup_error"] = setup_error
-    summary["duration_seconds"] = round(metrics["total_ms"] / 1000.0, 1)
-    summary["metrics"] = metrics
-    summary["shots"] = {"count": (shots or {}).get("count", 0),
-                        "contact_sheet": (shots or {}).get("contact_sheet"),
-                        "list": (shots or {}).get("list_path")}
-    with open(os.path.join(run_dir, "gui-report.html"), "w", encoding="utf-8") as handle:
-        handle.write(document)
-    with open(os.path.join(run_dir, "gui-summary.json"), "w", encoding="utf-8") as handle:
-        json.dump(summary, handle, ensure_ascii=False, indent=2)
-    with open(os.path.join(run_dir, "run-metadata.json"), "w", encoding="utf-8") as handle:
-        json.dump({"metadata": metadata, "env": env, "metrics": metrics},
-                  handle, ensure_ascii=False, indent=2)
+    try:
+        document = report.render_report(record, shots)
+        (record.directory / FILES["report"]).write_text(document, encoding="utf-8")
+    except Exception as failure:
+        record.artifact_errors.append({"role":"report", "error":str(failure)})
+    metrics["phases"]["report_ms"] = int((time.perf_counter()-report_started)*1000)
+    metrics["total_ms"] = int((time.perf_counter()-started)*1000)
+    record.save()
+    summary = record.summary()
     print("verdict=%s 用例 %d/%d 细项 %d/%d"
           % (summary["verdict"], summary["passed"], summary["total_cases"],
              summary["passed_checks"], summary["total_checks"]))
@@ -659,6 +657,8 @@ def main(argv):
           % (metrics["total_ms"] / 1000.0, metrics["evals"]["count"],
              metrics["evals"]["rtt_avg_ms"], metrics["settle"]["waited_ms"],
              metrics["shots"]["count"]))
+    for artifact_error in record.artifact_errors:
+        print("[artifact-error] " + json.dumps(artifact_error, ensure_ascii=False))
     print("报告: " + os.path.join(run_dir, "gui-report.html"))
     if setup_error:
         return 1

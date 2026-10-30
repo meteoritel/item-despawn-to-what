@@ -3,7 +3,7 @@
 // 版本号与 run.py 的 PRELUDE_VERSION 一一对应：驱动发现会话里装的是旧版本会重装，
 // 复用同一个客户端会话换 RunDir 时才能同时换掉证据目录与新增原语。
 var __gp = (function () {
-  var VERSION = 8;
+  var VERSION = 9;
   var MC = Java.loadClass('net.minecraft.client.Minecraft').getInstance();
   var SS = Java.loadClass('net.minecraft.client.Screenshot');
   var File = Java.loadClass('java.io.File');
@@ -91,8 +91,8 @@ var __gp = (function () {
     var s = MC.screen;
     if (s === null) return { handled: false, reason: 'no-screen' };
     var pre = CH.onScreenMouseClickedPre(s, x, y, button);
-    var handled = s.mouseClicked(x, y, button);
-    CH.onScreenMouseClickedPost(s, x, y, button, handled);
+    var handled = pre || s.mouseClicked(x, y, button);
+    if (!pre) CH.onScreenMouseClickedPost(s, x, y, button, handled);
     s.mouseReleased(x, y, button);
     return { handled: Boolean(handled), pre: Boolean(pre), screen: String(MC.screen) };
   }
@@ -124,8 +124,18 @@ var __gp = (function () {
 
   function key(code, scan, mods) {
     var s = MC.screen;
-    if (s === null) return { handled: false, reason: 'no-screen' };
-    var handled = s.keyPressed(code, scan === undefined ? 0 : scan, mods === undefined ? 0 : mods);
+    if (s === null) {
+      var Bus = Java.loadClass('net.neoforged.neoforge.common.NeoForge');
+      var KeyEvent = Java.loadClass('net.neoforged.neoforge.client.event.InputEvent$Key');
+      Bus.EVENT_BUS.post(new KeyEvent(code, scan || 0, 1, mods || 0));
+      Bus.EVENT_BUS.post(new KeyEvent(code, scan || 0, 0, mods || 0));
+      return {handled: MC.screen !== null};
+    }
+    scan = scan === undefined ? 0 : scan; mods = mods === undefined ? 0 : mods;
+    var cancelled = CH.onScreenKeyPressedPre(s, code, scan, mods);
+    var handled = cancelled || s.keyPressed(code, scan, mods);
+    if (!cancelled) CH.onScreenKeyPressedPost(s, code, scan, mods);
+    if (MC.screen === s) s.keyReleased(code, scan, mods);
     return { handled: Boolean(handled) };
   }
 
@@ -148,70 +158,133 @@ var __gp = (function () {
       var w = list.get(i);
       var item = { index: i, type: String(w).split('@')[0].split('.').pop() };
       try { item.x = w.getX(); item.y = w.getY(); item.width = w.getWidth(); item.height = w.getHeight(); } catch (e) { }
-      try { item.label = String(w.getMessage().getString()); } catch (e2) { }
+      try { item.label = String(w.getMessage().getString()); item.enabled=Boolean(w.active); } catch (e2) { }
       out.push(item);
     }
     return out;
   }
 
-  // 自绘界面的按钮不在原版控件树里，只存在于排版快照；原版界面则只有 children()。两处都找。
-  function findClickable(label) {
-    var nodes = flatCached();
-    for (var i = 0; i < nodes.length; i++) {
-      var n = nodes[i];
-      if (n.text === label && (n.kind === 'CONTROL' || n.kind === 'TEXT_INPUT' || n.kind === 'ROW')) return n;
+  // 选择器保留祖先作用域，活动模态遮住的下层节点不参与命中。
+  function candidates(selector) {
+    selector = selector || {};
+    var roots = layoutCached();
+    var all = flatCached();
+    var modals = all.filter(function(n) { return n.kind === 'MODAL' && n.visible !== false; });
+    if (modals.length) roots = [modals[modals.length - 1]];
+    var out = [];
+    var win = windowInfo();
+    function walk(nodes, ancestors, clip) {
+      for (var i = 0; i < nodes.length; i++) {
+        var n = nodes[i];
+        if (n.visible === false) continue;
+        var r = {x: Math.max(clip.x, n.x), y: Math.max(clip.y, n.y),
+          right: Math.min(clip.right, n.x + n.width), bottom: Math.min(clip.bottom, n.y + n.height)};
+        var label = selector.lang ? lang(selector.lang) : selector.text;
+        var labels = selector.lang_any ? selector.lang_any.map(lang) : selector.text_any;
+        var matches = (!selector.kind || n.kind === selector.kind) &&
+          (label === undefined || n.text === label) && (!labels || labels.indexOf(n.text) >= 0) &&
+          (selector.enabled === undefined || n.enabled === selector.enabled) &&
+          (!selector.within || ancestors.some(function(a) { return matchScope(a, selector.within); })) &&
+          (!selector.has_text || flat([n]).some(function(c) { return c.text === selector.has_text; })) &&
+          r.right > r.x && r.bottom > r.y;
+        if (matches) {
+          var value = {kind:n.kind, text:n.text, x:r.x, y:r.y, width:r.right-r.x, height:r.bottom-r.y,
+            bounds:{x:n.x,y:n.y,width:n.width,height:n.height}, enabled:n.enabled, visible:true, ancestors:ancestors.map(function(a){return {kind:a.kind,text:a.text};})};
+          out.push(value);
+        }
+        walk(n.children || [], ancestors.concat([n]), n.kind === 'FRAME' || n.kind === 'MODAL' ? r : clip);
+      }
     }
-    var list = widgets();
-    for (var j = 0; j < list.length; j++) {
-      if (list[j].label === label) return list[j];
+    walk(roots, [], {x:0,y:0,right:win.logicalWidth,bottom:win.logicalHeight});
+    if (!all.length || all[0].kind === 'ERROR') {
+      widgets().forEach(function(w) {
+        var label = selector.lang ? lang(selector.lang) : selector.text;
+        if ((!selector.kind || selector.kind === 'CONTROL') && (label === undefined || w.label === label)) {
+          out.push({kind:'CONTROL',text:w.label,x:w.x,y:w.y,width:w.width,height:w.height,enabled:w.enabled !== false,visible:true,ancestors:[]});
+        }
+      });
     }
-    return null;
+    return out;
   }
-
-  function clickWidget(label) {
-    var w = findClickable(label);
-    if (w === null) return { handled: false, reason: 'widget-not-found:' + label, widgets: widgets() };
-    return click(w.x + w.width / 2, w.y + w.height / 2, 0);
+  function matchScope(node, scope) {
+    return (!scope.kind || node.kind === scope.kind) &&
+      (!scope.lang || node.text === lang(scope.lang)) && (scope.text === undefined || node.text === scope.text);
   }
-
-  // 客户端语言可能是中文或英文，导航按钮按候选文案依次尝试，避免把语言绑进脚本。
+  function unique(selector) {
+    var nodes = candidates(selector);
+    if (nodes.length !== 1) throw new Error('selector expected one: ' + JSON.stringify({selector:selector,candidates:nodes,screen:screenName()}));
+    return nodes[0];
+  }
+  function clickTarget(selector) {
+    var node = unique(selector);
+    if (!node.enabled) throw new Error('disabled target: ' + JSON.stringify(node));
+    var result = click(node.x + node.width/2, node.y + node.height/2, 0);
+    if (!result.handled) throw new Error('input unhandled: ' + JSON.stringify({selector:selector,result:result}));
+    return result;
+  }
+  function clickWidget(label) { return clickTarget({text:label, kind:'CONTROL'}); }
   function clickWidgetAny(labels) {
-    for (var i = 0; i < labels.length; i++) {
-      var w = findClickable(labels[i]);
-      if (w !== null) return click(w.x + w.width / 2, w.y + w.height / 2, 0);
+    for (var i=0;i<labels.length;i++) {
+      if (candidates({text:labels[i],kind:'CONTROL'}).length) return clickWidget(labels[i]);
     }
-    return { handled: false, reason: 'widget-not-found:' + labels.join('|'), widgets: widgets() };
+    throw new Error('navigation widget missing: '+JSON.stringify(labels));
   }
-
-  // 按节点种类点第一处可见节点：模态内容区、自绘画布这类没有文案的节点也只能这样真实点到。
-  function clickKindAt(kind, dx, dy) {
-    var nodes = flatCached();
-    for (var i = 0; i < nodes.length; i++) {
-      var n = nodes[i];
-      if (n.kind !== kind || n.visible === false || n.width <= 0 || n.height <= 0) continue;
-      var x = n.x + (dx === undefined ? n.width / 2 : dx);
-      var y = n.y + (dy === undefined ? n.height / 2 : dy);
-      return click(x, y, 0);
-    }
-    return { handled: false, reason: 'kind-not-found:' + kind };
+  function read(query) {
+    if (query.source === 'screen_title') return screenInfo().title;
+    if (query.source === 'window') return windowInfo();
+    if (query.source === 'layout') return layoutCached();
+    if (query.source === 'workspace') return workspace();
+    var nodes = candidates(query.selector || {});
+    if (query.source === 'nodes') return nodes;
+    if (query.source === 'count') return nodes.length;
+    var node = unique(query.selector || {});
+    if (query.source === 'text') return node.text;
+    if (query.source === 'enabled') return node.enabled;
+    if (query.source === 'rect') return {x:node.bounds.x,y:node.bounds.y,width:node.bounds.width,height:node.bounds.height,window:windowInfo()};
+    throw new Error('unknown query: '+JSON.stringify(query));
   }
-
-  // 同名文案在页面与模态里各有一个时（例如页脚 Back 与模态 Back），取快照里靠后的那个：模态节点排在页面节点之后。
-  function clickWidgetLast(label) {
-    var nodes = flatCached();
-    var found = null;
-    for (var i = 0; i < nodes.length; i++) {
-      var n = nodes[i];
-      if (n.text !== label || n.visible === false) continue;
-      if (n.kind === 'CONTROL' || n.kind === 'TEXT_INPUT' || n.kind === 'ROW') found = n;
+  function action(action) {
+    if (action.kind === 'click') return clickTarget(action.selector);
+    if (action.kind === 'type') return typeText(action.text);
+    if (action.kind === 'clear') { key(269,0,0); for(var i=0;i<256;i++) key(259,0,0); return {handled:true}; }
+    if (action.kind === 'key') return key(action.code,0,action.modifiers || 0);
+    if (action.kind === 'resize') return resize(action.width,action.height,action.scale);
+    if (action.kind === 'scroll') { var n=unique(action.selector);return wheel(n.x+n.width/2,n.y+n.height/2,action.delta); }
+    if (action.kind === 'drag') { var n=unique(action.selector);return drag(n.x+n.width*action.from,n.y+n.height/2,n.x+n.width*action.to,n.y+n.height/2,4,0); }
+    if (action.kind === 'press') {var n=unique(action.selector);var x=n.x+n.width*action.at;return {handled:Boolean(MC.screen.mouseClicked(x,n.y+n.height/2,0))};}
+    if (action.kind === 'release') return {handled:Boolean(MC.screen.mouseReleased(0,0,0))};
+    throw new Error('unknown action: '+JSON.stringify(action));
+  }
+  function reachStep(target) {
+    var screen=screenName();
+    if (target.kind === 'workbench' || target.kind === 'scene') {
+      if (target.scene === 'previews' && !inWorld()) return menuStep(target.world);
+      if (screen === 'PreviewExamplesScreen' && target.scene === 'previews') return {done:true};
+      if (screen === 'Gallery' && target.kind === 'scene' && candidates({lang:'gui.itemdespawntowhat.debug.workbench.'+target.scene,kind:'FRAME'}).length === 1) return {done:true};
+      if (screen === 'Directory') {
+        if (target.kind === 'workbench') return {done:true};
+        return {action:clickTarget({lang:'gui.itemdespawntowhat.debug.workbench.'+target.scene,kind:'CONTROL'})};
+      }
+      return {action:key(297,0,2)};
     }
-    if (found === null) return { handled: false, reason: 'widget-not-found:' + label };
-    return click(found.x + found.width / 2, found.y + found.height / 2, 0);
+    var menu=menuStep(target.world);
+    if (!menu.done) return menu;
+    if (screen !== 'RuleEditorScreen') {
+      if (String(Workspace.instance().session().state()) === 'ACTIVE') {
+        if (screen === 'Gallery' || screen === 'PreviewExamplesScreen') return {action:key(256)};
+        if (screen === 'Directory') return {action:clickTarget({lang:'gui.itemdespawntowhat.debug.workbench.drafts',kind:'CONTROL'})};
+      }
+      return editorStep();
+    }
+    var back={lang:'gui.itemdespawntowhat.edit.button.back',kind:'CONTROL'};
+    if (candidates(back).length === 1) return {action:clickTarget(back)};
+    if (candidates({lang:'gui.itemdespawntowhat.edit.button.new',kind:'CONTROL'}).length === 1) return {done:true};
+    return {action:key(256)};
   }
 
   function screenName() {
     var s = MC.screen;
-    return s === null ? 'null' : String(s).split('@')[0].split('.').pop();
+    return s === null ? 'null' : String(s).split('@')[0].split('.').pop().split('$').pop();
   }
 
   // 一步菜单导航：每次调用只推进一个界面，驱动脚本负责等待渲染，让每个界面都真实落地过。
@@ -240,7 +313,7 @@ var __gp = (function () {
         for (var k = 0; k < entries.size(); k++) {
           var name = '';
           try { name = String(entries.get(k).getLevelName()); } catch (e) { }
-          if (worldName === undefined || name === worldName) { chosenIndex = k; break; }
+          if (worldName == null || name === worldName) { chosenIndex = k; break; }
         }
         if (chosenIndex < 0) return { done: false, action: 'no-world', entries: entries.size() };
         // 行的坐标是列表内部几何（getRowTop 为 protected），选中态走列表公开的 setSelected。
@@ -258,6 +331,9 @@ var __gp = (function () {
     if (screen === 'RuleEditorScreen') return { done: true, screen: screen };
     if (!inWorld()) return { done: false, action: 'not-in-world', screen: screen };
     var state = String(Workspace.instance().session().state());
+    if (state === 'ACTIVE' && (screen === 'null' || screen === 'PauseScreen')) {
+      key(297,0,2); return {done:false,action:'workbench-for-workspace'};
+    }
     if (state === 'FREE') {
       openEditor();
       return { done: false, action: 'command-sent', screen: screen };
@@ -336,19 +412,6 @@ var __gp = (function () {
     return { s: screenName(), w: w.logicalWidth, h: w.logicalHeight, k: hashText(parts.join('|')), n: count };
   }
 
-  // 批量求值：一次 eval 跑多条表达式，逐项捕获异常；表达式以字符串传入，按顺序求值。
-  function evalAll(expressions) {
-    var out = [];
-    for (var i = 0; i < expressions.length; i++) {
-      try {
-        out.push({ ok: true, value: eval(String(expressions[i])) });
-      } catch (e) {
-        out.push({ ok: false, error: String(e) });
-      }
-    }
-    return out;
-  }
-
   function rects(kinds) {
     var wanted = kinds === undefined ? null : kinds;
     var nodes = flatCached();
@@ -387,14 +450,14 @@ var __gp = (function () {
     if (s === null) return { screen: 'null', title: '' };
     var title = '';
     try { title = String(s.getTitle().getString()); } catch (e) { }
-    return { screen: String(s).split('@')[0].split('.').pop(), className: String(s.getClass ? s.getClass().getName() : s), title: title };
+    return { screen: String(s).split('@')[0].split('.').pop().split('$').pop(), className: String(s.getClass ? s.getClass().getName() : s), title: title };
   }
 
   function state() {
     var s = MC.screen;
     var out = {
       where: String(AutoJS.where()),
-      screen: s === null ? 'null' : String(s).split('@')[0].split('.').pop(),
+      screen: s === null ? 'null' : String(s).split('@')[0].split('.').pop().split('$').pop(),
       player: MC.player === null ? 'null' : String(MC.player.getName().getString()),
       connected: MC.getConnection() !== null,
       workspace: String(Workspace.instance().session().state())
@@ -465,11 +528,9 @@ var __gp = (function () {
     key: key,
     typeText: typeText,
     widgets: widgets,
-    findClickable: findClickable,
+    candidates:candidates, unique:unique, read:read, action:action, reachStep:reachStep,
     clickWidget: clickWidget,
     clickWidgetAny: clickWidgetAny,
-    clickWidgetLast: clickWidgetLast,
-    clickKindAt: clickKindAt,
     screenName: screenName,
     menuStep: menuStep,
     editorStep: editorStep,
@@ -478,7 +539,6 @@ var __gp = (function () {
     flat: flat,
     flatCached: flatCached,
     probeKey: probeKey,
-    evalAll: evalAll,
     rects: rects,
     textNodes: textNodes,
     lang: lang,

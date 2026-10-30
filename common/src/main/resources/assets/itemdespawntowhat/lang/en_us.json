@@ -1013,14 +1013,12 @@
   "gui.itemdespawntowhat.edit.field.common.offset.up": "Up",
   "gui.itemdespawntowhat.edit.field.common.offset.north": "North",
   "gui.itemdespawntowhat.edit.field.common.offset.south": "South",
-  "gui.itemdespawntowhat.edit.preview.examples.title": "Icon preview examples",
-  "gui.itemdespawntowhat.edit.preview.examples.budget": "GPU: %s KiB  |  Pending / reserved: %s KiB",
-  "gui.itemdespawntowhat.edit.preview.examples.controls": "Scroll to browse · Space: turntable rotation · R: clear and reload · Esc: close",
   "gui.itemdespawntowhat.edit.preview.state.preparing": "Preparing",
   "gui.itemdespawntowhat.edit.preview.state.ready": "Ready",
   "gui.itemdespawntowhat.edit.preview.state.empty": "No visible content",
   "gui.itemdespawntowhat.edit.preview.state.missing_subject": "Missing subject",
   "gui.itemdespawntowhat.edit.preview.state.no_level": "Client level required",
   "gui.itemdespawntowhat.edit.preview.state.too_large": "Scene too large",
-  "gui.itemdespawntowhat.edit.preview.state.failed": "Preparation or rendering failed"
+  "gui.itemdespawntowhat.edit.preview.state.failed": "Preparation or rendering failed",
+  "gui.itemdespawntowhat.edit.debug.button.tools": "Debug tools"
 }

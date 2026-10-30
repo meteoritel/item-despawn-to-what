@@ -13,11 +13,17 @@ import net.minecraft.world.entity.item.ItemEntity;
 
 import java.util.IdentityHashMap;
 import java.util.Map;
+import java.util.UUID;
+import java.util.List;
+import java.nio.file.Path;
+import net.minecraft.server.level.ServerLevel;
 
-/** 每服务器一条开发流水线：占用场景入口，真实结束回调驱动串行计划和失败停止。 */
+/** 每服务器一条开发流水线：占用场景入口，统一步骤运行驱动串行计划和失败停止。 */
 final class DebugPipelineManager {
     private static final String PREFIX = "itemdespawntowhat.command.debug.pipeline.";
-    private static final Map<MinecraftServer, DebugPipelineRun> ACTIVE = new IdentityHashMap<>();
+    private static final Map<MinecraftServer, CommandRun> ACTIVE = new IdentityHashMap<>();
+
+    private record CommandRun(UUID initiator, ServerLevel level, DebugSequenceRun sequence, RuleRuntimeDiagnosticsContext context) {}
 
     // 工具类不创建实例。
     private DebugPipelineManager() {}
@@ -42,59 +48,62 @@ final class DebugPipelineManager {
         // 只解析不执行1001命令，验证命令边界不会创建测试实体。
         var rejected = source.getServer().getCommands().getDispatcher().parse(RuleCommandTree.ROOT + " debug bench normal 1001 10", source);
         if (!rejected.getReader().canRead() && rejected.getExceptions().isEmpty()) { return failure(source, "boundary_failed"); }
-        var run = new DebugPipelineRun(stage, player, entities, gap);
-        ACTIVE.put(source.getServer(), run);
-        var data = run.state();
-        data.addProperty("requested_entities", entities);
-        data.addProperty("source_entity_limit", DebugScenarioSpec.MAX_BENCHMARK_SOURCES);
-        data.addProperty("quantity_boundary_rejected", true);
-        data.addProperty("performance_gate", stage.performanceGate());
-        data.addProperty("origin", run.origin.toString());
-        run.log("PIPELINE_START", data);
-        source.sendSuccess(() -> Component.translatable(PREFIX + "started", stage.name(), run.id, run.plan.size(), gap), false);
+        var look = player.getLookAngle();
+        var origin = player.position().add(look.x * 3, 1, look.z * 3);
+        var plan = DebugSequenceCatalog.plan(name, "prepare", entities, gap);
+        var sequence = new DebugSequenceRun(null, plan, source, context, origin, false);
+        ACTIVE.put(source.getServer(), new CommandRun(player.getUUID(), player.serverLevel(), sequence, context));
+        DebugLog.write(sequence.id, name, "PIPELINE_START", sequence.state());
+        source.sendSuccess(() -> Component.translatable(PREFIX + "started", stage.name(), sequence.id, plan.steps().size(), gap), false);
+        return 1;
+    }
+
+    // 单场景命令与流水线共用步骤所有者；场景内部入口只负责本轮负载。
+    static int startSingle(CommandSourceStack source, RuleRuntimeDiagnosticsContext context, String name,
+                           boolean benchmark, int entities, int seconds) {
+        if (!DebugMode.ENABLED) { return failure(source, "development_only"); }
+        if (!(source.getEntity() instanceof ServerPlayer player)) { return failure(source, "player_only"); }
+        if (active(source.getServer()) || !DebugScenarioManager.inactive(source.getServer())) { return failure(source, "busy"); }
+        if (context.runtime() == null || context.editContext().typeRegistries() == null) { return failure(source, "not_ready"); }
+        var spec = DebugScenarioCatalog.find(name, benchmark);
+        if (entities < 0 || entities > DebugScenarioSpec.MAX_BENCHMARK_SOURCES || seconds < 10 || seconds > 300
+                || !benchmark && entities != spec.sources()) { return failure(source, "invalid_parameters"); }
+        var kind = benchmark ? DebugSequenceCatalog.Kind.BENCH : DebugSequenceCatalog.Kind.SCENE;
+        var plan = new DebugSequenceCatalog.Plan((benchmark ? "bench/" : "run/") + name,
+                List.of(new DebugSequenceCatalog.Step(kind, name, entities, seconds, seconds + 45, 1)), 0, false, false);
+        var look = player.getLookAngle();
+        var origin = player.position().add(look.x * 3, 1, look.z * 3);
+        var sequence = new DebugSequenceRun(null, plan, source, context, origin, false);
+        ACTIVE.put(source.getServer(), new CommandRun(player.getUUID(), player.serverLevel(), sequence, context));
         return 1;
     }
 
     // 复用已有两平台开发tick，无定时线程，无额外Mixin。
-    static void tick(MinecraftServer server, RuleRuntimeDiagnosticsContext context) {
+    @SuppressWarnings("resource")
+    static void tick(MinecraftServer server) {
         var run = ACTIVE.get(server);
         if (run == null) { return; }
-        ServerPlayer player = server.getPlayerList().getPlayer(run.initiator);
-        if (player == null) { halt(server, context, "player_left"); return; }
-        if (player.serverLevel() != run.level || server.getLevel(run.level.dimension()) != run.level) {
-            halt(server, context, "dimension_changed"); return;
+        ServerPlayer player = server.getPlayerList().getPlayer(run.initiator());
+        if (player == null) { halt(server, "player_left"); return; }
+        if (player.serverLevel() != run.level() || server.getLevel(run.level().dimension()) != run.level()) {
+            halt(server, "dimension_changed"); return;
         }
-        if (Math.abs(server.tickRateManager().tickrate() - 20) > 0.01F) { halt(server, context, "tick_rate"); return; }
+        if (Math.abs(server.tickRateManager().tickrate() - 20) > 0.01F) { halt(server, "tick_rate"); return; }
         try {
-            if (run.tick(player, context)) { finish(server, "PASS", "completed"); }
+            if (run.sequence().tick()) { finish(server, run.sequence().verdict(), run.sequence().reason()); }
         } catch (RuntimeException failure) {
-            var data = run.state();
+            var data = run.sequence().state();
             data.addProperty("error", failure.toString());
-            run.log("PIPELINE_ERROR", data);
-            halt(server, context, failure.getMessage() != null && failure.getMessage().equals("residual_fixtures")
+            DebugLog.write(run.sequence().id, run.sequence().plan.id(), "PIPELINE_ERROR", data);
+            halt(server, failure.getMessage() != null && failure.getMessage().equals("residual_fixtures")
                     ? "residual_fixtures" : "execution_error");
         }
     }
 
-    // 必须在场景END与解绑之后调用，清理失败不能被当作阶段通过。
-    static void sceneFinished(MinecraftServer server, DebugScenarioRun scene, String verdict) {
-        var run = ACTIVE.get(server);
-        if (run == null || !run.id.equals(scene.pipelineId)) { return; }
-        try {
-            boolean passed = run.accept(scene, verdict);
-            if (!run.cancelling && !passed) { finish(server, verdict.equals("INCOMPLETE") ? "INCOMPLETE" : "FAIL", "step_failed"); }
-        } catch (RuntimeException failure) {
-            var data = run.state();
-            data.addProperty("error", failure.toString());
-            run.log("PIPELINE_ERROR", data);
-            finish(server, "INCOMPLETE", "execution_error");
-        }
-    }
-
     // stop 子命令：冷却期间也能取消后续计划。
-    static int stop(CommandSourceStack source, RuleRuntimeDiagnosticsContext context) {
+    static int stop(CommandSourceStack source) {
         if (!active(source.getServer())) { return failure(source, "not_running"); }
-        halt(source.getServer(), context, "manual_stop");
+        halt(source.getServer(), "manual_stop");
         return 1;
     }
 
@@ -102,16 +111,16 @@ final class DebugPipelineManager {
     static int status(CommandSourceStack source) {
         var run = ACTIVE.get(source.getServer());
         if (run == null) { return failure(source, "not_running"); }
-        var state = run.state();
-        source.sendSuccess(() -> Component.translatable(PREFIX + "status", run.stage.name(), run.id,
-                state.get("step").getAsInt(), run.plan.size(), Component.translatable(PREFIX + "phase." + state.get("phase").getAsString()),
+        var state = run.sequence().state();
+        source.sendSuccess(() -> Component.translatable(PREFIX + "status", run.sequence().plan.id(), run.sequence().id,
+                state.get("step").getAsInt(), run.sequence().plan.steps().size(), Component.translatable(PREFIX + "phase." + state.get("phase").getAsString()),
                 state.get("cooldown_remaining_seconds").getAsInt()), false);
         return 1;
     }
 
-    // 先撤销阶段计划再关闭平台运行时，避免停服回调启动下一步。
-    static void shutdown(MinecraftServer server, RuleRuntimeDiagnosticsContext context) {
-        if (active(server)) { halt(server, context, "server_stopping"); }
+    // 先撤销阶段计划再关闭平台运行时，让步骤资源先于平台运行时释放。
+    static void shutdown(MinecraftServer server) {
+        if (active(server)) { halt(server, "server_stopping"); }
     }
 
     // 只在阶段开始和冷却结束扫描已加载实体，性能测量期间不增加世界扫描。
@@ -127,30 +136,28 @@ final class DebugPipelineManager {
         return false;
     }
 
-    // 中止本轮并保留真实INCOMPLETE结果；回调只记结果，不推进后续步骤。
-    private static void halt(MinecraftServer server, RuleRuntimeDiagnosticsContext context, String reason) {
+    // 中止本轮并保留真实 INCOMPLETE 结果，取消后续步骤。
+    private static void halt(MinecraftServer server, String reason) {
         var run = ACTIVE.get(server);
         if (run == null) { return; }
-        run.cancelling = true;
-        try { DebugScenarioManager.stopPipelineScene(server, context, reason); }
-        finally { finish(server, "INCOMPLETE", reason); }
+        run.sequence().cancel(reason, null);
+        finish(server, run.sequence().verdict(), reason);
     }
 
     // 汇总所有已完成步骤及跳过数量，不保留服务器静态引用。
     private static void finish(MinecraftServer server, String verdict, String reason) {
         var run = ACTIVE.remove(server);
         if (run == null) { return; }
-        JsonObject data = run.state();
+        JsonObject data = run.sequence().state();
         data.addProperty("verdict", verdict);
         data.addProperty("stop_reason", reason);
-        data.addProperty("skipped_steps", run.plan.size() - run.results.size());
-        data.add("results", run.results);
-        run.log("PIPELINE_END", data);
-        var player = server.getPlayerList().getPlayer(run.initiator);
+        new BackendProbeReport(server, run.sequence(), "command", Path.of("probe-runs", run.sequence().id, "probe-report.json"), run.context()).write();
+        DebugLog.write(run.sequence().id, run.sequence().plan.id(), "PIPELINE_END", data);
+        var player = server.getPlayerList().getPlayer(run.initiator());
         if (player != null) {
-            player.sendSystemMessage(Component.translatable(PREFIX + "finished", run.stage.name(),
+            player.sendSystemMessage(Component.translatable(PREFIX + "finished", run.sequence().plan.id(),
                     Component.translatable("itemdespawntowhat.command.debug.scene.verdict." + verdict),
-                    run.results.size(), run.plan.size(), Component.translatable(PREFIX + "reason." + reason)));
+                    run.sequence().results.size(), run.sequence().plan.steps().size(), Component.translatable(PREFIX + "reason." + reason)));
         }
     }
 

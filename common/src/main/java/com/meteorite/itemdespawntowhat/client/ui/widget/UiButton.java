@@ -234,7 +234,10 @@ public final class UiButton implements UiWidget, UiFocusTarget, UiLayoutSource, 
             return List.of();
         }
         int budget = chipStyle ? Math.max(0, rect.width() - CHIP_PADDING * 2) : rect.width();
-        return List.of(new UiLayoutNode(UiLayoutNode.Kind.CONTROL, rect, label, labelWidth(), budget,
+        Component snapshotLabel = label;
+        Component accessible = accessibleName();
+        if (label.getString().isEmpty() && accessible != null) { snapshotLabel = accessible; }
+        return List.of(new UiLayoutNode(UiLayoutNode.Kind.CONTROL, rect, snapshotLabel, font.width(snapshotLabel), budget,
                 control.isEnabled(), true, List.of()));
     }
 

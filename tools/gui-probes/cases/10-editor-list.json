@@ -11,35 +11,31 @@
   },
   "steps": [
     {
-      "do": "__gp.clickWidgetLast(__gp.lang('gui.itemdespawntowhat.edit.button.back'))"
-    },
-    {
-      "do": "__gp.clickWidgetLast(__gp.lang('gui.itemdespawntowhat.edit.button.back'))"
-    },
-    {
-      "check": {
+      "assert": {
         "name": "列表页标题来自语言文件",
-        "expr": "__gp.screenInfo().title",
-        "expected_lang": "gui.itemdespawntowhat.edit.title",
-        "lang": "en_us"
+        "kind": "value_equals",
+        "query": {
+          "source": "screen_title"
+        },
+        "expected_lang": "gui.itemdespawntowhat.edit.title"
       }
     },
     {
-      "check": {
+      "assert": {
         "name": "列表页有新建规则按钮",
-        "expr": "__gp.textNodes().join(' ')",
-        "expected_lang": "gui.itemdespawntowhat.edit.button.new",
-        "lang": "en_us",
-        "contains": true
+        "kind": "text_present",
+        "selector": {
+          "lang": "gui.itemdespawntowhat.edit.button.new"
+        }
       }
     },
     {
-      "check": {
+      "assert": {
         "name": "列表页有搜索框占位",
-        "expr": "__gp.textNodes().join(' ')",
-        "expected_lang": "gui.itemdespawntowhat.edit.list.search",
-        "lang": "en_us",
-        "contains": true
+        "kind": "text_present",
+        "selector": {
+          "lang": "gui.itemdespawntowhat.edit.list.search"
+        }
       }
     },
     {
@@ -47,7 +43,12 @@
     },
     {
       "dump": "10-editor-list.json",
-      "expr": "__gp.layout()"
+      "query": {
+        "source": "layout"
+      }
     }
-  ]
+  ],
+  "start": {
+    "kind": "editor"
+  }
 }

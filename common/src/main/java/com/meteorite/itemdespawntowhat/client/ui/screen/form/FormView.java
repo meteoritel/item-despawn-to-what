@@ -23,7 +23,6 @@ import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -777,11 +776,8 @@ public final class FormView implements UiWidget, UiLayoutSource {
     }
 
     /**
-     * 导出表单的排版快照：按行顺序收集当前可见的字段控件与行尾按钮。
-     *
-     * <p>表单布局已经把控件矩形写成屏幕坐标，滚动时由 {@link #shiftViewportY} 平移视口，
-     * 因此直接沿行的焦点目标收集，不再做坐标换算。复合控件（条件树、目录选择等）只暴露
-     * 自身的焦点目标，其内部行不在焦点顺序里，快照不展开这些内部行。</p>
+     * 导出可见字段作用域与子控件，矩形复用排版后的屏幕坐标和实际视口。
+     * 复合控件自行导出内部条目，其余控件沿焦点目标展开。
      */
     @Override
     public List<UiLayoutNode> layoutNodes() {
@@ -789,21 +785,26 @@ public final class FormView implements UiWidget, UiLayoutSource {
             return List.of();
         }
         List<UiLayoutNode> nodes = new ArrayList<>();
-        List<UiFocusTarget> targets = new ArrayList<>();
-        IdentityHashMap<UiFocusTarget, Boolean> seen = new IdentityHashMap<>();
         for (FormRow row : rows) {
-            if (!row.visible) {
-                continue;
-            }
-            targets.clear();
-            row.control.addFocusTargets(targets);
-            targets.addAll(row.pickers);
-            targets.addAll(row.actions);
-            for (UiFocusTarget target : targets) {
-                if (seen.put(target, Boolean.TRUE) != null || !(target instanceof UiLayoutSource source)) {
-                    continue;
+            if (!row.visible) { continue; }
+            List<UiLayoutNode> children = new ArrayList<>();
+            if (row.control instanceof UiLayoutSource source) { children.addAll(source.layoutNodes()); }
+            else {
+                List<UiFocusTarget> targets = new ArrayList<>();
+                row.control.addFocusTargets(targets);
+                for (UiFocusTarget target : targets) {
+                    if (target instanceof UiLayoutSource source) { children.addAll(source.layoutNodes()); }
                 }
-                nodes.addAll(source.layoutNodes());
+            }
+            row.pickers.forEach(button -> children.addAll(button.layoutNodes()));
+            row.actions.forEach(button -> children.addAll(button.layoutNodes()));
+            int top = Math.max(viewportY, rowScreenY(row));
+            int bottom = Math.min(viewportY + viewportHeight, rowScreenY(row) + row.contentHeight);
+            if (bottom > top) {
+                Component label = row.control.label();
+                nodes.add(new UiLayoutNode(UiLayoutNode.Kind.FRAME,
+                        new UiRect(viewportX, top, viewportWidth, bottom - top), label, font.width(label), viewportWidth,
+                        true, true, List.copyOf(children)));
             }
         }
         return nodes;

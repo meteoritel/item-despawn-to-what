@@ -131,7 +131,7 @@ flowchart TD
 | `PreviewResources` | 资源生命周期所有者 | 世界、语言与模型身份决定资源世代；客户端 tick 观察变化；关屏保留近期 READY 场景，超时或世代变化释放 | `PreviewIcons`、目录名称索引 |
 | `PreviewIcons` | 图标宿主门面 | 注册名、age、NBT 与结构输入统一转换，转台参数、状态文案与 kit 适配 | `CatalogPreviewIcons`、`RulePreviewIcons`、`TagPreviewIcons` |
 | `StructurePreviewResources` | 资源读取 | 枚举 assets 结构，异步有界 NBT 解码并保留资源诊断 | 资源管理器、`PreviewStructure` |
-| `PreviewExamplesScreen` | 开发入口 | 枚举结构与载荷示例，展示多个尺寸和预算 | 正式 `PreviewIcons` 入口 |
+| `PreviewExamplesScreen`（common dev） | 工作台工具 | 枚举结构与载荷示例，展示多个尺寸和预算 | 正式 `PreviewIcons` 入口 |
 | `UiFlatText` | 文本绘制原语 | 无阴影的居中、折行文本与悬停提示面板；GUI 不使用字体阴影与加粗，标题只靠颜色、缩进与分区间距区分层次 | kit 的 `UiRenderLayers`、各控件与页面 |
 | `UiSlider` / `UiRangeBar` / `UiTextInput` | 控件适配 | 原版输入模型留在宿主，文本值操作经 `UiTextValue`，码点接纳与回填抑制经 `UiTextAcceptance`，数值交互委托给 kit；提交时机由宿主回调决定 | kit 数值/文本契约、主题 |
 
@@ -181,7 +181,7 @@ flowchart LR
 
 保存、分区和目标切换、返回、刷新及关闭进入 `RuleEditorEditPage.finish(reason)`。完成编辑先保留当前修订输入，再取消未释放预览、提交合法值并通知模型，最后卸载或重建；非法文本保留在会话并参与阻塞校验。快照身份变化前只保留输入；重绑后旧修订控件重新装载并退出该次提交。放弃草稿先释放旧页面再清除记录，关闭与 removed 共用外壳的一次释放标记。保存与应用不关闭编辑页：回执到达后页面留在原处，用户退出、工作区释放或外部切屏才关屏。
 
-`EditorInputRouter` 只按保存遮罩 → 顶层 modal → 类型选择器 → 活动页选取稳定的 `UiInputScope`，通用派发交给 kit `UiInputRouter`。输入与 hover 使用同一个活动作用域；F1–F12 保持放行，Ctrl+F8 沿用调试入口条件。关屏先取消未完成会话，再冲刷已提交草稿。
+`EditorInputRouter` 只按保存遮罩 → 顶层 modal → 类型选择器 → 活动页选取稳定的 `UiInputScope`，通用派发交给 kit `UiInputRouter`。输入与 hover 使用同一个活动作用域；F1–F12 保持放行，Ctrl+F8 在屏幕层按保存与模态状态进入开发工作台。关屏先取消未完成会话，再冲刷已提交草稿。
 
 各页面、模态、选择器与保存遮罩独立拥有焦点和持续交互；作用域返回恢复合格的旧焦点，旁白与自动滚动连接作用域焦点通知。表单子树隐藏、禁用或卸载时结束本子树交互，数值取消恢复模型与文本快照。
 
@@ -222,9 +222,15 @@ flowchart LR
 
 ### 图标开发验收入口
 
-开发环境在规则编辑器按 **Ctrl+F9** 打开 `PreviewExamplesScreen`。列表从资源管理器枚举本模组的 `assets/itemdespawntowhat/structures/<path>.nbt`，逻辑 id 保留子目录；资源包覆盖同路径后用 F3+T 重载。随包 `preview/icon_gallery` 包含跨 x=16 的水体、玻璃围合、箱子、告示牌文字与实体载荷。每个结构以 16、48、80 像素绘制，显示准备状态、失败原因与 GPU／待上传预算。滚轮浏览，空格切换转台，R 清理并重读，Esc 关闭。
+开发客户端按 **Ctrl+F8** 进入 `DebugWorkbenchScreen` 工具目录，再选择 `PreviewExamplesScreen` 图标预览。列表从资源管理器枚举本模组的 `assets/itemdespawntowhat/structures/<path>.nbt`，逻辑 id 保留子目录；资源包覆盖同路径后用 F3+T 重载。随包 `preview/icon_gallery` 包含跨 x=16 的水体、玻璃围合、箱子、告示牌文字与实体载荷。每个结构以 16、48、80 像素绘制，显示准备状态、失败原因与 GPU／待上传预算。滚轮浏览，空格切换转台，R 清理并重读，Esc 关闭。
 
 结构解码读取 size、palette／palettes、blocks、entities，多 palette 固定首组；压缩 NBT 使用 16 MiB 读取限额，尺寸体积在分配前检查。静态几何使用完整只读占位；需要世界的实例使用当前客户端 Level。实体与方块实体独立创建、不入世界、不 tick，方块实体邻居联动按独立实例展示。开发列表另外提供幼年实体、带物品实体、Display 与空实体，使用相同正式入口。
+
+### 调试工作台
+
+`DebugWorkbenchScreen` 位于 common dev 的 client/debug，目录显式装配组件展台、组合交互、图标预览和测试规则草稿。NeoForge probe 客户端事件装配 Ctrl+F8；main 的 `DebugWorkbenchHooks` 只持有打开动作。草稿工具保留在编辑器，预览和本地场景由各自 Screen 持有状态与资源。场景使用 UiInputScope、UiInputRouter 和 UiModalStack；模态切换取消持续交互，返回编辑器时重建屏幕并复用有效工作区。
+
+`FormView.layoutNodes` 保留字段作用域；CardListControl 导出卡片及子控件，UiCatalogGrid 导出当前可见目录行，RuleNameInput 导出真实文本框。自动化定位使用实际层级和几何。工作台组件状态在同一页面可见、可滚动、可重置，详见 [GUI 探针](../guides/gui-probes.md)。
 
 ## 5. 扩展点与约束
 

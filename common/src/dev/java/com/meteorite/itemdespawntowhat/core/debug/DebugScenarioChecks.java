@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.core.debug;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 
@@ -27,6 +28,29 @@ final class DebugScenarioChecks {
 
     // 共用基础约束无需在每份资源重复声明。
     void equal(String name, long expected, long actual) { check(name, new JsonPrimitive(expected), new JsonPrimitive(actual)); }
+
+    void equal(String name, boolean expected, boolean actual) { check(name, new JsonPrimitive(expected), new JsonPrimitive(actual)); }
+
+    void minimum(String name, double bound, double actual) { range(name, "min", bound, actual); }
+
+    void maximum(String name, double bound, double actual) { range(name, "max", bound, actual); }
+
+    void missing(String name) {
+        JsonObject result = new JsonObject();
+        result.addProperty("name", name);
+        result.addProperty("expected", "observed");
+        result.add("actual", JsonNull.INSTANCE);
+        result.addProperty("evaluation_error", "missing_observation");
+        result.addProperty("pass", false);
+        results.add(result);
+    }
+
+    private void range(String name, String kind, double bound, double actual) {
+        if (!Double.isFinite(actual)) { missing(name); return; }
+        JsonObject expected = new JsonObject();
+        expected.addProperty(kind, bound);
+        check(name, expected, new JsonPrimitive(actual));
+    }
 
     // 未声明的实际物品与候选也按零预期校对，避免漏报多产。
     void counts(String prefix, JsonObject expected, Map<String, Long> actual) {

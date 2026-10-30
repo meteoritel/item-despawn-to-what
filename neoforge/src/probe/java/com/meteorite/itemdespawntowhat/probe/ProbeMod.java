@@ -28,6 +28,7 @@ public final class ProbeMod {
     /** 在正式宿主启动前装配观测器，生产事件只依赖空接缝。 */
     @SubscribeEvent
     public static void starting(ServerAboutToStartEvent event) {
+        BackendProbe.starting();
         RuntimeObserver.install(new BackendRuntimeObserver());
         DevelopmentDiagnostics.install(new DevelopmentDiagnostics.Sink() {
             @Override public boolean enabled() { return DebugProfile.enabled(); }

@@ -19,7 +19,7 @@ final class DebugPipelineCommands {
         var root = Commands.literal("pipeline").executes(ctx -> help(ctx.getSource()))
                 .then(Commands.literal("help").executes(ctx -> help(ctx.getSource())))
                 .then(Commands.literal("status").executes(ctx -> DebugPipelineManager.status(ctx.getSource())))
-                .then(Commands.literal("stop").executes(ctx -> DebugPipelineManager.stop(ctx.getSource(), context)));
+                .then(Commands.literal("stop").executes(ctx -> DebugPipelineManager.stop(ctx.getSource())));
         for (var stage : DebugPipelineCatalog.stages()) {
             var command = Commands.literal(stage.name()).executes(ctx -> DebugPipelineManager.start(
                     ctx.getSource(), context, stage.name(), stage.defaultEntities(), DebugPipelineCatalog.DEFAULT_GAP_SECONDS));

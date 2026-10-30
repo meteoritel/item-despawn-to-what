@@ -7,6 +7,7 @@ import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.service.edit.RuleEdit;
 import com.meteorite.itemdespawntowhat.runtime.RuleRuntimeHost;
 import net.minecraft.resources.ResourceLocation;
+import com.meteorite.itemdespawntowhat.core.runtime.scheduler.SchedulerConfig;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
@@ -22,7 +23,9 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.TreeMap;
+import java.util.Comparator;
 
 /** 世界探针共用的规则、实体与文件夹具；清理只触达本轮登记对象。 */
 final class BackendProbeFixtures {
@@ -31,6 +34,7 @@ final class BackendProbeFixtures {
     final List<ItemEntity> sources = new ArrayList<>();
     final List<ItemEntity> outputs = new ArrayList<>();
     private final List<Path> files = new ArrayList<>();
+    private Path writerRoot;
     private final MinecraftServer server;
     private final ServerLevel level;
 
@@ -100,11 +104,27 @@ final class BackendProbeFixtures {
 
     long liveSources() { return sources.stream().filter(Entity::isAlive).mapToLong(item -> item.getItem().getCount()).sum(); }
 
+    SchedulerConfig smallBudget() {
+        var defaults = SchedulerConfig.from(Objects.requireNonNull(RuleRuntimeHost.core().diagnosticsContext().serverConfig()));
+        return new SchedulerConfig(1_000_000_000L, 12, 8, 1, defaults.dispatchBatchSize(),
+                defaults.positionSearchChecksPerTick(), defaults.cancelsPerStep(), defaults.prepareGroupsPerStep());
+    }
+
+    Path writerRoot() throws IOException {
+        writerRoot = Files.createTempDirectory(Path.of("."), "probe-writer-");
+        return writerRoot;
+    }
+
     void close() {
         sources.forEach(Entity::discard);
         outputs.forEach(Entity::discard);
         try {
             for (Path file : files) { Files.deleteIfExists(file); }
+            if (writerRoot != null) {
+                try (var paths = Files.walk(writerRoot)) {
+                    for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) { Files.deleteIfExists(path); }
+                }
+            }
             if (!files.isEmpty()) { reload(); }
         } catch (IOException failure) { throw new java.io.UncheckedIOException(failure); }
     }

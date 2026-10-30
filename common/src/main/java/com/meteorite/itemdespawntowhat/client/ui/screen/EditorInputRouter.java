@@ -80,11 +80,6 @@ final class EditorInputRouter {
     }
 
     boolean keyPressed(int key, int scan, int modifiers) {
-        if (key == GLFW.GLFW_KEY_F8 && (modifiers & GLFW.GLFW_MOD_CONTROL) != 0 && shell.canEnterDebug()) {
-            shell.enterDebug();
-            synchronize();
-            return false;
-        }
         if (key >= GLFW.GLFW_KEY_F1 && key <= GLFW.GLFW_KEY_F12) return false;
         synchronize();
         UiInputScope scope = router.active();

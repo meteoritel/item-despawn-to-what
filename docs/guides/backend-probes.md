@@ -11,7 +11,7 @@ authority: tools/run-probes.ps1、neoforge/build.gradle、common/src/dev、neofo
 
 - 运行 `powershell -ExecutionPolicy Bypass -File tools/run-probes.ps1`，在独立存档验证精选核心后端链路，报告失败时退出非零。
 - 探针只在 NeoForge 开发类目录装载；正式 `main` 保留空观测契约，发布物由打包检查约束。
-- GUI、客户端交互和显示由用户手测。
+- GUI 自动输入与截图见 [GUI 探针](gui-probes.md)，显示手感交用户实机确认。
 - `-Chain performance` 运行空基线、千实体空白对照、转化与重载回扫，生成可直接打开的 `performance.html`，显示阶段耗时、CPU、heap、GC 和调度分类曲线。
 
 ## 适用对象
@@ -50,7 +50,7 @@ powershell -ExecutionPolicy Bypass -File tools/run-probes.ps1 -Chain save -Negat
 powershell -ExecutionPolicy Bypass -File tools/dsh-build.ps1 -Tasks build
 ```
 
-`-Chain` 接受 `core`、`natural`、`settlement`、`damage`、`recovery`、`loading`、`budget`、`state`、`save`、`performance`。`-TimeoutSeconds` 设置每次服务端进程的等待上限，默认 900 秒。Gradle 始终经已有构建互斥脚本串行运行。
+`-Chain` 从 `common/src/dev/resources/idtw-debug/sequences/catalog.json` 读取序列，`-List` 输出入口。除 core 与专项外，可选择 p0–p4 或任意 manifest 中的 `run/<name>`、`bench/<name>` 单场景。`python tools/probe-catalog.py --coverage` 输出静态归属；声明归属和本次报告结果分别记录。`-TimeoutSeconds` 是每次进程等待上限，默认 900 秒。Gradle 通过构建互斥脚本串行运行。
 
 每次运行创建 `neoforge/build/probe-runs/<运行编号>/`，写入专用平坦世界配置、EULA 和本地服务端配置。服务端绑定 `127.0.0.1`，端口由系统分配；夹具只操作该次运行的存档和 config。该目录保留现场，使用脚本自动生成的目录进行验证。
 
@@ -86,11 +86,17 @@ powershell -ExecutionPolicy Bypass -File tools/dsh-build.ps1 -Tasks build
 - `probe-report.json`：最近一次进程的检查点和终态。
 - `prepare-gradle.log` / `resume-gradle.log`、对应 stderr、游戏 `logs/` 和存档。
 
-报告格式为 `idtw-backend-probe-v1`。`results` 每步含 `verdict` 和 `checks`，每项断言给出 `name`、`expected`、`actual`、`pass`。声明场景还带真实事件、账目和实物指标；世界探针含 `metrics`。`remaining` 列出尚未完成的步骤。串行场景的账本累计值以启动时 `COUNTER_BASELINE` 记录的基线计算预期。
+报告格式为 `idtw-backend-probe-v1`。`results` 每步含 `verdict` 和 `checks`，每项断言给出 `name`、`expected`、`actual`、`pass`。声明场景还带真实事件、账目和实物指标；世界探针含 `metrics`。`remaining` 列出尚未完成的步骤。串行场景在启动时记录 `COUNTER_BASELINE`，保留 `raw_actual`，并以本轮实际差值对照原声明期望。
 
 成功要求：进程退出零、报告身份正确、结果与断言非空、每步及每项断言通过、`remaining` 为空。恢复首进程的 `RESTART_REQUIRED` 会进入第二进程。断言失败立即封存报告并停服；异常、启动失败、超时、缺报告和未完成状态均退出非零。预期的注入异常保留在日志中，使用注入次数及业务结果判定。
 
-`-Negative` 追加 `negative_control/intentionally_wrong`：预期 1、实际 0。它走相同断言与退出路径，用于检查 Agent 会看到明确失败。
+`-Negative` 追加 `negative_control/intentionally_wrong`：预期 true、实际 false。它走相同断言与退出路径，用于检查 Agent 会看到明确失败。
+
+## 统一序列与步骤所有权
+
+`DebugSequenceCatalog` 解析有限 scene、bench、world 步骤，验证引用、数量、时长、轮次和重启声明。`DebugSequenceRun` 持有游标、deadline、双时钟冷却、性能门禁、步骤资源及结果。单场景命令与流水线通过 `DebugPipelineManager` 进入同一执行器；`BackendProbe` 负责隔离存档、检查点与停服，`run-probes.ps1` 负责进程和重启交接。
+
+`run_id`、序列与阶段绑定报告身份；恢复首阶段产生 RESTART_REQUIRED，脚本用同一 run id 和存档启动 resume。命令结果也写入 `probe-runs/<run_id>/probe-report.json`。步骤先登记资源再准备，完成或取消时精确清理，失败与异常形成真实终态。布尔断言保留 boolean，数值保留原指标和范围；缺观测字段记 evaluation_error。
 
 ## 开发隔离与维护入口
 
@@ -102,7 +108,7 @@ powershell -ExecutionPolicy Bypass -File tools/dsh-build.ps1 -Tasks build
 | `RuntimeObserver`、`DevelopmentDiagnostics` | 生产侧空观测契约，开发入口在服务端装配并在停止后释放 |
 | `tools/run-probes.ps1` | 隔离运行、重启编排、超时、报告校验与退出码 |
 | `DebugProbePerformance` | 自动运行逐步启停的独立 JMX 采样、阶段计时、主线程 tick 与分类耗时记录 |
-| `BackendProbeSuite` / `BackendProbeReport` | 精选集合目录、环境配置与结构化检查点；控制器只编排步骤和终态 |
+| `DebugSequenceCatalog` / `DebugSequenceRun` / `BackendProbeReport` | 统一声明、步骤所有权、环境与结果；命令和无人宿主共享推进与断言 |
 | `BackendProbeFixtures` | 正式文件规则、源/产物登记、字节快照与精确清理；世界探针只保留业务步骤与断言 |
 | `tools/probe-performance-report.py` | 原始 CSV、离线 HTML、测量窗口汇总和历史目录对比 |
 | `tools/check-probe-packaging.py`、根 `checkProbePackaging` 任务 | 扫描 common / Fabric / NeoForge 的发布 jar、sources jar、javadoc jar；拒绝探针类、夹具资源与开发语言 key |
@@ -132,7 +138,7 @@ python tools/probe-performance-report.py neoforge/build/probe-runs/<本次目录
 | `bench:convert` | 1000 个独立源，每堆 1 件，60 秒；触发年龄 10 秒 | 千次结算完成，消费源与生成的实物精确匹配，无待交付余额 |
 | `bench:reload_storm` | 1000 个源，30 秒；五次正式重载 | 五次动作实际执行，回扫排空、源仍完整追踪，步长与工作量符合声明上限 |
 
-场景规模、动作、规则与预期取自 `common/src/dev/resources/idtw-debug/scenarios/bench/`。新增代表负载时先写声明并登记 manifest，再加入 `BackendProbeSuite`；阶段、资源采样与报告无需各场景重复实现。功能场景与性能场景共用生命周期和断言器。
+场景规模、动作、规则与预期取自 `common/src/dev/resources/idtw-debug/scenarios/bench/`。新增代表负载时先写声明并登记 manifest，再加入统一序列目录；阶段、资源采样与报告无需各场景重复实现。功能场景与性能场景共用生命周期和断言器。
 
 两组空白对照沿用转化场景的实体数量、堆叠数、网格密度、防合并组件与测量时长。先看 `unmatched` 相对空载的进程 CPU 与原版 tick，再看 `condition_miss` 的检查次数、runtime 和调度分类，最后结合 `convert` 评估结算成本。CPU 均值可作同负载差异观察；分位数分别展示，避免把不同场景的 p95 相减当作独立净开销。
 
@@ -182,3 +188,25 @@ JMX 线程只读取管理指标；世界和 scheduler 数据由服务端线程�
 - [转化运行时](../modules/conversion-runtime.md)
 - [平台接入](../modules/platform.md)
 - [依赖规则](../architecture/dependency-rules.md)
+
+## 序列目录
+
+<!-- probe-catalog:start -->
+| 序列 | 用途 | 直接步骤 |
+|---|---|---|
+| core | 精选功能链路 | sequence:natural, sequence:settlement, sequence:damage, sequence:recovery, sequence:loading, sequence:budget, sequence:state, sequence:save |
+| natural | natural | scene:priority, scene:expiry |
+| settlement | settlement | scene:source_cost, scene:catalyst_limited, scene:delay |
+| damage | damage | world:damage |
+| recovery | recovery | scene:prepare_failure, scene:settlement_failure_recovery |
+| loading | loading | world:loading |
+| budget | budget | world:budget |
+| state | state | world:state |
+| save | save | world:save |
+| performance | performance | bench:baseline, bench:unmatched, bench:condition_miss, bench:convert, bench:reload_storm |
+| p0 | p0 | bench:baseline |
+| p1 | p1 | scene:convert, scene:stack, scene:delay, scene:expiry |
+| p2 | p2 | scene:retry, scene:priority, scene:excluded, scene:source_cost, scene:rebate, scene:insufficient, scene:outcome_priority, scene:round_robin, scene:multi_effect, scene:chance_skip, scene:condition_tree, scene:catalyst, scene:catalyst_limited, scene:reload |
+| p3 | p3 | bench:baseline, bench:normal, bench:converted, bench:convert, bench:retry, bench:normal, bench:converted, bench:convert, bench:retry, bench:normal, bench:converted, bench:convert, bench:retry, bench:normal, bench:converted, bench:convert, bench:retry |
+| p4 | p4 | bench:baseline, bench:normal, bench:converted, bench:retry |
+<!-- probe-catalog:end -->

@@ -315,6 +315,8 @@ final class RuleEditorEditPage implements EditorPage {
             nodes.addAll(pages.layoutNodes());
         }
         nodes.addAll(footerBar.layoutNodes());
+        UiTypePicker picker = activeTypePicker();
+        if (picker != null) { nodes.addAll(picker.layoutNodes()); }
         return nodes;
     }
 

@@ -312,11 +312,6 @@ final class EditorShell {
         rebuildFocus();
     }
 
-    // 调试页入口条件：debug 模式开启、停在管理页、未在保存且没有弹层
-    boolean canEnterDebug() {
-        return Services.PLATFORM.isDevelopmentEnvironment() && page == listPage && !saving() && modals.isEmpty();
-    }
-
     void enterDebug() {
         page = debugPage;
         setNotice(null, NoticeLevel.INFO);

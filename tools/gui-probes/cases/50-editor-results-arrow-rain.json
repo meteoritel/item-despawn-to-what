@@ -1,146 +1,229 @@
 {
   "name": "editor-results-arrow-rain",
-  "description": "搜索并打开 new_rule_4，进入 Results 页签：断言 Pickup 以单个轮询按钮表达并点击后切换取值；点卡片标题栏的 Add 打开多选目录，勾选一个效果确认后断言只剩该效果卡片；再点卡片胶囊换引用、点 X 删除。运行前把该规则编辑草稿归一为 potion_effects:[{}]，否则断言依赖旧状态不幂等。",
-  "window": {
-    "width": 1280,
-    "height": 720,
-    "scale": 2
+  "description": "从新草稿通过真实动作选择器建立箭雨，验证 Pickup 轮询及药水卡片增删与换引用。",
+  "start": {
+    "kind": "editor",
+    "new_rule": true
   },
-  "settle": {
-    "timeout_ms": 2000
+  "window": {
+    "width": 1600,
+    "height": 1000,
+    "scale": 2
   },
   "steps": [
     {
-      "check": {
-        "name": "列表页标题来自语言文件",
-        "expr": "__gp.screenInfo().title",
-        "expected_lang": "gui.itemdespawntowhat.edit.title",
-        "lang": "en_us"
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.tab.results"
+        }
       }
     },
     {
-      "do": "__gp.clickWidget(__gp.lang('gui.itemdespawntowhat.edit.list.search'))"
-    },
-    {
-      "do": "(function(){__gp.typeText('new_rule_4');return 'typed';})()"
-    },
-    {
-      "do": "(function(){var ns=__gp.flatCached().filter(function(n){return n.kind==='ROW'&&n.visible!==false&&n.width>0&&!/\\)$/.test(n.text);});if(!ns.length)return 'no-row';var n=ns[ns.length-1];__gp.click(n.x+n.width/2,n.y+n.height/2,0);return 'row:'+n.text;})()"
-    },
-    {
-      "do": "__gp.clickWidget(__gp.lang('gui.itemdespawntowhat.edit.button.edit'))"
-    },
-    {
-      "check": {
-        "name": "编辑页有 Results 页签",
-        "expr": "__gp.textNodes().join(' ')",
-        "expected_lang": "gui.itemdespawntowhat.edit.tab.results",
-        "lang": "en_us",
-        "contains": true
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.button.effect_add"
+        }
       }
     },
     {
-      "do": "__gp.clickWidget(__gp.lang('gui.itemdespawntowhat.edit.tab.results'))"
-    },
-    {
-      "check": {
-        "name": "Results 页有药水效果卡片区的 Add 胶囊",
-        "expr": "__gp.textNodes().join(' ')",
-        "expected_lang": "gui.itemdespawntowhat.edit.list.add",
-        "lang": "en_us",
-        "contains": true
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.effect.arrow_rain"
+        }
       }
     },
     {
-      "check": {
-        "name": "Pickup 三个选项文案只出现一次（轮询按钮单值显示）",
-        "expr": "(function(){var s=__gp.textNodes().join(' ');var keys=['allowed','creative_only','disallowed'];var c=0;keys.forEach(function(k){var t=__gp.lang('gui.itemdespawntowhat.edit.enum.arrow_rain_pickup.'+k);var i=s.indexOf(t);while(i>=0){c++;i=s.indexOf(t,i+1);}});return String(c);})()",
-        "expected": "1"
+      "assert": {
+        "name": "gui.itemdespawntowhat.edit.field.arrow_rain.pickup",
+        "kind": "text_present",
+        "selector": {
+          "lang": "gui.itemdespawntowhat.edit.field.arrow_rain.pickup"
+        }
       }
     },
     {
-      "shot": "50-results-arrow-rain.png"
-    },
-    {
-      "do": "(function(){var s=__gp.textNodes().join(' ');var keys=['allowed','creative_only','disallowed'];var vis=keys.filter(function(k){return s.indexOf(__gp.lang('gui.itemdespawntowhat.edit.enum.arrow_rain_pickup.'+k))>=0;});if(vis.length!==1)return 'vis='+vis.join(',');__gp.prevPickup=vis[0];__gp.clickWidget(__gp.lang('gui.itemdespawntowhat.edit.enum.arrow_rain_pickup.'+vis[0]));return 'clicked:'+vis[0];})()"
-    },
-    {
-      "check": {
-        "name": "点轮询按钮切到下一个取值",
-        "expr": "(function(){var s=__gp.textNodes().join(' ');var keys=['allowed','creative_only','disallowed'];var vis=keys.filter(function(k){return s.indexOf(__gp.lang('gui.itemdespawntowhat.edit.enum.arrow_rain_pickup.'+k))>=0;});if(vis.length!==1)return 'vis='+vis.join(',');if(!__gp.prevPickup)return 'cycled';return vis[0]===__gp.prevPickup?'unchanged:'+vis[0]:'cycled';})()",
-        "expected": "cycled"
+      "assert": {
+        "name": "Pickup 单值",
+        "kind": "text_count",
+        "selector": {
+          "kind": "CONTROL",
+          "lang_any": [
+            "gui.itemdespawntowhat.edit.enum.arrow_rain_pickup.allowed",
+            "gui.itemdespawntowhat.edit.enum.arrow_rain_pickup.creative_only",
+            "gui.itemdespawntowhat.edit.enum.arrow_rain_pickup.disallowed"
+          ]
+        },
+        "expected": 1
       }
     },
     {
-      "shot": "50-results-pickup-cycled.png"
-    },
-    {
-      "do": "(function(){var ns=__gp.flatCached().filter(function(n){return n.kind==='CONTROL'&&n.text===__gp.lang('gui.itemdespawntowhat.edit.list.add');});if(!ns.length)return 'no-add';var n=ns[ns.length-1];__gp.click(n.x+n.width/2,n.y+n.height/2,0);return 'clicked:'+ns.length;})()"
-    },
-    {
-      "check": {
-        "name": "点 Add 打开目录弹窗",
-        "expr": "String(__gp.rects(['MODAL']).length)",
-        "expected": "1"
+      "capture": "pickup",
+      "query": {
+        "source": "text",
+        "selector": {
+          "kind": "CONTROL",
+          "lang_any": [
+            "gui.itemdespawntowhat.edit.enum.arrow_rain_pickup.allowed",
+            "gui.itemdespawntowhat.edit.enum.arrow_rain_pickup.creative_only",
+            "gui.itemdespawntowhat.edit.enum.arrow_rain_pickup.disallowed"
+          ]
+        }
       }
     },
     {
-      "shot": "50-add-modal.png"
-    },
-    {
-      "do": "(function(){var m=__gp.rects(['MODAL']);if(!m.length)return 'no-modal';var r=m[0];__gp.click(r.x+r.w*0.13,r.y+r.h*0.14,0);return 'cell';})()"
-    },
-    {
-      "do": "__gp.clickWidget(__gp.lang('gui.itemdespawntowhat.edit.button.confirm'))"
-    },
-    {
-      "check": {
-        "name": "确认后目录选择落成卡片",
-        "expr": "(function(){var s=__gp.textNodes().join(' ');return s.indexOf('Absorption')>=0?'added':'unexpected';})()",
-        "expected": "added"
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang_any": [
+            "gui.itemdespawntowhat.edit.enum.arrow_rain_pickup.allowed",
+            "gui.itemdespawntowhat.edit.enum.arrow_rain_pickup.creative_only",
+            "gui.itemdespawntowhat.edit.enum.arrow_rain_pickup.disallowed"
+          ]
+        }
       }
     },
     {
-      "shot": "50-results-effect-added.png"
-    },
-    {
-      "do": "__gp.clickWidget('Absorption')"
-    },
-    {
-      "check": {
-        "name": "点卡片胶囊为单条换引用（打开目录弹窗）",
-        "expr": "String(__gp.rects(['MODAL']).length)",
-        "expected": "1"
+      "wait_for": {
+        "name": "Pickup 切换后变化",
+        "kind": "value_changed",
+        "capture": "pickup",
+        "query": {
+          "source": "text",
+          "selector": {
+            "kind": "CONTROL",
+            "lang_any": [
+              "gui.itemdespawntowhat.edit.enum.arrow_rain_pickup.allowed",
+              "gui.itemdespawntowhat.edit.enum.arrow_rain_pickup.creative_only",
+              "gui.itemdespawntowhat.edit.enum.arrow_rain_pickup.disallowed"
+            ]
+          }
+        }
       }
     },
     {
-      "do": "(function(){var m=__gp.rects(['MODAL']);if(!m.length)return 'no-modal';var r=m[0];__gp.click(r.x+r.w*0.13,r.y+r.h*0.14,0);return 'cell';})()"
-    },
-    {
-      "do": "__gp.clickWidget(__gp.lang('gui.itemdespawntowhat.edit.button.confirm'))"
-    },
-    {
-      "check": {
-        "name": "换引用后仍只有一张卡片",
-        "expr": "(function(){var s=__gp.textNodes().join(' ');var c=0;var i=s.indexOf('Absorption');while(i>=0){c++;i=s.indexOf('Absorption',i+1);}return String(c);})()",
-        "expected": "1"
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.list.add",
+          "within": {
+            "lang": "gui.itemdespawntowhat.edit.field.arrow_rain.potion_effects"
+          }
+        }
       }
     },
     {
-      "shot": "50-results-effect-chosen.png"
-    },
-    {
-      "do": "(function(){var ns=__gp.flatCached().filter(function(n){return n.kind==='CONTROL'&&n.visible!==false&&n.width>0&&(!n.text||n.text==='');});if(!ns.length)return 'no-x';var n=ns[ns.length-1];__gp.click(n.x+n.width/2,n.y+n.height/2,0);return 'clicked:'+ns.length;})()"
-    },
-    {
-      "check": {
-        "name": "点卡片右上角的 X 删掉该条目",
-        "expr": "(function(){var s=__gp.textNodes().join(' ');var c=0;var i=s.indexOf('Absorption');while(i>=0){c++;i=s.indexOf('Absorption',i+1);}return String(c);})()",
-        "expected": "0"
+      "assert": {
+        "name": "目录打开",
+        "kind": "text_count",
+        "selector": {
+          "kind": "MODAL"
+        },
+        "expected": 1
       }
     },
     {
-      "shot": "50-results-effect-removed.png"
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "ROW",
+          "text": "Absorption"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.button.confirm"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "新增药水卡片",
+        "kind": "text_count",
+        "selector": {
+          "kind": "CONTROL",
+          "text": "Absorption"
+        },
+        "expected": 1
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "text": "Absorption"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "单条换引用打开目录",
+        "kind": "text_count",
+        "selector": {
+          "kind": "MODAL"
+        },
+        "expected": 1
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.button.confirm"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "换引用后单卡",
+        "kind": "text_count",
+        "selector": {
+          "kind": "CONTROL",
+          "text": "Absorption"
+        },
+        "expected": 1
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.list.remove"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "删除药水卡片",
+        "kind": "text_absent",
+        "selector": {
+          "kind": "CONTROL",
+          "text": "Absorption"
+        }
+      }
+    },
+    {
+      "shot": "50-arrow-rain.png"
+    },
+    {
+      "dump": "50-arrow-rain.json",
+      "query": {
+        "source": "layout"
+      }
     }
   ]
 }

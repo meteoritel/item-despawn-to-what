@@ -10,7 +10,6 @@ param(
     [int]$WaitClient = 240,
     [switch]$NoLaunch,
     [switch]$KeepClient,
-    [switch]$SkipSetup,
     [switch]$Reuse
 )
 
@@ -26,6 +25,11 @@ if ([string]::IsNullOrWhiteSpace($RunDir)) {
 $RunDir = [System.IO.Path]::GetFullPath($RunDir)
 New-Item -ItemType Directory -Force -Path $RunDir | Out-Null
 if ([string]::IsNullOrWhiteSpace($Cases)) { $Cases = Join-Path $repoRoot "tools/gui-probes/cases" }
+
+$validationArgs = @((Join-Path $repoRoot "tools/gui-probes/lib/run.py"), "--run-dir", $RunDir, "--cases", $Cases, "--validate")
+foreach ($name in $Only) { $validationArgs += @("--only", $name) }
+& python @validationArgs
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 $modsDir = Join-Path $repoRoot "neoforge/run/mods"
 $requiredMods = @("AutoJS-neoforge-1.21.1-1.0.0.jar", "rhino-2101.2.7-build.81.jar")
@@ -96,7 +100,6 @@ try {
         "--wait-client", "$WaitClient"
     )
     if ($World) { $pythonArgs += @("--world", $World) }
-    if ($SkipSetup) { $pythonArgs += "--skip-setup" }
     foreach ($name in $Only) { $pythonArgs += @("--only", $name) }
     & python @pythonArgs
     $exitCode = $LASTEXITCODE

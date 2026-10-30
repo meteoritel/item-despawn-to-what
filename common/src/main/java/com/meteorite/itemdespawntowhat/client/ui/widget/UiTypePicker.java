@@ -232,7 +232,7 @@ public final class UiTypePicker implements UiWidget, UiLayoutSource {
             nodes.add(row(new UiRect(listRect.x(), listRect.y(), listRect.width(),
                             Math.min(PICKER_ROW_HEIGHT, listRect.height())),
                     Component.translatable(TypeLabels.UI_PREFIX + "picker.empty")));
-            return nodes;
+            return List.of(new UiLayoutNode(UiLayoutNode.Kind.MODAL, panelRect, title, font.width(title), panelRect.width(), true, true, List.copyOf(nodes)));
         }
         int rowWidth = listRect.width() - (scroll.isScrollbarVisible() ? UiScrollView.SCROLLBAR_WIDTH + BORDER : 0);
         int first = scroll.offset() / PICKER_ROW_HEIGHT;
@@ -248,7 +248,7 @@ public final class UiTypePicker implements UiWidget, UiLayoutSource {
                     new UiRect(listRect.x(), rowY, Math.max(0, rowWidth), height),
                     label, font.width(label), Math.max(0, rowWidth - CARD_PADDING_X * 2), true, true, List.of()));
         }
-        return nodes;
+        return List.of(new UiLayoutNode(UiLayoutNode.Kind.MODAL, panelRect, title, font.width(title), panelRect.width(), true, true, List.copyOf(nodes)));
     }
 
     // 只读文本行：带宽取矩形宽度，不参与命中也不改变面板状态

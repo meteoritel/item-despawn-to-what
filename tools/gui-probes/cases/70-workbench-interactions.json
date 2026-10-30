@@ -1,0 +1,124 @@
+{
+  "name": "workbench-interactions",
+  "description": "拖动中切模态、释放捕获、缩放、重置的组合交互。",
+  "start": {
+    "kind": "scene",
+    "scene": "interactions"
+  },
+  "window": {
+    "width": 1600,
+    "height": 1000,
+    "scale": 2
+  },
+  "steps": [
+    {
+      "action": {
+        "kind": "scroll",
+        "selector": {
+          "kind": "FRAME",
+          "lang": "gui.itemdespawntowhat.debug.workbench.interactions"
+        },
+        "delta": -12
+      }
+    },
+    {
+      "capture": "values",
+      "query": {
+        "source": "text",
+        "selector": {
+          "kind": "ROW",
+          "within": {
+            "lang": "gui.itemdespawntowhat.debug.workbench.values.label"
+          }
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "press",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.scalar"
+        },
+        "at": 0.7
+      }
+    },
+    {
+      "action": {
+        "kind": "key",
+        "code": 77,
+        "modifiers": 2
+      }
+    },
+    {
+      "assert": {
+        "name": "拖动中打开模态",
+        "kind": "text_count",
+        "selector": {
+          "kind": "MODAL"
+        },
+        "expected": 1
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.close"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "release"
+      }
+    },
+    {
+      "assert": {
+        "name": "模态取消拖动后值恢复",
+        "kind": "value_equals",
+        "query": {
+          "source": "text",
+          "selector": {
+            "kind": "ROW",
+            "within": {
+              "lang": "gui.itemdespawntowhat.debug.workbench.values.label"
+            }
+          }
+        },
+        "expected_capture": "values"
+      }
+    },
+    {
+      "action": {
+        "kind": "resize",
+        "width": 1280,
+        "height": 720,
+        "scale": 2
+      }
+    },
+    {
+      "assert": {
+        "name": "缩放后返回按钮在窗口内",
+        "kind": "geometry_inside",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.back"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.reset"
+        }
+      }
+    },
+    {
+      "shot": "70-interactions.png"
+    }
+  ]
+}

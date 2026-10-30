@@ -1,0 +1,524 @@
+{
+  "schema_version": 1,
+  "sequences": [
+    {
+      "id": "core",
+      "description": "精选功能链路",
+      "priority": "standard",
+      "quantity": "none",
+      "default_entities": 0,
+      "rounds": 1,
+      "gap_seconds": 0,
+      "performance_gate": false,
+      "steps": [
+        {
+          "sequence": "natural"
+        },
+        {
+          "sequence": "settlement"
+        },
+        {
+          "sequence": "damage"
+        },
+        {
+          "sequence": "recovery"
+        },
+        {
+          "sequence": "loading"
+        },
+        {
+          "sequence": "budget"
+        },
+        {
+          "sequence": "state"
+        },
+        {
+          "sequence": "save"
+        }
+      ]
+    },
+    {
+      "id": "natural",
+      "description": "natural",
+      "priority": "standard",
+      "quantity": "none",
+      "default_entities": 0,
+      "rounds": 1,
+      "gap_seconds": 0,
+      "performance_gate": false,
+      "steps": [
+        {
+          "kind": "scene",
+          "id": "priority"
+        },
+        {
+          "kind": "scene",
+          "id": "expiry"
+        }
+      ]
+    },
+    {
+      "id": "settlement",
+      "description": "settlement",
+      "priority": "standard",
+      "quantity": "none",
+      "default_entities": 0,
+      "rounds": 1,
+      "gap_seconds": 0,
+      "performance_gate": false,
+      "steps": [
+        {
+          "kind": "scene",
+          "id": "source_cost"
+        },
+        {
+          "kind": "scene",
+          "id": "catalyst_limited"
+        },
+        {
+          "kind": "scene",
+          "id": "delay"
+        }
+      ]
+    },
+    {
+      "id": "damage",
+      "description": "damage",
+      "priority": "standard",
+      "quantity": "none",
+      "default_entities": 0,
+      "rounds": 1,
+      "gap_seconds": 0,
+      "performance_gate": false,
+      "steps": [
+        {
+          "kind": "world",
+          "id": "damage"
+        }
+      ]
+    },
+    {
+      "id": "recovery",
+      "description": "recovery",
+      "priority": "standard",
+      "quantity": "none",
+      "default_entities": 0,
+      "rounds": 1,
+      "gap_seconds": 0,
+      "performance_gate": false,
+      "steps": [
+        {
+          "kind": "scene",
+          "id": "prepare_failure"
+        },
+        {
+          "kind": "scene",
+          "id": "settlement_failure_recovery"
+        }
+      ],
+      "restart": true,
+      "resume": [
+        {
+          "kind": "world",
+          "id": "restart"
+        }
+      ]
+    },
+    {
+      "id": "loading",
+      "description": "loading",
+      "priority": "standard",
+      "quantity": "none",
+      "default_entities": 0,
+      "rounds": 1,
+      "gap_seconds": 0,
+      "performance_gate": false,
+      "steps": [
+        {
+          "kind": "world",
+          "id": "loading"
+        }
+      ]
+    },
+    {
+      "id": "budget",
+      "description": "budget",
+      "priority": "standard",
+      "quantity": "none",
+      "default_entities": 0,
+      "rounds": 1,
+      "gap_seconds": 0,
+      "performance_gate": false,
+      "steps": [
+        {
+          "kind": "world",
+          "id": "budget"
+        }
+      ]
+    },
+    {
+      "id": "state",
+      "description": "state",
+      "priority": "standard",
+      "quantity": "none",
+      "default_entities": 0,
+      "rounds": 1,
+      "gap_seconds": 0,
+      "performance_gate": false,
+      "steps": [
+        {
+          "kind": "world",
+          "id": "state"
+        }
+      ]
+    },
+    {
+      "id": "save",
+      "description": "save",
+      "priority": "standard",
+      "quantity": "none",
+      "default_entities": 0,
+      "rounds": 1,
+      "gap_seconds": 0,
+      "performance_gate": false,
+      "steps": [
+        {
+          "kind": "world",
+          "id": "save"
+        }
+      ]
+    },
+    {
+      "id": "performance",
+      "description": "performance",
+      "priority": "standard",
+      "quantity": "none",
+      "default_entities": 0,
+      "rounds": 1,
+      "gap_seconds": 0,
+      "performance_gate": false,
+      "steps": [
+        {
+          "kind": "bench",
+          "id": "baseline"
+        },
+        {
+          "kind": "bench",
+          "id": "unmatched"
+        },
+        {
+          "kind": "bench",
+          "id": "condition_miss"
+        },
+        {
+          "kind": "bench",
+          "id": "convert"
+        },
+        {
+          "kind": "bench",
+          "id": "reload_storm"
+        }
+      ]
+    },
+    {
+      "quantity": "none",
+      "default_entities": 0,
+      "rounds": 1,
+      "performance_gate": true,
+      "steps": [
+        {
+          "entities": 0,
+          "seconds": 20,
+          "kind": "bench",
+          "id": "baseline"
+        }
+      ],
+      "id": "p0",
+      "description": "p0",
+      "priority": "extended",
+      "gap_seconds": 5
+    },
+    {
+      "quantity": "none",
+      "default_entities": 0,
+      "rounds": 1,
+      "performance_gate": false,
+      "steps": [
+        {
+          "entities": 1,
+          "seconds": 12,
+          "kind": "scene",
+          "id": "convert"
+        },
+        {
+          "entities": 1,
+          "seconds": 12,
+          "kind": "scene",
+          "id": "stack"
+        },
+        {
+          "entities": 1,
+          "seconds": 12,
+          "kind": "scene",
+          "id": "delay"
+        },
+        {
+          "entities": 1,
+          "seconds": 12,
+          "kind": "scene",
+          "id": "expiry"
+        }
+      ],
+      "id": "p1",
+      "description": "p1",
+      "priority": "extended",
+      "gap_seconds": 5
+    },
+    {
+      "quantity": "none",
+      "default_entities": 0,
+      "rounds": 1,
+      "performance_gate": false,
+      "steps": [
+        {
+          "entities": 1,
+          "seconds": 12,
+          "kind": "scene",
+          "id": "retry"
+        },
+        {
+          "entities": 1,
+          "seconds": 12,
+          "kind": "scene",
+          "id": "priority"
+        },
+        {
+          "entities": 2,
+          "seconds": 12,
+          "kind": "scene",
+          "id": "excluded"
+        },
+        {
+          "entities": 1,
+          "seconds": 12,
+          "kind": "scene",
+          "id": "source_cost"
+        },
+        {
+          "entities": 1,
+          "seconds": 12,
+          "kind": "scene",
+          "id": "rebate"
+        },
+        {
+          "entities": 1,
+          "seconds": 12,
+          "kind": "scene",
+          "id": "insufficient"
+        },
+        {
+          "entities": 1,
+          "seconds": 12,
+          "kind": "scene",
+          "id": "outcome_priority"
+        },
+        {
+          "entities": 4,
+          "seconds": 12,
+          "kind": "scene",
+          "id": "round_robin"
+        },
+        {
+          "entities": 1,
+          "seconds": 12,
+          "kind": "scene",
+          "id": "multi_effect"
+        },
+        {
+          "entities": 1,
+          "seconds": 12,
+          "kind": "scene",
+          "id": "chance_skip"
+        },
+        {
+          "entities": 1,
+          "seconds": 12,
+          "kind": "scene",
+          "id": "condition_tree"
+        },
+        {
+          "entities": 1,
+          "seconds": 12,
+          "kind": "scene",
+          "id": "catalyst"
+        },
+        {
+          "entities": 1,
+          "seconds": 12,
+          "kind": "scene",
+          "id": "catalyst_limited"
+        },
+        {
+          "entities": 1,
+          "seconds": 12,
+          "kind": "scene",
+          "id": "reload"
+        }
+      ],
+      "id": "p2",
+      "description": "p2",
+      "priority": "extended",
+      "gap_seconds": 5
+    },
+    {
+      "quantity": "ceiling",
+      "default_entities": 1000,
+      "rounds": 1,
+      "performance_gate": true,
+      "steps": [
+        {
+          "entities": 0,
+          "seconds": 20,
+          "kind": "bench",
+          "id": "baseline"
+        },
+        {
+          "entities": 100,
+          "seconds": 20,
+          "kind": "bench",
+          "id": "normal"
+        },
+        {
+          "entities": 100,
+          "seconds": 20,
+          "kind": "bench",
+          "id": "converted"
+        },
+        {
+          "entities": 100,
+          "seconds": 20,
+          "kind": "bench",
+          "id": "convert"
+        },
+        {
+          "entities": 100,
+          "seconds": 20,
+          "kind": "bench",
+          "id": "retry"
+        },
+        {
+          "entities": 250,
+          "seconds": 20,
+          "kind": "bench",
+          "id": "normal"
+        },
+        {
+          "entities": 250,
+          "seconds": 20,
+          "kind": "bench",
+          "id": "converted"
+        },
+        {
+          "entities": 250,
+          "seconds": 20,
+          "kind": "bench",
+          "id": "convert"
+        },
+        {
+          "entities": 250,
+          "seconds": 20,
+          "kind": "bench",
+          "id": "retry"
+        },
+        {
+          "entities": 500,
+          "seconds": 20,
+          "kind": "bench",
+          "id": "normal"
+        },
+        {
+          "entities": 500,
+          "seconds": 20,
+          "kind": "bench",
+          "id": "converted"
+        },
+        {
+          "entities": 500,
+          "seconds": 20,
+          "kind": "bench",
+          "id": "convert"
+        },
+        {
+          "entities": 500,
+          "seconds": 20,
+          "kind": "bench",
+          "id": "retry"
+        },
+        {
+          "entities": 1000,
+          "seconds": 20,
+          "kind": "bench",
+          "id": "normal"
+        },
+        {
+          "entities": 1000,
+          "seconds": 20,
+          "kind": "bench",
+          "id": "converted"
+        },
+        {
+          "entities": 1000,
+          "seconds": 20,
+          "kind": "bench",
+          "id": "convert"
+        },
+        {
+          "entities": 1000,
+          "seconds": 20,
+          "kind": "bench",
+          "id": "retry"
+        }
+      ],
+      "id": "p3",
+      "description": "p3",
+      "priority": "extended",
+      "gap_seconds": 5
+    },
+    {
+      "quantity": "fixed",
+      "default_entities": 100,
+      "rounds": 3,
+      "performance_gate": true,
+      "steps": [
+        {
+          "entities": 0,
+          "seconds": 60,
+          "kind": "bench",
+          "id": "baseline"
+        },
+        {
+          "entities": "$entities",
+          "seconds": 60,
+          "kind": "bench",
+          "id": "normal"
+        },
+        {
+          "entities": "$entities",
+          "seconds": 60,
+          "kind": "bench",
+          "id": "converted"
+        },
+        {
+          "entities": "$entities",
+          "seconds": 60,
+          "kind": "bench",
+          "id": "retry"
+        }
+      ],
+      "id": "p4",
+      "description": "p4",
+      "priority": "extended",
+      "gap_seconds": 5
+    }
+  ]
+}

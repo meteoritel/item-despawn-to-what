@@ -5,6 +5,9 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
+import java.util.List;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
@@ -19,7 +22,7 @@ import org.jetbrains.annotations.Nullable;
 /**
  * 规则名字输入区：解析 `<namespace>:<path>` 或单独的 `<path>`，并展示名称限制与校验错误位。
  */
-final class RuleNameInput implements UiWidget, UiFocusTarget {
+final class RuleNameInput implements UiWidget, UiFocusTarget, UiLayoutSource {
 
     // 宿主默认主题：屏幕按主题取色与绘制原语
     private final UiHostTheme THEME;
@@ -94,6 +97,10 @@ final class RuleNameInput implements UiWidget, UiFocusTarget {
         int textRows = font.split(help, width).size() + ERROR_ROWS;
         return INPUT_HEIGHT + textRows * font.lineHeight + GAP * 2;
     }
+
+    /** 导出真实命名输入框，与弹窗的输入和校验使用同一控件。 */
+    @Override
+    public List<UiLayoutNode> layoutNodes() { return input.layoutNodes(); }
 
     @Override
     public UiRect bounds() {

@@ -11,95 +11,129 @@
   },
   "steps": [
     {
-      "do": "__gp.clickWidget(__gp.lang('gui.itemdespawntowhat.edit.button.new'))"
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.button.new"
+        }
+      }
     },
     {
-      "check": {
+      "assert": {
         "name": "出现新建规则弹窗标题",
-        "expr": "__gp.textNodes().join(' ')",
-        "expected_lang": "gui.itemdespawntowhat.edit.prompt.new_title",
-        "lang": "en_us",
-        "contains": true
+        "kind": "text_present",
+        "selector": {
+          "lang": "gui.itemdespawntowhat.edit.prompt.new_title"
+        }
       }
     },
     {
-      "check": {
+      "assert": {
         "name": "弹窗有确认按钮",
-        "expr": "__gp.textNodes().join(' ')",
-        "expected_lang": "gui.itemdespawntowhat.edit.button.confirm",
-        "lang": "en_us",
-        "contains": true
+        "kind": "text_present",
+        "selector": {
+          "lang": "gui.itemdespawntowhat.edit.button.confirm"
+        }
       }
     },
     {
-      "do": "__gp.clickKindAt('FRAME', 40, 10)"
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "TEXT_INPUT"
+        }
+      }
     },
     {
-      "do": "(function(){__gp.key(269,0,0);for(var i=0;i<40;i++){__gp.key(259,0,0);}return 'cleared';})()"
+      "action": {
+        "kind": "clear"
+      }
     },
     {
-      "check": {
+      "assert": {
         "name": "名字清空后确认按钮变灰",
-        "expr": "(function(){var n=__gp.findClickable(__gp.lang('gui.itemdespawntowhat.edit.button.confirm'));return n===null?'missing':(n.enabled?'enabled':'disabled');})()",
-        "expected": "disabled"
+        "kind": "node_enabled",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.button.confirm"
+        },
+        "expected": false
       }
     },
     {
-      "do": "(function(){__gp.typeText('probe_' + (Date.now() % 100000));return 'typed';})()"
+      "action": {
+        "kind": "type",
+        "unique_text": true
+      }
     },
     {
-      "check": {
+      "assert": {
         "name": "输入合法名字后确认按钮恢复",
-        "expr": "(function(){var n=__gp.findClickable(__gp.lang('gui.itemdespawntowhat.edit.button.confirm'));return n===null?'missing':(n.enabled?'enabled':'disabled');})()",
-        "expected": "enabled"
+        "kind": "node_enabled",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.button.confirm"
+        },
+        "expected": true
       }
     },
     {
       "shot": "20-new-rule-prompt.png"
     },
     {
-      "do": "__gp.clickWidget(__gp.lang('gui.itemdespawntowhat.edit.button.confirm'))"
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.button.confirm"
+        }
+      }
     },
     {
-      "check": {
+      "assert": {
         "name": "编辑页有 Basic 页签",
-        "expr": "__gp.textNodes().join(' ')",
-        "expected_lang": "gui.itemdespawntowhat.edit.tab.info",
-        "lang": "en_us",
-        "contains": true
+        "kind": "text_present",
+        "selector": {
+          "lang": "gui.itemdespawntowhat.edit.tab.info"
+        }
       }
     },
     {
-      "check": {
+      "assert": {
         "name": "编辑页有 Trigger 页签",
-        "expr": "__gp.textNodes().join(' ')",
-        "expected_lang": "gui.itemdespawntowhat.edit.tab.trigger",
-        "lang": "en_us",
-        "contains": true
+        "kind": "text_present",
+        "selector": {
+          "lang": "gui.itemdespawntowhat.edit.tab.trigger"
+        }
       }
     },
     {
-      "check": {
+      "assert": {
         "name": "编辑页有 Results 页签",
-        "expr": "__gp.textNodes().join(' ')",
-        "expected_lang": "gui.itemdespawntowhat.edit.tab.results",
-        "lang": "en_us",
-        "contains": true
+        "kind": "text_present",
+        "selector": {
+          "lang": "gui.itemdespawntowhat.edit.tab.results"
+        }
       }
     },
     {
-      "check": {
+      "assert": {
         "name": "命名弹窗已关闭",
-        "expr": "(function(){return __gp.textNodes().join(' ').indexOf(__gp.lang('gui.itemdespawntowhat.edit.prompt.new_title'))>=0?'open':'closed';})()",
-        "expected": "closed"
+        "kind": "text_absent",
+        "selector": {
+          "lang": "gui.itemdespawntowhat.edit.prompt.new_title"
+        }
       }
     },
     {
-      "check": {
+      "assert": {
         "name": "编辑页标题来自语言文件",
-        "expr": "__gp.screenInfo().title",
-        "expected_lang": "gui.itemdespawntowhat.edit.title",
-        "lang": "en_us"
+        "kind": "value_equals",
+        "query": {
+          "source": "screen_title"
+        },
+        "expected_lang": "gui.itemdespawntowhat.edit.title"
       }
     },
     {
@@ -107,7 +141,12 @@
     },
     {
       "dump": "20-editor-edit-page.json",
-      "expr": "__gp.layout()"
+      "query": {
+        "source": "layout"
+      }
     }
-  ]
+  ],
+  "start": {
+    "kind": "editor"
+  }
 }

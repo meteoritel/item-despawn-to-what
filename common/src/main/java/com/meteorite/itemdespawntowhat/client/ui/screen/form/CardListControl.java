@@ -8,6 +8,8 @@ import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInteractionSession;
@@ -45,7 +47,7 @@ import org.jetbrains.annotations.Nullable;
  * 不再有红标签可依附，而是经 {@link #issues(String)} 汇总到校验面板，并由胶囊的空态文案就地表达
  * 「还缺一个引用」。</p>
  */
-final class CardListControl extends FormControl {
+final class CardListControl extends FormControl implements UiLayoutSource {
 
     // 自绘标题栏高度：字段标题与「添加」胶囊共用一行
     private static final int HEADER_HEIGHT = 16;
@@ -337,6 +339,27 @@ final class CardListControl extends FormControl {
         int cardBottom = bottom + CARD_PADDING;
         entry.card = new UiRect(x, cardTop, width, Math.max(0, cardBottom - cardTop));
         return cardBottom;
+    }
+
+    /** 导出卡片与真实子控件，字段和条目作用域保持与交互布局一致。 */
+    @Override
+    public List<UiLayoutNode> layoutNodes() {
+        List<UiLayoutNode> nodes = new ArrayList<>(addButton.layoutNodes());
+        for (Entry entry : entries) {
+            if (entry.card == null) { continue; }
+            List<UiLayoutNode> children = new ArrayList<>(entry.choice.layoutNodes());
+            children.addAll(entry.remove.layoutNodes());
+            for (FormControl value : entry.values) {
+                List<UiFocusTarget> targets = new ArrayList<>();
+                value.addFocusTargets(targets);
+                for (UiFocusTarget target : targets) {
+                    if (target instanceof UiLayoutSource source) { children.addAll(source.layoutNodes()); }
+                }
+            }
+            nodes.add(new UiLayoutNode(UiLayoutNode.Kind.FRAME, entry.card, entry.choice.label(), 0, 0,
+                    true, true, List.copyOf(children)));
+        }
+        return List.copyOf(nodes);
     }
 
     // ---- 绘制 ----

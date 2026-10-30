@@ -31,7 +31,7 @@ import org.jetbrains.annotations.Nullable;
  *
  * <p>测试规则的身份前缀、分类归属与规则体由 {@link DebugTestRules} 统一约定，
  * 删除只按前缀匹配，不会影响任何非测试规则。调试页由 {@link EditorShell} 在
- * debug 模式下按 Ctrl+F8 从管理页进入，控件与视图状态全部留在本类。</p>
+ * 工作台的草稿工具入口进入，控件与视图状态全部留在本类。</p>
  */
 final class RuleEditorDebugPage implements EditorPage {
     private final UiInputScope inputScope = new UiInputScope(this);
@@ -84,6 +84,7 @@ final class RuleEditorDebugPage implements EditorPage {
     private final List<UiButton> buttons = new ArrayList<>();
     private @Nullable UiButton fillButton;
     private @Nullable UiButton deleteButton;
+    private @Nullable UiButton toolsButton;
 
     RuleEditorDebugPage(EditorShell shell, RuleEditorModel model, Font font,
                         UiModalStack modals) {
@@ -108,9 +109,10 @@ final class RuleEditorDebugPage implements EditorPage {
         fillButton = button(UI + "button.fill", UiButtonVariant.PRIMARY, this::fillTestRules);
         deleteButton = button(UI + "button.delete_all", UiButtonVariant.DANGER, this::confirmDeleteAll);
         UiButton back = button(EDIT_UI + "button.back", UiButtonVariant.SECONDARY, shell::backToList);
-        bottomBar.set(List.of(fillButton, deleteButton, back));
+        toolsButton = button(EDIT_UI + "debug.button.tools", UiButtonVariant.SECONDARY, DebugWorkbenchHooks::open);
+        bottomBar.set(List.of(fillButton, deleteButton, toolsButton, back));
         buttons.clear();
-        buttons.addAll(List.of(fillButton, deleteButton, back));
+        buttons.addAll(List.of(fillButton, deleteButton, toolsButton, back));
         updateButtons();
     }
 
@@ -274,7 +276,7 @@ final class RuleEditorDebugPage implements EditorPage {
     // 每帧同步按钮可用状态：冻结时全部禁用，没有测试规则时删除按钮禁用
     public void updateButtons() {
         boolean editable = shell.editable();
-        buttons.forEach(button -> button.setEnabled(editable));
+        if (toolsButton != null) { toolsButton.setEnabled(!shell.saving() && DebugWorkbenchHooks.available()); }
         boolean hasTestRules = model.testRuleCount() > 0;
         if (fillButton != null) {
             fillButton.setEnabled(editable);

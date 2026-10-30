@@ -2,7 +2,6 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.ui.shared.PreviewResources;
 import com.meteorite.itemdespawntowhat.client.ui.shared.PreviewIcons;
-import com.meteorite.itemdespawntowhat.platform.Services;
 import org.lwjgl.glfw.GLFW;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiConditionTreeSummary;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
@@ -66,7 +65,6 @@ public final class RuleEditorScreen extends Screen implements UiLayoutSource {
     private boolean noticeTruncated;
     private @Nullable UiRect noticeRect;
     private @Nullable UiRect truncatedTitleRect;
-    private UiRect contentArea = new UiRect(0, 0, 0, 0);
 
     public RuleEditorScreen(RuleEditClientWorkspace workspace) {
         super(Component.translatable(UI + "title"));
@@ -146,7 +144,7 @@ public final class RuleEditorScreen extends Screen implements UiLayoutSource {
         int footerHeight = page.footerHeight(availableWidth);
         int footerY = h - pagePad - footerHeight;
         int noticeY = footerY - PAD - (shell.notice() == null ? 0 : NOTICE_H);
-        contentArea = new UiRect(pagePad, y, availableWidth, Math.max(0, noticeY - y - pagePad));
+        UiRect contentArea = new UiRect(pagePad, y, availableWidth, Math.max(0, noticeY - y - pagePad));
         page.render(graphics, font, mouseX, mouseY, contentArea);
         drawNotice(graphics, noticeY, w);
         page.renderFooter(graphics, font, mouseX, mouseY, new UiRect(pagePad, footerY, availableWidth, footerHeight));
@@ -199,7 +197,7 @@ public final class RuleEditorScreen extends Screen implements UiLayoutSource {
      *
      * <p>只导出活动页：另两页在切换后不再重排，其控件矩形会停留在上一次的屏幕位置，
      * 报出来会让探针误以为那部分内容仍然可见。坐标已是屏幕 GUI 坐标——页每帧按内容区重排，
-     * 滚动也在页内部结算完毕。保存遮罩与类型选择器不在控件树上，不在此快照内。</p>
+     * 滚动也在页内部结算完毕。活动类型选择器由编辑页导出；保存遮罩由独立状态持有。</p>
      */
     @Override
     public List<UiLayoutNode> layoutNodes() {
@@ -278,6 +276,12 @@ public final class RuleEditorScreen extends Screen implements UiLayoutSource {
         return saveOverlay;
     }
 
+    /** 保存与弹层结束后才允许切换独立工具屏幕。 */
+    public boolean canOpenDebugTools() { return !shell.saving() && shell.modals().isEmpty(); }
+
+    /** 已授权工作区的草稿工具导航，沿用现有页与草稿命令。 */
+    public void showDebugDrafts() { shell.enterDebug(); }
+
     // ---- 焦点 / 事件 / 生命周期 ----
 
     @Override
@@ -302,10 +306,8 @@ public final class RuleEditorScreen extends Screen implements UiLayoutSource {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (!shell.saving() && keyCode == GLFW.GLFW_KEY_F9 && (modifiers & GLFW.GLFW_MOD_CONTROL) != 0
-                && Services.PLATFORM.isDevelopmentEnvironment()) {
-            Minecraft.getInstance().setScreen(new PreviewExamplesScreen());
-            return true;
+        if (keyCode == GLFW.GLFW_KEY_F8 && (modifiers & GLFW.GLFW_MOD_CONTROL) != 0) {
+            return canOpenDebugTools() && DebugWorkbenchHooks.open();
         }
         return input.keyPressed(keyCode, scanCode, modifiers);
     }

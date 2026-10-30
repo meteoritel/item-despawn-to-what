@@ -10,6 +10,8 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlatText;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiSpinner;
 import com.meteorite.itemdespawntowhat.client.ui.shared.RuleDisplayLabels;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
@@ -52,7 +54,7 @@ import org.lwjgl.glfw.GLFW;
  * 技术性条目与空/流动流体；范围值由宿主视图提供，切换只发出意图回调，
  * 因此页码、总数与可见条目始终一致。宿主每次提供一份 {@link View}，网格从同一快照读取条目和状态。</p>
  */
-public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidget, UiFocusTarget, UiFooterHost {
+public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidget, UiFocusTarget, UiFooterHost, UiLayoutSource {
 
     /**
      * 交互意图回调：页面只上报意图、不直接改宿主数据，默认实现全部留空，宿主按需覆写。
@@ -731,6 +733,27 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
     }
 
     // ---- 渲染 ----
+
+    /** 导出搜索和当前页可见目录行，几何复用绘制的列宽与滚动行。 */
+    @Override
+    public List<UiLayoutNode> layoutNodes() {
+        if (!visible) { return List.of(); }
+        List<UiLayoutNode> nodes = new ArrayList<>(search.layoutNodes());
+        int columns = columns();
+        int last = Math.min(rowCount(), scrollRow + visibleRows());
+        for (int row = scrollRow; row < last; row++) {
+            for (int column = 0; column < columns; column++) {
+                int index = row * columns + column;
+                if (index >= entries.size()) { break; }
+                Component label = rowLabel(entries.get(index));
+                UiRect rect = new UiRect(cellsRect.x() + column * columnWidth(),
+                        cellsRect.y() + (row - scrollRow) * ROW_HEIGHT, columnWidth(), ROW_HEIGHT);
+                nodes.add(new UiLayoutNode(UiLayoutNode.Kind.ROW, rect, label, font.width(label), rect.width(),
+                        enabled && !explicitLoading, true, List.of()));
+            }
+        }
+        return List.copyOf(nodes);
+    }
 
     @Override
     public void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {

@@ -73,6 +73,18 @@ final class DebugScenarioRun {
     private float viewYaw;
     private float viewPitch;
 
+    private final JsonObject counterBaseline = new JsonObject();
+
+    void captureBaseline(RuleRuntimeDiagnosticsContext context) {
+        var runtime = context.runtime();
+        if (runtime == null) { throw new IllegalStateException("运行时未就绪"); }
+        counterBaseline.addProperty("ledger_records", SettlementLedger.get(level).size());
+        counterBaseline.addProperty("recovery_attempts", runtime.settlementRecoveryStats().attempts());
+        counterBaseline.addProperty("recovery_abandoned", runtime.settlementRecoveryStats().abandoned());
+        counterBaseline.addProperty("recovery_alerts", runtime.settlementRecoveryStats().alerts());
+        log("COUNTER_BASELINE", counterBaseline);
+    }
+
     // 固定场景参数，测试源使用独立规则索引，不替换用户运行时索引。
     DebugScenarioRun(String name, boolean benchmark, ServerLevel level, @Nullable UUID initiator,
                      Vec3 origin, int seconds, DebugScenarioDefinition definition, @Nullable String pipelineId) {
@@ -396,6 +408,11 @@ final class DebugScenarioRun {
             // 未命中声明在断言前报告，配置写错时由 faults_remaining 暴露，而不是静默通过
             faults.reportUnused();
             JsonObject metrics = metrics(context.runtime(), liveOutput, remainingSource);
+            end.add("raw_actual", metrics.deepCopy());
+            end.add("counter_baseline", counterBaseline.deepCopy());
+            for (String key : counterBaseline.keySet()) {
+                metrics.addProperty(key, metrics.get(key).getAsLong() - counterBaseline.get(key).getAsLong());
+            }
             JsonArray checks = probe.checks(metrics);
             boolean passed = true;
             for (var check : checks) {

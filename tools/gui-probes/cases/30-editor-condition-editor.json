@@ -11,100 +11,140 @@
   },
   "steps": [
     {
-      "do": "__gp.clickWidget(__gp.lang('gui.itemdespawntowhat.edit.tab.trigger'))"
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.tab.trigger"
+        }
+      }
     },
     {
-      "check": {
+      "assert": {
         "name": "Trigger 页有打开条件树的按钮",
-        "expr": "__gp.textNodes().join(' ')",
-        "expected_lang": "gui.itemdespawntowhat.edit.tree.button.open",
-        "lang": "en_us",
-        "contains": true
+        "kind": "text_present",
+        "selector": {
+          "lang": "gui.itemdespawntowhat.edit.tree.button.open"
+        }
       }
     },
     {
-      "do": "__gp.clickWidget(__gp.lang('gui.itemdespawntowhat.edit.tree.button.open'))"
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.tree.button.open"
+        }
+      }
     },
     {
-      "check": {
+      "assert": {
         "name": "条件编辑画布标题来自语言文件",
-        "expr": "__gp.textNodes().join(' ')",
-        "expected_lang": "gui.itemdespawntowhat.edit.tree.title",
-        "lang": "en_us",
-        "contains": true
+        "kind": "text_present",
+        "selector": {
+          "lang": "gui.itemdespawntowhat.edit.tree.title"
+        }
       }
     },
     {
-      "check": {
+      "assert": {
         "name": "空画布显示添加条件占位",
-        "expr": "__gp.textNodes().join(' ')",
-        "expected_lang": "gui.itemdespawntowhat.edit.tree.add_placeholder",
-        "lang": "en_us",
-        "contains": true
+        "kind": "text_present",
+        "selector": {
+          "lang": "gui.itemdespawntowhat.edit.tree.add_placeholder"
+        }
       }
     },
     {
       "shot": "30-condition-canvas-empty.png"
     },
     {
-      "do": "__gp.clickWidget(__gp.lang('gui.itemdespawntowhat.edit.tree.add_placeholder'))"
-    },
-    {
-      "check": {
-        "name": "类型选择器标题来自语言文件",
-        "expr": "__gp.textNodes().join(' ')",
-        "expected_lang": "gui.itemdespawntowhat.edit.picker.title",
-        "lang": "en_us",
-        "contains": true
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.tree.add_placeholder"
+        }
       }
     },
     {
-      "check": {
+      "assert": {
+        "name": "类型选择器标题来自语言文件",
+        "kind": "text_present",
+        "selector": {
+          "lang": "gui.itemdespawntowhat.edit.picker.title"
+        }
+      }
+    },
+    {
+      "assert": {
         "name": "选择器列出 Outdoor 类型",
-        "expr": "__gp.textNodes().join(' ')",
-        "expected_lang": "condition.itemdespawntowhat.type.outdoor",
-        "lang": "en_us",
-        "contains": true
+        "kind": "text_present",
+        "selector": {
+          "lang": "condition.itemdespawntowhat.type.outdoor"
+        }
       }
     },
     {
       "shot": "30-condition-type-picker.png"
     },
     {
-      "do": "__gp.clickWidget(__gp.lang('condition.itemdespawntowhat.type.outdoor'))"
-    },
-    {
-      "check": {
-        "name": "选完类型后选择器关闭",
-        "expr": "__gp.textNodes().join(' ').indexOf(__gp.lang('gui.itemdespawntowhat.edit.picker.title')) < 0",
-        "expected": true
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "condition.itemdespawntowhat.type.outdoor"
+        }
       }
     },
     {
-      "check": {
+      "assert": {
+        "name": "选完类型后选择器关闭",
+        "kind": "text_absent",
+        "selector": {
+          "lang": "gui.itemdespawntowhat.edit.picker.title"
+        }
+      }
+    },
+    {
+      "assert": {
         "name": "画布出现 Outdoor 条件叶",
-        "expr": "__gp.textNodes().join(' ')",
-        "expected_lang": "condition.itemdespawntowhat.type.outdoor",
-        "lang": "en_us",
-        "contains": true
+        "kind": "text_present",
+        "selector": {
+          "lang": "condition.itemdespawntowhat.type.outdoor"
+        }
       }
     },
     {
       "shot": "30-condition-canvas-leaf.png"
     },
     {
-      "do": "__gp.clickWidgetLast(__gp.lang('gui.itemdespawntowhat.edit.button.back'))"
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.button.back"
+        }
+      }
     },
     {
-      "check": {
+      "assert": {
         "name": "Back 关闭条件编辑画布",
-        "expr": "__gp.textNodes().join(' ').indexOf(__gp.lang('gui.itemdespawntowhat.edit.tree.title')) < 0",
-        "expected": true
+        "kind": "text_absent",
+        "selector": {
+          "lang": "gui.itemdespawntowhat.edit.tree.title"
+        }
       }
     },
     {
       "dump": "30-editor-condition-editor.json",
-      "expr": "__gp.layout()"
+      "query": {
+        "source": "layout"
+      }
     }
-  ]
+  ],
+  "start": {
+    "kind": "editor",
+    "new_rule": true
+  }
 }

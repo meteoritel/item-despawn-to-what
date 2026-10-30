@@ -1,0 +1,49 @@
+{
+  "name": "workbench-previews",
+  "description": "通过工作台进入预览工具，切换转台并返回目录。",
+  "start": {
+    "kind": "scene",
+    "scene": "previews"
+  },
+  "window": {
+    "width": 1600,
+    "height": 1000,
+    "scale": 2
+  },
+  "steps": [
+    {
+      "assert": {
+        "name": "预览页标题",
+        "kind": "value_equals",
+        "query": {
+          "source": "screen_title"
+        },
+        "expected_lang": "gui.itemdespawntowhat.edit.preview.examples.title"
+      }
+    },
+    {
+      "action": {
+        "kind": "key",
+        "code": 32
+      }
+    },
+    {
+      "shot": "80-previews.png"
+    },
+    {
+      "action": {
+        "kind": "key",
+        "code": 256
+      }
+    },
+    {
+      "assert": {
+        "name": "gui.itemdespawntowhat.debug.workbench.previews",
+        "kind": "text_present",
+        "selector": {
+          "lang": "gui.itemdespawntowhat.debug.workbench.previews"
+        }
+      }
+    }
+  ]
+}

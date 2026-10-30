@@ -1,15 +1,20 @@
 param(
-    [ValidateSet('core', 'natural', 'settlement', 'damage', 'recovery', 'loading', 'budget', 'state', 'save', 'performance')]
     [string]$Chain = 'core',
     [switch]$Negative,
+    [switch]$List,
     [int]$TimeoutSeconds = 900,
     [string]$CompareTo
 )
 # 单入口：隔离存档、串行 Gradle、结构化报告。每次保留现场，失败退出非零。
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
+$catalogTool = Join-Path $PSScriptRoot 'probe-catalog.py'
+if ($List) { & python $catalogTool --list; exit $LASTEXITCODE }
+& python $catalogTool --select $Chain
+if ($LASTEXITCODE -ne 0) { throw "Invalid probe selection: $Chain" }
+$runId = [guid]::NewGuid().ToString()
 if ($CompareTo) { $CompareTo = (Resolve-Path -LiteralPath $CompareTo).Path }
-$runName = (Get-Date -Format 'yyyyMMdd-HHmmss-fff') + '-' + $Chain
+$runName = (Get-Date -Format 'yyyyMMdd-HHmmss-fff') + '-' + $Chain.Replace('/', '-')
 $relativeRun = 'build/probe-runs/' + $runName
 $runDirectory = Join-Path $projectRoot ('neoforge/' + $relativeRun)
 New-Item -ItemType Directory -Path $runDirectory | Out-Null
@@ -42,7 +47,7 @@ $negativeProperty = $Negative.IsPresent.ToString().ToLowerInvariant()
 $exitCode = 1
 try {
     foreach ($phase in @('prepare', 'resume')) {
-        $tasks = ":neoforge:runProbeServer -PprobeRunDir=$relativeRun -PprobeSuite=$Chain -PprobeNegative=$negativeProperty -PprobePhase=$phase"
+        $tasks = ":neoforge:runProbeServer -PprobeRunDir=$relativeRun -PprobeSuite=$Chain -PprobeNegative=$negativeProperty -PprobePhase=$phase -PprobeRunId=$runId"
         $log = Join-Path $runDirectory ($phase + '-gradle.log')
         $errors = Join-Path $runDirectory ($phase + '-stderr.log')
         $buildScript = Join-Path $PSScriptRoot 'dsh-build.ps1'
@@ -60,7 +65,7 @@ try {
         $report = Get-Content -LiteralPath $reportFile -Raw -Encoding UTF8 | ConvertFrom-Json
         Copy-Item -LiteralPath $reportFile -Destination (Join-Path $runDirectory ($phase + '-report.json'))
         $expectedPhase = $phase
-        if ($report.format -ne 'idtw-backend-probe-v1' -or $report.phase -ne $expectedPhase -or $report.suite -ne $Chain) {
+        if ($report.format -ne 'idtw-backend-probe-v1' -or $report.phase -ne $expectedPhase -or $report.suite -ne $Chain -or $report.run_id -ne $runId) {
             throw "unexpected report identity: $reportFile"
         }
         foreach ($result in $report.results) {

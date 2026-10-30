@@ -10,7 +10,7 @@ import com.meteorite.itemdespawntowhat.core.service.edit.RuleSaveProgress;
 import com.meteorite.itemdespawntowhat.core.runtime.ProbeLedgerAccess;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ScheduledTaskHandle;
 import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ScheduledTask;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.SchedulerConfig;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.CancelReason;
 import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerScheduler;
 import com.meteorite.itemdespawntowhat.core.service.EditSessionManager;
 import com.meteorite.itemdespawntowhat.core.service.RuleOverlayWriter;
@@ -36,7 +36,7 @@ import java.util.UUID;
 import static com.meteorite.itemdespawntowhat.core.debug.BackendProbeFixtures.*;
 
 /** 正式索引与原版实体入口探针；只在独立开发存档中创建少量实物。 */
-final class BackendWorldProbe {
+final class BackendWorldProbe implements DebugSequenceRun.WorldStep {
     private static boolean rejectReload;
     private static BackendWorldProbe active;
     private final MinecraftServer server;
@@ -52,13 +52,17 @@ final class BackendWorldProbe {
     private int budgetEarly;
     private boolean middle;
 
-    BackendWorldProbe(MinecraftServer server, String name) throws IOException {
+    BackendWorldProbe(MinecraftServer server, String name) {
         this.server = server;
         fixtures = new BackendProbeFixtures(server);
         DebugProbePerformance.phase("SETUP");
         level = server.overworld();
         this.name = name;
         start = level.getGameTime();
+    }
+
+    /** 所有资源已登记后才执行可能失败的准备。 */
+    @Override public void start() throws IOException {
         active = this;
         switch (name) {
             case "loading" -> {
@@ -123,12 +127,13 @@ final class BackendWorldProbe {
         DebugProbePerformance.phase("WAIT");
     }
 
-    JsonObject tick() throws IOException {
+    /** 封存真实观测，资源在终态发布前释放。 */
+    @Override public JsonObject tick() throws IOException {
         long elapsed = level.getGameTime() - start;
         if (!middle && elapsed >= 20) {
             middle = true;
             if (name.equals("state")) {
-                checks.equal("cooldown_before_boundary/source_alive", 1, fixtures.sources.get(1).isAlive() ? 1 : 0);
+                checks.equal("cooldown_before_boundary/source_alive", true, fixtures.sources.get(1).isAlive());
                 fixtures.sources.getFirst().hurt(level.damageSources().cactus(), 100);
                 check("protection_at_boundary_expired", !fixtures.sources.getFirst().isAlive());
             }
@@ -207,10 +212,10 @@ final class BackendWorldProbe {
         return result;
     }
 
-    private void check(String key, boolean pass) { checks.equal(key, 1, pass ? 1 : 0); }
+    private void check(String key, boolean pass) { checks.equal(key, true, pass); }
 
     private void save() throws IOException {
-        Path root = Path.of("probe-writer");
+        Path root = fixtures.writerRoot();
         var writer = new RuleOverlayWriter(root, BackendProbeFixtures.PROBE_NAMESPACE);
         var initial = new RuleEditChangeSet(0, List.of(edit("a", 1), edit("b", 1)));
         var result = DebugProbePerformance.operation("SAVE_INITIAL", () -> writer.apply(initial, new IssueCollector()));
@@ -257,7 +262,7 @@ final class BackendWorldProbe {
 
     private void budget() {
         // 同一生产调度器、两个真实维度键、混合 lane；小预算放大跨 tick 行为。
-        ServerScheduler scheduler = new ServerScheduler(new SchedulerConfig(1_000_000_000L, 12, 8, 1, 32, 4, 4, 4));
+        ServerScheduler scheduler = new ServerScheduler(fixtures.smallBudget());
         List<ScheduledTask> handles = new ArrayList<>();
         int[] delivered = {0, 0};
         int[] early = {0};
@@ -275,7 +280,7 @@ final class BackendWorldProbe {
         checks.equal("before_due", 0, delivered[0] + delivered[1]);
         scheduler.tick(3);
         int first = delivered[0] + delivered[1];
-        check("shared_tick_did_not_drain_all", first < 40);
+        checks.maximum("shared_tick_did_not_drain_all", 39, first);
         scheduler.tick(3);
         checks.equal("same_tick_does_not_reset_budget", first, delivered[0] + delivered[1]);
         int maxPerTick = first;
@@ -285,7 +290,7 @@ final class BackendWorldProbe {
             maxPerTick = Math.max(maxPerTick, delivered[0] + delivered[1] - before);
         }
         metrics.addProperty("max_completed_per_tick", maxPerTick);
-        check("all_realms_share_global_work_cap", maxPerTick <= 12);
+        checks.maximum("all_realms_share_global_work_cap", 12, maxPerTick);
         checks.equal("overworld_completed", 20, delivered[0]);
         checks.equal("nether_completed", 20, delivered[1]);
         checks.equal("no_early_execution", 0, early[0]);
@@ -323,10 +328,12 @@ final class BackendWorldProbe {
         }
     }
 
-    void close() {
+    /** 取消本轮排期并删除登记实体，清理失败进入统一步骤终态。 */
+    @Override public void close() {
         DebugProbePerformance.phase("CLEANUP");
         active = null;
         if (name.equals("restart")) { return; }
+        budgetTasks.forEach(task -> task.cancel(CancelReason.SCENARIO_STOP));
         budgetItems.forEach(Entity::discard);
         fixtures.close();
     }

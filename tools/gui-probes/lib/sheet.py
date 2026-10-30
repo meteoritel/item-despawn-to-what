@@ -4,12 +4,14 @@
 另写 visual-summary.md 列出每张截图的序号、用例、尺寸与路径，供人和 Agent 直接读图确认界面。
 
 边界：只做拼图与清单，不比较两张图、不产出 diff、不维护基线；单张截图解码失败只跳过该格，
-不影响其它格子和整轮运行。
+解码错误记录在运行记录的 artifact_errors，其他格子继续生成。
 """
 
 import math
 import os
 import time
+from pathlib import Path
+from record import FILES
 
 import bitmap_font
 import pixels
@@ -36,28 +38,9 @@ _TEXT_PRIMARY = (230, 233, 239, 255)
 _TEXT_DIM = (140, 147, 160, 255)
 
 
-def _collect(cases):
-    """按用例顺序收集截图证据：只认 kind=screenshot 且字节已读入的 artifact。"""
-    shots = []
-    for case in cases:
-        for artifact in case.get("artifacts") or []:
-            if artifact.get("kind") != "screenshot":
-                continue
-            png = artifact.get("png_bytes")
-            if not png:
-                continue
-            shots.append({
-                "index": len(shots) + 1,
-                "case": str(case.get("name", "")),
-                "name": str(artifact.get("name", "")),
-                "path": artifact.get("path"),
-                "thumb": artifact.get("thumb"),
-                "width": artifact.get("width"),
-                "height": artifact.get("height"),
-                "scale": artifact.get("scale"),
-                "png_bytes": png,
-            })
-    return shots
+def _collect(record):
+    """截图元数据始终来自运行记录，字节只在生成派生图时读取。"""
+    return [dict(artifact, index=index) for index, artifact in enumerate(record.screenshots(), 1)]
 
 
 def _label_lines(shot):
@@ -85,10 +68,11 @@ def _draw_cell(canvas, sheet_width, sheet_height, x, y, shot):
     image_x = inner_x + _CELL_PADDING
     image_y = inner_y + _CELL_PADDING + _LABEL_HEIGHT
     try:
-        width, height, rgba = pixels.decode_png(bytes(shot["png_bytes"]))
+        width, height, rgba = pixels.decode_png(Path(shot["path"]).read_bytes())
         fit_width, fit_height, fitted = pixels.scale_to_fit(width, height, rgba,
                                                            _IMAGE_WIDTH, _IMAGE_HEIGHT)
-    except (ValueError, OSError):
+    except (ValueError, OSError) as failure:
+        shot["render_error"] = str(failure)
         pixels.fill_rect(canvas, sheet_width, sheet_height, image_x, image_y,
                          _IMAGE_WIDTH, _IMAGE_HEIGHT, _PLACEHOLDER)
         bitmap_font.draw_text(canvas, sheet_width, sheet_height, image_x + 8, image_y + 8,
@@ -114,7 +98,7 @@ def _write_contact_sheet(run_dir, shots):
         x = _MARGIN + column * (_CELL_WIDTH + _GAP)
         y = _MARGIN + row * (_CELL_HEIGHT + _GAP)
         _draw_cell(canvas, sheet_width, sheet_height, x, y, shot)
-    path = os.path.join(run_dir, "gui-contact-sheet.png")
+    path = os.path.join(run_dir, FILES["sheet"])
     with open(path, "wb") as handle:
         handle.write(pixels.encode_png(sheet_width, sheet_height, canvas))
     return path
@@ -145,20 +129,24 @@ def _write_list(run_dir, shots, sheet_path):
                         int(shot.get("width") or 0), int(shot.get("height") or 0),
                         shot.get("scale"), shot.get("path")))
     lines.append("")
-    path = os.path.join(run_dir, "visual-summary.md")
+    path = os.path.join(run_dir, FILES["visual"])
     with open(path, "w", encoding="utf-8") as handle:
         handle.write("\n".join(lines))
     return path
 
 
-def build(run_dir, cases):
+def build(record):
     """拼 contact sheet 并写截图清单。
 
     返回 {contact_sheet, list_path, shots, count, sheet_ms}；没有截图时 contact_sheet 为 None。
     """
     started = time.perf_counter()
-    shots = _collect(cases)
+    run_dir = record.directory
+    shots = _collect(record)
     sheet_path = _write_contact_sheet(run_dir, shots)
+    for shot in shots:
+        if "render_error" in shot:
+            record.artifact_errors.append({"role":"screenshot", "id":shot["id"], "error":shot["render_error"]})
     list_path = _write_list(run_dir, shots, sheet_path)
     return {
         "contact_sheet": sheet_path,

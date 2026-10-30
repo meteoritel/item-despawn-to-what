@@ -49,6 +49,7 @@ neoForge {
             systemProperty 'idtw.probe.suite', providers.gradleProperty('probeSuite').getOrElse('core')
             systemProperty 'idtw.probe.negative', providers.gradleProperty('probeNegative').getOrElse('false')
             systemProperty 'idtw.probe.phase', providers.gradleProperty('probePhase').getOrElse('prepare')
+            systemProperty 'idtw.probe.runId', providers.gradleProperty('probeRunId').getOrElse('manual')
         }
         gameTestServer {
             type = "gameTestServer"
