@@ -19,20 +19,20 @@ import org.jetbrains.annotations.Nullable;
 
 /** 选择目录类型在客户端的名称、预览、标签与默认可见策略。 */
 public enum CatalogTypePresentation {
-    ITEM("item", illustrated(CatalogTypePresentation::itemLabel, CatalogPreviewIcons::itemIcon),
+    ITEM("pick.scope_item_label", illustrated(CatalogTypePresentation::itemLabel, CatalogPreviewIcons::itemIcon),
             tags("items", () -> BuiltInRegistries.ITEM, TagPreviewIcons::itemMembers), CatalogTypePresentation::hiddenItem),
-    BLOCK("block", illustrated(CatalogTypePresentation::blockLabel, CatalogPreviewIcons::blockIcon),
+    BLOCK("pick.scope_block_label", illustrated(CatalogTypePresentation::blockLabel, CatalogPreviewIcons::blockIcon),
             tags("blocks", () -> BuiltInRegistries.BLOCK, TagPreviewIcons::blockMembers), CatalogTypePresentation::visible),
-    ENTITY("entity", illustrated(CatalogTypePresentation::entityLabel, CatalogPreviewIcons::entityIcon),
+    ENTITY("pick.scope_entity_label", illustrated(CatalogTypePresentation::entityLabel, CatalogPreviewIcons::entityIcon),
             tags("entities", () -> BuiltInRegistries.ENTITY_TYPE, TagPreviewIcons::entityMembers), CatalogTypePresentation::visible),
-    LOOT_TABLE("loot_table", text(CatalogTypePresentation::noLabel), noTags(), CatalogTypePresentation::visible),
-    BIOME("biome", text(id -> translatedKey("biome." + id.getNamespace() + "." + id.getPath(), id)),
+    LOOT_TABLE("pick.scope_loot_table_label", text(CatalogTypePresentation::noLabel), noTags(), CatalogTypePresentation::visible),
+    BIOME("pick.scope_biome_label", text(id -> translatedKey("biome." + id.getNamespace() + "." + id.getPath(), id)),
             biomeTags(), CatalogTypePresentation::visible),
-    DIMENSION("dimension", text(CatalogTypePresentation::dimensionLabel), noTags(), CatalogTypePresentation::visible),
-    TAG("tag", text(CatalogTypePresentation::noLabel), noTags(), CatalogTypePresentation::visible),
-    FLUID("fluid", illustrated(FluidPreviewIcons::label, CatalogPreviewIcons::fluidIcon),
+    DIMENSION("pick.scope_dimension_label", text(CatalogTypePresentation::dimensionLabel), noTags(), CatalogTypePresentation::visible),
+    TAG("pick.scope_tag_label", text(CatalogTypePresentation::noLabel), noTags(), CatalogTypePresentation::visible),
+    FLUID("pick.scope_fluid_label", illustrated(FluidPreviewIcons::label, CatalogPreviewIcons::fluidIcon),
             tags("fluids", () -> BuiltInRegistries.FLUID, TagPreviewIcons::fluidMembers), CatalogTypePresentation::hiddenFluid),
-    MOB_EFFECT("mob_effect", illustrated(CatalogTypePresentation::mobEffectLabel, CatalogPreviewIcons::mobEffectIcon),
+    MOB_EFFECT("pick.scope_mob_effect_label", illustrated(CatalogTypePresentation::mobEffectLabel, CatalogPreviewIcons::mobEffectIcon),
             noTags(), CatalogTypePresentation::visible);
 
     private static final Set<String> HIDDEN_ITEM_IDS = Set.of(
