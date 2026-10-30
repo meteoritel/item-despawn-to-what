@@ -116,7 +116,8 @@ flowchart TD
 | `RuleChangesView` | 变更清单 | 列出待应用的规则，每条同时给出内容动作与启停动作 | `RuleEditorModel`、`EditSession` |
 | `RuleEditorDebugPage` | 调试页 | 按输入数量填充测试规则、一次性删除测试规则；只写草稿，落盘仍由管理页的“应用全部”决定 | `DebugTestRules` |
 | `RuleEditorPageInput` | 页内输入分发 | 把按下、释放、拖动、滚动与键盘输入派发给当前页控件，并维护结果分区动作列表的拖动排序；按下归属决定释放只发给谁 | 编辑页控件、`FormView` |
-| `RuleEditorPanelFactory` | 面板装配 | 把 kit 控件与目录链路接到规则草稿上；写入一律经调用方给定的 `applyChange` | 叶子面板、`shared` 图标、数值控件 |
+| `RuleEditorPanelFactory` | 面板装配 | 装配目录模态与叶子附加控件；目录接收选择绑定，数值写入经调用方给定的 `applyChange` | `CatalogSelectionOpener`、叶子面板、目录网格 |
+| `CatalogSelectionBinding` / `CatalogSelectionOpener` | 目录接收契约与宿主装配 | 接收端声明本次模式、初始引用和确认出口；宿主集中打开目录并核对活动编辑会话 | `FormView`、`CardListControl`、`SourceBlacklistPicker` |
 | `UiCatalogGrid` | 目录网格 | 以一次发布的 `View` 读取条目、选择、分页、加载/错误与可用状态；只向宿主发送搜索、分页、范围和选择意图 | `RuleEditorPanelFactory`、`SourceBlacklistPicker`、弹窗 footer |
 | `FormView` | 表单聚合根 | 按 `TypeEditorDescriptor` 渲染可滚动控件列；写入统一经 `EditSession`；支持定位高亮、内联选择与行尾动作 | `FormCommit`、`FormInputRouter`、`FormControl` |
 | `FormField` | 行身份与装配入口 | 绑定实际行，配置显隐、默认值、数值窗口、目录过滤、行尾动作与数量配对；路径随 rebase 更新，换描述符或卸载后失效 | `FormView`、字段声明 |
@@ -174,7 +175,7 @@ flowchart LR
 
 ### 表单装配与页面收尾
 
-`EditorFormFactory` 装配目录、条件上下文、数量默认值与几何失效通知。输入分区的刷新联动留在输入分区；`EditorConditionForms` 装配条件画布与局部参数表；`EditorQuantityBindings` 提供共享数量及存在条件写回。结果结构与严格值读取由编辑数据层的 `ResultStructure`、`RuleValue` 提供。
+`EditorFormFactory` 为表单注入目录入口、条件上下文、数量默认值与几何失效通知。普通表单与条件叶表单共用 `CatalogSelectionOpener`；嵌套表单继承该入口并传递自身行过滤条件，源黑名单在输入表单装配处路由到分组目录。输入分区的刷新联动留在输入分区；`EditorConditionForms` 装配条件画布与局部参数表；`EditorQuantityBindings` 提供共享数量及存在条件写回。结果结构与严格值读取由编辑数据层的 `ResultStructure`、`RuleValue` 提供。
 
 `addField` 返回 `FormField`，`setDescriptor` 返回有序句柄集合；固定描述符在装配时用 `field(name)` 取得必需行，动态闭包保留句柄。JSON 路径继续承担数据读写、历史迁移、问题定位与高亮。
 
@@ -231,7 +232,8 @@ flowchart LR
 
 - **规则固定表单**：基本信息、延迟、条件树和输入精简字段从 `BuiltinEditorDescriptors` 获取；screen 保留布局、tooltip、动态窗口与动作，`EditorField` 的值域使用 `FieldDomain`，数值与枚举直接读取类型化数据。
 - **新增字段控件**：实现 `FormControl` 子类，并在 `FormControlRegistry` 的穷举 switch 增加工厂分支。数值字段先走 `FormControl#create` 的“滑杆 + 行内精确输入”，域元数据不足时才落到注册表；第三方只读描述符使用显式 `RAW_JSON` 类型；新增已知字段漏接控件会在编译期报错。字段归类用 `EditorField` 的分类谓词（列表、数值、说明行、可带标签等）判断，不对 `EditorFieldType` 做 switch。
-- **嵌套对象列表的卡片形态**：参数声明标 `ParamShape.CARD_LIST` 时，`ParamProjection` 把该列表投影成 `EditorField.cardList`，界面交给 `CardListControl`。控件自绘字段标题与「添加」入口，每条元素是一张卡片：首行是目录引用胶囊（图标 + 显示名，点开目录替换单个条目），下方是数值行里并排的数值控件。点「添加」以多选目录勾选引用：目录里把当前条目回填为已勾选，确认后按勾选结果补齐或移除卡片，已有卡片的数值保持不动；更新卡片时以原对象为底稿保留扩展字段，未知非对象数组项保持原位。
+- **嵌套对象列表的卡片形态**：参数声明标 `ParamShape.CARD_LIST` 时，`ParamProjection` 把该列表投影成 `EditorField.cardList`，界面交给 `CardListControl`。控件自绘字段标题与「添加」入口，每条元素是一张卡片：首行是目录引用胶囊（图标 + 显示名，点开目录替换单个条目），下方是数值行里并排的数值控件。点「添加」以多选目录勾选引用：目录里把当前条目回填为已勾选，确认后按勾选结果补齐或移除卡片，保留卡片的数值与省略字段保持原样，新卡片采用声明默认值；更新时以原对象为底稿保留扩展字段。非对象项、缺失或非法引用项保留在原有相对顺序，新增项追加；单张替换只修改目标卡片的引用。
+- **目录接收与提交**：`CatalogSelectionBinding` 表达本次单选／多选、不可变初始引用与完整快照确认出口。普通引用字段按 `EditorField.isMultiCatalog` 声明模式，卡片替换与集合编辑按操作声明。表单完成合法待提交输入后捕获固定修订、所属行与目标路径；目录只修改临时选择，确认时核对行、路径、草稿修订及活动会话。空快照表示清空可编辑选择，取消与 Esc 只关闭目录；未变化的选择保留原始值。字段、关联数量与存在条件继续沿同一 `FormCommit`／`EditSession` 回调写入，共享一条内容历史；外部组件可在确认出口转换结果并使用现有草稿入口。
 - **目录宿主**：平铺目录与源黑名单选择器经 `CatalogViewState` 按内容、导航、状态分组发布不可变视图。未变化的组复用实例，网格分别应用条目与选择，选择变化保持布局；固定策略在装配时注入。`CatalogDisplayQuery` 统一搜索、过滤、切页与页号夹紧，翻页复用查询结果；黑名单保留源标签组及组内子页，当前页才建立完整条目，空搜索只读成员键。焦点在列表刷新时按条目 id 恢复。
 - **目录名称与引用**：展示条目持有已解析的 `TaggedId`，图标、标签预览和策略直接消费引用值。目录 label 按类型解释，subLabel 为来源原文；已选内容复用同一名称策略，缺键使用资源路径可读名称，技术 id 保留给悬停与搜索。取舍见 [ADR-0059](../adr/0059-catalog-label-policy.md)。
 - **新增界面标记图标**：标记图集是 `textures/gui/editor/marks.png`，由 `tools/image_generator/generate-editor-marks.py` 生成，字形为纯白、按调用方给定的主题色染色；在 `theme` 的 `UiMarkIcons.Mark` 登记行号与尺寸，用 `UiMarkIcons.icon(mark, color)` 取得图标后交给控件的 `setIcon` 或直接渲染。

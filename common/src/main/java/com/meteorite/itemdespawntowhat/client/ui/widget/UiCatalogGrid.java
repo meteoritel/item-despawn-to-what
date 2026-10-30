@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogSelectionBinding.Mode;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
@@ -178,7 +179,7 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
     private static final int WHEEL_ROWS = 3;
 
     private final Font font;
-    private final boolean multiSelect;
+    private final Mode selectionMode;
     private final Texts texts;
     private final Listener listener;
     private final UiTextInput search;
@@ -290,10 +291,11 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
     // 注入的宿主主题
     private final UiHostTheme theme;
 
-    public UiCatalogGrid(UiHostTheme theme, Font font, boolean multiSelect, Texts texts, Listener listener) {
+    /** 装配目录交互；selectionMode 由结果接收端按本次操作声明，打开后保持固定。 */
+    public UiCatalogGrid(UiHostTheme theme, Font font, Mode selectionMode, Texts texts, Listener listener) {
         this.theme = UiHostThemes.require(theme);
         this.font = Objects.requireNonNull(font, "font");
-        this.multiSelect = multiSelect;
+        this.selectionMode = Objects.requireNonNull(selectionMode);
         this.texts = Objects.requireNonNull(texts, "texts");
         this.listener = Objects.requireNonNull(listener, "listener");
         this.search = new UiTextInput(theme, font, texts.searchHint());
@@ -346,15 +348,11 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
     /**
      * 回填完整选择，跨页与过滤保留；程序化回填不触发编辑回调。
      *
-     * @param ids 当前字段引用，单选模式只采用第一项
+     * @param ids 当前完整选择，按本次操作的选择模式校验
      */
     private void setSelection(List<String> ids) {
         selection.clear();
-        for (String id : ids) {
-            if (id == null || id.isBlank() || selection.contains(id)) continue;
-            selection.add(id);
-            if (!multiSelect) break;
-        }
+        selection.addAll(selectionMode.snapshot(ids));
     }
 
     public boolean isSelected(String id) {
@@ -504,7 +502,7 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
         int tailX = nextRect.right() + GAP * 3;
         int tailWidth = Math.max(0, footerRect.right() - tailX);
         // 清空链接的位置与选中项无关地预留出来，选择变化时不触发重新布局
-        int clearWidth = multiSelect ? Math.min(font.width(texts.clear().getString()) + PAGER_PADDING, tailWidth) : 0;
+        int clearWidth = Math.min(font.width(texts.clear().getString()) + PAGER_PADDING, tailWidth);
         this.clearRect = new UiRect(footerRect.right() - clearWidth, footerRect.y(), clearWidth,
                 footerRect.height());
         this.statusRect = new UiRect(tailX, footerRect.y(), Math.max(0, clearRect.x() - GAP - tailX),
@@ -1060,7 +1058,7 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
     }
 
     private boolean canClear() {
-        return enabled && multiSelect && !selection.isEmpty();
+        return enabled && !selection.isEmpty();
     }
 
     // ---- 输入 ----
@@ -1251,7 +1249,7 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
         }
         String id = entries.get(cursor).id();
         if (unavailableReason.apply(id) != null) return;
-        if (!multiSelect && !selection.contains(id)) toggle(id);
+        if (selectionMode == Mode.SINGLE && !selection.contains(id)) toggle(id);
         listener.onActivate(id);
         listener.onConfirm();
     }
@@ -1263,7 +1261,7 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
         }
         // 冲突项禁止新增，但保留取消已有冲突项的修复入口。
         if (!selection.contains(id) && unavailableReason.apply(id) != null) return;
-        if (multiSelect) {
+        if (selectionMode == Mode.MULTIPLE) {
             if (!selection.remove(id)) {
                 selection.add(id);
             }

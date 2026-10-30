@@ -4,7 +4,6 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionTreeViewModel;
 import net.minecraft.client.gui.Font;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModalStack;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.ConditionEditContextFactory;
-import com.meteorite.itemdespawntowhat.client.net.RuleEditClientWorkspace;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.EditorRegistries;
@@ -18,7 +17,6 @@ import com.meteorite.itemdespawntowhat.client.ui.screen.form.ConditionHostCoordi
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.ConditionTreeOverlay;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.LeafPanel;
-import com.meteorite.itemdespawntowhat.client.ui.shared.FieldCatalogTypes;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionTreeContract;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
@@ -26,7 +24,6 @@ import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
 import com.meteorite.itemdespawntowhat.core.model.ConditionNode;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
-import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalogType;
 import com.meteorite.itemdespawntowhat.core.type.condition.BiomeCondition;
 import java.util.List;
 import java.util.function.BooleanSupplier;
@@ -38,7 +35,6 @@ final class EditorConditionForms {
     private final UiHostTheme THEME;
     private final EditorShell shell;
     private final Font font;
-    private final RuleEditClientWorkspace workspace;
     private final UiModalStack modals;
     private final ConditionEditingSupport baseSupport;
 
@@ -46,7 +42,6 @@ final class EditorConditionForms {
         this.THEME = shell.theme();
         this.shell = shell;
         this.font = font;
-        this.workspace = shell.workspace();
         this.modals = shell.modals();
         this.baseSupport = baseSupport;
     }
@@ -150,13 +145,7 @@ final class EditorConditionForms {
         form.setOnChanged(shell::draftChanged);
         // 输入被长度上限拒绝时立刻显示一条可读提示（字段名：问题）
         form.setOnRejectedNotice(message -> shell.setNotice(message,EditorShell.NoticeLevel.DANGER));
-        form.setSelectionCatalogOpener((field, fieldPath, tags, multiple, selected, onPicked) -> {
-            RuleCatalogType type = tags ? RuleCatalogType.TAG : FieldCatalogTypes.catalogTypeOf(field);
-            if (type == null || !shell.editable()) return;
-            modals.push(RuleEditorPanelFactory.fieldCatalogModal(font, shell, workspace, type, multiple,
-                    Component.translatable(field.labelKey()), shell.screenWidth(), shell.screenHeight(), onPicked,
-                    field, session.root(), fieldPath, selected));
-        });
+        form.setSelectionCatalogOpener(new CatalogSelectionOpener(shell, font, session));
         form.setDescriptor(descriptor);
         form.reload();
         if (BiomeCondition.ID.equals(leaf.condition().type())) configureBiomeFields(form, descriptor);
@@ -173,7 +162,7 @@ final class EditorConditionForms {
                 }, () -> {
                     form.reload();
                     shell.draftChanged();
-                }, modals::push, shell, workspace, shell.screenWidth(), shell.screenHeight());
+                });
         String noteKey = catalystLeaf ? RuleEditorPageSupport.UI + "rule.catalyst_all_required"
                 : RuleEditorPageSupport.FLUID_PRESENT_ID.equals(leaf.condition().type()) ? RuleEditorPageSupport.UI + "field.fluid_present.fluid.hint" : null;
         LeafPanel panel = noteKey == null ? content : content.addNote(() -> Component.translatable(noteKey));

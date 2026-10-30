@@ -741,6 +741,7 @@
   "gui.itemdespawntowhat.edit.pick.next": "下一页 >",
   "gui.itemdespawntowhat.edit.pick.selected": "已选",
   "gui.itemdespawntowhat.edit.pick.field": "选择 %s",
+  "gui.itemdespawntowhat.edit.pick.target_changed": "选择目标已变化，请重新打开目录",
   "gui.itemdespawntowhat.edit.pick.frozen": "会话已失效，无法选择",
   "gui.itemdespawntowhat.edit.range.value": "%s 至 %s",
   "gui.itemdespawntowhat.edit.range.low": "低端",

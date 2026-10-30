@@ -24,6 +24,7 @@ import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogTypePresentation;
 import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogDisplayQuery;
 import com.meteorite.itemdespawntowhat.client.ui.shared.FieldCatalogChoices;
 import com.meteorite.itemdespawntowhat.client.ui.shared.FieldCatalogTypes;
+import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogSelectionBinding;
 import com.meteorite.itemdespawntowhat.client.ui.shared.TagPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
@@ -161,32 +162,22 @@ public final class RuleEditorPanelFactory {
         return Component.translatable(UI + CatalogTypePresentation.of(type).scopeLabel());
     }
 
-    // 目录面板弹窗：数据与请求全部走既有工作区链路，翻页/搜索只发意图
-    // 字段路径来自实际发起选择的表单行，子表单和条件叶都以同一入口解析互斥范围。
-    static UiModal fieldCatalogModal(Font font, EditorShell shell, RuleEditClientWorkspace workspace, RuleCatalogType type,
-                                     boolean multiSelect, Component title, int screenWidth, int screenHeight,
-                                     Consumer<List<String>> onPicked, EditorField field, RuleValue draft,
-                                     String path, List<String> selected) {
-        return fieldCatalogModal(font, shell, workspace, type, multiSelect, title, screenWidth, screenHeight,
-                onPicked, field, draft, path, selected, null);
-    }
-
     /**
      * 打开字段目录，并只列出条目过滤器接受的资源引用。
      * @param entryFilter 条目过滤器，null 表示不限；只作用于资源条目，标签条目不受限制
      */
     static UiModal fieldCatalogModal(Font font, EditorShell shell, RuleEditClientWorkspace workspace, RuleCatalogType type,
-                                     boolean multiSelect, Component title, int screenWidth, int screenHeight,
-                                     Consumer<List<String>> onPicked, EditorField field, RuleValue draft,
-                                     String path, List<String> selected, @Nullable Predicate<String> entryFilter) {
-        return catalogModal(font, shell, workspace, type, multiSelect, title, screenWidth, screenHeight,
-                onPicked, field, selected, SourceCatalystSelectionPolicy.forField(draft, path), entryFilter);
+                                     CatalogSelectionBinding binding, Component title, int screenWidth, int screenHeight,
+                                     EditorField field, RuleValue draft,
+                                     String path, @Nullable Predicate<String> entryFilter) {
+        return catalogModal(font, shell, workspace, type, binding, title, screenWidth, screenHeight,
+                field, SourceCatalystSelectionPolicy.forField(draft, path), entryFilter);
     }
 
     private static UiModal catalogModal(Font font, EditorShell shell, RuleEditClientWorkspace workspace, RuleCatalogType type,
-                                        boolean multiSelect, Component title, int screenWidth, int screenHeight,
-                                        Consumer<List<String>> onPicked, @Nullable EditorField field,
-                                        List<String> selected, Function<String, @Nullable Component> unavailableReason,
+                                        CatalogSelectionBinding binding, Component title, int screenWidth, int screenHeight,
+                                        @Nullable EditorField field,
+                                        Function<String, @Nullable Component> unavailableReason,
                                         @Nullable Predicate<String> entryFilter) {
         UiHostTheme THEME = shell.theme();
         boolean includeTags = field != null && field.allowsTags();
@@ -199,11 +190,11 @@ public final class RuleEditorPanelFactory {
         mapper.includeTags = includeTags;
         mapper.policy = policy;
         mapper.entryFilter = entryFilter;
-        CatalogViewState viewState = new CatalogViewState(selected);
+        CatalogViewState viewState = new CatalogViewState(binding.initialSelection());
         UiModal modal = UiModal.create(THEME, font);
         // 确认按钮可用态由目录每帧刷新：值不变时不再重配按钮（重配会复制文本并重建命中目标）
         ConfirmGate confirmGate = new ConfirmGate();
-        UiCatalogGrid grid = new UiCatalogGrid(THEME, font, multiSelect, catalogTexts(type, includeTags), new UiCatalogGrid.Listener() {
+        UiCatalogGrid grid = new UiCatalogGrid(THEME, font, binding.mode(), catalogTexts(type, includeTags), new UiCatalogGrid.Listener() {
             @Override
             public void onSelectionChanged(List<String> selection) {
                 viewState.select(selection);
@@ -281,7 +272,7 @@ public final class RuleEditorPanelFactory {
         modal.confirm(Component.translatable(UI + "button.confirm"), () -> {
             List<String> selection = List.copyOf(viewState.selection());
             if (shell.editable() && selection.stream().noneMatch(id -> unavailableReason.apply(id) != null))
-                onPicked.accept(selection);
+                binding.confirm(selection);
         });
         confirmGate.enabled = null;
         refreshCatalogConfirm(modal, shell.editable(), viewState.selection(), unavailableReason, confirmGate);
@@ -493,12 +484,9 @@ public final class RuleEditorPanelFactory {
      * @param basePath   叶子参数在草稿中的路径（FormView 的 basePath）
      * @param applyChange 提交一次变更（内部应走 EditSession.apply，形成一条撤销记录）
      * @param onChange   变更后刷新视图（表单重载/宿主刷新）
-     * @param pushModal  推入目录弹窗
      */
     static LeafPanel leafPanel(Font font, FormView form, EditSession session, List<EditorField> fields,
-                               String basePath, Consumer<Consumer<RuleDraft>> applyChange, Runnable onChange,
-                               Consumer<UiModal> pushModal, EditorShell shell, RuleEditClientWorkspace workspace, int screenWidth,
-                               int screenHeight) {
+                               String basePath, Consumer<Consumer<RuleDraft>> applyChange, Runnable onChange) {
         List<UiWidget> extras = new ArrayList<>();
         List<UiButton> buttons = new ArrayList<>();
         List<Runnable> reloadValues = new ArrayList<>();
@@ -534,9 +522,6 @@ public final class RuleEditorPanelFactory {
             extras.add(bar);
             reloadValues.add(() -> bar.core().setValue(integerRange(session, min, max, basePath)));
         }
-        form.setSelectionCatalogOpener((field, path, tags, multiple, selected, picked) -> pushModal.accept(fieldCatalogModal(font, shell, workspace,
-                tags ? RuleCatalogType.TAG : FieldCatalogTypes.catalogTypeOf(field), multiple,
-                Component.translatable(field.labelKey()), screenWidth, screenHeight, picked, field, session.root(), path, selected)));
         LeafPanel panel = new LeafPanel(font, form, extras, buttons, reloadValues);
         int extraIndex = 0;
         if (from != null && to != null && from.isIntegerLike() && to.isIntegerLike()

@@ -1,7 +1,9 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogSelectionBinding;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
+import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogDisplayQuery;
@@ -19,7 +21,6 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Consumer;
 import net.minecraft.client.gui.Font;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
@@ -53,18 +54,16 @@ final class SourceBlacklistPicker {
         return List.copyOf(tags);
     }
 
-    static UiModal modal(Font font, EditorShell shell, @Nullable RuleValue rule, int width, int height,
-                         Consumer<List<String>> onPicked) {
+    static UiModal modal(Font font, EditorShell shell, EditSession session, @Nullable RuleValue rule, int width, int height,
+                         CatalogSelectionBinding binding) {
         UiHostTheme THEME = shell.theme();
         CatalogEntryPolicy policy = CatalogEntryPolicy.fixed(RuleCatalogType.ITEM);
         Pages pages = new Pages(sourceTags(rule), policy);
         UiCatalogGrid.Texts texts = RuleEditorPanelFactory.catalogTexts()
                 .withEmpty(Component.translatable(UI + "blacklist.empty"));
         UiModal modal = UiModal.create(THEME, font).title(Component.translatable(UI + "rule.source.exclude"));
-        RuleValue source = rule == null ? null : rule.child(RuleFields.SOURCE);
-        CatalogViewState viewState = new CatalogViewState(source == null ? List.of()
-                : RuleValue.textItems(source.child(RuleFields.SOURCE_EXCLUDE)));
-        UiCatalogGrid grid = new UiCatalogGrid(THEME, font, true, texts, new UiCatalogGrid.Listener() {
+        CatalogViewState viewState = new CatalogViewState(binding.initialSelection());
+        UiCatalogGrid grid = new UiCatalogGrid(THEME, font, binding.mode(), texts, new UiCatalogGrid.Listener() {
                     @Override public void onSearch(String filter) { pages.filter(filter); }
                     @Override public void onPageChange(int delta) { pages.move(delta); }
                     @Override public void onSelectionChanged(List<String> selection) {
@@ -80,14 +79,15 @@ final class SourceBlacklistPicker {
             viewState.entries(page == null ? List.of() : page.items());
             viewState.navigation(UiCatalogGrid.Scope.BOTH, result.index(), result.count(),
                     page == null ? null : page.label());
-            viewState.status(false, shell.editable(), -1, null);
+            viewState.status(false, shell.editable() && shell.editingSession() == session, -1, null);
             return viewState.view();
         }, policy, ignored -> null);
         modal.preferredWidth(RuleEditorPanelFactory.pickerWidth(width));
         modal.inlineFooter();
         modal.contentWidget(grid, RuleEditorPanelFactory.pickerBodyHeight(THEME, height));
         modal.confirm(Component.translatable(UI + "button.confirm"), () -> {
-            if (shell.editable()) onPicked.accept(viewState.selection());
+            if (shell.editable() && shell.editingSession() == session) binding.confirm(viewState.selection());
+            else shell.setNotice(Component.translatable(UI + "pick.target_changed"), EditorShell.NoticeLevel.WARNING);
         });
         modal.cancel(Component.translatable(UI + "button.cancel"));
         modal.layoutCentered(width, height);

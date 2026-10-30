@@ -741,6 +741,7 @@
   "gui.itemdespawntowhat.edit.pick.next": "Next >",
   "gui.itemdespawntowhat.edit.pick.selected": "Selected",
   "gui.itemdespawntowhat.edit.pick.field": "Pick %s",
+  "gui.itemdespawntowhat.edit.pick.target_changed": "The selection target changed. Reopen the catalog.",
   "gui.itemdespawntowhat.edit.pick.frozen": "Session lost, cannot pick",
   "gui.itemdespawntowhat.edit.range.value": "%s to %s",
   "gui.itemdespawntowhat.edit.range.low": "Low",

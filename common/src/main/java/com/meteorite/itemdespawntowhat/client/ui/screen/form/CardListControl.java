@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogSelectionBinding.Mode;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
@@ -22,6 +23,8 @@ import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalogType;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
+import java.util.Objects;
+import java.util.Set;
 import java.util.List;
 
 import net.minecraft.client.gui.Font;
@@ -117,14 +120,18 @@ final class CardListControl extends FormControl {
             insertEntry();
             return;
         }
-        List<String> current = new ArrayList<>();
-        for (Entry entry : entries) {
-            if (entry.reference != null) {
-                current.add(entry.reference);
-            }
-        }
-        // 选择范围是整段列表，目录策略按列表字段自身的路径解析
-        owner.openMultiReferenceChoice(choiceField, owner.childPath(field.name()), current, this::applyReferences);
+        // 选择范围是整段列表，目录策略按列表字段自身的路径解析。
+        owner.openReferenceChoice(this, choiceField, () -> owner.childPath(field.name()), Mode.MULTIPLE,
+                this::selectedReferences, this::applyReferences);
+    }
+
+    private List<String> selectedReferences() {
+        return entries.stream().filter(this::selectable).map(entry -> entry.reference).distinct().toList();
+    }
+
+    private boolean selectable(Entry entry) {
+        TaggedId reference = TaggedId.tryParse(entry.reference);
+        return reference != null && (!reference.tag() || choiceField != null && choiceField.allowsTags());
     }
 
     private void insertEntry() {
@@ -135,31 +142,28 @@ final class CardListControl extends FormControl {
 
     // 目录确认的选择快照即卡片集合：留下的卡片保留原有数值，新勾选的补默认值，取消勾选的移除
     private void applyReferences(List<String> picked) {
+        Set<String> chosen = Set.copyOf(picked);
+        LinkedHashSet<String> remaining = new LinkedHashSet<>(picked);
+        if (remaining.equals(new LinkedHashSet<>(selectedReferences()))) return;
         mutate(() -> {
-            List<Entry> pool = new ArrayList<>(entries);
             List<Entry> next = new ArrayList<>();
-            for (String reference : new LinkedHashSet<>(picked)) {
-                Entry matched = takeReference(pool, reference);
-                next.add(matched != null ? matched : newEntry(reference));
+            for (Entry entry : entries) {
+                // 未知元素与非法引用不属于目录可编辑集合，保留其位置及原始内容。
+                if (!selectable(entry) || chosen.contains(entry.reference)) {
+                    next.add(entry);
+                    remaining.remove(entry.reference);
+                }
             }
+            remaining.forEach(reference -> next.add(newEntry(reference)));
             entries.clear();
             entries.addAll(next);
         });
     }
 
-    private static @Nullable Entry takeReference(List<Entry> pool, String reference) {
-        for (Entry candidate : pool) {
-            if (reference.equals(candidate.reference)) {
-                pool.remove(candidate);
-                return candidate;
-            }
-        }
-        return null;
-    }
-
     private Entry newEntry(@Nullable String reference) {
         Entry entry = createEntry(null);
         entry.reference = reference;
+        entry.referenceEdited = true;
         refreshChoice(entry);
         return entry;
     }
@@ -173,10 +177,16 @@ final class CardListControl extends FormControl {
         if (index < 0) {
             return;
         }
-        owner.openReferenceChoice(choiceField, entryChoicePath(choiceField, index), entry.reference, picked -> mutate(() -> {
-            entry.reference = picked;
-            refreshChoice(entry);
-        }));
+        owner.openReferenceChoice(this, choiceField, () -> entries.contains(entry) ? entryChoicePath(choiceField, entries.indexOf(entry)) : null,
+                Mode.SINGLE, () -> entry.reference != null && selectable(entry) ? List.of(entry.reference) : List.of(), picked -> {
+                    String reference = picked.isEmpty() ? null : picked.getFirst();
+                    if (Objects.equals(entry.reference, reference)) return;
+                    mutate(() -> {
+                        entry.reference = reference;
+                        entry.referenceEdited = true;
+                        refreshChoice(entry);
+                    });
+                });
     }
 
     private void removeEntry(Entry entry) {
@@ -400,17 +410,19 @@ final class CardListControl extends FormControl {
     }
 
     private RuleValue storeEntry(Entry entry) {
-        if (entry.original != null && !entry.original.isMapping()) {
+        if (entry.original != null && !entry.original.isMapping() && !entry.referenceEdited) {
             return entry.original.deepCopy();
         }
         RuleValue.Mapping object = RuleValue.mapping(entry.original);
-        if (choiceField != null && entry.reference != null && !entry.reference.isBlank()) {
-            object.put(choiceField.name(), RuleValue.text(entry.reference));
+        if (choiceField != null && entry.referenceEdited) {
+            if (entry.reference == null) object.remove(choiceField.name());
+            else object.put(choiceField.name(), RuleValue.text(entry.reference));
         }
         for (int i = 0; i < entry.values.size(); i++) {
             RuleValue value = entry.values.get(i).store();
-            if (value != null) {
-                object.put(valueFields.get(i).name(), value.deepCopy());
+            if (entry.original == null || entry.values.get(i).isEdited()) {
+                if (value == null) object.remove(valueFields.get(i).name());
+                else object.put(valueFields.get(i).name(), value.deepCopy());
             }
         }
         return object.build();
@@ -632,6 +644,7 @@ final class CardListControl extends FormControl {
         // 每个数值控件的上方标题行，与 values 同序
         private final List<UiRect> captions = new ArrayList<>();
         private @Nullable String reference;
+        private boolean referenceEdited;
         private @Nullable RuleValue original;
         private @Nullable UiRect card;
     }

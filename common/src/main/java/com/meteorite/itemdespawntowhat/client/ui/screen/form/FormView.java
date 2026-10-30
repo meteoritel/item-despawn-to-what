@@ -2,6 +2,9 @@ package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
+import com.meteorite.itemdespawntowhat.core.api.TaggedId;
+import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogSelectionBinding;
+import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogSelectionBinding.Mode;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
@@ -24,8 +27,10 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.function.Predicate;
 
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
@@ -77,12 +82,11 @@ public final class FormView implements UiWidget, UiLayoutSource {
          * @param field    字段描述符
          * @param path     字段在草稿中的确切路径
          * @param tags     是否只浏览标签
-         * @param multiple 是否按多选打开目录
-         * @param selected 当前字段中的引用，多选时作为已勾选项回填
-         * @param onPicked 确认后的完整选择回调
+         * @param filter   资源条目过滤条件，标签资格继续由字段声明决定
+         * @param binding  接收端声明的模式、初始快照与确认出口
          */
-        void open(EditorField field, String path, boolean tags, boolean multiple, List<String> selected,
-                  Consumer<List<String>> onPicked);
+        void open(EditorField field, String path, boolean tags, @Nullable Predicate<String> filter,
+                  CatalogSelectionBinding binding);
     }
 
     /**
@@ -238,12 +242,6 @@ public final class FormView implements UiWidget, UiLayoutSource {
         return field;
     }
 
-    /**
-     * 按名字取得行；由复合控件转发来的子字段没有对应行时返回 null。
-     */
-    public @Nullable FormField findField(String name) {
-        return fields.get(name);
-    }
 
     /**
      * 描述符字段的有序句柄，用于按字段元数据装配。
@@ -332,79 +330,85 @@ public final class FormView implements UiWidget, UiLayoutSource {
     }
 
     private void pick(FormRow row, boolean tags) {
-        if (!enabled || !row.attached || catalogOpener == null) return;
-        commitPendingInputs();
-        RuleValue existing = session.valueAt(row.path);
-        List<String> selected = existing == null ? List.of()
-                : existing.isList() ? existing.textItems() : existing.isText() ? List.of(existing.asText()) : List.of();
-        catalogOpener.open(row.field, row.path, tags, row.field.isMultiCatalog(), selected, ids -> {
-            if (!enabled || !row.attached || loadedRevision != session.revision()) return;
-            RuleValue value;
-            if (row.field.isMultiCatalog()) {
-                // 文本引用由完整选择替换；未知元素保留，避免目录编辑破坏扩展数据。
-                RuleValue.Sequence array = RuleValue.list();
-                LinkedHashSet<String> remaining = new LinkedHashSet<>(ids);
-                if (existing != null && existing.isList()) for (RuleValue element : existing.items()) {
-                    if (!element.isText() || remaining.remove(element.asText())) array.add(element.deepCopy());
+        openCatalog(row, row.field, () -> row.path, tags, () -> {
+            RuleValue existing = session.valueAt(row.path);
+            Mode mode = row.field.isMultiCatalog() ? Mode.MULTIPLE : Mode.SINGLE;
+            List<String> initial = references(row.field, existing);
+            return new CatalogSelectionBinding(mode, initial, ids -> {
+                // 协调可编辑引用时保留其它原始元素及保留项的顺序。
+                RuleValue value;
+                if (mode == Mode.MULTIPLE) {
+                    RuleValue.Sequence array = RuleValue.list();
+                    var chosen = Set.copyOf(ids);
+                    LinkedHashSet<String> remaining = new LinkedHashSet<>(ids);
+                    if (existing != null && existing.isList()) for (RuleValue element : existing.items()) {
+                        if (!selectable(row.field, element) || chosen.contains(element.asText())) {
+                            array.add(element.deepCopy());
+                            if (element.isText()) remaining.remove(element.asText());
+                        }
+                    }
+                    remaining.forEach(id -> array.add(RuleValue.text(id)));
+                    value = array.build();
+                } else {
+                    value = ids.isEmpty() ? null : RuleValue.text(ids.getFirst());
                 }
-                remaining.forEach(id -> array.add(RuleValue.text(id)));
-                value = array.build();
-            } else {
-                value = ids.isEmpty() ? null : RuleValue.text(ids.getFirst());
-            }
-            writeField(row, value);
-            reload();
-            notifyChanged();
+                writeField(row, value);
+                reload();
+                notifyChanged();
+            });
         });
     }
 
-    /**
-     * 复合控件内的单值目录选择：确认后把选中的引用交给调用方。
-     *
-     * <p>写入仍由控件自己的 {@code store()} 经本表单回写，因此这里只做「打开目录 + 回传选中项」，
-     * 守卫条件与行级目录入口一致：失能、已删除或草稿版本变化都不再回传。</p>
-     *
-     * @param field    目录引用字段描述符
-     * @param path     该引用在草稿中的完整路径
-     * @param current  当前选中的引用，null 表示尚未选择
-     * @param onPicked 确认后的回调，接收选中的引用
-     */
-    void openReferenceChoice(EditorField field, String path, @Nullable String current, Consumer<String> onPicked) {
-        if (!enabled || catalogOpener == null) {
-            return;
-        }
-        commitPendingInputs();
-        List<String> selected = current == null || current.isBlank() ? List.of() : List.of(current);
-        catalogOpener.open(field, path, false, false, selected, ids -> {
-            if (!enabled || loadedRevision != session.revision()) {
-                return;
-            }
-            onPicked.accept(ids.isEmpty() ? null : ids.getFirst());
-        });
+    // 选择集只消费当前字段可编辑的引用，原始值协调时保留其它数据。
+    private static boolean selectable(EditorField field, RuleValue value) {
+        if (!value.isText()) return false;
+        TaggedId reference = TaggedId.tryParse(value.asText());
+        return reference != null && (!reference.tag() || field.allowsTags());
     }
 
-    /**
-     * 复合控件内的多值目录选择：确认后把完整选择交给调用方。
-     *
-     * <p>与行级多选目录一致，目录里回填当前引用作为已勾选项，因此调用方拿到的是「本次要保留的全部引用」，
-     * 而不是增量。守卫条件与 {@link #openReferenceChoice} 相同；空选择不回调，避免误清空整段。</p>
-     *
-     * @param field    目录引用字段描述符
-     * @param path     该引用在草稿中的完整路径
-     * @param selected 当前已选中的引用，作为目录的初始勾选项
-     * @param onPicked 确认后的回调，接收完整选择快照
-     */
-    void openMultiReferenceChoice(EditorField field, String path, List<String> selected, Consumer<List<String>> onPicked) {
-        if (!enabled || catalogOpener == null) {
+    private static List<String> references(EditorField field, @Nullable RuleValue value) {
+        if (value == null) return List.of();
+        if (field.isMultiCatalog() && value.isList()) {
+            return value.items().stream().filter(element -> selectable(field, element)).map(RuleValue::asText).toList();
+        }
+        return selectable(field, value) ? List.of(value.asText()) : List.of();
+    }
+
+    // 复合控件按本次操作声明模式；路径和初始值在待提交输入完成后读取。
+    void openReferenceChoice(FormControl control, EditorField field, Supplier<String> path, Mode mode,
+                             Supplier<List<String>> selected, Consumer<List<String>> onPicked) {
+        FormRow row = rows.stream().filter(candidate -> candidate.control == control).findFirst().orElseThrow();
+        openCatalog(row, field, path, false, () -> new CatalogSelectionBinding(mode, selected.get(), onPicked));
+    }
+
+    // 行级与复合控件共用本次打开的固定修订和所属行，表单刷新无法使旧回调重新生效。
+    private void openCatalog(FormRow row, EditorField field, Supplier<String> targetPath, boolean tags,
+                             Supplier<CatalogSelectionBinding> receiver) {
+        if (!enabled || !row.visible || !row.attached || catalogOpener == null) return;
+        commitPendingInputs();
+        if (!enabled || !row.visible || !row.attached) return;
+        long revision = session.revision();
+        String ownerPath = row.path;
+        String path = targetPath.get();
+        if (path == null) {
+            rejectSelection();
             return;
         }
-        commitPendingInputs();
-        catalogOpener.open(field, path, false, true, List.copyOf(selected), ids -> {
-            if (!enabled || loadedRevision != session.revision()) {
+        CatalogSelectionBinding target = receiver.get();
+        CatalogSelectionBinding guarded = new CatalogSelectionBinding(target.mode(), target.initialSelection(), ids -> {
+            if (!enabled || !row.visible || !row.attached || !ownerPath.equals(row.path) || revision != session.revision()
+                    || !path.equals(targetPath.get())) {
+                rejectSelection();
                 return;
             }
-            onPicked.accept(List.copyOf(ids));
+            if (!ids.equals(target.initialSelection())) target.confirm(ids);
         });
+        catalogOpener.open(field, path, tags, row.catalogFilter, guarded);
+    }
+
+    private void rejectSelection() {
+        if (rejectedNoticeHandler != null) rejectedNoticeHandler.accept(
+                Component.translatable(TypeLabels.UI_PREFIX + "pick.target_changed"));
     }
 
     // 字段在草稿中的路径：原始 JSON 行与说明行指向所在对象本身
@@ -668,6 +672,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
         child.setSelectionCatalogOpener(catalogOpener);
         child.setLabelWidth(labelWidth);
         child.setOnChanged(this::notifyChanged);
+        child.setOnRejectedNotice(rejectedNoticeHandler);
         for (EditorField field : fields) {
             child.addField(field);
         }

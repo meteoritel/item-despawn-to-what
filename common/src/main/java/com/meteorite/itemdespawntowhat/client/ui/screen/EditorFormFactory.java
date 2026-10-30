@@ -1,22 +1,16 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
-import com.meteorite.itemdespawntowhat.client.net.RuleEditClientWorkspace;
 import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
-import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormField;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
-import com.meteorite.itemdespawntowhat.client.ui.shared.FieldCatalogTypes;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModalStack;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
-import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalogType;
 import net.minecraft.client.gui.Font;
-import net.minecraft.network.chat.Component;
 
 /** 编辑器表单的共享装配：目录、条件上下文、数量默认值和几何失效。 */
 final class EditorFormFactory {
     private final EditorShell shell;
     private final Font font;
-    private final RuleEditClientWorkspace workspace;
     private final UiModalStack modals;
     private final EditorConditionForms conditions;
     private final Runnable geometryChanged;
@@ -24,7 +18,6 @@ final class EditorFormFactory {
     EditorFormFactory(EditorShell shell, Font font, EditorConditionForms conditions, Runnable geometryChanged) {
         this.shell = shell;
         this.font = font;
-        this.workspace = shell.workspace();
         this.modals = shell.modals();
         this.conditions = conditions;
         this.geometryChanged = geometryChanged;
@@ -40,19 +33,16 @@ final class EditorFormFactory {
         form.setOnChanged(shell::draftChanged);
         // 输入超过长度上限时立即提示，格式为「字段名：原因」
         form.setOnRejectedNotice(message -> shell.setNotice(message,EditorShell.NoticeLevel.DANGER));
-        form.setSelectionCatalogOpener((field, path, tags, multiple, selected, onPicked) -> {
+        CatalogSelectionOpener catalog = new CatalogSelectionOpener(shell, font, session);
+        form.setSelectionCatalogOpener((field, path, tags, filter, binding) -> {
             if (RuleFields.SOURCE.equals(basePath) && RuleFields.SOURCE_EXCLUDE.equals(field.name())) {
-                if (shell.editable()) modals.push(SourceBlacklistPicker.modal(font, shell, session.root(),
-                        shell.screenWidth(), shell.screenHeight(), onPicked));
+                if (shell.editable() && shell.editingSession() == session) {
+                    modals.push(SourceBlacklistPicker.modal(font, shell, session, session.root(),
+                            shell.screenWidth(), shell.screenHeight(), binding));
+                }
                 return;
             }
-            RuleCatalogType type = tags ? RuleCatalogType.TAG : FieldCatalogTypes.catalogTypeOf(field);
-            if (type == null || !shell.editable()) return;
-            // 目录过滤条件按行配置；复合控件转发的子字段没有独立行，因此不加过滤
-            FormField row = form.findField(field.name());
-            modals.push(RuleEditorPanelFactory.fieldCatalogModal(font, shell, workspace, type, multiple,
-                    Component.translatable(field.labelKey()), shell.screenWidth(), shell.screenHeight(), onPicked,
-                    field, session.root(), path, selected, row == null ? null : row.catalogFilter()));
+            catalog.open(field, path, tags, filter, binding);
         });
         var handles = form.setDescriptor(descriptor);
         form.reload();
