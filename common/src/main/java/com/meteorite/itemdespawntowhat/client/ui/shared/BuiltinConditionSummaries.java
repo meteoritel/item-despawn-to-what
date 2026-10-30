@@ -244,7 +244,7 @@ public final class BuiltinConditionSummaries {
     // counts 的键是 TaggedId.serialized()；归一化失败时退回原文
     private static String canonical(String raw) {
         String value = raw == null ? "" : raw.trim();
-        TaggedId tagged = TaggedId.parse(value).result().orElse(null);
+        TaggedId tagged = TaggedId.tryParse(value.trim());
         return tagged == null ? value : tagged.serialized();
     }
 

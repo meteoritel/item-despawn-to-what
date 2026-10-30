@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.shared;
 
+import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.edit.EditorRegistries;
 import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
@@ -11,7 +12,6 @@ import org.jetbrains.annotations.Nullable;
 
 /** 客户端展示名称：直接读取已加载的注册表与语言，不触发目录请求。 */
 public final class RuleDisplayLabels {
-    private static final String TAG_PREFIX = "#";
     private static final String TAG_LABEL_KEY = TypeLabels.UI_PREFIX + "tag.label";
     private RuleDisplayLabels() {
         throw new UnsupportedOperationException("Utility class");
@@ -20,16 +20,15 @@ public final class RuleDisplayLabels {
     /**
      * 展示完整标签注册名，统一添加一个标签前缀，供目录、已选卡片与摘要共用。
      *
-     * @param id 可带标签前缀的完整注册名
+     * @param reference 已解析的标签引用
      * @return 只含一个前置 {@code #} 的标签显示名
      */
-    public static Component tagLabel(String id) {
-        String name = id.startsWith(TAG_PREFIX) ? id : TAG_PREFIX + id;
-        return Component.translatable(TAG_LABEL_KEY, name);
+    public static Component tagLabel(TaggedId reference) {
+        return Component.translatable(TAG_LABEL_KEY, new TaggedId(reference.id(), true).serialized());
     }
 
-    // 按目录类型查询，避免同名的物品与维度、群系等资源被显示成错误名称。
-    public static @Nullable Component catalogLabel(RuleCatalogType type, ResourceLocation id) {
+    /** 按目录类型查询已选引用的名称，复用目录名称策略与缺键回退。 */
+    public static Component catalogLabel(RuleCatalogType type, ResourceLocation id) {
         return CatalogTypePresentation.of(type).label(id);
     }
 

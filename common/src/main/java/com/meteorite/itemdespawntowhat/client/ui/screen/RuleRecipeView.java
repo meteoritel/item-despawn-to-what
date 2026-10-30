@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
@@ -451,7 +452,8 @@ public final class RuleRecipeView {
             case ENTITY_ENTITY, ENTITY_MOB -> {
                 ObjectPart part = resource(text(effect, "entity"), RuleCatalogType.ENTITY, integer(effect, "count", 1));
                 // 标签引用保留标签图标；具体实体改用动作图标
-                if (!text(effect, "entity").startsWith("#")) part = new ObjectPart(part.name,
+                TaggedId entity = TaggedId.tryParse(text(effect, "entity"));
+                if (entity == null || !entity.tag()) part = new ObjectPart(part.name,
                         RulePreviewIcons.action(effect), integer(effect, "count", 1));
                 yield part;
             }
@@ -462,7 +464,8 @@ public final class RuleRecipeView {
                 if (RuleValue.flag(effect, "use_source_block", false)) {
                     part = new ObjectPart(Component.translatable(UI + "source_block"), firstSourceIcon(rule), integer(effect, "count", 1));
                     String source = firstSource(rule);
-                    if (source.startsWith("#")) part.tag = TagPreviewIcons.sourceBlocks(source);
+                    TaggedId reference = TaggedId.tryParse(source);
+                    if (reference != null && reference.tag()) part.tag = TagPreviewIcons.sourceBlocks(reference);
                 } else {
                     part = resource(text(effect, "block"), RuleCatalogType.BLOCK, integer(effect, "count", 1));
                 }
@@ -499,8 +502,9 @@ public final class RuleRecipeView {
 
     static @Nullable UiIcon firstSourceIcon(RuleValue rule) {
         String raw = firstSource(rule);
-        if (raw.startsWith("#")) return TagPreviewIcons.sourceBlocks(raw).icon();
-        ResourceLocation id = ResourceLocation.tryParse(raw);
+        TaggedId reference = TaggedId.tryParse(raw);
+        if (reference != null && reference.tag()) return TagPreviewIcons.sourceBlocks(reference).icon();
+        ResourceLocation id = reference == null ? null : reference.id();
         var item = id == null ? null : BuiltInRegistries.ITEM.getOptional(id).orElse(null);
         return item instanceof BlockItem blockItem
                 ? PreviewIcons.block(BuiltInRegistries.BLOCK.getKey(blockItem.getBlock()).toString()) : null;
@@ -508,17 +512,18 @@ public final class RuleRecipeView {
 
     // 标签不能伪装成同名普通物品；实体/方块名称只查对应注册表。
     private static ObjectPart resource(String raw, RuleCatalogType type, int quantity) {
-        if (raw.startsWith("#")) {
-            TagPreviewIcons.Tag tag = TagPreviewIcons.resolve(type, raw);
+        TaggedId reference = TaggedId.tryParse(raw);
+        if (reference != null && reference.tag()) {
+            TagPreviewIcons.Tag tag = TagPreviewIcons.resolve(type, reference);
             ObjectPart part = new ObjectPart(tag.label(), tag.icon(), quantity);
             part.tag = tag;
             return part;
         }
-        ResourceLocation id = ResourceLocation.tryParse(raw);
+        ResourceLocation id = reference == null ? null : reference.id();
         Component label = id == null ? null : RuleDisplayLabels.catalogLabel(type, id);
         Component name = id == null ? Component.translatable(UI + "object_missing")
                 : label == null ? Component.literal(raw) : label;
-        return new ObjectPart(name, CatalogPreviewIcons.iconFor(type, raw), quantity);
+        return new ObjectPart(name, CatalogPreviewIcons.iconFor(type, reference), quantity);
     }
 
     // 顶层 effects 对应隐式候选，fill_origin 取后端默认值；outcomes 各自读取候选级开关。

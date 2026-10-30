@@ -20,57 +20,38 @@ import java.util.Map;
 public final class RuleCatalogService {
 
     /**
-     * 未指定时的默认每页条数
-     */
-    public static final int DEFAULT_PAGE_SIZE = 50;
-    /**
-     * 单页条数上限，与请求 payload 的上限一致
+     * 请求入口校验使用的单页条数上限
      */
     public static final int MAX_PAGE_SIZE = 200;
 
     // 每类型缓存：来源修订号 + 该修订号下的全量候选；由本次服务端持有
-    private final Map<RuleCatalogType, Cached> cache = new EnumMap<>(RuleCatalogType.class);
+    private final Map<RuleCatalogType, CatalogSourceSnapshot> cache = new EnumMap<>(RuleCatalogType.class);
 
     // 来源与缓存随同一编辑宿主创建并释放
-    private final List<RuleCatalogSource> sources;
+    private final List<SnapshotCatalogSource> sources;
 
     /** @param server 当前服务端；仅本实例持有由其注册表创建的来源 */
     public RuleCatalogService(MinecraftServer server) {
-        sources = RuleCatalogSources.builtin(server);
+        sources = RuleCatalogSources.builtinSnapshots(server);
     }
 
     /**
      * 取一页目录：filter 为大小写不敏感的子串过滤（id/label/subLabel），空串或 null 表示不过滤
-     * page 从 0 起，越界时夹到最后一页；{@code pageSize <= 0} 用默认值，超过上限时按上限截断。
+     * page 从 0 起，越界时夹到最后一页；调用方已完成 type 非空与 pageSize 为 1..MAX_PAGE_SIZE 的校验。
      */
     public synchronized RuleCatalog page(RuleCatalogType type,
                                                 @Nullable String filter,
                                                 int page,
                                                 int pageSize) {
-        if (type == null) {
-            return RuleCatalog.empty(RuleCatalogType.ITEM, 0);
-        }
-        Cached cached = cached(type);
-        if (cached == null) {
-            return RuleCatalog.empty(type, 0);
-        }
-        int size = pageSize <= 0 ? DEFAULT_PAGE_SIZE : Math.min(pageSize, MAX_PAGE_SIZE);
+        CatalogSourceSnapshot cached = cached(type);
         List<RuleCatalogEntry> matched = applyFilter(cached.entries(), filter);
         int total = matched.size();
-        int lastPageIndex = total == 0 ? 0 : (total - 1) / size;
+        int lastPageIndex = total == 0 ? 0 : (total - 1) / pageSize;
         int safePage = Math.clamp(page, 0, lastPageIndex);
-        int from = safePage * size;
-        int to = Math.min(from + size, total);
+        int from = safePage * pageSize;
+        int to = Math.min(from + pageSize, total);
         List<RuleCatalogEntry> pageEntries = from >= to ? List.of() : List.copyOf(matched.subList(from, to));
         return new RuleCatalog(type, cached.revision(), pageEntries, safePage >= lastPageIndex);
-    }
-
-    /**
-     * 取该类型的来源修订号；无该类型数据源时为 0
-     */
-    public synchronized int revision(RuleCatalogType type) {
-        Cached cached = cached(type);
-        return cached == null ? 0 : cached.revision();
     }
 
     /**
@@ -80,32 +61,21 @@ public final class RuleCatalogService {
         cache.clear();
     }
 
-    // 取（必要时重建）某类型的缓存；服务端实例变化或来源修订号变化即重建
-    private @Nullable Cached cached(RuleCatalogType type) {
-        RuleCatalogSource source = sourceOf(type);
-        if (source == null) {
-            cache.remove(type);
-            return null;
-        }
-        int revision = source.revision();
-        Cached existing = cache.get(type);
-        if (existing != null && existing.revision() == revision) {
-            return existing;
-        }
-        List<RuleCatalogEntry> all = source.all();
-        Cached rebuilt = new Cached(revision, all == null ? List.of() : List.copyOf(all));
-        cache.put(type, rebuilt);
-        return rebuilt;
+    // 每页只读取一次来源，缓存复用同批修订和条目。
+    private CatalogSourceSnapshot cached(RuleCatalogType type) {
+        CatalogSourceSnapshot snapshot = sourceOf(type).snapshot();
+        CatalogSourceSnapshot existing = cache.get(type);
+        if (existing != null && existing.revision() == snapshot.revision()) return existing;
+        cache.put(type, snapshot);
+        return snapshot;
     }
 
-    // 在冻结数据源里找对应类型；缺失或实现体抛错时返回 null 并丢弃该类型缓存
-    private @Nullable RuleCatalogSource sourceOf(RuleCatalogType type) {
-        for (RuleCatalogSource source : sources) {
-            if (source != null && source.type() == type) {
-                return source;
-            }
+    // 内置工厂穷举所有目录；缺失属于装配错误，保留具体类型供诊断。
+    private SnapshotCatalogSource sourceOf(RuleCatalogType type) {
+        for (SnapshotCatalogSource source : sources) {
+            if (source.type() == type) return source;
         }
-        return null;
+        throw new IllegalArgumentException("Missing catalog source: " + type);
     }
 
     // 大小写不敏感的 id/label/subLabel 子串过滤；同时保留过滤前的相对顺序
@@ -131,7 +101,4 @@ public final class RuleCatalogService {
         return value != null && value.toLowerCase(Locale.ROOT).contains(needle);
     }
 
-    // 某类型在某修订号下的全量候选
-    private record Cached(int revision, List<RuleCatalogEntry> entries) {
-    }
 }

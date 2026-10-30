@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.core.catalog;
 
 import net.minecraft.core.Registry;
+import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
@@ -19,17 +20,15 @@ import java.util.Map;
  * 其 {@code subLabel} 记录首次命中的注册表短名（item / block / entity_type / fluid / biome）。</p>
  * <p>原版语言文件不含标签翻译键（en_us 中无 {@code tag.*} 条目），因此 label 使用原文 {@code #命名空间:路径}，
  * 由界面按需自行本地化或直接展示。</p>
- * <p>修订号按「标签 id → 首次命中的注册表短名」映射的内容哈希计算：id 集合未变、但某个标签改由其他注册表提供时，
- * 短名随之变化，修订号同样改变，条目缓存因此按最新副标签重建；映射哈希与遍历顺序无关（按条目哈希求和），
- * 内容未变时修订号保持稳定。条目按 id 字典序排序并缓存。只在服务端主线程调用。</p>
+ * <p>按「标签 id → 首次所属注册表」映射比较内容；相同内容复用快照。
+ * 条目按 id 排序，修订覆盖实际下发字段。只在服务端主线程调用。</p>
  */
-final class TagCatalogSource implements RuleCatalogSource {
+final class TagCatalogSource implements SnapshotCatalogSource {
 
     private final MinecraftServer server;
 
-    // 缓存：修订号与对应条目
-    private int cachedRevision = Integer.MIN_VALUE;
-    private List<RuleCatalogEntry> cachedEntries = List.of();
+    private Map<ResourceLocation, String> cachedTags;
+    private CatalogSourceSnapshot cached;
 
     TagCatalogSource(MinecraftServer server) {
         this.server = server;
@@ -41,30 +40,24 @@ final class TagCatalogSource implements RuleCatalogSource {
     }
 
     @Override
-    public int revision() {
-        return revisionOf(collect());
-    }
+    public int revision() { return snapshot().revision(); }
 
     @Override
-    public List<RuleCatalogEntry> all() {
-        Map<ResourceLocation, String> tags = collect();
-        int revision = revisionOf(tags);
-        synchronized (this) {
-            if (revision != this.cachedRevision) {
-                List<RuleCatalogEntry> built = new ArrayList<>(tags.size());
-                tags.forEach((id, kind) -> built.add(
-                        new RuleCatalogEntry("#" + id, "#" + id, kind, "")));
-                built.sort(Comparator.comparing(RuleCatalogEntry::id));
-                this.cachedEntries = List.copyOf(built);
-                this.cachedRevision = revision;
-            }
-            return this.cachedEntries;
-        }
-    }
+    public List<RuleCatalogEntry> all() { return snapshot().entries(); }
 
-    // 内容哈希：同时覆盖标签 id 与注册表短名；Map.hashCode 按条目求和，与顺序无关，故同一内容始终得到同一修订号
-    static int revisionOf(Map<ResourceLocation, String> tags) {
-        return 31 * tags.size() + tags.hashCode();
+    @Override
+    public CatalogSourceSnapshot snapshot() {
+        Map<ResourceLocation, String> tags = collect();
+        if (tags.equals(cachedTags)) return cached;
+        List<RuleCatalogEntry> built = new ArrayList<>(tags.size());
+        tags.forEach((id, kind) -> {
+            String reference = new TaggedId(id, true).serialized();
+            built.add(new RuleCatalogEntry(reference, reference, kind, ""));
+        });
+        built.sort(Comparator.comparing(RuleCatalogEntry::id));
+        cachedTags = Map.copyOf(tags);
+        cached = CatalogSourceSnapshot.of(built);
+        return cached;
     }
 
     // 汇总各注册表的标签 id：键为标签 id，值为首次命中的注册表短名

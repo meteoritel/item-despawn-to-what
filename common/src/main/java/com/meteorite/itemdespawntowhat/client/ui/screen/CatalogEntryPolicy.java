@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogTypePresentation;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCatalogGrid;
 import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalogType;
@@ -34,11 +35,8 @@ public final class CatalogEntryPolicy implements UiCatalogGrid.EntryPolicy {
 
     // 默认排除：物品是技术性条目清单，流体是空流体与流动变体；两者写在一起便于对照维护
     @Override
-    public boolean hidden(String id) {
-        if (id == null || id.isBlank() || id.startsWith("#")) {
-            return false;
-        }
-        return CatalogTypePresentation.of(type).hidden(id);
+    public boolean hidden(TaggedId reference) {
+        return !reference.tag() && CatalogTypePresentation.of(type).hidden(reference.id());
     }
 
     @Override

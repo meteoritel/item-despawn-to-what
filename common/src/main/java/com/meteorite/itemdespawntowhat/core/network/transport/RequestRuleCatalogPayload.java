@@ -12,9 +12,6 @@ import org.jetbrains.annotations.NotNull;
 public record RequestRuleCatalogPayload(String sessionId, String requestId, String catalogType,
                                         String filter, int page, int pageSize) implements CustomPacketPayload {
 
-    // 单页条目数上限（超出按 INVALID_REQUEST 拒绝）
-    public static final int MAX_PAGE_SIZE = 200;
-
     public static final Type<RequestRuleCatalogPayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(RuleEditLimits.NAMESPACE, "request_rule_catalog")
     );

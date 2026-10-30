@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.net;
 
+import com.meteorite.itemdespawntowhat.Constants;
+import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalog;
 import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalogEntry;
 import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalogType;
@@ -81,6 +83,14 @@ final class CatalogDirectory {
         if (stale(type, requestId)) return;
         Load load = loads.get(type);
         if (catalog == null) { load.request.fail(); load.validating = false; return; }
+        for (RuleCatalogEntry entry : catalog.entries()) {
+            if (TaggedId.tryParse(entry.id()) == null) {
+                Constants.LOG.warn("Invalid catalog reference: {} ({})", entry.id(), type);
+                load.request.fail();
+                load.validating = false;
+                return;
+            }
+        }
         load.request.complete();
         if (load.validating && load.revision == catalog.revision()) { load.validating = false; return; }
         load.validating = false;

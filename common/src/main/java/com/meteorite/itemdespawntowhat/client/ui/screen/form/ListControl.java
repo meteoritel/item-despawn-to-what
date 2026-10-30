@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
@@ -15,7 +16,6 @@ import java.util.List;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 
@@ -31,7 +31,7 @@ final class ListControl extends FormControl {
         super(theme, field);
         UiListEditor.Mode mode = field.isTagList() ? UiListEditor.Mode.TAG
                 : field.isStringList() ? UiListEditor.Mode.TEXT : UiListEditor.Mode.ID;
-        this.editor = new UiListEditor(THEME, font, mode, field.registry());
+        this.editor = new UiListEditor(THEME, font, mode);
         this.editor.setOnChanged(items -> {
             markEdited();
             onChanged.run();
@@ -188,8 +188,7 @@ final class ListControl extends FormControl {
     @SuppressWarnings("BooleanMethodIsAlwaysInverted")
     private boolean validEntry(String value) {
         if (field.isStringList()) return true;
-        String id = value.startsWith("#") ? value.substring(1) : value;
-        return ResourceLocation.tryParse(id) != null;
+        return TaggedId.tryParse(value) != null;
     }
 
 }

@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInteractionSession;
@@ -46,7 +47,7 @@ import org.lwjgl.glfw.GLFW;
  * <p>面板不知道任何目录协议类型：条目、图标与全部本地化文本由宿主提供。搜索与翻页只发出意图回调
  * （宿主据此走既有目录请求链路），快速切换时由宿主丢弃过时响应。</p>
  *
- * <p>条目策略由宿主通过 {@link EntryPolicy} 注入：宿主在分页前按 {@link EntryPolicy#hidden(String)} 排除
+ * <p>条目策略由宿主通过 {@link EntryPolicy} 注入：宿主在分页前按 {@link EntryPolicy#hidden(TaggedId)} 排除
  * 技术性条目与空/流动流体；范围值由宿主视图提供，切换只发出意图回调，
  * 因此页码、总数与可见条目始终一致。宿主每次提供一份 {@link View}，网格从同一快照读取条目和状态。</p>
  */
@@ -92,12 +93,12 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
 
     /**
      * 条目策略：默认不展示哪些条目，以及是否显示范围控件。
-     * <p>宿主在分页前用 {@link #hidden(String)} 过滤条目；范围值由 {@link View} 提供，页面按钮只发出切换意图。</p>
+     * <p>宿主在分页前用 {@link #hidden(TaggedId)} 过滤条目；范围值由 {@link View} 提供，页面按钮只发出切换意图。</p>
      */
     public interface EntryPolicy {
 
         // 该 id 是否属于默认不展示的内容（技术性条目、空与流动流体…）
-        boolean hidden(String id);
+        boolean hidden(TaggedId reference);
 
         // 是否出现范围按钮：只有同时存在主分类与标签的目录页才需要
         default boolean scoped() {
@@ -109,22 +110,20 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
      * 一条目录条目：{@code id} 用于选择集与激活回调，{@code icon} 为空时回落文字槽，
      * {@code subLabel} 只供宿主搜索匹配、页面不渲染。
      */
-    public record Entry(String id, Component label, @Nullable Component subLabel, @Nullable UiIcon icon) {
+    public record Entry(String id, TaggedId reference, Component label, @Nullable Component subLabel, @Nullable UiIcon icon) {
     }
 
-    /** 宿主一次发布的目录视图；列表与状态字段属于同一刷新结果。 */
-    public record View(List<Entry> entries, List<String> selection, @Nullable EntryPolicy policy, Scope scope,
-                       Function<String, @Nullable Component> unavailableReason,
-                       int page, int pageCount, boolean canPrev, boolean canNext,
-                       @Nullable Component pageLabel, @Nullable Component statusNote,
-                       boolean loading, @Nullable Component error, boolean enabled) {
-        public View {
-            entries = entries == null ? List.of() : List.copyOf(entries);
-            selection = selection == null ? List.of() : List.copyOf(selection);
-            scope = scope == null ? Scope.BOTH : scope;
-            unavailableReason = unavailableReason == null ? ignored -> null : unavailableReason;
-        }
-    }
+    /** 内容与选择分别使用稳定列表；选择变化不重建条目。 */
+    public record Content(List<Entry> entries, List<String> selection) { }
+
+    /** 页信息与范围；前后页能力由页号和页数派生。 */
+    public record Navigation(Scope scope, int page, int pageCount, @Nullable Component label) { }
+
+    /** 加载、错误与可编辑状态独立于内容发布。 */
+    public record Status(boolean loading, boolean enabled, @Nullable Component note, @Nullable Component error) { }
+
+    /** 宿主按变化组发布的不可变视图；未变化的组复用实例。 */
+    public record View(Content content, Navigation navigation, Status status) { }
 
     /**
      * 目录页的宿主本地化文本：搜索/空/加载/错误/选择状态、翻页按钮的标记贴图、
@@ -141,9 +140,6 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
                     scopeTag, scopeBoth, scopeItemLabel, scopeTagLabel, scopeBothLabel, clear);
         }
     }
-
-    // 计划规定的分页上限
-    public static final int PAGE_SIZE = 200;
 
     // 工具栏（搜索框 + 显示全部开关）
     private static final int TOOLBAR_HEIGHT = 16;
@@ -321,30 +317,15 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
         });
     }
 
-    // 注入条目策略：null 表示页面不隐藏任何条目，也不出现范围按钮
-    private void setEntryPolicy(@Nullable EntryPolicy next) {
-        this.policy = next;
-        layout(bounds.x(), bounds.y(), bounds.width(), bounds.height());
-    }
-
-    // 注入宿主视图：一次读取取得同一刷新周期内的条目和所有展示状态
-    public void setViewSource(@Nullable Supplier<View> source) {
-        this.viewSource = source;
-        this.sourceCache = null;
+    /** 装配唯一视图入口；固定策略与即时业务原因不参与逐帧发布。 */
+    public void setViewSource(Supplier<View> source, EntryPolicy entryPolicy,
+                              Function<String, @Nullable Component> reason) {
+        viewSource = Objects.requireNonNull(source, "source");
+        policy = Objects.requireNonNull(entryPolicy, "entryPolicy");
+        unavailableReason = Objects.requireNonNull(reason, "reason");
+        sourceCache = null;
         syncView();
-    }
-
-    // 直接设置条目（测试或宿主已就绪的缓存）
-    public UiCatalogGrid setEntries(List<Entry> next) {
-        this.viewSource = null;
-        this.entries.clear();
-        if (next != null) {
-            this.entries.addAll(next);
-        }
-        entriesVersion++;
-        clampCursor();
-        clampScroll();
-        return this;
+        layout(bounds.x(), bounds.y(), bounds.width(), bounds.height());
     }
 
     // 条目列表（当前已同步的视图）
@@ -374,15 +355,6 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
             selection.add(id);
             if (!multiSelect) break;
         }
-    }
-
-    /**
-     * 注入不可新增选择的原因；已有冲突选择仍可取消，原因进入行尾标记与悬停提示。
-     *
-     * @param reason 按条目 ID 查询原因，返回 null 表示可选
-     */
-    private void setUnavailableReason(Function<String, @Nullable Component> reason) {
-        unavailableReason = Objects.requireNonNull(reason, "reason");
     }
 
     public boolean isSelected(String id) {
@@ -636,10 +608,12 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
             return;
         }
         sourceCache = next;
-        if (previous == null || next.entries() != previous.entries()) {
+        Content content = next.content();
+        Content oldContent = previous == null ? null : previous.content();
+        if (oldContent == null || content.entries() != oldContent.entries()) {
             String focusedId = cursor >= 0 && cursor < entries.size() ? entries.get(cursor).id() : null;
             entries.clear();
-            entries.addAll(next.entries());
+            entries.addAll(content.entries());
             entriesVersion++;
             rowLabels.clear();
             rowLabelsLanguage = null;
@@ -649,17 +623,21 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
             clampCursor();
             clampScroll();
         }
-        setSelection(next.selection());
-        setEntryPolicy(next.policy());
-        scope = next.scope();
-        setUnavailableReason(next.unavailableReason());
-        setPage(next.page(), next.pageCount());
-        setPageLimits(next.canPrev(), next.canNext());
-        setPageLabel(next.pageLabel());
-        setStatusNote(next.statusNote());
-        setLoading(next.loading());
-        setError(next.error());
-        setEnabled(next.enabled());
+        if (oldContent == null || content.selection() != oldContent.selection()) setSelection(content.selection());
+        Navigation navigation = next.navigation();
+        if (previous == null || navigation != previous.navigation()) {
+            scope = navigation.scope();
+            setPage(navigation.page(), navigation.pageCount());
+            setPageLimits(navigation.page() > 0, navigation.page() + 1 < navigation.pageCount());
+            setPageLabel(navigation.label());
+        }
+        Status status = next.status();
+        if (previous == null || status != previous.status()) {
+            setStatusNote(status.note());
+            setLoading(status.loading());
+            setError(status.error());
+            setEnabled(status.enabled());
+        }
     }
 
     private int indexOf(String id) {
@@ -887,7 +865,7 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
     // 标签名称由共用方法生成，避免目录行和标签快照各添加一次前缀。
     private static Component rowLabel(Entry entry) {
         Component label = entry.label() == null ? Component.literal(entry.id()) : entry.label();
-        return entry.id().startsWith("#") ? RuleDisplayLabels.tagLabel(entry.id()) : label;
+        return entry.reference().tag() ? RuleDisplayLabels.tagLabel(entry.reference()) : label;
     }
 
     // 图标槽固定 16 像素：比槽更大的贴图按比例缩到槽内，避免压到上下相邻行

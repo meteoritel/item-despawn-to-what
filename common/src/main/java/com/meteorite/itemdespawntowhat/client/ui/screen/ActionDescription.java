@@ -18,6 +18,7 @@ import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalogType;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.network.chat.Component;
+import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import net.minecraft.resources.ResourceLocation;
 
 /** 动作的玩家说明：按已注册字段的语义展示有效值，不枚举原始 JSON 键值。 */
@@ -146,17 +147,19 @@ final class ActionDescription {
     }
 
     private static Component reference(EditorField field, String text) {
-        ResourceLocation id = ResourceLocation.tryParse(text);
+        TaggedId reference = TaggedId.tryParse(text);
         RuleCatalogType catalog = FieldCatalogTypes.catalogTypeOf(field);
-        Component label = id == null || catalog == null ? null : RuleDisplayLabels.catalogLabel(catalog, id);
+        Component label = reference == null || catalog == null ? null : reference.tag()
+                ? RuleDisplayLabels.tagLabel(reference) : RuleDisplayLabels.catalogLabel(catalog, reference.id());
         // 标签和未加载的资源保留注册名，不能把它们误认成同名的物品。
         return label == null ? Component.literal(text) : label;
     }
 
     private static Component itemLabel(EditorField field, String text) {
-        ResourceLocation id = ResourceLocation.tryParse(text);
+        TaggedId reference = TaggedId.tryParse(text);
         RuleCatalogType catalog = FieldCatalogTypes.catalogTypeOf(field);
-        Component label = id == null || catalog == null ? null : RuleDisplayLabels.catalogLabel(catalog, id);
+        Component label = reference == null || catalog == null ? null : reference.tag()
+                ? RuleDisplayLabels.tagLabel(reference) : RuleDisplayLabels.catalogLabel(catalog, reference.id());
         return label == null ? Component.literal(text) : label;
     }
 

@@ -1,9 +1,13 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogDisplayQuery;
+import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogTypePresentation;
+import com.meteorite.itemdespawntowhat.client.ui.shared.PreviewResources;
+import net.minecraft.locale.Language;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCatalogGrid;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
@@ -43,7 +47,8 @@ final class SourceBlacklistPicker {
         LinkedHashSet<String> tags = new LinkedHashSet<>();
         // 仅收集形如 #命名空间:路径 的源标签，非文本元素自然被 textItems() 跳过
         for (String raw : items.textItems()) {
-            if (raw.startsWith("#") && ResourceLocation.tryParse(raw.substring(1)) != null) tags.add(raw);
+            TaggedId reference = TaggedId.tryParse(raw);
+            if (reference != null && reference.tag()) tags.add(raw);
         }
         return List.copyOf(tags);
     }
@@ -57,32 +62,32 @@ final class SourceBlacklistPicker {
                 .withEmpty(Component.translatable(UI + "blacklist.empty"));
         UiModal modal = UiModal.create(THEME, font).title(Component.translatable(UI + "rule.source.exclude"));
         RuleValue source = rule == null ? null : rule.child(RuleFields.SOURCE);
-        List<String> selected = new ArrayList<>(source == null ? List.of()
+        CatalogViewState viewState = new CatalogViewState(source == null ? List.of()
                 : RuleValue.textItems(source.child(RuleFields.SOURCE_EXCLUDE)));
         UiCatalogGrid grid = new UiCatalogGrid(THEME, font, true, texts, new UiCatalogGrid.Listener() {
                     @Override public void onSearch(String filter) { pages.filter(filter); }
-                    @Override public void onPageChange(int delta) { pages.index = Math.clamp(pages.index + delta, 0, Math.max(0, pages.filtered.size() - 1)); }
+                    @Override public void onPageChange(int delta) { pages.move(delta); }
                     @Override public void onSelectionChanged(List<String> selection) {
-                        selected.clear();
-                        selected.addAll(selection);
+                        viewState.select(selection);
                     }
                     @Override public void onConfirm() {
                         if (!modal.buttons().isEmpty()) modal.buttons().getFirst().activate();
                     }
                 });
         grid.setViewSource(() -> {
-            Page page = pages.filtered.isEmpty() ? null : pages.filtered.get(pages.index);
-            return new UiCatalogGrid.View(page == null ? List.of() : page.items(), selected, policy, UiCatalogGrid.Scope.BOTH,
-                    ignored -> null, pages.index, pages.filtered.size(), pages.index > 0,
-                    pages.index + 1 < pages.filtered.size(),
-                    page == null ? null : Component.translatable(UI + "blacklist.page", page.tag(), page.part() + 1, page.parts()),
-                    null, false, null, shell.editable());
-        });
+            CatalogDisplayQuery.Page<Page> result = pages.current();
+            Page page = result.content();
+            viewState.entries(page == null ? List.of() : page.items());
+            viewState.navigation(UiCatalogGrid.Scope.BOTH, result.index(), result.count(),
+                    page == null ? null : page.label());
+            viewState.status(false, shell.editable(), -1, null);
+            return viewState.view();
+        }, policy, ignored -> null);
         modal.preferredWidth(RuleEditorPanelFactory.pickerWidth(width));
         modal.inlineFooter();
         modal.contentWidget(grid, RuleEditorPanelFactory.pickerBodyHeight(THEME, height));
         modal.confirm(Component.translatable(UI + "button.confirm"), () -> {
-            if (shell.editable()) onPicked.accept(List.copyOf(selected));
+            if (shell.editable()) onPicked.accept(viewState.selection());
         });
         modal.cancel(Component.translatable(UI + "button.cancel"));
         modal.layoutCentered(width, height);
@@ -119,80 +124,54 @@ final class SourceBlacklistPicker {
             return members;
         }
 
-        // 按当前搜索词过滤成员：空搜索只做 id 与策略判定，命中搜索时才创建条目读取显示名
-        private List<String> visibleIds(String needle, CatalogEntryPolicy policy) {
-            if (needle.isEmpty() && visibleAll != null) {
-                return visibleAll;
+        private List<String> visibleIds(CatalogEntryPolicy policy) {
+            if (visibleAll == null) {
+                visibleAll = members().keySet().stream().filter(itemId -> !policy.hidden(
+                        new TaggedId(BuiltInRegistries.ITEM.getKey(members().get(itemId)), false))).toList();
             }
-            List<String> visible = new ArrayList<>();
-            for (String itemId : members().keySet()) {
-                if (policy.hidden(itemId)) {
-                    continue;
-                }
-                if (!needle.isEmpty()) {
-                    UiCatalogGrid.Entry entry = entry(itemId);
-                    if (!CatalogDisplayQuery.matches(needle, itemId, entry.label(), entry.subLabel())) {
-                        continue;
-                    }
-                }
-                visible.add(itemId);
-            }
-            List<String> result = List.copyOf(visible);
-            if (needle.isEmpty()) {
-                visibleAll = result;
-            }
-            return result;
+            return visibleAll;
+        }
+
+        private boolean matches(String itemId, CatalogDisplayQuery.Search query) {
+            if (query.needle().isEmpty()) return true;
+            UiCatalogGrid.Entry entry = entry(itemId);
+            return query.matches(itemId, false, entry.label(), entry.subLabel());
+        }
+
+        private void invalidate() {
+            members = null;
+            visibleAll = null;
+            entries.clear();
         }
 
         // 单个条目：名称、图标与预览只在该物品真的出现在某个子页时创建
         private UiCatalogGrid.Entry entry(String itemId) {
             return entries.computeIfAbsent(itemId, key -> {
                 Item item = members().get(key);
-                Component name = item == null ? Component.literal(key) : item.getDescription();
-                return new UiCatalogGrid.Entry(key, name, null, CatalogPreviewIcons.iconFor(RuleCatalogType.ITEM, key));
+                TaggedId reference = new TaggedId(BuiltInRegistries.ITEM.getKey(item), false);
+                Component name = CatalogTypePresentation.ITEM.label(reference.id());
+                return new UiCatalogGrid.Entry(key, reference, name, null, CatalogPreviewIcons.iconFor(RuleCatalogType.ITEM, reference));
             });
         }
     }
 
     /** 大标签分为多个子页，每个子页仍只属于一个源标签；条目列表在子页生命周期内复用同一实例。 */
     private static final class Page {
-        private final Group group;
-        private final List<String> visible;
-        private final int part;
-        private final int parts;
-        private final int from;
-        private final int to;
+        private final CatalogDisplayQuery.Part<Group, String> part;
         private @Nullable List<UiCatalogGrid.Entry> items;
+        private @Nullable Component label;
 
-        private Page(Group group, List<String> visible, int part, int parts, int from, int to) {
-            this.group = group;
-            this.visible = visible;
-            this.part = part;
-            this.parts = parts;
-            this.from = from;
-            this.to = to;
-        }
+        private Page(CatalogDisplayQuery.Part<Group, String> part) { this.part = part; }
 
-        private String tag() {
-            return group.tag();
-        }
-
-        private int part() {
-            return part;
-        }
-
-        private int parts() {
-            return parts;
+        private Component label() {
+            if (label == null) label = Component.translatable(UI + "blacklist.page", part.group().tag(), part.index() + 1, part.count());
+            return label;
         }
 
         // 只展开当前子页的条目；UiCatalogGrid 用实例身份判断内容变化，因此必须返回同一个列表
         private List<UiCatalogGrid.Entry> items() {
             if (items == null) {
-                List<UiCatalogGrid.Entry> built = new ArrayList<>(to - from);
-                for (int index = from; index < to; index++) {
-                    built.add(group.entry(visible.get(index)));
-                }
-                items = List.copyOf(built);
+                items = part.items().stream().map(part.group()::entry).toList();
             }
             return items;
         }
@@ -202,33 +181,46 @@ final class SourceBlacklistPicker {
     private static final class Pages {
         private final List<Group> groups = new ArrayList<>();
         private final CatalogEntryPolicy policy;
-        private List<Page> filtered = List.of();
+        private CatalogDisplayQuery.Pages<Page> filtered;
+        private CatalogDisplayQuery.Page<Page> published;
+        private String query = "";
+        private Object generation;
+        private Object language;
         private int index;
 
         Pages(List<String> tags, CatalogEntryPolicy policy) {
             this.policy = policy;
             for (String tag : tags) {
-                ResourceLocation id = ResourceLocation.tryParse(tag.substring(1));
-                if (id == null) continue;
-                groups.add(new Group(tag, id));
+                TaggedId reference = TaggedId.tryParse(tag);
+                if (reference != null) groups.add(new Group(tag, reference.id()));
             }
             filter("");
         }
 
         void filter(String text) {
-            String needle = CatalogDisplayQuery.normalize(text);
-            List<Page> result = new ArrayList<>();
-            for (Group group : groups) {
-                List<String> visible = group.visibleIds(needle, policy);
-                int parts = CatalogDisplayQuery.range(visible.size(), 0, UiCatalogGrid.PAGE_SIZE).pageCount();
-                for (int part = 0; part < parts; part++) {
-                    CatalogDisplayQuery.PageRange range = CatalogDisplayQuery.range(
-                            visible.size(), part, UiCatalogGrid.PAGE_SIZE);
-                    result.add(new Page(group, visible, part, parts, range.from(), range.to()));
-                }
-            }
-            filtered = List.copyOf(result);
+            query = text;
+            CatalogDisplayQuery.Search search = CatalogDisplayQuery.search(text, false);
+            var result = CatalogDisplayQuery.grouped(groups, group -> group.visibleIds(policy),
+                    (group, id) -> group.matches(id, search));
+            filtered = new CatalogDisplayQuery.Pages<>(result.contents().stream().map(Page::new).toList(), result.total());
+            generation = PreviewResources.generation();
+            language = Language.getInstance();
             index = 0;
+            published = null;
+        }
+
+        private void move(int delta) { index = filtered.page(index + delta).index(); }
+
+        private CatalogDisplayQuery.Page<Page> current() {
+            if (generation != PreviewResources.generation() || language != Language.getInstance()) {
+                groups.forEach(Group::invalidate);
+                int requested = index;
+                filter(query);
+                index = requested;
+            }
+            if (published == null || published.index() != index) published = filtered.page(index);
+            index = published.index();
+            return published;
         }
     }
 }

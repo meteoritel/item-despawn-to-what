@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.edit;
 
+import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -224,16 +225,16 @@ public final class RuleNaming {
         if (raw.isEmpty()) {
             return null;
         }
-        boolean tag = raw.startsWith("#");
-        ResourceLocation id = ResourceLocation.tryParse(tag ? raw.substring(1) : raw);
+        TaggedId parsed = TaggedId.tryParse(raw);
+        ResourceLocation id = parsed == null ? null : parsed.id();
         if (id == null) {
             return Component.literal(raw);
         }
-        Component label = source == null ? null : source.label(id);
+        Component label = source == null || parsed.tag() ? null : source.label(id);
         if (label != null) {
             return label;
         }
-        return Component.literal(tag ? "#" + id : id.toString());
+        return Component.literal(parsed.serialized());
     }
 
     // 安全兜底：id 文本；连 id 都没有时用未完成占位

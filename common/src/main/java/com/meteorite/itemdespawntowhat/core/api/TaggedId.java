@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.core.api;
 
+import org.jetbrains.annotations.Nullable;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import net.minecraft.resources.ResourceLocation;
@@ -13,22 +14,22 @@ public record TaggedId(ResourceLocation id, boolean tag) {
     // 字符串编解码：解析失败时返回可读错误而不是 null
     public static final Codec<TaggedId> CODEC = Codec.STRING.comapFlatMap(TaggedId::parse, TaggedId::serialized);
 
-    // 解析 "minecraft:stone" / "#minecraft:logs" 形式
+    /** Codec 解析保留外围空白归一化与原有诊断。 */
     public static DataResult<TaggedId> parse(String raw) {
-        if (raw == null || raw.isBlank()) {
-            return DataResult.error(() -> "引用不能为空");
-        }
-        String value = raw.trim();
-        boolean isTag = value.startsWith("#");
-        String idPart = isTag ? value.substring(1) : value;
-        ResourceLocation id = ResourceLocation.tryParse(idPart);
-        if (id == null) {
-            return DataResult.error(() -> "非法的引用标识: " + raw);
-        }
-        return DataResult.success(new TaggedId(id, isTag));
+        if (raw == null || raw.isBlank()) return DataResult.error(() -> "引用不能为空");
+        TaggedId value = tryParse(raw.trim());
+        return value == null ? DataResult.error(() -> "非法的引用标识: " + raw) : DataResult.success(value);
     }
 
-    // 序列化回字符串形式
+    /** 轻量解析完整引用；不接受外围空白，供目录与字段校验直接消费。 */
+    public static @Nullable TaggedId tryParse(@Nullable String raw) {
+        if (raw == null || raw.isEmpty()) return null;
+        boolean tag = raw.startsWith("#");
+        ResourceLocation id = ResourceLocation.tryParse(tag ? raw.substring(1) : raw);
+        return id == null ? null : new TaggedId(id, tag);
+    }
+
+    /** 输出规则与目录使用的字符串形状。 */
     public String serialized() {
         return tag ? "#" + id : id.toString();
     }

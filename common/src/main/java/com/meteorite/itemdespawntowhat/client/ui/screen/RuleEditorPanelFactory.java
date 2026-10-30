@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import java.util.Objects;
+import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.client.ui.shared.PreviewResources;
 import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
@@ -22,7 +24,6 @@ import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogTypePresentation;
 import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogDisplayQuery;
 import com.meteorite.itemdespawntowhat.client.ui.shared.FieldCatalogChoices;
 import com.meteorite.itemdespawntowhat.client.ui.shared.FieldCatalogTypes;
-import com.meteorite.itemdespawntowhat.client.ui.shared.FluidPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.shared.TagPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
@@ -57,7 +58,7 @@ import org.jetbrains.annotations.Nullable;
  * <p>本类只做「把 kit 控件与目录链路接到规则草稿上」的装配，不复制数据层逻辑：
  * 写入一律经调用方给定的 {@code applyChange}（内部走 {@link EditSession#apply(String, java.util.function.Consumer)}，
  * 一次完整操作 = 一条撤销记录）。
- * <p>目录条目、图标与文本由宿主解析：{@link #catalogLabel(String)} 判定翻译键，
+ * <p>目录条目、图标与文本由宿主解析：{@link CatalogTypePresentation} 按类型解释名称，
  * 图标分发见 {@link com.meteorite.itemdespawntowhat.client.ui.shared.CatalogPreviewIcons#iconFor(RuleCatalogType, String)}，
  * 其余目录类型回落文字槽。
  */
@@ -160,15 +161,6 @@ public final class RuleEditorPanelFactory {
         return Component.translatable(UI + CatalogTypePresentation.of(type).scopeLabel());
     }
 
-    // 目录标签可能是翻译键或原文：无空格、无冒号且含点号时按翻译键解析
-    public static Component catalogLabel(@Nullable String raw) {
-        if (raw == null || raw.isBlank()) {
-            return Component.empty();
-        }
-        boolean looksLikeKey = raw.indexOf(' ') < 0 && raw.indexOf(':') < 0 && raw.indexOf('.') >= 0;
-        return looksLikeKey ? Component.translatable(raw) : Component.literal(raw);
-    }
-
     // 目录面板弹窗：数据与请求全部走既有工作区链路，翻页/搜索只发意图
     // 字段路径来自实际发起选择的表单行，子表单和条件叶都以同一入口解析互斥范围。
     static UiModal fieldCatalogModal(Font font, EditorShell shell, RuleEditClientWorkspace workspace, RuleCatalogType type,
@@ -207,15 +199,14 @@ public final class RuleEditorPanelFactory {
         mapper.includeTags = includeTags;
         mapper.policy = policy;
         mapper.entryFilter = entryFilter;
-        List<String> selectedState = new ArrayList<>(selected);
+        CatalogViewState viewState = new CatalogViewState(selected);
         UiModal modal = UiModal.create(THEME, font);
         // 确认按钮可用态由目录每帧刷新：值不变时不再重配按钮（重配会复制文本并重建命中目标）
         ConfirmGate confirmGate = new ConfirmGate();
         UiCatalogGrid grid = new UiCatalogGrid(THEME, font, multiSelect, catalogTexts(type, includeTags), new UiCatalogGrid.Listener() {
             @Override
             public void onSelectionChanged(List<String> selection) {
-                selectedState.clear();
-                selectedState.addAll(selection);
+                viewState.select(selection);
                 refreshCatalogConfirm(modal, shell.editable(), selection, unavailableReason, confirmGate);
             }
 
@@ -252,21 +243,20 @@ public final class RuleEditorPanelFactory {
         grid.setViewSource(() -> {
             boolean active = shell.editable();
             List<UiCatalogGrid.Entry> mapped = mapper.map(workspace, type);
-            refreshCatalogConfirm(modal, active, selectedState, unavailableReason, confirmGate);
+            refreshCatalogConfirm(modal, active, viewState.selection(), unavailableReason, confirmGate);
             boolean loading = mapper.cached == null || !mapper.cached.lastPage()
                     || includeTags && (mapper.cachedTags == null || !mapper.cachedTags.lastPage());
             String errorState = workspace.directory(type).failed()
                     || includeTags && workspace.directory(RuleCatalogType.TAG).failed() ? "retry" : active ? "" : "frozen";
-            Component status = Component.translatable(UI + "pick.total", mapper.total);
-            Component error = switch (errorState) {
-                case "retry" -> Component.translatable(UI + "pick.retry_hint");
-                case "frozen" -> Component.translatable(UI + "pick.frozen");
+            viewState.entries(mapped == null ? List.of() : mapped);
+            viewState.navigation(mapper.scope, mapper.page, mapper.pageCount, null);
+            viewState.status(loading, active, mapper.total, switch (errorState) {
+                case "retry" -> "pick.retry_hint";
+                case "frozen" -> "pick.frozen";
                 default -> null;
-            };
-            return new UiCatalogGrid.View(mapped == null ? List.of() : mapped, selectedState, policy, mapper.scope,
-                    unavailableReason, mapper.page, mapper.pageCount, mapper.page > 0, mapper.hasNext,
-                    null, status, loading, error, active);
-        });
+            });
+            return viewState.view();
+        }, policy, unavailableReason);
         grid.setOnRetry(() -> {
             workspace.retryDirectory(type);
             if (includeTags) workspace.retryDirectory(RuleCatalogType.TAG);
@@ -289,12 +279,12 @@ public final class RuleEditorPanelFactory {
         modal.inlineFooter();
         modal.contentWidget(grid, pickerBodyHeight(shell.theme(), screenHeight));
         modal.confirm(Component.translatable(UI + "button.confirm"), () -> {
-            List<String> selection = List.copyOf(selectedState);
+            List<String> selection = List.copyOf(viewState.selection());
             if (shell.editable() && selection.stream().noneMatch(id -> unavailableReason.apply(id) != null))
                 onPicked.accept(selection);
         });
         confirmGate.enabled = null;
-        refreshCatalogConfirm(modal, shell.editable(), selectedState, unavailableReason, confirmGate);
+        refreshCatalogConfirm(modal, shell.editable(), viewState.selection(), unavailableReason, confirmGate);
         modal.cancel(Component.translatable(UI + "button.cancel"));
         modal.layoutCentered(screenWidth, screenHeight);
         return modal;
@@ -354,6 +344,7 @@ public final class RuleEditorPanelFactory {
         private int mappedPage = -1;
         private UiCatalogGrid.Scope mappedScope = UiCatalogGrid.Scope.BOTH;
         private List<UiCatalogGrid.Entry> full = List.of();
+        private CatalogDisplayQuery.Pages<List<UiCatalogGrid.Entry>> queryPages;
         private final Map<String, TagPreviewIcons.Tag> tagPreviews = new HashMap<>();
 
         @Nullable
@@ -381,7 +372,8 @@ public final class RuleEditorPanelFactory {
                 boolean withTags = includeTags && scope != UiCatalogGrid.Scope.ITEM;
                 Set<String> validTags = field != null && type == RuleCatalogType.TAG ? FieldCatalogChoices.tags(field) : null;
                 for (RuleCatalogEntry entry : withItems ? catalog.entries() : List.<RuleCatalogEntry>of()) {
-                    if (policy != null && policy.hidden(entry.id())) continue;
+                    TaggedId reference = Objects.requireNonNull(TaggedId.tryParse(entry.id()));
+                    if (policy != null && policy.hidden(reference)) continue;
                     if (validTags != null && !validTags.contains(entry.id())) continue;
                     if (entryFilter != null && !entryFilter.test(entry.id())) continue;
                     if (type == RuleCatalogType.ENTITY && field != null
@@ -390,40 +382,40 @@ public final class RuleEditorPanelFactory {
                     if (type == RuleCatalogType.TAG) {
                         RuleCatalogType memberType = field == null ? null : FieldCatalogTypes.catalogTypeOf(field);
                         if (memberType == null) continue;
-                        var tag = TagPreviewIcons.resolve(memberType, entry.id());
+                        var tag = TagPreviewIcons.resolve(memberType, reference);
                         tagPreviews.put(entry.id(), tag);
-                        mapped.add(new UiCatalogGrid.Entry(entry.id(), tag.label(), null, tag.icon()));
+                        mapped.add(new UiCatalogGrid.Entry(entry.id(), reference, tag.label(), null, tag.icon()));
                     } else {
                         String sub = entry.subLabel();
-                        ResourceLocation id = ResourceLocation.tryParse(entry.id());
-                        Component fluidLabel = type == RuleCatalogType.FLUID && id != null ? FluidPreviewIcons.label(id) : null;
-                        mapped.add(new UiCatalogGrid.Entry(entry.id(), fluidLabel == null ? catalogLabel(entry.label()) : fluidLabel,
-                                sub == null || sub.isBlank() ? null : catalogLabel(sub), CatalogPreviewIcons.iconFor(type, entry.id())));
+                        mapped.add(new UiCatalogGrid.Entry(entry.id(), reference, CatalogTypePresentation.of(type).label(reference, entry.label()),
+                                sub == null || sub.isBlank() ? null : Component.literal(sub), CatalogPreviewIcons.iconFor(type, reference)));
                     }
                 }
                 if (withTags && tags != null && field != null) {
                     Set<String> allowed = FieldCatalogChoices.tags(field);
                     for (RuleCatalogEntry entry : tags.entries()) {
                         if (!allowed.contains(entry.id())) continue;
-                        var tag = TagPreviewIcons.resolve(type, entry.id());
+                        TaggedId reference = Objects.requireNonNull(TaggedId.tryParse(entry.id()));
+                        var tag = TagPreviewIcons.resolve(type, reference);
                         tagPreviews.put(entry.id(), tag);
-                        mapped.add(new UiCatalogGrid.Entry(entry.id(), tag.label(), null, tag.icon()));
+                        mapped.add(new UiCatalogGrid.Entry(entry.id(), reference, tag.label(), null, tag.icon()));
                     }
                 }
                 full = List.copyOf(mapped);
+                queryPages = null;
             }
             if (mappedPage != page || !mappedFilter.equals(filter)) {
-                String query = CatalogDisplayQuery.normalize(filter);
-                boolean tagsOnly = includeTags && query.startsWith("#");
-                String needle = tagsOnly ? query.substring(1) : query;
-                List<UiCatalogGrid.Entry> filtered = full.stream().filter(entry -> !tagsOnly || entry.id().startsWith("#"))
-                        .filter(entry -> CatalogDisplayQuery.matches(needle, entry.id(), entry.label(), entry.subLabel())).toList();
-                total = filtered.size();
-                CatalogDisplayQuery.PageRange range = CatalogDisplayQuery.range(total, page, UiCatalogGrid.PAGE_SIZE);
-                pageCount = range.pageCount();
-                page = range.from() / UiCatalogGrid.PAGE_SIZE;
-                entries = List.copyOf(filtered.subList(range.from(), range.to()));
-                hasNext = page + 1 < pageCount;
+                if (queryPages == null || !mappedFilter.equals(filter)) {
+                    CatalogDisplayQuery.Search query = CatalogDisplayQuery.search(filter, includeTags);
+                    queryPages = CatalogDisplayQuery.flat(full,
+                            entry -> query.matches(entry.id(), entry.reference().tag(), entry.label(), entry.subLabel()));
+                }
+                CatalogDisplayQuery.Page<List<UiCatalogGrid.Entry>> result = queryPages.page(page);
+                total = result.total();
+                pageCount = result.count();
+                page = result.index();
+                entries = result.content();
+                hasNext = result.hasNext();
                 mappedPage = page; mappedFilter = filter;
             }
             return entries;

@@ -221,7 +221,7 @@ public final class RuleEditService {
     }
 
     /**
-     * C2S 目录请求：按来源分层缓存分页下发；来源实现为空时返回空目录 + lastPage=true
+     * C2S 目录请求：校验会话、目录类型与分页合法域后，读取内置来源并分页下发。
      */
     public Outbound requestCatalog(ServerPlayer player, RuleEditRequest.Catalog payload, long tick) {
         EditAdmission.Refusal refusal = admission.admitConfirmed(player, payload.sessionId());
@@ -229,12 +229,9 @@ public final class RuleEditService {
             // 会话状态优先于请求参数：未确认的 OPENING 会话不接受目录请求
             return Outbound.of(new RuleEditReply.QueryResult(RuleEditRequest.Kind.CATALOG, payload.sessionId(), payload.requestId(), refusal.status()));
         }
-        if (payload.page() < 0 || payload.pageSize() <= 0
-                || payload.pageSize() > RuleCatalogService.MAX_PAGE_SIZE) {
-            return Outbound.of(new RuleEditReply.QueryResult(RuleEditRequest.Kind.CATALOG, payload.sessionId(), payload.requestId(), RuleSaveStatus.INVALID_REQUEST));
-        }
         RuleCatalogType type = RuleCatalogType.fromId(payload.catalogType());
-        if (type == null) {
+        if (type == null || payload.page() < 0 || payload.pageSize() <= 0
+                || payload.pageSize() > RuleCatalogService.MAX_PAGE_SIZE) {
             return Outbound.of(new RuleEditReply.QueryResult(RuleEditRequest.Kind.CATALOG, payload.sessionId(), payload.requestId(), RuleSaveStatus.INVALID_REQUEST));
         }
         sessions.heartbeat(payload.sessionId(), tick);

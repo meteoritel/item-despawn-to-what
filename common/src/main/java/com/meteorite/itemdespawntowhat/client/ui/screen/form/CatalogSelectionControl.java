@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import java.util.Objects;
+import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
@@ -63,13 +65,13 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
     /**
      * 完整保留既有元素，格式错误的条目不会因其它编辑而丢失。
      */
-    private record Selection(RuleValue value, String id, Component name, @Nullable UiIcon icon) {
+    private record Selection(RuleValue value, String id, @Nullable TaggedId reference, Component name, @Nullable UiIcon icon) {
     }
 
     CatalogSelectionControl(UiHostTheme theme, Font font, EditorField field, Runnable onChanged) {
         super(theme, field);
         this.font = font;
-        this.catalogType = java.util.Objects.requireNonNull(FieldCatalogTypes.catalogTypeOf(field),
+        this.catalogType = Objects.requireNonNull(FieldCatalogTypes.catalogTypeOf(field),
                 "Catalog selection requires a declared registry");
         this.onChanged = onChanged;
         scroll.setStep(CHIP_HEIGHT + GAP);
@@ -166,12 +168,13 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
         String id = raw.isText() ? raw.asText() : "";
         Component name = Component.translatable(UI + "selection.unknown");
         UiIcon icon;
-        if (id.startsWith("#")) {
-            var tag = TagPreviewIcons.resolve(type, id);
+        TaggedId reference = TaggedId.tryParse(id);
+        if (reference != null && reference.tag()) {
+            var tag = TagPreviewIcons.resolve(type, reference);
             name = tag.label();
             icon = tag.icon();
         } else {
-            ResourceLocation key = ResourceLocation.tryParse(id);
+            ResourceLocation key = reference == null ? null : reference.id();
             Component label = key == null ? null : RuleDisplayLabels.catalogLabel(type, key);
             if (label != null) {
                 name = label;
@@ -179,9 +182,9 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
                 // 查不到语言键的维度、群系按路径给出人话名，完整注册名仍由悬停提示给出
                 name = key == null ? Component.literal(id) : RuleDisplayLabels.idFallback(key);
             }
-            icon = CatalogPreviewIcons.iconFor(type, id);
+            icon = CatalogPreviewIcons.iconFor(type, reference);
         }
-        return new Selection(raw.deepCopy(), id, name, icon);
+        return new Selection(raw.deepCopy(), id, reference, name, icon);
     }
 
     private RuleCatalogType catalogType() {
@@ -203,12 +206,8 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
     List<FormIssue> issues(String path) {
         if (field.required() && values.isEmpty()) return List.of(FormIssue.required(path, label()));
         for (Selection value : values) {
-            boolean allowsTags = field.allowsTags();
-            if (!allowsTags && value.id().startsWith("#")) {
-                return List.of(FormIssue.error(path, label(), Component.translatable(ISSUE_PREFIX + "invalid_id")));
-            }
-            String id = value.id().startsWith("#") ? value.id().substring(1) : value.id();
-            if (ResourceLocation.tryParse(id) == null)
+            TaggedId reference = value.reference();
+            if (reference == null || reference.tag() && !field.allowsTags())
                 return List.of(FormIssue.error(path, label(), Component.translatable(ISSUE_PREFIX + "invalid_id")));
         }
         return List.of();

@@ -25,14 +25,13 @@ import java.util.Set;
  * <p>条目字段约定（配合冻结 DTO，客户端选择器按此渲染）：</p>
  * <ul>
  *   <li>label：物品/方块/实体/状态效果使用 {@code getDescriptionId()}，群系使用 {@code biome.命名空间.路径}，
- *       战利品表、维度、标签使用原文 id；</li>
+ *       战利品表、维度、标签使用原文 id；流体提供放置态方块翻译 key 或原文 id，客户端按流体策略取名；</li>
  *   <li>subLabel：注册表 id 的命名空间，标签条目为标签所属注册表短名（item / block / entity_type / fluid / biome）；</li>
  *   <li>icon：物品与方块为条目 id 字符串（客户端据此取物品/方块模型），其余类型为空串；
  *       客户端解析失败必须走缺省渲染，不得抛异常。</li>
  * </ul>
  * <p>列表按 id 字典序稳定排序；结果缓存在数据源实例内，而实例由服务端编辑宿主复用，因此重复请求不会重建全部字符串。
- * {@code revision()} 每次现场按可展示内容的内容哈希计算、不缓存：注册表类数据源哈希 id 集合，标签数据源哈希
- * 「标签 id → 注册表短名」映射；内容未变时稳定，reload 后内容变化即改变。</p>
+ * 内部快照一次采集修订与条目；来源内容以 id 集合或标签归属映射比较，修订覆盖实际下发字段。</p>
  * <p>全部方法只在服务端主线程调用。</p>
  */
 public final class RuleCatalogSources {
@@ -49,12 +48,12 @@ public final class RuleCatalogSources {
         if (server == null) {
             return List.of();
         }
-        return create(server);
+        return List.copyOf(builtinSnapshots(server));
     }
 
     // 按 RuleCatalogType 的声明顺序建立九类数据源
-    private static List<RuleCatalogSource> create(MinecraftServer server) {
-        List<RuleCatalogSource> sources = new ArrayList<>(RuleCatalogType.values().length);
+    static List<SnapshotCatalogSource> builtinSnapshots(MinecraftServer server) {
+        List<SnapshotCatalogSource> sources = new ArrayList<>(RuleCatalogType.values().length);
         sources.add(items(server));
         sources.add(blocks(server));
         sources.add(entities(server));
@@ -68,7 +67,7 @@ public final class RuleCatalogSources {
     }
 
     // 物品：静态注册表；图标用物品 id，客户端据此取物品模型
-    private static RuleCatalogSource items(MinecraftServer server) {
+    private static SnapshotCatalogSource items(MinecraftServer server) {
         return new RegistryCatalogSource(server, RuleCatalogType.ITEM,
                 s -> BuiltInRegistries.ITEM.keySet(),
                 id -> {
@@ -78,7 +77,7 @@ public final class RuleCatalogSources {
     }
 
     // 方块：静态注册表；图标用方块 id，客户端据此取方块物品或方块模型
-    private static RuleCatalogSource blocks(MinecraftServer server) {
+    private static SnapshotCatalogSource blocks(MinecraftServer server) {
         return new RegistryCatalogSource(server, RuleCatalogType.BLOCK,
                 s -> BuiltInRegistries.BLOCK.keySet(),
                 id -> {
@@ -88,7 +87,7 @@ public final class RuleCatalogSources {
     }
 
     // 实体：静态注册表；实体没有统一图标，icon 留空由客户端走缺省渲染
-    private static RuleCatalogSource entities(MinecraftServer server) {
+    private static SnapshotCatalogSource entities(MinecraftServer server) {
         return new RegistryCatalogSource(server, RuleCatalogType.ENTITY,
                 s -> BuiltInRegistries.ENTITY_TYPE.keySet(),
                 id -> {
@@ -98,7 +97,7 @@ public final class RuleCatalogSources {
     }
 
     // 战利品表：数据包内容，必须走可重载查找（静态注册表取不到）
-    private static RuleCatalogSource lootTables(MinecraftServer server) {
+    private static SnapshotCatalogSource lootTables(MinecraftServer server) {
         return new RegistryCatalogSource(server, RuleCatalogType.LOOT_TABLE,
                 RuleCatalogSources::lootTableIds,
                 id -> registered(id, id.toString(), ""));
@@ -110,7 +109,7 @@ public final class RuleCatalogSources {
     }
 
     // 群系：动态注册表；原版语言文件带 biome.命名空间.路径 键
-    private static RuleCatalogSource biomes(MinecraftServer server) {
+    private static SnapshotCatalogSource biomes(MinecraftServer server) {
         return new RegistryCatalogSource(server, RuleCatalogType.BIOME,
                 RuleCatalogSources::biomeIds,
                 id -> registered(id, "biome." + id.getNamespace() + "." + id.getPath(), ""));
@@ -121,7 +120,7 @@ public final class RuleCatalogSources {
     }
 
     // 维度：取服务端已加载的维度键，与维度条件的校验口径一致
-    private static RuleCatalogSource dimensions(MinecraftServer server) {
+    private static SnapshotCatalogSource dimensions(MinecraftServer server) {
         return new RegistryCatalogSource(server, RuleCatalogType.DIMENSION,
                 RuleCatalogSources::dimensionIds,
                 id -> registered(id, id.toString(), ""));
@@ -134,7 +133,7 @@ public final class RuleCatalogSources {
     }
 
     // 流体：原版没有流体翻译键，改用流体默认状态的方块名称（水、岩浆），取不到方块时回退原文 id
-    private static RuleCatalogSource fluids(MinecraftServer server) {
+    private static SnapshotCatalogSource fluids(MinecraftServer server) {
         return new RegistryCatalogSource(server, RuleCatalogType.FLUID,
                 s -> BuiltInRegistries.FLUID.keySet(),
                 id -> {
@@ -145,7 +144,7 @@ public final class RuleCatalogSources {
     }
 
     // 状态效果：静态注册表；原版语言文件带 effect.命名空间.路径 键（MobEffect.getDescriptionId 生成）
-    private static RuleCatalogSource mobEffects(MinecraftServer server) {
+    private static SnapshotCatalogSource mobEffects(MinecraftServer server) {
         return new RegistryCatalogSource(server, RuleCatalogType.MOB_EFFECT,
                 s -> BuiltInRegistries.MOB_EFFECT.keySet(),
                 id -> {
@@ -159,5 +158,4 @@ public final class RuleCatalogSources {
         return new RuleCatalogEntry(id.toString(), label, id.getNamespace(), icon);
     }
 
-    // 源列表与其所属服务端：同一服务端复用实例，从而复用 all() 的条目缓存
 }

@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputTarget;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.FieldNumbers;
@@ -24,7 +24,6 @@ import java.util.function.Predicate;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -282,32 +281,8 @@ abstract class FormControl implements UiInputTarget {
         }
     }
 
-    public boolean mousePressed(UiInputContext context) {
-        return false;
-    }
-
-    public boolean mouseReleased(UiInputContext context) {
-        return false;
-    }
-
-    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
-        return false;
-    }
-
-    public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
-        return false;
-    }
-
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        return false;
-    }
-
     // 按键抬起：方向键重复在抬起时合并为一次提交
     public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
-        return false;
-    }
-
-    public boolean charTyped(char codePoint, int modifiers) {
         return false;
     }
 
@@ -410,8 +385,8 @@ abstract class FormControl implements UiInputTarget {
     }
 
     static @Nullable RuleValue referenceValue(String text, boolean allowTag) {
-        String id = allowTag && text.startsWith("#") ? text.substring(1) : text;
-        return ResourceLocation.tryParse(id) == null ? null : RuleValue.text(text);
+        TaggedId reference = TaggedId.tryParse(text);
+        return reference == null || reference.tag() && !allowTag ? null : RuleValue.text(text);
     }
 
     static RuleValue literalValue(String text) {

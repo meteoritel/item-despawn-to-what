@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
@@ -21,7 +22,6 @@ public final class RulePreviewIcons {
     // 未填 age 时按成年实体预览；图标构造统一使用这一默认值
     private static final int DEFAULT_AGE = 0;
     // 标签引用前缀；具体展开交给 TagPreviewIcons
-    private static final String TAG_PREFIX = "#";
     // 内置效果类型：预览只区分这几种，命名空间与类型标签保持同一来源
     private static final String OWN_EFFECT_PREFIX = TypeLabels.OWN_NAMESPACE + ":";
     private static final String SPAWN_ENTITY_TYPE = OWN_EFFECT_PREFIX + "spawn_entity";
@@ -82,9 +82,10 @@ public final class RulePreviewIcons {
                 case "item" -> CatalogPreviewIcons.iconFor(RuleCatalogType.ITEM, text(action, FIELD_ITEM));
                 case "entity", "mob" -> {
                     String entity = text(action, FIELD_ENTITY);
-                    yield entity.startsWith(TAG_PREFIX)
-                            ? TagPreviewIcons.resolve(RuleCatalogType.ENTITY, entity).icon()
-                            : PreviewIcons.entity(entity, age(action));
+                    TaggedId reference = TaggedId.tryParse(entity);
+                    yield reference == null ? null : reference.tag()
+                            ? TagPreviewIcons.resolve(RuleCatalogType.ENTITY, reference).icon()
+                            : PreviewIcons.entity(reference.id().toString(), age(action));
                 }
                 case "experience" -> PreviewIcons.entity(EXPERIENCE_ORB, DEFAULT_AGE);
                 default -> null;

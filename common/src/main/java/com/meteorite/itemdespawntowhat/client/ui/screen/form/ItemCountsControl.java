@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
@@ -223,8 +224,9 @@ final class ItemCountsControl extends FormControl {
         for (String reference : unique) {
             Entry entry = entries.get(reference);
             if (entry == null) {
-                entry = new Entry(reference, createControl(), displayName(reference),
-                        CatalogPreviewIcons.iconFor(catalogType, reference));
+                TaggedId parsed = TaggedId.tryParse(reference);
+                entry = new Entry(reference, createControl(), displayName(reference, parsed),
+                        CatalogPreviewIcons.iconFor(catalogType, parsed));
                 entry.control.load(values.childOr(reference, RuleValue.integer(defaultCount)));
             }
             next.put(reference, entry);
@@ -248,11 +250,9 @@ final class ItemCountsControl extends FormControl {
     }
 
     // 名称按字段声明的注册表取本地化名称；标签与未知引用保留原始注册名，悬停提示可读完整内容
-    private Component displayName(String reference) {
-        if (reference.startsWith("#")) {
-            return RuleDisplayLabels.tagLabel(reference);
-        }
-        ResourceLocation id = ResourceLocation.tryParse(reference);
+    private Component displayName(String reference, @Nullable TaggedId parsed) {
+        if (parsed != null && parsed.tag()) return RuleDisplayLabels.tagLabel(parsed);
+        ResourceLocation id = parsed == null ? null : parsed.id();
         Component label = id == null || catalogType == null ? null
                 : RuleDisplayLabels.catalogLabel(catalogType, id);
         return label == null ? Component.literal(reference) : label;

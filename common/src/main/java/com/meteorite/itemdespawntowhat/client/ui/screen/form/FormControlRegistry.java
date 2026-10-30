@@ -1,5 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
+import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
+import net.minecraft.network.chat.Component;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
@@ -117,16 +120,16 @@ final class FormControlRegistry {
         }
 
         @Override void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
-            String text = net.minecraft.network.chat.Component.translatable(TypeLabels.UI_PREFIX + "catalog.unavailable").getString();
-            String visible = com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll.trimToWidth(font, text, Math.max(0, width - 4));
+            String text = Component.translatable(TypeLabels.UI_PREFIX + "catalog.unavailable").getString();
+            String visible = TextScroll.trimToWidth(font, text, Math.max(0, width - 4));
             graphics.drawString(font, visible, x + 2, y + 2, THEME.palette().textSecondary(), false);
         }
 
-        @Override void load(@Nullable com.meteorite.itemdespawntowhat.client.edit.RuleValue value) {
+        @Override void load(@Nullable RuleValue value) {
             rememberLoaded(value);
         }
 
-        @Override @Nullable com.meteorite.itemdespawntowhat.client.edit.RuleValue store() {
+        @Override @Nullable RuleValue store() {
             return originalValue();
         }
     }

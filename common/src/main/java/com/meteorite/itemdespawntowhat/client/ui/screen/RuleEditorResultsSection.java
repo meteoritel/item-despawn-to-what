@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.ui.shared.RuleDisplayLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollView;
@@ -886,7 +887,8 @@ final class RuleEditorResultsSection {
 
     // 目录条目按档位过滤：技术性/不可召唤类型两档都不出现；标签条目无法判定成员，两个实体档都保留
     private boolean catalogEntryAllowed(String id) {
-        if (id.isEmpty() || id.startsWith("#")) return true;
+        TaggedId reference = TaggedId.tryParse(id);
+        if (reference == null || reference.tag()) return true;
         if (EntityTraits.isExcluded(id)) return false;
         boolean wantsMob = productStop == EntityProductStop.MOB;
         return wantsMob == EntityTraits.isMob(id);
@@ -896,7 +898,10 @@ final class RuleEditorResultsSection {
     private boolean selectedEntityHasAge(String actionPath) {
         if (productStop != EntityProductStop.MOB) return false;
         List<String> ids = entitySelection(actionPath);
-        return ids.isEmpty() || ids.stream().anyMatch(id -> id.startsWith("#") || EntityTraits.isAgeable(id));
+        return ids.isEmpty() || ids.stream().anyMatch(id -> {
+            TaggedId reference = TaggedId.tryParse(id);
+            return reference != null && (reference.tag() || EntityTraits.isAgeable(reference.id().toString()));
+        });
     }
 
     // 草稿里的实体引用：字段可能是单个引用或引用列表

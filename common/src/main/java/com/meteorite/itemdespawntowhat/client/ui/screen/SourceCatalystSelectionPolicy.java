@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
@@ -92,10 +93,10 @@ final class SourceCatalystSelectionPolicy implements Function<String, @Nullable 
 
     private Set<String> members(String reference) {
         return members.computeIfAbsent(reference, raw -> {
-            boolean tag = raw.startsWith("#");
-            ResourceLocation id = ResourceLocation.tryParse(tag ? raw.substring(1) : raw);
-            if (id == null) return Set.of();
-            if (!tag) return Set.of(id.toString());
+            TaggedId parsed = TaggedId.tryParse(raw);
+            if (parsed == null) return Set.of();
+            ResourceLocation id = parsed.id();
+            if (!parsed.tag()) return Set.of(id.toString());
             return BuiltInRegistries.ITEM.getTag(TagKey.create(Registries.ITEM, id))
                     .map(holders -> {
                         Set<String> ids = new HashSet<>();

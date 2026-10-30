@@ -149,7 +149,8 @@ final class EditorQuantityBindings {
         List<TaggedId> items = new ArrayList<>();
         for (String reference : RuleValue.textItems(session.valueAt(
                 DraftPaths.child(conditionPath, RuleFields.CATALYST_ITEMS)))) {
-            TaggedId.parse(reference).result().ifPresent(items::add);
+            TaggedId item = TaggedId.tryParse(reference.trim());
+            if (item != null) items.add(item);
         }
         return items;
     }

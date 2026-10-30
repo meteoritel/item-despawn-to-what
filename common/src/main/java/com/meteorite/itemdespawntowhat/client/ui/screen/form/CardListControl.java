@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
@@ -241,10 +242,11 @@ final class CardListControl extends FormControl {
         RuleCatalogType type = FieldCatalogTypes.catalogTypeOf(choiceField);
         Component name = null;
         UiIcon icon = null;
-        if (!reference.startsWith("#")) {
-            ResourceLocation key = ResourceLocation.tryParse(reference);
+        TaggedId parsed = TaggedId.tryParse(reference);
+        if (parsed != null && !parsed.tag()) {
+            ResourceLocation key = parsed.id();
             name = key == null ? null : RuleDisplayLabels.catalogLabel(type, key);
-            icon = CatalogPreviewIcons.iconFor(type, reference);
+            icon = CatalogPreviewIcons.iconFor(type, parsed);
         }
         entry.choice.setLabel(name != null ? name : Component.literal(reference));
         entry.choice.setIcon(icon);

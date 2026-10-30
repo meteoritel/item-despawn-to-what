@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.shared;
 
+import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiCarousel;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
@@ -23,10 +24,12 @@ public final class TagPreviewIcons {
     private TagPreviewIcons() { }
 
     /** 可展开的标签快照，不将单个示例物品解释为唯一匹配对象。 */
-    public record Tag(RuleCatalogType type, String id, List<Member> members, UiCarousel carousel) {
-        public Component label() { return RuleDisplayLabels.tagLabel(id); }
+    public record Tag(RuleCatalogType type, TaggedId reference, List<Member> members, UiCarousel carousel) {
+        public Component label() { return RuleDisplayLabels.tagLabel(reference); }
         public Component tooltip() {
-            var tip = Component.translatable(UI + "supports." + CatalogTypePresentation.of(type).tagDescription(), id);
+            var tip = CatalogTypePresentation.of(type).tags()
+                    .map(support -> Component.translatable(UI + "supports." + support.description(), reference.serialized()))
+                    .orElseGet(() -> label().copy());
             return tip.append("\n").append(Component.translatable(UI + "expand", members.size()));
         }
         public UiIcon icon() {
@@ -39,11 +42,10 @@ public final class TagPreviewIcons {
     /** 保留成员的实际名称与模型，供轮播和展开列表共用。 */
     public record Member(Component name, UiIcon icon) { }
 
-    public static Tag resolve(RuleCatalogType type, String raw) {
-        ResourceLocation id = ResourceLocation.tryParse(raw.startsWith("#") ? raw.substring(1) : raw);
-        List<Member> members = id == null ? List.of() : CatalogTypePresentation.of(type).tagMembers(id);
-        members = members.stream().filter(member -> member.icon() != null).toList();
-        return snapshot(type, raw, members);
+    /** 展开已解析标签，名称与成员共用同一引用。 */
+    public static Tag resolve(RuleCatalogType type, TaggedId reference) {
+        List<Member> members = CatalogTypePresentation.of(type).tags().map(support -> support.members(reference.id())).orElseGet(List::of);
+        return snapshot(type, reference, members);
     }
 
     // 方块物品按方块模型渲染：物品渲染在 GUI 中叠加方向光，交叉平面的两面会被点亮成不同亮度，
@@ -55,19 +57,18 @@ public final class TagPreviewIcons {
         return PreviewIcons.item(new ItemStack(item));
     }
 
-    // 使用源物品对应方块时，将物品标签映射成真正的方块模型，而不是名称牌或空气物品。
-    public static Tag sourceBlocks(String raw) {
-        ResourceLocation id = ResourceLocation.tryParse(raw.startsWith("#") ? raw.substring(1) : raw);
-        List<Member> members = id == null ? List.of() : BuiltInRegistries.ITEM.getTag(TagKey.create(Registries.ITEM, id))
+    /** 将源物品标签中的方块成员映射成方块预览。 */
+    public static Tag sourceBlocks(TaggedId reference) {
+        List<Member> members = BuiltInRegistries.ITEM.getTag(TagKey.create(Registries.ITEM, reference.id()))
                 .map(set -> set.stream().map(Holder::value).filter(item -> item instanceof BlockItem)
                         .map(item -> ((BlockItem) item).getBlock())
                         .map(block -> new Member(block.getName(), PreviewIcons.block(BuiltInRegistries.BLOCK.getKey(block).toString()))).toList())
                 .orElse(List.of());
-        return snapshot(RuleCatalogType.ITEM, raw, members);
+        return snapshot(RuleCatalogType.ITEM, reference, members);
     }
 
-    private static Tag snapshot(RuleCatalogType type, String raw, List<Member> members) {
-        return new Tag(type, raw.startsWith("#") ? raw : "#" + raw, members,
+    private static Tag snapshot(RuleCatalogType type, TaggedId reference, List<Member> members) {
+        return new Tag(type, new TaggedId(reference.id(), true), members,
                 new UiCarousel(members.stream().map(Member::icon).toList()));
     }
 
@@ -81,8 +82,7 @@ public final class TagPreviewIcons {
     static List<Member> blockMembers(ResourceLocation id) {
         return BuiltInRegistries.BLOCK.getTag(TagKey.create(Registries.BLOCK, id))
                 .map(set -> set.stream().map(holder -> new Member(holder.value().getName(),
-                        CatalogPreviewIcons.iconFor(RuleCatalogType.BLOCK,
-                                BuiltInRegistries.BLOCK.getKey(holder.value()).toString()))).toList())
+                        CatalogTypePresentation.BLOCK.icon(BuiltInRegistries.BLOCK.getKey(holder.value())))).toList())
                 .orElse(List.of());
     }
 

@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
@@ -17,7 +18,6 @@ import java.util.function.Consumer;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
@@ -50,7 +50,6 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
     public static final int MAX_ENTRY_LENGTH = 128;
 
     private final Mode mode;
-    private final @Nullable String registryHint;
     private final UiTextInput input;
     private List<String> items = new ArrayList<>();
     private int selected = -1;
@@ -66,11 +65,10 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
     // 注入的宿主主题
     private final UiHostTheme theme;
 
-    public UiListEditor(UiHostTheme theme, Font font, Mode mode, @Nullable String registryHint) {
+    public UiListEditor(UiHostTheme theme, Font font, Mode mode) {
         this.theme = UiHostThemes.require(theme);
         Objects.requireNonNull(font, "font");
         this.mode = mode == null ? Mode.ID : mode;
-        this.registryHint = registryHint;
         this.input = new UiTextInput(theme, font, Component.translatable(TypeLabels.UI_PREFIX + "list.input_hint"));
         this.input.setMaxLength(MAX_ENTRY_LENGTH);
         this.input.setFilter(this::acceptText);
@@ -85,10 +83,6 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
 
     public Mode mode() {
         return mode;
-    }
-
-    public @Nullable String registryHint() {
-        return registryHint;
     }
 
     // 内嵌输入框（表单引擎把它一并注册进焦点顺序）
@@ -131,14 +125,6 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
         return items.size();
     }
 
-    public int selectedIndex() {
-        return selected;
-    }
-
-    public void setSelectedIndex(int index) {
-        this.selected = index >= 0 && index < items.size() ? index : -1;
-    }
-
     public @Nullable String selectedItem() {
         return selected >= 0 && selected < items.size() ? items.get(selected) : null;
     }
@@ -159,18 +145,6 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
     public void setVisible(boolean next) {
         this.visible = next;
         this.input.setVisible(next);
-    }
-
-    // 追加条目
-    public boolean addItem(String value) {
-        if (value == null || value.isBlank() || items.size() >= 512) {
-            return false;
-        }
-        List<String> next = new ArrayList<>(items);
-        next.add(value);
-        selected = next.size() - 1;
-        applyItems(next);
-        return true;
     }
 
     public boolean removeSelected() {
@@ -213,8 +187,10 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
     // 输入内容提交：追加或覆盖选中项
     private void commitInput() {
         String text = input.value().trim();
-        String id = mode == Mode.TAG && text.startsWith("#") ? text.substring(1) : text;
-        if (mode != Mode.TEXT && ResourceLocation.tryParse(id) == null) return;
+        if (mode != Mode.TEXT) {
+            TaggedId reference = TaggedId.tryParse(text);
+            if (reference == null || mode != Mode.TAG && reference.tag()) return;
+        }
         if (text.isEmpty()) {
             return;
         }
@@ -455,7 +431,7 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
             return false;
         }
         int from = Math.max(0, selected);
-        selected = Math.max(0, Math.min(items.size() - 1, from + delta));
+        selected = Math.clamp(from + delta, 0, items.size() - 1);
         return true;
     }
 

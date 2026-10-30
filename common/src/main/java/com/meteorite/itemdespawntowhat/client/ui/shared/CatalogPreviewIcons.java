@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.shared;
 
+import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiPreviewCache;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
@@ -89,16 +90,17 @@ public final class CatalogPreviewIcons {
                 THEME.palette().textSecondary(), false);
     }
 
-    // 物品、方块、实体和流体图标；其他目录类型回落文字槽。
-    public static @Nullable UiIcon iconFor(@Nullable RuleCatalogType type, @Nullable String id) {
-        if (type == null || id == null || id.isBlank()) {
-            return null;
-        }
-        if (id.startsWith("#")) {
-            return CatalogTypePresentation.of(type).supportsTags()
-                    ? TagPreviewIcons.resolve(type, id).icon() : null;
-        }
-        return CatalogTypePresentation.of(type).icon(id);
+    /** 原始草稿引用的展示入口；已解析调用方使用值重载。 */
+    public static @Nullable UiIcon iconFor(@Nullable RuleCatalogType type, @Nullable String raw) {
+        return iconFor(type, TaggedId.tryParse(raw));
+    }
+
+    /** 直接使用已解析引用，不在名称、图标与预览之间重复解析。 */
+    public static @Nullable UiIcon iconFor(@Nullable RuleCatalogType type, @Nullable TaggedId reference) {
+        if (type == null || reference == null) return null;
+        if (reference.tag()) return CatalogTypePresentation.of(type).tags().isPresent()
+                ? TagPreviewIcons.resolve(type, reference).icon() : null;
+        return CatalogTypePresentation.of(type).icon(reference.id());
     }
 
     // 状态效果图标有界复用：贴图来自 mob_effects 图集，缺项的第三方效果以 Optional.empty 缓存

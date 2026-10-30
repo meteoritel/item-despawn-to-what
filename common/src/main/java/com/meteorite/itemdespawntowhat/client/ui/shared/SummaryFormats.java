@@ -122,7 +122,7 @@ public final class SummaryFormats {
         if (value.isEmpty()) {
             return Component.empty();
         }
-        TaggedId tagged = TaggedId.parse(value).result().orElse(null);
+        TaggedId tagged = TaggedId.tryParse(value.trim());
         if (tagged == null) {
             return Component.literal(value);
         }

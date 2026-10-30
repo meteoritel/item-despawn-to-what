@@ -828,7 +828,7 @@ final class RuleEditorListPage implements EditorPage {
             return false;
         }
         TagCarouselView view = new TagCarouselView(THEME, font, tag);
-        modals.push(UiModal.create(THEME, font).title(Component.translatable(UI + "tag.title", tag.id()))
+        modals.push(UiModal.create(THEME, font).title(Component.translatable(UI + "tag.title", tag.reference().serialized()))
                 .contentWidget(view, Math.clamp(shell.screenHeight() - 70, 110, 220))
                 .preferredWidth(TAG_MODAL_WIDTH).cancel(Component.translatable(UI + "button.close"))
                 .onClosed(view::resumePolling)
