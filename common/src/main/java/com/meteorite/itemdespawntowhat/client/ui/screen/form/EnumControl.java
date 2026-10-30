@@ -7,6 +7,8 @@ import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiMarkIcons;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiSegmentedControl;
@@ -100,9 +102,19 @@ final class EnumControl extends FormControl {
     void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
         if (cycleButton != null) {
             cycleButton.render(graphics, font, mouseX, mouseY);
+            drawCycleHint(graphics);
         } else if (segments != null) {
             segments.render(graphics, font, mouseX, mouseY);
         }
+    }
+
+    // 轮询按钮右缘留一个箭头：整行长条不加提示会被读成输入框，看不出点一下会换取值
+    private void drawCycleHint(GuiGraphics graphics) {
+        UiRect rect = cycleButton.bounds();
+        UiMarkIcons.Mark mark = UiMarkIcons.Mark.NEXT;
+        int x = Math.max(rect.x(), rect.right() - 4 - mark.width());
+        int y = rect.y() + Math.max(0, (rect.height() - mark.height()) / 2);
+        UiMarkIcons.icon(mark, THEME.palette().textSecondary()).render(graphics, x, y);
     }
 
     @Override

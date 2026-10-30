@@ -1,0 +1,146 @@
+{
+  "name": "editor-results-arrow-rain",
+  "description": "搜索并打开 new_rule_4，进入 Results 页签：断言 Pickup 以单个轮询按钮表达（三个选项文案只出现一次）并点击后切换取值，截图药水效果卡片区；再点卡片标题栏的 Add，从目录选入一个效果，断言新卡片出现；点空卡片的选项胶囊换引用，最后点卡片右上角 X 删除一条。运行前把该规则编辑草稿归一为 potion_effects:[{}]，否则断言依赖旧状态不幂等。",
+  "window": {
+    "width": 1280,
+    "height": 720,
+    "scale": 2
+  },
+  "settle": {
+    "timeout_ms": 2000
+  },
+  "steps": [
+    {
+      "check": {
+        "name": "列表页标题来自语言文件",
+        "expr": "__gp.screenInfo().title",
+        "expected_lang": "gui.itemdespawntowhat.edit.title",
+        "lang": "en_us"
+      }
+    },
+    {
+      "do": "__gp.clickWidget(__gp.lang('gui.itemdespawntowhat.edit.list.search'))"
+    },
+    {
+      "do": "(function(){__gp.typeText('new_rule_4');return 'typed';})()"
+    },
+    {
+      "do": "(function(){var ns=__gp.flatCached().filter(function(n){return n.kind==='ROW'&&n.visible!==false&&n.width>0&&!/\\)$/.test(n.text);});if(!ns.length)return 'no-row';var n=ns[ns.length-1];__gp.click(n.x+n.width/2,n.y+n.height/2,0);return 'row:'+n.text;})()"
+    },
+    {
+      "do": "__gp.clickWidget(__gp.lang('gui.itemdespawntowhat.edit.button.edit'))"
+    },
+    {
+      "check": {
+        "name": "编辑页有 Results 页签",
+        "expr": "__gp.textNodes().join(' ')",
+        "expected_lang": "gui.itemdespawntowhat.edit.tab.results",
+        "lang": "en_us",
+        "contains": true
+      }
+    },
+    {
+      "do": "__gp.clickWidget(__gp.lang('gui.itemdespawntowhat.edit.tab.results'))"
+    },
+    {
+      "check": {
+        "name": "Results 页有药水效果卡片区的 Add 胶囊",
+        "expr": "__gp.textNodes().join(' ')",
+        "expected_lang": "gui.itemdespawntowhat.edit.list.add",
+        "lang": "en_us",
+        "contains": true
+      }
+    },
+    {
+      "check": {
+        "name": "Pickup 三个选项文案只出现一次（轮询按钮单值显示）",
+        "expr": "(function(){var s=__gp.textNodes().join(' ');var keys=['allowed','creative_only','disallowed'];var c=0;keys.forEach(function(k){var t=__gp.lang('gui.itemdespawntowhat.edit.enum.arrow_rain_pickup.'+k);var i=s.indexOf(t);while(i>=0){c++;i=s.indexOf(t,i+1);}});return String(c);})()",
+        "expected": "1"
+      }
+    },
+    {
+      "shot": "50-results-arrow-rain.png"
+    },
+    {
+      "do": "(function(){var s=__gp.textNodes().join(' ');var keys=['allowed','creative_only','disallowed'];var vis=keys.filter(function(k){return s.indexOf(__gp.lang('gui.itemdespawntowhat.edit.enum.arrow_rain_pickup.'+k))>=0;});if(vis.length!==1)return 'vis='+vis.join(',');__gp.prevPickup=vis[0];__gp.clickWidget(__gp.lang('gui.itemdespawntowhat.edit.enum.arrow_rain_pickup.'+vis[0]));return 'clicked:'+vis[0];})()"
+    },
+    {
+      "check": {
+        "name": "点轮询按钮切到下一个取值",
+        "expr": "(function(){var s=__gp.textNodes().join(' ');var keys=['allowed','creative_only','disallowed'];var vis=keys.filter(function(k){return s.indexOf(__gp.lang('gui.itemdespawntowhat.edit.enum.arrow_rain_pickup.'+k))>=0;});if(vis.length!==1)return 'vis='+vis.join(',');if(!__gp.prevPickup)return 'cycled';return vis[0]===__gp.prevPickup?'unchanged:'+vis[0]:'cycled';})()",
+        "expected": "cycled"
+      }
+    },
+    {
+      "shot": "50-results-pickup-cycled.png"
+    },
+    {
+      "do": "(function(){var ns=__gp.flatCached().filter(function(n){return n.kind==='CONTROL'&&n.text===__gp.lang('gui.itemdespawntowhat.edit.list.add');});if(!ns.length)return 'no-add';var n=ns[ns.length-1];__gp.click(n.x+n.width/2,n.y+n.height/2,0);return 'clicked:'+ns.length;})()"
+    },
+    {
+      "check": {
+        "name": "点 Add 打开目录弹窗",
+        "expr": "String(__gp.rects(['MODAL']).length)",
+        "expected": "1"
+      }
+    },
+    {
+      "shot": "50-add-modal.png"
+    },
+    {
+      "do": "(function(){var m=__gp.rects(['MODAL']);if(!m.length)return 'no-modal';var r=m[0];__gp.click(r.x+r.w*0.13,r.y+r.h*0.14,0);return 'cell';})()"
+    },
+    {
+      "do": "__gp.clickWidget(__gp.lang('gui.itemdespawntowhat.edit.button.confirm'))"
+    },
+    {
+      "check": {
+        "name": "确认后新增一张带效果名的卡片（原有空卡片保留）",
+        "expr": "(function(){var s=__gp.textNodes().join(' ');return (s.indexOf('Absorption')>=0 && s.indexOf(__gp.lang('gui.itemdespawntowhat.edit.list.choose'))>=0)?'added':'unexpected';})()",
+        "expected": "added"
+      }
+    },
+    {
+      "shot": "50-results-effect-added.png"
+    },
+    {
+      "do": "__gp.clickWidget(__gp.lang('gui.itemdespawntowhat.edit.list.choose'))"
+    },
+    {
+      "check": {
+        "name": "点空卡片的选项胶囊打开目录弹窗",
+        "expr": "String(__gp.rects(['MODAL']).length)",
+        "expected": "1"
+      }
+    },
+    {
+      "do": "(function(){var m=__gp.rects(['MODAL']);if(!m.length)return 'no-modal';var r=m[0];__gp.click(r.x+r.w*0.13,r.y+r.h*0.14,0);return 'cell';})()"
+    },
+    {
+      "do": "__gp.clickWidget(__gp.lang('gui.itemdespawntowhat.edit.button.confirm'))"
+    },
+    {
+      "check": {
+        "name": "替换后空卡片消失、只留效果名",
+        "expr": "(function(){var s=__gp.textNodes().join(' ');return s.indexOf(__gp.lang('gui.itemdespawntowhat.edit.list.choose'))<0?'filled':'still-empty';})()",
+        "expected": "filled"
+      }
+    },
+    {
+      "shot": "50-results-effect-chosen.png"
+    },
+    {
+      "do": "(function(){var ns=__gp.flatCached().filter(function(n){return n.kind==='CONTROL'&&n.visible!==false&&n.width>0&&(!n.text||n.text==='');});if(!ns.length)return 'no-x';var n=ns[ns.length-1];__gp.click(n.x+n.width/2,n.y+n.height/2,0);return 'clicked:'+ns.length;})()"
+    },
+    {
+      "check": {
+        "name": "点卡片右上角的 X 删掉该条目",
+        "expr": "(function(){var s=__gp.textNodes().join(' ');var t='Absorption';var c=0;var i=s.indexOf(t);while(i>=0){c++;i=s.indexOf(t,i+1);}return String(c);})()",
+        "expected": "1"
+      }
+    },
+    {
+      "shot": "50-results-effect-removed.png"
+    }
+  ]
+}

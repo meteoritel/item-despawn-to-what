@@ -230,6 +230,7 @@ flowchart LR
 
 - **规则固定表单**：基本信息、延迟、条件树和输入精简字段从 `BuiltinEditorDescriptors` 获取；screen 保留布局、tooltip、动态窗口与动作，`EditorField` 的值域使用 `FieldDomain`，数值与枚举直接读取类型化数据。
 - **新增字段控件**：实现 `FormControl` 子类，并在 `FormControlRegistry` 的穷举 switch 增加工厂分支。数值字段先走 `FormControl#create` 的“滑杆 + 行内精确输入”，域元数据不足时才落到注册表；第三方只读描述符使用显式 `RAW_JSON` 类型；新增已知字段漏接控件会在编译期报错。字段归类用 `EditorField` 的分类谓词（列表、数值、说明行、可带标签等）判断，不对 `EditorFieldType` 做 switch。
+- **嵌套对象列表的卡片形态**：参数声明标 `ParamShape.CARD_LIST` 时，`ParamProjection` 把该列表投影成 `EditorField.cardList`，界面交给 `CardListControl`。控件自绘字段标题与「添加」入口，每条元素是一张卡片：首行是目录引用胶囊（图标 + 显示名，点开目录替换），下方是数值行里并排的数值控件；点「添加」先取引用、确认后才插入条目。
 - **新增界面标记图标**：标记图集是 `textures/gui/editor/marks.png`，由 `tools/image_generator/generate-editor-marks.py` 生成，字形为纯白、按调用方给定的主题色染色；在 `theme` 的 `UiMarkIcons.Mark` 登记行号与尺寸，用 `UiMarkIcons.icon(mark, color)` 取得图标后交给控件的 `setIcon` 或直接渲染。
 - **新增事件图标**：事件图集是 `textures/gui/editor/events.png`，由 `tools/image_generator/generate-event-icons.py` 生成，每格 32×32 彩色成品、按 16 像素槽位缩放绘制，不做主题染色；在 `theme` 的 `UiEventIcons.Event` 登记行号，动作到事件的判定收在 `shared/EventPreviewIcons`，新增天象类动作在那里补一支分支。
 - **新增目录类型或预览图标**：在 `FieldCatalogTypes` 与 `CatalogPreviewIcons` 保留目录语义，展示内容统一送入 `PreviewIcons`。场景资源由 kit `preview` 持有，`PreviewResources` 统一世代和关闭；流体名称与过滤留在 `FluidPreviewIcons`，标签展开与事件图集留在各宿主。实体 age、方块实体 NBT 与完整实体 NBT 参与场景身份。

@@ -241,6 +241,13 @@ public record EditorField(String name, String labelKey, EditorFieldType type, Fi
     }
 
     /**
+     * 卡片列表字段：对象数组，每项的引用与数值折进一张紧凑卡片
+     */
+    public static EditorField cardList(String name, String labelKey, EditorField... subFields) {
+        return create(name, labelKey, EditorFieldType.CARD_LIST, FieldDomain.None.INSTANCE, true, false, null, null, List.of(subFields));
+    }
+
+    /**
      * 单个嵌套对象字段：subFields 描述对象内部字段
      */
     public static EditorField object(String name, String labelKey, EditorField... subFields) {
@@ -278,7 +285,7 @@ public record EditorField(String name, String labelKey, EditorFieldType type, Fi
     // 类型的独立事实集中于穷举分类；字段自身仍持有 nullable、registry 和取值域。
     private enum Shape {
         TEXT, LONG_TEXT, NUMBER, BOOLEAN, ENUM, REFERENCE, LIST, ITEM_COUNTS,
-        CLIMATE_RANGE, SUBLIST, OBJECT, CONDITION_TREE, NOTE, RAW_JSON
+        CLIMATE_RANGE, SUBLIST, CARD_LIST, OBJECT, CONDITION_TREE, NOTE, RAW_JSON
     }
 
     private enum NumberKind { NONE, INTEGER, TICKS, DECIMAL, PERCENT, AMPLIFIER }
@@ -321,6 +328,7 @@ public record EditorField(String name, String labelKey, EditorFieldType type, Fi
                 case ITEM_COUNTS -> Classification.plain(Shape.ITEM_COUNTS);
                 case CLIMATE_RANGE -> Classification.plain(Shape.CLIMATE_RANGE);
                 case SUBLIST -> Classification.plain(Shape.SUBLIST);
+                case CARD_LIST -> Classification.plain(Shape.CARD_LIST);
                 case OBJECT -> Classification.plain(Shape.OBJECT);
                 case CONDITION_TREE -> Classification.plain(Shape.CONDITION_TREE);
                 case NOTE -> Classification.plain(Shape.NOTE);
@@ -444,6 +452,11 @@ public record EditorField(String name, String labelKey, EditorFieldType type, Fi
         return classification().shape() == Shape.SUBLIST;
     }
 
+    /** 可增删的嵌套对象列表，每条元素按卡片渲染。 */
+    public boolean isCardList() {
+        return classification().shape() == Shape.CARD_LIST;
+    }
+
     /** 固定子字段组成的嵌套对象。 */
     public boolean isObject() {
         return classification().shape() == Shape.OBJECT;
@@ -451,7 +464,7 @@ public record EditorField(String name, String labelKey, EditorFieldType type, Fi
 
     /** 控件自行绘制标签，表单不预留标签列。 */
     public boolean hidesRowLabel() {
-        return isClimateRange() || isBoolean();
+        return isClimateRange() || isBoolean() || isCardList();
     }
 
     // ---- 派生 ----

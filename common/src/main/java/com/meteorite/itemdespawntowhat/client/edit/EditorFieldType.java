@@ -40,8 +40,10 @@ public enum EditorFieldType {
     AMPLIFIER,
     // 刻数：整数，0 显示为「立即」
     TICKS,
-    // 子列表（例如 arrow_rain.potion_effects）：自身是对象数组
+    // 子列表（例如 conditions）：自身是对象数组，每项展开成完整子表单
     SUBLIST,
+    // 卡片列表：对象数组，每项的引用与数值折进一张紧凑卡片
+    CARD_LIST,
     // 单个嵌套对象：自身是映射，内部字段由 subFields 描述
     OBJECT,
     // 条件树（条件编辑器与效果编辑器共用同一控件）

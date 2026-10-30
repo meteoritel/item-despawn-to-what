@@ -12,5 +12,8 @@ public enum ParamShape {
     CLIMATE_RANGE,
 
     /** 枚举轮询：候选共用一个按钮轮换，界面只显示当前取值，点击切换到下一个。 */
-    ENUM_CYCLE
+    ENUM_CYCLE,
+
+    /** 卡片列表：列表元素由引用与少量数值组成，界面把每一条渲染成一张紧凑卡片。 */
+    CARD_LIST
 }

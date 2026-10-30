@@ -74,6 +74,7 @@ final class FormControlRegistry {
             case CONDITION_TREE -> (font, owner, field, onChanged) ->
                     new ConditionTreeControl(owner.theme(), font, field, owner.conditionEditingSupport(), () -> owner.conditionContext(field));
             case SUBLIST -> SublistControl::new;
+            case CARD_LIST -> CardListControl::new;
             case OBJECT -> NestedObjectControl::new;
             case RAW_JSON -> (font, owner, field, onChanged) -> new RawJsonControl(owner.theme(), field);
             case NOTE -> (font, owner, field, onChanged) -> new NoteControl(owner.theme(), field);

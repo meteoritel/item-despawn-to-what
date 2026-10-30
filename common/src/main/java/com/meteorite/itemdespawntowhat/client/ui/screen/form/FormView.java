@@ -237,6 +237,13 @@ public final class FormView implements UiWidget, UiLayoutSource {
     }
 
     /**
+     * 按名字取得行；由复合控件转发来的子字段没有对应行时返回 null。
+     */
+    public @Nullable FormField findField(String name) {
+        return fields.get(name);
+    }
+
+    /**
      * 描述符字段的有序句柄，用于按字段元数据装配。
      */
     public List<FormField> fields() {
@@ -347,6 +354,31 @@ public final class FormView implements UiWidget, UiLayoutSource {
             writeField(row, value);
             reload();
             notifyChanged();
+        });
+    }
+
+    /**
+     * 复合控件内的单值目录选择：确认后把选中的引用交给调用方。
+     *
+     * <p>写入仍由控件自己的 {@code store()} 经本表单回写，因此这里只做「打开目录 + 回传选中项」，
+     * 守卫条件与行级目录入口一致：失能、已删除或草稿版本变化都不再回传。</p>
+     *
+     * @param field    目录引用字段描述符
+     * @param path     该引用在草稿中的完整路径
+     * @param current  当前选中的引用，null 表示尚未选择
+     * @param onPicked 确认后的回调，接收选中的引用
+     */
+    void openReferenceChoice(EditorField field, String path, @Nullable String current, Consumer<String> onPicked) {
+        if (!enabled || catalogOpener == null) {
+            return;
+        }
+        commitPendingInputs();
+        List<String> selected = current == null || current.isBlank() ? List.of() : List.of(current);
+        catalogOpener.open(field, path, false, selected, ids -> {
+            if (!enabled || ids.isEmpty() || loadedRevision != session.revision()) {
+                return;
+            }
+            onPicked.accept(ids.getFirst());
         });
     }
 

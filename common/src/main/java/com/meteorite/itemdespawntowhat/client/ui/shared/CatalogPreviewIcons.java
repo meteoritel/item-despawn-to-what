@@ -9,8 +9,10 @@ import java.util.Optional;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -22,6 +24,8 @@ public final class CatalogPreviewIcons {
 
     // 占位标记的边长上限（与图标槽一致）
     private static final int MARKER_MAX_SIZE = 16;
+    // 状态效果图标按原版物品栏效果图标的边长绘制
+    private static final int EFFECT_ICON_SIZE = 18;
     // 图标缓存上限：与统一场景请求容量同一口径，超出后淘汰最久未用的项
     private static final int MAX_CACHED_ICONS = 256;
     // 物品图标按「类型 + 规范化注册名」复用：目录网格与配方列表共用同一实例，ItemStack 只建一次
@@ -104,8 +108,28 @@ public final class CatalogPreviewIcons {
         if (type == RuleCatalogType.BLOCK && !id.startsWith("#")) return PreviewIcons.block(key.toString());
         if (type == RuleCatalogType.FLUID && !id.startsWith("#")) return PreviewIcons.fluid(key.toString());
         if (type == RuleCatalogType.ITEM) return itemIcon(key);
+        if (type == RuleCatalogType.MOB_EFFECT && !id.startsWith("#")) return effectIcon(key);
         // 可预览目录已接入统一场景；其余目录类型回落文字展示
         return null;
+    }
+
+    // 状态效果图标有界复用：贴图来自 mob_effects 图集，缺项的第三方效果以 Optional.empty 缓存
+    private static @Nullable UiIcon effectIcon(ResourceLocation key) {
+        ICONS.invalidate(PreviewResources.generation());
+        IconKey cacheKey = new IconKey(RuleCatalogType.MOB_EFFECT, key);
+        return ICONS.getOrLoad(cacheKey, ignored -> Optional.ofNullable(effectSprite(key))).orElse(null);
+    }
+
+    // 效果贴图取自 mob_effects 图集；注册表里没有该效果时回落文字，缺贴图的第三方效果由图集的 missingno 兜底
+    private static @Nullable UiIcon effectSprite(ResourceLocation key) {
+        MobEffect effect = BuiltInRegistries.MOB_EFFECT.getOptional(key).orElse(null);
+        if (effect == null) {
+            return null;
+        }
+        TextureAtlasSprite sprite = Minecraft.getInstance().getMobEffectTextures()
+                .get(BuiltInRegistries.MOB_EFFECT.wrapAsHolder(effect));
+        return new UiIcon.Rendered(EFFECT_ICON_SIZE, EFFECT_ICON_SIZE,
+                (graphics, box) -> graphics.blit(box.x(), box.y(), 0, box.width(), box.height(), sprite));
     }
 
     // 物品图标有界复用：键是注册名而不是 ItemStack，未注册物品以 Optional.empty 缓存，避免每帧重查注册表

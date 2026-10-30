@@ -160,11 +160,14 @@ public final class ParamProjection {
         return EditorField.object(spec.name(), label, subFields.toArray(EditorField[]::new));
     }
 
-    // 嵌套对象列表：子字段沿用元素自己的参数声明
+    // 嵌套对象列表：子字段沿用元素自己的参数声明；声明为卡片形态时改为紧凑卡片编辑
     private static EditorField nestedListField(NestedListSpec<?> spec, String label, ResourceLocation typeId) {
         List<EditorField> subFields = fields(spec.fields(), typeId);
-        return requiredByEditor(EditorField.subList(spec.name(), label, subFields.toArray(EditorField[]::new)),
-                spec.editorRequired());
+        EditorField[] declared = subFields.toArray(EditorField[]::new);
+        EditorField field = spec.shape() == ParamShape.CARD_LIST
+                ? EditorField.cardList(spec.name(), label, declared)
+                : EditorField.subList(spec.name(), label, declared);
+        return requiredByEditor(field, spec.editorRequired());
     }
 
     // 按声明的编辑器必填标记调整字段

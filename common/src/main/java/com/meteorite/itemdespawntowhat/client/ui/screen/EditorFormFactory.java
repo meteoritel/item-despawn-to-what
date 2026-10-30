@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.net.RuleEditClientWorkspace;
 import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
+import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormField;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
 import com.meteorite.itemdespawntowhat.client.ui.shared.FieldCatalogTypes;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModalStack;
@@ -48,9 +49,11 @@ final class EditorFormFactory {
             RuleCatalogType type = tags ? RuleCatalogType.TAG : FieldCatalogTypes.catalogTypeOf(field);
             if (type == null || !shell.editable()) return;
             boolean multi = field.isMultiCatalog();
+            // 目录过滤条件按行配置；复合控件转发的子字段没有独立行，因此不加过滤
+            FormField row = form.findField(field.name());
             modals.push(RuleEditorPanelFactory.fieldCatalogModal(font, shell, workspace, type, multi,
                     Component.translatable(field.labelKey()), shell.screenWidth(), shell.screenHeight(), onPicked,
-                    field, session.root(), path, selected, form.field(field.name()).catalogFilter()));
+                    field, session.root(), path, selected, row == null ? null : row.catalogFilter()));
         });
         var handles = form.setDescriptor(descriptor);
         form.reload();

@@ -37,6 +37,11 @@ public record NestedListSpec<T>(ParamMeta meta, Codec<T> codec, ParamList<? supe
         return new NestedListSpec<>(meta.withEditorRequired(value), codec, fields);
     }
 
+    /** 设置编辑器投影形态。 */
+    public NestedListSpec<T> shape(ParamShape value) {
+        return new NestedListSpec<>(meta.withShape(value), codec, fields);
+    }
+
     @Override
     public Codec<List<T>> valueCodec() {
         return codec.listOf();
