@@ -41,7 +41,7 @@ import java.util.List;
 /**
  * arrow_rain：在触发位置上方生成一阵箭雨。
  * potion_effects 可空，元素为箭矢携带的药水效果（效果 id + 持续刻数 + 等级）。
- * 注册为一次性效果（oneShot）：不参与候选容量计算，对同一源最多尝试一组。本类只承载参数模型与参数校验。
+ * 不声明产出容量需求；同一候选同一槽位的多组各演一场，由同一个延迟任务按序打完。本类只承载参数模型与参数校验。
  */
 public record ArrowRainEffect(
         int count,
@@ -159,7 +159,7 @@ public record ArrowRainEffect(
     /**
      * 本次箭雨在成功转化当刻固定的输入：只放已经抽定的药水效果，
      * 或无法解析药水引用时固定下来的失败原因；不冻结任何执行期世界状态。
-     * @param potionEffects 已抽定的药水效果；列表只读、整场序列共用，套用到箭矢时再逐个复制
+     * @param potionEffects 已抽定的药水效果；列表只读、本组这一场序列共用，套用到箭矢时再逐个复制
      * @param failure 成功转化当刻就无法解析的失败原因；null 表示照常执行
      */
     public record Prepared(List<MobEffectInstance> potionEffects, @Nullable String failure)
@@ -197,7 +197,7 @@ public record ArrowRainEffect(
                 return ArrowRainExecutor.start(effect, context, preparation);
             }
         };
-        return new SimpleEffectType<>(ID, codec(), ArrowRainEffect::validateParams, executor, true,
+        return new SimpleEffectType<>(ID, codec(), ArrowRainEffect::validateParams, executor, false,
                 ProductKind.WORLD, PARAMS);
     }
 

@@ -7,7 +7,7 @@ After a rule fires, the mod runs every effect object in the `effects` array in o
 | Effect | `type` | One-shot | What it does |
 |---|---|---|---|
 | Entities | `idtw:spawn_entity` | No | Hands out items, spawns entities, or awards experience |
-| Arrow rain | `idtw:arrow_rain` | Yes | Drops a volley of arrows from above the trigger position, with optional potion effects |
+| Arrow rain | `idtw:arrow_rain` | No | Drops a volley of arrows from above the trigger position, with optional potion effects |
 | Place block | `idtw:place_block` | No | Places blocks near the trigger position |
 | Loot table | `idtw:loot_table` | No | Rolls a loot table and drops the results |
 | Lightning | `idtw:lightning` | Yes | Strikes 1 to 16 bolts |
@@ -41,7 +41,7 @@ Three things worth knowing:
 - **Timing of the check**: effects that need their input fixed when the conversion succeeds, such as `place_block` (which decides at that moment what to place, where the candidates are and the cap), roll `chance` right then; a later delay or an already consumed source item no longer changes the result. Effects without fixed input still roll `chance` at the moment they are due to run, after their delay.
 - **Every group runs the effects once**: each group that starts runs the effects once, so `count` is the amount for that single run and a loot table rolls once per group. For how a whole stack splits into groups, see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
 - **A cap of 32**: one rule can hold at most 32 effects in total, counting the `effects` of every candidate. A rule above the cap is rejected.
-- **One-shot effects**: `arrow_rain`, `lightning`, `explosion`, and `weather` are one-shot. They play once for a given source, they do not repeat with the group count, and they take no part in the capacity check of a candidate. Each source gets at most one attempt at them: a failed roll and a run-time error both count as that one attempt.
+- **One-shot effects**: `lightning`, `explosion`, and `weather` are one-shot. They play once for a given source, they do not repeat with the group count, and they take no part in the capacity check of a candidate. Each source gets at most one attempt at them: a failed roll and a run-time error both count as that one attempt. Arrow rain is not one-shot: it plays once per group and merges its groups into a single delayed task.
 
 ## Entities (spawn_entity)
 
@@ -117,7 +117,7 @@ The number of nearby experience orbs never blocks a group over experience storag
 
 | Field | What it does | Values | Default | Notes |
 |---|---|---|---|---|
-| `count` | How many arrows | 1 to 256 | `16` | One arrow every 2 ticks |
+| `count` | How many arrows | 1 to 256 | `16` | One arrow every 1 to 3 ticks |
 | `pickup` | Whether players may pick the arrows up | `disallowed` / `allowed` / `creative_only` | `disallowed` | The three values mean never, always, and only in creative mode |
 | `potion_effects` | Potion effects carried by the arrows | Array, optional | Omit for none | The fields of each entry are in the table below |
 
@@ -125,7 +125,7 @@ Each entry in `potion_effects`:
 
 | Field | What it does | Values | Default | Notes |
 |---|---|---|---|---|
-| `effect` | The potion effect | Potion effect id or tag | None, required | A tag takes one random member, and the whole volley shares that result |
+| `effect` | The potion effect | Potion effect id or tag | None, required | A tag takes one random member, shared by every arrow of that volley; each group rolls its own |
 | `duration_ticks` | How long it lasts (ticks) | 1 to 1000000 | `100` | 20 ticks = 1 second |
 | `amplifier` | Level | 0 to 255 | `0` | `0` is level I and `1` is level II |
 
@@ -144,7 +144,9 @@ Each entry in `potion_effects`:
 }
 ```
 
-What you see in game: after a 10 tick delay the volley starts and drops 32 downward arrows every 2 ticks from 80 blocks above the trigger position, spread over roughly 5 blocks around it, and players can pick them up. With potion effects, an entity the arrows hit takes the matching effect.
+What you see in game: after a 10 tick delay the volley starts and drops 32 angled arrows, one every 1 to 3 ticks, landing within a radius of 5 blocks around the trigger position, and players can pick them up. Where the arrows start depends on the space overhead: the mod walks up from one block above the trigger position, at most 20 blocks, and stops under the first block or ceiling it meets, so outdoors they start about 20 blocks up while indoors and in caves they fall from just under the ceiling. Each arrow gets a random launch speed between 0.5 and 2.0 and a direction at most about 25 degrees off vertical, so the volley drifts down at a slant and one arrow deals roughly 3 to 5 damage when it hits. With potion effects, an entity the arrows hit takes the matching effect.
+
+Each group of the same candidate and slot plays its own volley: every volley rolls its own `chance` and draws its own potion effects, and one delayed task runs the volleys back to back with no extra pause, so the total duration grows with the number of groups. For how many groups a stack opens, see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
 
 ## Place Block (place_block)
 

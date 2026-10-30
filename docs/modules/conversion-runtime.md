@@ -193,7 +193,7 @@ flowchart TB
 
 直接物品由 `SettlementItemOutputs` 汇总已支付组的成功固定输入，同一结算、候选、效果槽位与已解析物品共用总件数。概率及标签抽取保持逐组独立；所有组派发后生成一个汇总任务，按堆叠上限拆分并沿用共享预算跨 tick 交付，尾堆只生成一次。汇总交付不早于该桶最晚的原定到期时刻；全部效果任务终态前，结算保留源库存与回执写入窗口；随后交付剩余源库存并完成。执行状态通过 `requiredChunks()` 声明推进所需区块，中途等待返回 `EffectStep.AwaitChunks`；`EffectTask` 在重试刻统一复查区块，沿用连续 1200 tick 等待上限，就绪后从原执行状态续接；共享计数游标由其它组推进时，当前需求替代旧断点请求。`Yield` 和 `Delay` 分别表示预算续接与正常间隔，后者直接按到期刻排期，两者均不累计区块等待。超时以失败回执终结效果，并释放结算等待计数。汇总物品任务每个桶在排期时与终态各上报一次 `ITEM_BATCH_SCHEDULED` / `ITEM_BATCH_FINISHED`，字段为 `record`、`candidate`、`item`、`items`、`ready_tick`、`pending_item_batches`；`SETTLEMENT_COMPLETED` 同带 `pending_item_batches`（完成时为零）。调试场景可用 `events/ITEM_BATCH_SCHEDULED` / `events/ITEM_BATCH_FINISHED` 断言排期与收尾；场景结束输出的 `settlement_snapshot` 汇总已完成结算的账目总量（含 `groups`、`prepared_groups`、`pending_delivery`），在飞桶数看事件字段。战利品沿用独立堆叠交付。
 
-方块的结果预算来自各已准入组的 `count`，环境预算来自 `radius` 内可替换且可支撑的位置及 `limit` 余量。`SettlementBlockOutputs` 按候选、槽位和实际目标方块汇总；每批保留一个候选游标，各组依次填满并在各自到期刻后放置。半径或上限耗尽后终结任务，未占用源成本进入原持久返还路径。例如 10 个源物品、每组成本 1、`count: 2`，成功 6 个方块消耗 3 个源并返还 7 个；成功 7 个消耗 4 个源并返还 6 个。多个方块槽位共享同组成本，不同非方块行为已经占满成本时该组无剩余源可返还。
+方块的结果预算来自各已准入组的 `count`，环境预算来自 `radius` 内可替换且可支撑的位置及 `limit` 余量。`SettlementBlockOutputs` 按候选、槽位和实际目标方块汇总；每批保留一个候选游标，各组依次填满并在各自到期刻后放置。箭雨按同一口径由 `SettlementArrowRainOutputs` 按候选与槽位汇总：每批保留各组的到期刻与已抽取的药水效果，批执行器按序打完各组序列后在全部场次结束时回执一次。半径或上限耗尽后终结任务，未占用源成本进入原持久返还路径。例如 10 个源物品、每组成本 1、`count: 2`，成功 6 个方块消耗 3 个源并返还 7 个；成功 7 个消耗 4 个源并返还 6 个。多个方块槽位共享同组成本，不同非方块行为已经占满成本时该组无剩余源可返还。
 
 邻域计数沿 `PlaceBlockEffect.Shape` 的候选位置逐个读取，统计范围与放置范围是同一批候选；`limit` 覆盖全部候选时直接跳过计数。位置读取与放置尝试共用每步 128 工作单位上限，同时受公共 tick 剩余额度约束。计数及放置都保留跨刻游标，结果预算与环境余额分别检查，成功量不会在 limit 判定里重复扣减。
 
@@ -249,7 +249,7 @@ flowchart TB
 
 - **新增触发方式**：在 `TriggerKind` 加常量 → 在 `ConversionGate.chooseOrWait` 的单趟遍历里接一条（kind 过滤、退避资格、命中判定与「本触发方式是否被规则覆盖」都只在这一处判）→ 同步 `core/model` 的编解码与 `docs/api/rule-json.md` 的取值说明。年龄门槛只对自然触发强制（`decide` 传入的 `Tracked` 与 `ageGated`），新触发方式默认走环境口径。
 - **新增组合语义**：在 `CombinationMode` 加常量 → 在 `SettlementGroupPlan.select` 与 `RoundRobinCursors` 中给出候选推进规则 → 确认游标在“被跳过”与“已定稿”两种情况下行为不同。
-- **新增效果类型**：落在类型系统与效果执行器，本模块只需 `startEffect` 能拿到可入账的 `EffectResult`；一次性效果由 `attemptedOneShots` 去重，同一源只有一次尝试机会。参与产物邻近容量约束时在类型定义上覆盖 `capacityDemand`，声明每轮一组最小产出需求（产物类型未知的按保守下界声明，战利品表用 `CapacityDemand.unspecified(1)`）；不覆盖即视为不占容量。
+- **新增效果类型**：落在类型系统与效果执行器，本模块只需 `startEffect` 能拿到可入账的 `EffectResult`；一次性效果（`lightning`、`explosion`、`weather`）由 `attemptedOneShots` 去重，同一源只有一次尝试机会；箭雨按可重复世界效果处理，不进入该去重。参与产物邻近容量约束时在类型定义上覆盖 `capacityDemand`，声明每轮一组最小产出需求（产物类型未知的按保守下界声明，战利品表用 `CapacityDemand.unspecified(1)`）；不覆盖即视为不占容量。
 - **调整返还与恢复策略**：共同交付机制改 `RebateDelivery`，任务结束与重试节奏分别归聚合根和恢复器；落账只走 `SettlementRecord.Writer`；新增账目字段时同步 `SettlementRecord` 的 Codec 与 `SettlementLedger` 的索引维护。
 - **新增实体状态字段**：在 `DropState` 记录加分量；有兼容缺省值的新增可选字段沿用当前版本，结构语义变化时调整版本与兼容读取。同步空状态、复制与合并逻辑，持久化通道由 `IPlatformHelper` 在两端的实体数据容器中承载，读写入口只保留 `DropStateStore`。
 

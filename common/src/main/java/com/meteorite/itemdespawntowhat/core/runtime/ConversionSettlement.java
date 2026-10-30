@@ -140,6 +140,7 @@ final class ConversionSettlement implements ServerTask {
     private boolean groupOpen;
     private final SettlementItemOutputs itemOutputs = new SettlementItemOutputs();
     private final SettlementBlockOutputs blockOutputs = new SettlementBlockOutputs();
+    private final SettlementArrowRainOutputs arrowRainOutputs = new SettlementArrowRainOutputs();
     private int pendingItemBatches;
     private int pendingEffects;
     private final List<ScheduledTaskHandle> effectTasks = new ArrayList<>();
@@ -280,6 +281,7 @@ final class ConversionSettlement implements ServerTask {
         // 尚未派发的汇总产物随结算中止丢弃；效果不恢复执行，未消耗源库存统一返还。
         itemOutputs.clear();
         blockOutputs.clear();
+        arrowRainOutputs.clear();
         try {
             // 释放未支付的催化剂预留（计划期登记、开组时转已支付）：无世界写入且幂等
             reservations().releaseOwner(record.id());
@@ -482,6 +484,15 @@ final class ConversionSettlement implements ServerTask {
                 return StepResult.yield(1, 1);
             }
             SettlementBlockOutputs.Batch output = blockOutputs.next();
+            scheduleEffect(output.readyTick(), output.context(), output.effect(), output.preparation(), () -> {});
+            budget.charge(1);
+            dispatchedThisStep++;
+        }
+        while (!arrowRainOutputs.isEmpty()) {
+            if (budget.exhausted() || dispatchedThisStep >= batch) {
+                return StepResult.yield(1, 1);
+            }
+            SettlementArrowRainOutputs.Batch output = arrowRainOutputs.next();
             scheduleEffect(output.readyTick(), output.context(), output.effect(), output.preparation(), () -> {});
             budget.charge(1);
             dispatchedThisStep++;
@@ -724,6 +735,9 @@ final class ConversionSettlement implements ServerTask {
             return;
         }
         if (blockOutputs.collect(candidate.id(), slot, effect, preparation, context, readyTick)) {
+            return;
+        }
+        if (arrowRainOutputs.collect(candidate.id(), slot, effect, preparation, context, readyTick)) {
             return;
         }
         scheduleEffect(readyTick, context, effect, preparation, () -> {});

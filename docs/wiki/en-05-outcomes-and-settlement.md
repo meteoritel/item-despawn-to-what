@@ -204,7 +204,8 @@ About counting only real output:
 About group counts and effect runs:
 
 - Every effect runs once in every conversion group, and `count` is the amount it produces in that one run. A stack that opens several groups runs the effects several times.
-- One-shot effects, meaning `arrow_rain`, `lightning`, `explosion`, and `weather`, are the exception: they run once per source and do not repeat with the group count, and they take no part in the output budget.
+- One-shot effects, meaning `lightning`, `explosion`, and `weather`, are the exception: they run once per source and do not repeat with the group count, and they take no part in the output budget.
+- Arrow rain is not one-shot: it plays once per group like any other effect, and its `chance` and potion effects are rolled per volley. One delayed task runs the volleys of the same candidate and slot back to back, and it takes no part in the output budget.
 
 About interruption and recovery:
 
