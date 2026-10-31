@@ -124,7 +124,8 @@ final class RuleEditorResultsSection {
     private static final int ACTION_ICON_TEXT_GAP = 4;
     private static final int ACTION_REMOVE_SIZE = 14;
     private static final int ACTION_REMOVE_INSET = 2;
-    private static final int ACTION_LIST_MIN_HEIGHT = ACTION_ROW_HEIGHT * 2 + 2;
+    // 左栏至少整装这么多条胶囊：条目未超出时按内容收紧，超出后列表占满该高度并滚动
+    private static final int ACTION_LIST_MIN_ROWS = 4;
     private static final int TOOLBAR_HEIGHT = 24;
     private static final int DETAIL_HEADER_HEIGHT = 26;
     // 动作参数表的标签列宽：产物行复用同一列宽，轮询按钮才能与下面的表单控件左右对齐。
@@ -1015,11 +1016,10 @@ final class RuleEditorResultsSection {
         }
         int navigationWidth = Math.clamp(area.width() / 3, NAVIGATION_MIN_WIDTH, NAVIGATION_MAX_WIDTH);
         int detailX = area.x() + navigationWidth + RuleEditorPageSupport.CARD_GAP;
-        int availableHeight = Math.max(0, area.bottom() - y);
-        // 先取得左栏列表与按钮的高度下限，再让右栏内容决定共用底边。
-        // 最终摆放左栏时复用此底边，切换行为和展开高级区均会同步伸缩。
-        int navigationBottom = layoutActionControls(area.x(), y, navigationWidth, availableHeight);
-        int detailBottom = layoutActionDetail(detailX, y, area.right() - detailX, navigationBottom - y);
+        // 两栏共用一条下界：先由视口底与左栏「最少行数 + 加号」的下限取较大值，右栏再按自身内容抬高它。
+        // 左栏比右栏更靠下时下界以左栏为准，右栏随之拉高，两卡底边始终一致。
+        int sharedBottom = Math.max(area.bottom(), y + actionsFloorHeight());
+        int detailBottom = layoutActionDetail(detailX, y, area.right() - detailX, sharedBottom - y);
         return layoutActions(area.x(), y, navigationWidth, detailBottom - y);
     }
 
@@ -1064,13 +1064,13 @@ final class RuleEditorResultsSection {
 
     /**
      * 摆放左侧一栏的动作列表、加号与底部按钮：列表按实际条目收紧，加号在列内水平居中并恒等于列表底边下移一个按钮间距。
-     * <p>列表高度取「全部条目所需高」与「可视上限」的较小值：条目少时不占满整栏，加号因此紧贴最后一条胶囊；
-     * 条目多到需要滚动时列表占满可视区，加号落在视口底边，也就是最下方可见胶囊的正下方。
+     * <p>下界取「宿主给的高度」与「{@link #ACTION_LIST_MIN_ROWS} 条胶囊所需高」的较大值，所以列表至少能整装这么多条；
+     * 条目更少时列表按内容收紧、加号紧随最后一条，条目更多时列表占满下界并滚动、加号停在下界的内边距之上。
      *
      * @param x               左缘
      * @param top             顶缘（卡片上边）
      * @param width           卡片宽
-     * @param availableHeight 宿主给该卡片的高度下限
+     * @param availableHeight 宿主给该卡片的高度
      * @return 卡片底边
      */
     private int layoutActionControls(int x, int top, int width, int availableHeight) {
@@ -1084,8 +1084,10 @@ final class RuleEditorResultsSection {
         int addSize = effectList == null ? ACTION_ROW_HEIGHT : effectList.rowContentHeight();
         boolean hasAdd = addEffectButton != null && addEffectButton.isVisible();
         int addBlock = hasAdd ? addSize + RuleEditorPageSupport.BUTTON_GAP : 0;
-        int bottom = Math.max(top + availableHeight, listY + ACTION_LIST_MIN_HEIGHT + addBlock
-                + (footer.isEmpty() ? 0 : RuleEditorPageSupport.BUTTON_GAP + footerHeight) + DETAIL_PADDING);
+        int footerBlock = footer.isEmpty() ? 0 : footerHeight + RuleEditorPageSupport.BUTTON_GAP;
+        // 下界不低于「最少行数 + 加号 + 底部内边距」：宿主给的高度再小，列表也不会被压到最少行数以下
+        int bottom = Math.max(top + availableHeight,
+                listY + actionListFloorHeight() + addBlock + footerBlock + DETAIL_PADDING);
         int footerY = bottom - DETAIL_PADDING - footerHeight;
         // 底边确定后按同一宽度重摆 footer，组内换行结果与上面的量高完全一致
         EditorSectionContent.layoutButtonGroup(footer, contentX, footerY, contentWidth);
@@ -1099,10 +1101,34 @@ final class RuleEditorResultsSection {
         if (effectList != null) effectList.setBounds(contentX, listY, contentWidth, listHeight);
         // 方形加号：边长取胶囊行内容高，列内水平居中，与列表底边只隔一个按钮间距
         if (hasAdd) {
-            addEffectButton.setBounds(contentX + (contentWidth - addSize) / 2,
-                    listY + listHeight + RuleEditorPageSupport.BUTTON_GAP, addSize, addSize);
+            // 加号跟随列表底边，但不越过下界：列表占满时它停在下界的内边距之上
+            int addY = Math.min(listY + listHeight + RuleEditorPageSupport.BUTTON_GAP,
+                    bottom - DETAIL_PADDING - addSize);
+            addEffectButton.setBounds(contentX + (contentWidth - addSize) / 2, addY, addSize, addSize);
         }
         return bottom;
+    }
+
+    /**
+     * 左栏整装 {@link #ACTION_LIST_MIN_ROWS} 条胶囊所需的外框高：行距按条目间距步进，末行只占内容高，再加视口内缩。
+     *
+     * @return 列表外框高；列表未建好时返回 0
+     */
+    private int actionListFloorHeight() {
+        if (effectList == null) return 0;
+        return (ACTION_LIST_MIN_ROWS - 1) * ACTION_ROW_HEIGHT
+                + effectList.rowContentHeight() + effectList.viewportInset();
+    }
+
+    /**
+     * 左栏在「最少行数 + 加号 + 底部内边距」下的内容高度（含卡片头）：分裂栏据此与右栏比较取较大值当共用下界。
+     *
+     * @return 左栏最少内容高度
+     */
+    private int actionsFloorHeight() {
+        boolean hasAdd = addEffectButton != null && addEffectButton.isVisible() && effectList != null;
+        int addBlock = hasAdd ? effectList.rowContentHeight() + RuleEditorPageSupport.BUTTON_GAP : 0;
+        return DETAIL_HEADER_HEIGHT + DETAIL_PADDING + actionListFloorHeight() + addBlock + DETAIL_PADDING;
     }
 
     private int layoutActionDetail(int x, int top, int width, int availableHeight) {

@@ -1,6 +1,6 @@
 {
   "name": "editor-results-small-window",
-  "description": "在小窗口（device 820x480、scale 2，即 logical 410x240）下复现用户报告时的比例：Results 分区加三个动作后取证加号位置与列表是否仍无滚动条。",
+  "description": "在小窗口（device 820x480、scale 2，即 logical 410x240）下复现用户报告时的比例：Results 分区加三个动作后取证左栏按四条胶囊的下限对齐右卡，内容超界时由页面滚动承接。",
   "start": {
     "kind": "editor",
     "new_rule": true
@@ -93,16 +93,6 @@
           "lang": "gui.itemdespawntowhat.edit.button.effect_add"
         },
         "expected": 1
-      }
-    },
-    {
-      "assert": {
-        "name": "小窗口下加号完整在窗口内",
-        "kind": "geometry_inside",
-        "selector": {
-          "kind": "CONTROL",
-          "lang": "gui.itemdespawntowhat.edit.button.effect_add"
-        }
       }
     },
     {
