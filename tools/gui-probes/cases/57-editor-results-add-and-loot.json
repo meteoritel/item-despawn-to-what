@@ -1,0 +1,211 @@
+{
+  "name": "editor-results-add-and-loot",
+  "description": "验证 Results 分区加号入口仍在、三个动作（spawn_entity/place_block/loot_table）能连续加入并各自选中，且 loot table 行不再出现「无可用目录」而是挂上目录按钮；采集三条动作的列表与 loot table 详情卡截图及布局快照。",
+  "start": {
+    "kind": "editor",
+    "new_rule": true
+  },
+  "window": {
+    "width": 1600,
+    "height": 1000,
+    "scale": 2
+  },
+  "steps": [
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.tab.results"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.button.effect_add"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.effect.spawn_entity"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "第一个动作已加入并选中（spawn_entity 默认物品档的 Item 行）",
+        "kind": "text_present",
+        "selector": {
+          "kind": "FRAME",
+          "lang": "gui.itemdespawntowhat.edit.field.spawn_item.item"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.button.effect_add"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.effect.place_block"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "第二个动作已加入并选中（place_block 详情）",
+        "kind": "text_present",
+        "selector": {
+          "kind": "FRAME",
+          "lang": "gui.itemdespawntowhat.edit.field.place_block.radius"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.button.effect_add"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.effect.loot_table"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "第三个动作已加入并选中（loot_table 详情）",
+        "kind": "text_present",
+        "selector": {
+          "kind": "FRAME",
+          "lang": "gui.itemdespawntowhat.edit.field.loot_table.loot_table"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "loot table 行不再显示无可用目录",
+        "kind": "text_absent",
+        "selector": {
+          "lang": "gui.itemdespawntowhat.edit.catalog.unavailable"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "loot table 行挂上目录按钮",
+        "kind": "text_count",
+        "selector": {
+          "kind": "CONTROL",
+          "lang_any": [
+            "gui.itemdespawntowhat.edit.pick.open",
+            "gui.itemdespawntowhat.edit.pick.add"
+          ],
+          "within": {
+            "kind": "FRAME",
+            "lang": "gui.itemdespawntowhat.edit.field.loot_table.loot_table"
+          }
+        },
+        "expected": 1
+      }
+    },
+    {
+      "assert": {
+        "name": "目录按钮完整在窗口内",
+        "kind": "geometry_inside",
+        "selector": {
+          "kind": "CONTROL",
+          "lang_any": [
+            "gui.itemdespawntowhat.edit.pick.open",
+            "gui.itemdespawntowhat.edit.pick.add"
+          ],
+          "within": {
+            "kind": "FRAME",
+            "lang": "gui.itemdespawntowhat.edit.field.loot_table.loot_table"
+          }
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "加号仍是唯一添加入口",
+        "kind": "text_count",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.button.effect_add"
+        },
+        "expected": 1
+      }
+    },
+    {
+      "assert": {
+        "name": "加号完整在窗口内",
+        "kind": "geometry_inside",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.button.effect_add"
+        }
+      }
+    },
+    {
+      "capture": "add_button",
+      "query": {
+        "source": "rect",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.button.effect_add"
+        }
+      }
+    },
+    {
+      "shot": "57-three-actions.png"
+    },
+    {
+      "dump": "57-three-actions.json",
+      "query": {
+        "source": "layout"
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang_any": [
+            "gui.itemdespawntowhat.edit.pick.open",
+            "gui.itemdespawntowhat.edit.pick.add"
+          ],
+          "within": {
+            "kind": "FRAME",
+            "lang": "gui.itemdespawntowhat.edit.field.loot_table.loot_table"
+          }
+        }
+      }
+    },
+    {
+      "shot": "57-loot-table-picker.png"
+    }
+  ]
+}

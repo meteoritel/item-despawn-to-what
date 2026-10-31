@@ -1,0 +1,223 @@
+{
+  "name": "editor-results-cycling",
+  "description": "验证结果工具条的组合方式按钮与生成实体动作的产物档位按钮都是单值轮询入口：单候选时无组合按钮、两个候选后出现且只显示一个取值、各点一次取值轮换，并采集两张截图。",
+  "start": {
+    "kind": "editor",
+    "new_rule": true
+  },
+  "window": {
+    "width": 1600,
+    "height": 1000,
+    "scale": 2
+  },
+  "steps": [
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.tab.results"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "单候选时无组合模式按钮",
+        "kind": "text_count",
+        "selector": {
+          "kind": "CONTROL",
+          "lang_any": [
+            "gui.itemdespawntowhat.edit.combination.round_robin",
+            "gui.itemdespawntowhat.edit.combination.priority"
+          ]
+        },
+        "expected": 0
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.results.plan_new"
+        }
+      }
+    },
+    {
+      "wait_for": {
+        "name": "两个候选后出现组合模式按钮",
+        "kind": "text_count",
+        "timeout_ms": 5000,
+        "selector": {
+          "kind": "CONTROL",
+          "lang_any": [
+            "gui.itemdespawntowhat.edit.combination.round_robin",
+            "gui.itemdespawntowhat.edit.combination.priority"
+          ]
+        },
+        "expected": 1
+      }
+    },
+    {
+      "assert": {
+        "name": "组合模式按钮完整在窗口内",
+        "kind": "geometry_inside",
+        "selector": {
+          "kind": "CONTROL",
+          "lang_any": [
+            "gui.itemdespawntowhat.edit.combination.round_robin",
+            "gui.itemdespawntowhat.edit.combination.priority"
+          ]
+        }
+      }
+    },
+    {
+      "capture": "combination",
+      "query": {
+        "source": "text",
+        "selector": {
+          "kind": "CONTROL",
+          "lang_any": [
+            "gui.itemdespawntowhat.edit.combination.round_robin",
+            "gui.itemdespawntowhat.edit.combination.priority"
+          ]
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang_any": [
+            "gui.itemdespawntowhat.edit.combination.round_robin",
+            "gui.itemdespawntowhat.edit.combination.priority"
+          ]
+        }
+      }
+    },
+    {
+      "wait_for": {
+        "name": "组合模式切到下一个取值",
+        "kind": "value_changed",
+        "capture": "combination",
+        "timeout_ms": 5000,
+        "query": {
+          "source": "text",
+          "selector": {
+            "kind": "CONTROL",
+            "lang_any": [
+              "gui.itemdespawntowhat.edit.combination.round_robin",
+              "gui.itemdespawntowhat.edit.combination.priority"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "shot": "56-combination.png"
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.button.effect_add"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.effect.spawn_entity"
+        }
+      }
+    },
+    {
+      "wait_for": {
+        "name": "产物档位按钮单值轮询",
+        "kind": "text_count",
+        "timeout_ms": 5000,
+        "selector": {
+          "kind": "CONTROL",
+          "lang_any": [
+            "gui.itemdespawntowhat.edit.results.product.item",
+            "gui.itemdespawntowhat.edit.results.product.mob",
+            "gui.itemdespawntowhat.edit.results.product.other_entity",
+            "gui.itemdespawntowhat.edit.results.product.experience"
+          ]
+        },
+        "expected": 1
+      }
+    },
+    {
+      "assert": {
+        "name": "产物档位按钮完整在窗口内",
+        "kind": "geometry_inside",
+        "selector": {
+          "kind": "CONTROL",
+          "lang_any": [
+            "gui.itemdespawntowhat.edit.results.product.item",
+            "gui.itemdespawntowhat.edit.results.product.mob",
+            "gui.itemdespawntowhat.edit.results.product.other_entity",
+            "gui.itemdespawntowhat.edit.results.product.experience"
+          ]
+        }
+      }
+    },
+    {
+      "capture": "product",
+      "query": {
+        "source": "text",
+        "selector": {
+          "kind": "CONTROL",
+          "lang_any": [
+            "gui.itemdespawntowhat.edit.results.product.item",
+            "gui.itemdespawntowhat.edit.results.product.mob",
+            "gui.itemdespawntowhat.edit.results.product.other_entity",
+            "gui.itemdespawntowhat.edit.results.product.experience"
+          ]
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang_any": [
+            "gui.itemdespawntowhat.edit.results.product.item",
+            "gui.itemdespawntowhat.edit.results.product.mob",
+            "gui.itemdespawntowhat.edit.results.product.other_entity",
+            "gui.itemdespawntowhat.edit.results.product.experience"
+          ]
+        }
+      }
+    },
+    {
+      "wait_for": {
+        "name": "产物档位切到下一档",
+        "kind": "value_changed",
+        "capture": "product",
+        "timeout_ms": 5000,
+        "query": {
+          "source": "text",
+          "selector": {
+            "kind": "CONTROL",
+            "lang_any": [
+              "gui.itemdespawntowhat.edit.results.product.item",
+              "gui.itemdespawntowhat.edit.results.product.mob",
+              "gui.itemdespawntowhat.edit.results.product.other_entity",
+              "gui.itemdespawntowhat.edit.results.product.experience"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "shot": "56-product.png"
+    }
+  ]
+}

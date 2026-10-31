@@ -1,0 +1,230 @@
+{
+  "name": "editor-results-weather",
+  "description": "从新草稿通过真实动作选择器建立天气行为，先采集行为空态截图与引导句断言，再验证 Mode 轮询按钮单值、雷暴行随模式隐藏与恢复，并采集两种模式的截图与布局。",
+  "start": {
+    "kind": "editor",
+    "new_rule": true
+  },
+  "window": {
+    "width": 1600,
+    "height": 1000,
+    "scale": 2
+  },
+  "steps": [
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.tab.results"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "空态只有一个方形加号作为添加入口",
+        "kind": "text_count",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.button.effect_add"
+        },
+        "expected": 1
+      }
+    },
+    {
+      "assert": {
+        "name": "空态加号完整在窗口内",
+        "kind": "geometry_inside",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.button.effect_add"
+        }
+      }
+    },
+    { "shot": "55-results-empty.png" },
+    {
+      "dump": "55-results-empty.json",
+      "query": {
+        "source": "layout"
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.button.effect_add"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.effect.weather"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "Mode 行存在",
+        "kind": "text_present",
+        "selector": {
+          "lang": "gui.itemdespawntowhat.edit.field.weather.mode"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "Mode 轮询按钮单值",
+        "kind": "text_count",
+        "selector": {
+          "kind": "CONTROL",
+          "lang_any": [
+            "gui.itemdespawntowhat.edit.enum.weather_effect_mode.rain",
+            "gui.itemdespawntowhat.edit.enum.weather_effect_mode.clear"
+          ]
+        },
+        "expected": 1
+      }
+    },
+    {
+      "assert": {
+        "name": "Mode 胶囊完整在窗口内",
+        "kind": "geometry_inside",
+        "selector": {
+          "kind": "CONTROL",
+          "lang_any": [
+            "gui.itemdespawntowhat.edit.enum.weather_effect_mode.rain",
+            "gui.itemdespawntowhat.edit.enum.weather_effect_mode.clear"
+          ]
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "加号按钮完整在窗口内",
+        "kind": "geometry_inside",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.button.effect_add"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "Thundering 行存在",
+        "kind": "text_present",
+        "selector": {
+          "lang": "gui.itemdespawntowhat.edit.field.weather.thundering"
+        }
+      }
+    },
+    {
+      "capture": "mode",
+      "query": {
+        "source": "text",
+        "selector": {
+          "kind": "CONTROL",
+          "lang_any": [
+            "gui.itemdespawntowhat.edit.enum.weather_effect_mode.rain",
+            "gui.itemdespawntowhat.edit.enum.weather_effect_mode.clear"
+          ]
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang_any": [
+            "gui.itemdespawntowhat.edit.enum.weather_effect_mode.rain",
+            "gui.itemdespawntowhat.edit.enum.weather_effect_mode.clear"
+          ]
+        }
+      }
+    },
+    {
+      "wait_for": {
+        "name": "Mode 切到下一档",
+        "kind": "value_changed",
+        "capture": "mode",
+        "timeout_ms": 5000,
+        "query": {
+          "source": "text",
+          "selector": {
+            "kind": "CONTROL",
+            "lang_any": [
+              "gui.itemdespawntowhat.edit.enum.weather_effect_mode.rain",
+              "gui.itemdespawntowhat.edit.enum.weather_effect_mode.clear"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "wait_for": {
+        "name": "Clear 档隐藏 Thundering 行",
+        "kind": "text_absent",
+        "timeout_ms": 5000,
+        "selector": {
+          "lang": "gui.itemdespawntowhat.edit.field.weather.thundering"
+        }
+      }
+    },
+    {
+      "shot": "55-weather.png"
+    },
+    {
+      "dump": "55-weather.json",
+      "query": {
+        "source": "layout"
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang_any": [
+            "gui.itemdespawntowhat.edit.enum.weather_effect_mode.rain",
+            "gui.itemdespawntowhat.edit.enum.weather_effect_mode.clear"
+          ]
+        }
+      }
+    },
+    {
+      "wait_for": {
+        "name": "轮询回到 Rain 档",
+        "kind": "value_equals",
+        "expected_lang": "gui.itemdespawntowhat.edit.enum.weather_effect_mode.rain",
+        "timeout_ms": 5000,
+        "query": {
+          "source": "text",
+          "selector": {
+            "kind": "CONTROL",
+            "lang_any": [
+              "gui.itemdespawntowhat.edit.enum.weather_effect_mode.rain",
+              "gui.itemdespawntowhat.edit.enum.weather_effect_mode.clear"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "wait_for": {
+        "name": "Rain 档恢复 Thundering 行",
+        "kind": "text_present",
+        "timeout_ms": 5000,
+        "selector": {
+          "lang": "gui.itemdespawntowhat.edit.field.weather.thundering"
+        }
+      }
+    },
+    {
+      "shot": "55-weather-rain.png"
+    }
+  ]
+}

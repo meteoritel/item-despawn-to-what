@@ -514,6 +514,8 @@ def load_cases(cases_dir, only):
                 if check["kind"] == "value_changed" and check.get("capture") not in captures: raise ProbeError("缺少 capture: " + str(check.get("capture")))
                 if check["kind"] in ("value_equals", "text_count", "node_enabled") and "expected" not in check and "expected_lang" not in check and "expected_capture" not in check: raise ProbeError("断言缺少期望: " + str(check))
             query = step.get("query", (check or {}).get("query"))
+            # dump 必须带 query：缺了它离线校验会放过，直到运行时才 KeyError
+            if "dump" in step and not step.get("query"): raise ProbeError("dump 缺少 query: " + str(step.get("dump")))
             if query and query.get("source") not in sources: raise ProbeError("未知 query: " + str(query))
             if "capture" in step: captures.add(step["capture"])
             validate_keys(step)

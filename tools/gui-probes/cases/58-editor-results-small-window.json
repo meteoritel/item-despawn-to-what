@@ -1,0 +1,128 @@
+{
+  "name": "editor-results-small-window",
+  "description": "在小窗口（device 820x480、scale 2，即 logical 410x240）下复现用户报告时的比例：Results 分区加三个动作后取证加号位置与列表是否仍无滚动条。",
+  "start": {
+    "kind": "editor",
+    "new_rule": true
+  },
+  "window": {
+    "width": 820,
+    "height": 480,
+    "scale": 2
+  },
+  "steps": [
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.tab.results"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.button.effect_add"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.effect.spawn_entity"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.button.effect_add"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.effect.place_block"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.button.effect_add"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.effect.loot_table"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "三个动作加入后 loot_table 详情在显示",
+        "kind": "text_present",
+        "selector": {
+          "kind": "FRAME",
+          "lang": "gui.itemdespawntowhat.edit.field.loot_table.loot_table"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "小窗口下加号仍是唯一添加入口",
+        "kind": "text_count",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.button.effect_add"
+        },
+        "expected": 1
+      }
+    },
+    {
+      "assert": {
+        "name": "小窗口下加号完整在窗口内",
+        "kind": "geometry_inside",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.button.effect_add"
+        }
+      }
+    },
+    {
+      "capture": "add_button",
+      "query": {
+        "source": "rect",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.edit.button.effect_add"
+        }
+      }
+    },
+    {
+      "dump": "58-small-window.json",
+      "query": {
+        "source": "layout"
+      }
+    },
+    {
+      "shot": "58-small-window.png"
+    }
+  ]
+}
