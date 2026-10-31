@@ -198,5 +198,8 @@ public final class DraftJournal {
         this.baselines.clear();
         this.pending.clear();
         this.writer.submitClear();
+        if (!this.writer.awaitIdle(DRAIN_WAIT_MS)) {
+            Constants.LOG.warn("草稿清理未在 {} 毫秒内完成，剩余任务会继续在后台执行", DRAIN_WAIT_MS);
+        }
     }
 }
