@@ -482,7 +482,6 @@
   "gui.itemdespawntowhat.edit.field.time_of_day.to": "To",
   "gui.itemdespawntowhat.edit.field.weather.duration_ticks": "Duration (ticks)",
   "gui.itemdespawntowhat.edit.field.weather.mode": "Mode",
-  "gui.itemdespawntowhat.edit.field.weather.note": "\"Clear\" mode: ignored",
   "gui.itemdespawntowhat.edit.field.weather.thundering": "Thundering",
   "gui.itemdespawntowhat.edit.field.weather.weather": "Weather",
   "gui.itemdespawntowhat.edit.field.y_level.max": "Max Y",

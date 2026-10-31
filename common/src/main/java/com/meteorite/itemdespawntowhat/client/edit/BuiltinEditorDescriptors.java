@@ -44,9 +44,6 @@ public final class BuiltinEditorDescriptors {
             id("time_of_day"), List.of(EditorField.note(FIELD + "time_of_day.note")),
             id("light_level"), List.of(EditorField.note(FIELD + "light_level.note")));
 
-    private static final Map<ResourceLocation, List<EditorField>> EFFECT_NOTES = Map.of(
-            id("weather"), List.of(EditorField.note(FIELD + "weather.note")));
-
     private static volatile boolean bootstrapped;
 
     private BuiltinEditorDescriptors() {
@@ -87,8 +84,7 @@ public final class BuiltinEditorDescriptors {
 
     private static void registerEffects() {
         for (TypeDefinition<?> type : ClientTypeRegistries.effects().all()) {
-            register(EditorRegistries.EFFECTS, type, TypeLabels.effectLabel(type.id()),
-                    EFFECT_NOTES.getOrDefault(type.id(), List.of()));
+            register(EditorRegistries.EFFECTS, type, TypeLabels.effectLabel(type.id()), List.of());
         }
     }
 

@@ -482,7 +482,6 @@
   "gui.itemdespawntowhat.edit.field.time_of_day.to": "结束",
   "gui.itemdespawntowhat.edit.field.weather.duration_ticks": "持续（刻）",
   "gui.itemdespawntowhat.edit.field.weather.mode": "模式",
-  "gui.itemdespawntowhat.edit.field.weather.note": "「晴天」模式下该项不生效",
   "gui.itemdespawntowhat.edit.field.weather.thundering": "雷暴",
   "gui.itemdespawntowhat.edit.field.weather.weather": "天气",
   "gui.itemdespawntowhat.edit.field.y_level.max": "最大 Y",

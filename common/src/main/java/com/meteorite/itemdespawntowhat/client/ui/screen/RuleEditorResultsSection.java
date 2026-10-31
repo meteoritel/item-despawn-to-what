@@ -42,6 +42,7 @@ import com.meteorite.itemdespawntowhat.core.model.ConditionLimits;
 import com.meteorite.itemdespawntowhat.core.model.OutcomeCandidate;
 import com.meteorite.itemdespawntowhat.core.api.param.ParamTier;
 import com.meteorite.itemdespawntowhat.core.type.effect.PlaceBlockEffect;
+import com.meteorite.itemdespawntowhat.core.type.effect.WeatherEffect;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -358,6 +359,7 @@ final class RuleEditorResultsSection {
                 // 卡片放宽后用卡片行距与更窄的标签列：实体与年龄行的控件才拿得到足够宽度
                 effectForm.setLabelWidth(DETAIL_LABEL_WIDTH);
                 if (typeId.equals(PlaceBlockEffect.ID)) bindPlaceBlockVisibility(effectForm, session, actionPath);
+                else if (typeId.equals(WeatherEffect.ID)) bindWeatherVisibility(effectForm, session, actionPath);
                 else if (spawnEntity && (productStop == EntityProductStop.MOB || productStop == EntityProductStop.OTHER_ENTITY))
                     bindEntityProductUi(effectForm, actionPath);
                 content.forms.add(effectForm);
@@ -446,6 +448,24 @@ final class RuleEditorResultsSection {
                 limitLink.followerChanged();
                 placeBlockLimitManual = limitLink.manual();
             }
+        });
+    }
+
+    /**
+     * weather 的字段联动：mode=clear 时雷暴开关不生效，隐藏该行，避免露出一个改了也没有作用的勾选框。
+     * <p>手工 JSON 可能已显式写 {@code thundering: true}，该值仍会参与执行，因此此时保留该行，不把生效值藏起来。
+     *
+     * @param form       weather 参数表单
+     * @param session    当前编辑会话
+     * @param actionPath 动作在草稿中的路径
+     */
+    private void bindWeatherVisibility(FormView form, EditSession session, String actionPath) {
+        form.field(WeatherEffect.THUNDERING_FIELD).visibleWhen(() -> {
+            RuleValue draft = session.valueAt(actionPath);
+            // mode 的 JSON 取值由 EnumCodecs.lowerCase 派生；忽略大小写比较，与手写 JSON 的解析口径一致
+            boolean clear = draft != null && draft.isMapping()
+                    && WeatherEffect.Mode.CLEAR.name().equalsIgnoreCase(draft.text(WeatherEffect.MODE_FIELD, ""));
+            return !clear || RuleValue.flag(draft, WeatherEffect.THUNDERING_FIELD, false);
         });
     }
 
