@@ -168,6 +168,8 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
     private static final int PAGE_LABEL_MIN_WIDTH = 30;
     // 工具栏范围按钮：一个按钮轮询「只主分类 → 只标签 → 一起」，按钮上写当前范围的短标签、完整文案进悬停说明
     private static final int SCOPE_SIDE_PADDING = 4;
+    // 范围按钮的标签与前进箭头间距：与 UiButton 轮询样式的图标间距保持同一口径
+    private static final int SCOPE_ARROW_GAP = 3;
     // 滚动条：视觉只有 4 像素，可抓取范围外扩；滑块最矮 8 像素
     private static final int SCROLLBAR_GRAB_MARGIN = 3;
     private static final int MIN_SCROLL_THUMB = 8;
@@ -560,7 +562,7 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
         int widest = Math.max(font.width(scopeLabel(Scope.ITEM).getString()),
                 Math.max(font.width(scopeLabel(Scope.TAG).getString()),
                         font.width(scopeLabel(Scope.BOTH).getString())));
-        return widest + SCOPE_SIDE_PADDING * 2;
+        return widest + SCOPE_SIDE_PADDING * 2 + Mark.NEXT.width() + SCOPE_ARROW_GAP;
     }
 
     // 滚动条命中：内容超过可见行时，抓取范围比 4 像素的视觉宽度宽一点
@@ -796,19 +798,29 @@ public final class UiCatalogGrid implements UiInteractionSession.Target, UiWidge
         theme.drawDivider(graphics, toolbarRect.x(), toolbarRect.bottom(), toolbarRect.width());
     }
 
-    // 范围轮询按钮：按钮上写当前范围短标签，点击切到下一个，完整说明只进悬停提示
+    // 范围轮询按钮：胶囊底图上写当前范围短标签，标签右侧带前进箭头，点击切到下一个，完整说明只进悬停提示
     private void drawScopeButton(GuiGraphics graphics, int mouseX, int mouseY) {
         if (policy == null || !policy.scoped() || scopeRect.width() <= 0) {
             return;
         }
         boolean hovered = enabled && scopeRect.contains(mouseX, mouseY);
-        graphics.fill(scopeRect.x(), scopeRect.y(), scopeRect.right(), scopeRect.bottom(),
-                hovered ? theme.palette().controlHover() : theme.palette().controlFill());
-        theme.drawBevel(graphics, scopeRect, theme.palette().controlBevelLight(), theme.palette().controlBevelDark());
+        if (enabled) {
+            theme.drawChip(graphics, scopeRect, false, hovered);
+        } else {
+            theme.drawSegment(graphics, scopeRect, false, false, false);
+        }
         String label = scopeLabel(scope).getString();
-        graphics.drawString(font, label, scopeRect.x() + Math.max(0, (scopeRect.width() - font.width(label)) / 2),
+        int labelWidth = font.width(label);
+        // 按钮宽度按最宽标签预留，标签与箭头因此总能整体居中放下
+        int contentWidth = labelWidth + Mark.NEXT.width() + SCOPE_ARROW_GAP;
+        int x = scopeRect.x() + Math.max(0, (scopeRect.width() - contentWidth) / 2);
+        graphics.drawString(font, label, x,
                 scopeRect.y() + Math.max(0, (scopeRect.height() - font.lineHeight) / 2),
                 enabled ? theme.palette().textPrimary() : theme.palette().textDisabled(), false);
+        UiIcon arrow = UiMarkIcons.icon(Mark.NEXT,
+                enabled ? theme.palette().textSecondary() : theme.palette().textDisabled());
+        arrow.render(graphics, x + labelWidth + SCOPE_ARROW_GAP,
+                scopeRect.y() + Math.max(0, (scopeRect.height() - arrow.height()) / 2));
     }
 
     private void drawList(GuiGraphics graphics) {

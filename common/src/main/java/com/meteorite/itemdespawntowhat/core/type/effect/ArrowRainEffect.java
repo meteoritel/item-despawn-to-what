@@ -136,7 +136,6 @@ public record ArrowRainEffect(
             .initial(DEFAULT_COUNT);
     public static final EnumSpec<Pickup> PICKUP = EnumSpec
             .defaulted(PICKUP_FIELD, Pickup.CODEC, DEFAULT_PICKUP, "arrow_rain_pickup", Pickup.values())
-            .shape(ParamShape.ENUM_CYCLE)
             .editorRequired(false)
             .initial(DEFAULT_PICKUP);
     public static final NestedListSpec<PotionEffectSpec> POTION_EFFECTS = NestedListSpec

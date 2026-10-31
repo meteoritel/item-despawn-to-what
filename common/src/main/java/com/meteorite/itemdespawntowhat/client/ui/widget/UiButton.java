@@ -12,6 +12,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiMarkIcons;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 
 import java.util.ArrayList;
@@ -70,6 +71,8 @@ public final class UiButton implements UiWidget, UiFocusTarget, UiLayoutSource, 
     private boolean enabled = true;
     private boolean visible = true;
     private boolean chipStyle;
+    // 轮询样式：胶囊底图 + 标签右侧的前进箭头
+    private boolean cycleStyle;
     private int hoverTicks;
     private static final int CHIP_PADDING = 4;
     private static final int ICON_GAP = 3;
@@ -155,6 +158,42 @@ public final class UiButton implements UiWidget, UiFocusTarget, UiLayoutSource, 
         return this;
     }
 
+    /**
+     * 选择轮询样式：按钮点一下切到下一个取值，因此统一采用圆角胶囊底图并在标签右侧绘制前进箭头。
+     *
+     * <p>箭头与标签作为一个整体居中，宽度不足时先裁标签；图标、标签与箭头的间距和圆角内缩都由本类统一，
+     * 调用方只负责给出当前取值的文案。</p>
+     *
+     * @param cycleStyle 是否为轮询样式
+     * @return 当前按钮
+     */
+    public UiButton setCycleStyle(boolean cycleStyle) {
+        this.cycleStyle = cycleStyle;
+        return this;
+    }
+
+    // 圆角底图：胶囊样式与轮询样式共用同一套绘制与内缩
+    private boolean capsule() {
+        return chipStyle || cycleStyle;
+    }
+
+    /**
+     * 轮询样式在标签右侧预留的箭头宽度（含与标签的间距）。
+     *
+     * <p>轮询按钮的文案是变动取值，调用方按「最长文案」预留按钮宽时要用同一个数，
+     * 否则文案会在箭头出现后被裁成省略号。</p>
+     *
+     * @return 箭头宽度与图标间距之和
+     */
+    public static int cycleArrowWidth() {
+        return UiMarkIcons.Mark.NEXT.width() + ICON_GAP;
+    }
+
+    // 本按钮需要为箭头预留的宽度；非轮询样式为 0
+    private int arrowReserve() {
+        return cycleStyle ? cycleArrowWidth() : 0;
+    }
+
     // 设置点击动作；同一动作不触发重配
     public UiButton setAction(UiAction action) {
         if (this.action == action) {
@@ -213,7 +252,7 @@ public final class UiButton implements UiWidget, UiFocusTarget, UiLayoutSource, 
 
     // 按文本宽度计算合适的按钮宽度（含左右内边距与图标）
     public int preferredWidth(int padding) {
-        int width = labelWidth() + padding * 2;
+        int width = labelWidth() + padding * 2 + arrowReserve();
         if (icon != null) {
             width += icon.width() + ICON_GAP;
         }
@@ -233,7 +272,7 @@ public final class UiButton implements UiWidget, UiFocusTarget, UiLayoutSource, 
         if (!visible || rect.width() <= 0 || rect.height() <= 0) {
             return List.of();
         }
-        int budget = chipStyle ? Math.max(0, rect.width() - CHIP_PADDING * 2) : rect.width();
+        int budget = capsule() ? Math.max(0, rect.width() - CHIP_PADDING * 2 - arrowReserve()) : rect.width();
         Component snapshotLabel = label;
         Component accessible = accessibleName();
         if (label.getString().isEmpty() && accessible != null) { snapshotLabel = accessible; }
@@ -261,7 +300,7 @@ public final class UiButton implements UiWidget, UiFocusTarget, UiLayoutSource, 
         if (!visible) {
             return;
         }
-        if (chipStyle) {
+        if (capsule()) {
             renderChip(graphics, font, mouseX, mouseY);
             return;
         }
@@ -275,8 +314,9 @@ public final class UiButton implements UiWidget, UiFocusTarget, UiLayoutSource, 
         if (control.isEnabled()) theme.drawChip(graphics, rect, isPressed(), hovered);
         else theme.drawSegment(graphics, rect, false, false, false);
         int iconWidth = icon == null ? 0 : icon.width() + ICON_GAP;
+        int arrowWidth = arrowReserve();
         int available = Math.max(0, rect.width() - CHIP_PADDING * 2);
-        int contentWidth = Math.min(available, labelWidth() + iconWidth);
+        int contentWidth = Math.min(available, labelWidth() + iconWidth + arrowWidth);
         int x = rect.x() + (rect.width() - contentWidth) / 2;
         // 胶囊按钮在窄布局中仍须把图标与文字裁剪到自身范围。
         graphics.enableScissor(rect.x(), rect.y(), rect.right(), rect.bottom());
@@ -288,7 +328,14 @@ public final class UiButton implements UiWidget, UiFocusTarget, UiLayoutSource, 
                     : variant == UiButtonVariant.DANGER ? theme.palette().danger() : theme.palette().textPrimary();
             TextScroll.draw(graphics, font, label.getString(), x + iconWidth,
                     rect.y() + (rect.height() - font.lineHeight) / 2,
-                    Math.max(0, contentWidth - iconWidth), color, hovered, hoverTicks, false);
+                    Math.max(0, contentWidth - iconWidth - arrowWidth), color, hovered, hoverTicks, false);
+            if (cycleStyle) {
+                UiMarkIcons.Mark arrow = UiMarkIcons.Mark.NEXT;
+                int arrowX = x + contentWidth - arrow.width();
+                int arrowY = rect.y() + Math.max(0, (rect.height() - arrow.height()) / 2);
+                UiMarkIcons.icon(arrow, control.isEnabled() ? theme.palette().textSecondary() : theme.palette().textDisabled())
+                        .render(graphics, arrowX, arrowY);
+            }
         } finally {
             graphics.disableScissor();
         }

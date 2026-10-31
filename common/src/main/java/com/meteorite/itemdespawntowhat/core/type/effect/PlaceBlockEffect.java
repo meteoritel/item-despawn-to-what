@@ -14,7 +14,6 @@ import com.meteorite.itemdespawntowhat.core.api.param.BoolSpec;
 import com.meteorite.itemdespawntowhat.core.api.param.EnumSpec;
 import com.meteorite.itemdespawntowhat.core.api.param.IntSpec;
 import com.meteorite.itemdespawntowhat.core.api.param.ParamList;
-import com.meteorite.itemdespawntowhat.core.api.param.ParamShape;
 import com.meteorite.itemdespawntowhat.core.api.param.RefSpec;
 import com.meteorite.itemdespawntowhat.core.model.CommonFields;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
@@ -284,7 +283,6 @@ public record PlaceBlockEffect(
             .defaulted(SHAPE_FIELD, Shape.CODEC, DEFAULT_SHAPE, "place_block_shape", Shape.values())
             .editorRequired(false)
             .initial(DEFAULT_SHAPE)
-            .shape(ParamShape.ENUM_CYCLE)
             .hint("place_block.shape.hint");
     public static final IntSpec COUNT = IntSpec.defaulted(COUNT_FIELD, DEFAULT_COUNT, MIN_COUNT, MAX_COUNT)
             .initial(DEFAULT_COUNT);

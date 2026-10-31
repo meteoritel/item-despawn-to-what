@@ -48,8 +48,7 @@ public record EnumSpec<E extends Enum<E>>(ParamMeta meta, Codec<E> codec, List<E
     /**
      * 声明编辑器的枚举展示形态。
      *
-     * <p>默认按分段选择投影；候选较多、每行放不下完整文案时声明 {@link ParamShape#ENUM_CYCLE}，
-     * 界面改为一个占满控件列的按钮轮换取值。</p>
+     * <p>只影响编辑器如何排布这个参数，wire 取值与校验不变；未声明时按参数自身类型常规投影。</p>
      *
      * @param value 展示形态
      * @return 带该形态的声明

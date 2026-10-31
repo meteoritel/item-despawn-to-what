@@ -122,7 +122,7 @@ flowchart TD
 | `FormView` | 表单聚合根 | 按 `TypeEditorDescriptor` 渲染可滚动控件列；写入统一经 `EditSession`；支持定位高亮、内联选择与行尾动作 | `FormCommit`、`FormInputRouter`、`FormControl` |
 | `FormField` | 行身份与装配入口 | 绑定实际行，配置显隐、默认值、数值窗口、目录过滤、行尾动作与数量配对；路径随 rebase 更新，换描述符或卸载后失效 | `FormView`、字段声明 |
 | `FormCommit` | 表单提交协议 | 装载与保留文本，按修订守卫提交合法输入；字段及关联更新共用会话回调，非法文本留在会话 | `FormView`、`EditSession` |
-| `FormControl` / `FormControlRegistry` | 字段控件扩展点 | 一个字段一行，负责 JSON 值与控件值的双向搬运与本地校验；无 default 的枚举 switch 将每种字段显式映射到控件工厂。枚举控件按字段声明渲染成横排分段或单个轮询按钮，两种形态共用同一份候选与写入路径 | 描述符引擎、`EditSession` |
+| `FormControl` / `FormControlRegistry` | 字段控件扩展点 | 一个字段一行，负责 JSON 值与控件值的双向搬运与本地校验；无 default 的枚举 switch 将每种字段显式映射到控件工厂。枚举控件是单个轮询按钮：当前取值显示在按钮文字里，点击切到下一个候选，候选列表与写入路径只有一份 | 描述符引擎、`EditSession` |
 | `UiHostTheme` / `UiHostThemes` / `AbstractHostTheme` | 主题注入入口 | 调色板、度量、文本色、控件样式、滑块皮肤、结构绘制与图标行号；两套主题逐项相同的宿主度量与外壳原语收在 `AbstractHostTheme`，默认入口给出像素外观，扁平外观由调用方显式取用 | 全部控件与屏幕 |
 | `UiWidget` / `UiModalStack` | 控件与弹窗契约 | 控件共享 `UiInputTarget`；模态栈维护层次与关闭通知，宿主选择顶层模态作用域，历史回调注入该作用域 | `EditorInputRouter`、`UiInputScope` |
 | `ConditionTreeContract` / `UiConditionGraphEditor` / `UiConditionTreeSummary` / `ConditionTreeOverlay` | 条件树界面家族 | 同一份条件数据与校验的两种展示；契约提供类型选项、叶子工厂、变更监听与选中路径同步 | 条件模型、`FormView`、`ConditionTreeChrome` |
@@ -185,7 +185,7 @@ flowchart LR
 
 各页面、模态、选择器与保存遮罩独立拥有焦点和持续交互；作用域返回恢复合格的旧焦点，旁白与自动滚动连接作用域焦点通知。表单子树隐藏、禁用或卸载时结束本子树交互，数值取消恢复模型与文本快照。
 
-`UiSegmentedControl` 的导航位置与业务选中独立：整组占一个 Tab 位置，方向键、Home、End 移动组内位置，Enter/Space 激活后才切换编辑分区或枚举值。状态、来源、目录范围、组合模式和产物档位等循环取值入口可点击且不参与焦点序列。鼠标与键盘共享唯一逻辑焦点，额外焦点轮廓仅键盘操作显示；文本光标与选区照常显示。
+`UiSegmentedControl` 只用于编辑分区的页签切换，导航位置与业务选中独立：整组占一个 Tab 位置，方向键、Home、End 移动组内位置，Enter/Space 激活后才切换分区。状态、来源、目录范围、组合模式和产物档位等循环取值入口是单个胶囊按钮（`UiButton#setCycleStyle`，标签右侧带前进箭头），点击即切到下一个取值，不参与焦点序列。鼠标与键盘共享唯一逻辑焦点，额外焦点轮廓仅键盘操作显示；文本光标与选区照常显示。
 
 ### 只读条目的编辑页
 
@@ -259,8 +259,8 @@ flowchart LR
 - 界面按描述符装配；JSON 的解析与构造收敛在 `client/edit`，界面消费模型或转换结果。
 - 主题只表达视觉，控件只表达交互语义；控件通过注入取色，不静态读取主题类。
 - 全 GUI 不使用字体阴影与加粗：需要居中、折行或悬停提示文本时统一走 `UiFlatText`，原版的 `drawCenteredString`、`drawWordWrap`、`renderTooltip` 会把暗色阴影叠在浅色底板上；信息层次由字体颜色、缩进与分区间距表达。
-- 页面内容里的按钮统一用扁平胶囊样式（`UiButton#setChipStyle`），立体边只留给外壳页脚的保存行；扁平填充配 `PANEL_BORDER` 描边，让按钮与同页的标签框、分段控件、列表行处在同一层次。
-- 悬停提示只补充画面上读不到的信息：规则名、组合方式、撤销说明、只读含义等；动作名、叉号、翻页箭头、分段选项、物品卡与行为卡这类已有文字或符号表达的内容不再重复解释。
+- 页面内容里的按钮统一用扁平胶囊样式（`UiButton#setChipStyle`），循环取值的按钮另加 `setCycleStyle`，复用同一套胶囊底图并自动带前进箭头；立体边只留给外壳页脚的保存行。扁平填充配 `PANEL_BORDER` 描边，让按钮与同页的标签框、页签、列表行处在同一层次。
+- 悬停提示只补充画面上读不到的信息：规则名、组合方式、撤销说明、只读含义等；动作名、叉号、翻页箭头、页签选项、物品卡与行为卡这类已有文字或符号表达的内容不再重复解释。
 - 必填字段在标签右上角加 `*` 角标；缺值时用红色标签与控件下沿的红色警示线表达。
 - 条件树的结构与参数编辑只在画布页完成，缩进树保持只读并作为进入画布的入口（[ADR-0031](../adr/0031-condition-tree-single-editor-two-renders.md)）。条件编辑入口统一在触发分区，结果分区只编辑动作自身的参数与共用补充参数（概率、延迟），动作说明也不重复条件行。
 - 条件摘要与画布各自拥有选择和折叠；画布 `UiTreeEditor.ViewChange` 驱动选择展示和参数同步，功能栏、工具列与画布/JSON 区域用 `UiFocusManager` 决定 Tab 顺序。

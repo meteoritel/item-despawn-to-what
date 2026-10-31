@@ -240,8 +240,10 @@ final class RuleEditorListPage implements EditorPage {
 
     // 筛选按钮：状态与来源各一个轮询按钮，两者取交集
     private void buildFilterButtons() {
-        statusButton = button(UI + "filter.status_label", UiButtonVariant.SECONDARY, this::cycleStatusFilter);
-        sourceButton = button(UI + "filter.source_label", UiButtonVariant.SECONDARY, this::cycleSourceFilter);
+        statusButton = button(UI + "filter.status_label", UiButtonVariant.SECONDARY, this::cycleStatusFilter)
+                .setCycleStyle(true);
+        sourceButton = button(UI + "filter.source_label", UiButtonVariant.SECONDARY, this::cycleSourceFilter)
+                .setCycleStyle(true);
         filterButtons.clear();
         statusButton.setFocusable(false);
         sourceButton.setFocusable(false);

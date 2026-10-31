@@ -280,7 +280,9 @@ final class RuleEditorResultsSection {
         }
         if (candidates > 1) {
             combinationButton = new UiButton(THEME, font, combinationLabel(rule), UiButtonVariant.SECONDARY,
-                    this::cycleCombination).setChipStyle(true).setFocusable(false);
+                    this::cycleCombination)
+                    .setCycleStyle(true)
+                    .setFocusable(false);
             content.widgets.add(combinationButton);
             content.buttons.add(combinationButton);
         }
@@ -331,7 +333,9 @@ final class RuleEditorResultsSection {
                         && element != null && element.isMapping()) {
                     descriptor = BuiltinEditorDescriptors.entityDescriptor(productStop.variant());
                     productButton = new UiButton(THEME, font, productLabel(productStop), UiButtonVariant.SECONDARY,
-                            () -> cycleProduct(actionPath)).setChipStyle(true).setFocusable(false);
+                            () -> cycleProduct(actionPath))
+                            .setCycleStyle(true)
+                            .setFocusable(false);
                     productButton.setTooltip(Component.translatable(RuleEditorPageSupport.UI + "results.product_switch"));
                     productButton.setAccessibleName(Component.translatable(RuleEditorPageSupport.UI + "results.product_switch"));
                     content.widgets.add(productButton);
@@ -1017,7 +1021,9 @@ final class RuleEditorResultsSection {
         if (combinationButton != null) {
             controls.add(combinationButton);
             ensureStaticTexts();
-            sizes.add(Math.min(width, combinationOptionWidth + RuleEditorPageSupport.PAD * 2));
+            // 宽度按「最长组合方式文案」预留，再加轮询箭头：两者都取最长时切档不会重新换行
+            sizes.add(Math.min(width, combinationOptionWidth + RuleEditorPageSupport.PAD * 2
+                    + UiButton.cycleArrowWidth()));
         }
         for (UiButton button : content.candidateButtons) {
             controls.add(button);
