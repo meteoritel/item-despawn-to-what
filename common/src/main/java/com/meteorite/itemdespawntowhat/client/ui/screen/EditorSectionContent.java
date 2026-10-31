@@ -27,7 +27,6 @@ final class EditorSectionContent {
     final List<FormView> forms = new ArrayList<>();
     final List<UiButton> buttons = new ArrayList<>();
     final List<UiButton> candidateButtons = new ArrayList<>();
-    final List<UiButton> effectButtons = new ArrayList<>();
     final List<PageCard> cards = new ArrayList<>();
 
     EditorSectionContent(Font font) { this.font = font; }
@@ -36,7 +35,6 @@ final class EditorSectionContent {
         for (FormView form : forms) form.setEnabled(enabled);
         for (UiButton button : buttons) button.setEnabled(enabled);
         for (UiButton button : candidateButtons) button.setEnabled(enabled);
-        for (UiButton button : effectButtons) button.setEnabled(enabled);
     }
 
     void clear() {
@@ -45,7 +43,6 @@ final class EditorSectionContent {
         forms.clear();
         buttons.clear();
         candidateButtons.clear();
-        effectButtons.clear();
         cards.clear();
     }
 

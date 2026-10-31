@@ -45,6 +45,8 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
     // 双击判定间隔（毫秒）
     private static final long DOUBLE_CLICK_MS = 250L;
     private static final int CHIP_ROW_GAP = 4;
+    // 视口相对外框的内缩：四周留 1 像素边框，因此可用视口比外框窄高各两像素
+    private static final int VIEWPORT_INSET = 2;
 
     // 行渲染器
     private final RowRenderer<T> rowRenderer;
@@ -217,21 +219,47 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
     @Override
     public void setBounds(int x, int y, int width, int height) {
         this.bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
-        scrollView.setViewport(x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2));
+        scrollView.setViewport(x + VIEWPORT_INSET / 2, y + VIEWPORT_INSET / 2,
+                Math.max(0, width - VIEWPORT_INSET), Math.max(0, height - VIEWPORT_INSET));
         scrollView.setStep(Math.max(1, rowHeight * 2));
         updateContentSize();
     }
 
     // 根据数据量与视口更新滚动范围
     private void updateContentSize() {
-        int contentHeight = items.isEmpty() ? 0 : (items.size() - 1) * rowHeight + rowContentHeight();
-        scrollView.setContentHeight(contentHeight);
+        int height = contentHeight();
+        scrollView.setContentHeight(height);
         int viewportHeight = scrollView.viewport().height();
         visibleRowCount = Math.max(1, viewportHeight / Math.max(1, rowHeight));
-        scrollView.setScrollbarVisible(contentHeight > viewportHeight);
+        scrollView.setScrollbarVisible(height > viewportHeight);
     }
 
-    private int rowContentHeight() {
+    /**
+     * 全部条目所需的滚动内容高度：首行到末行内容底边，行间留白已计入。
+     * <p>宿主需要按实际条目数收紧列表高度时读它，滚动范围也由同一口径派生，两者不会出现一像素级偏差。
+     *
+     * @return 内容高度；空列表返回 0
+     */
+    public int contentHeight() {
+        return items.isEmpty() ? 0 : (items.size() - 1) * rowHeight + rowContentHeight();
+    }
+
+    /**
+     * 视口相对列表外框的内缩边长：宿主按内容高收紧列表外框时必须加上它，
+     * 否则可用视口比内容矮两像素，最后一行被裁掉并触发滚动条。
+     *
+     * @return 宽高各自的内缩总量
+     */
+    public int viewportInset() {
+        return VIEWPORT_INSET;
+    }
+
+    /**
+     * 单行内容高：气泡行比行距矮一条行间留白，因此实际行矩形小于步进距离。
+     *
+     * @return 行内容高度，即渲染与命中使用的行矩形高
+     */
+    public int rowContentHeight() {
         return chipRows ? Math.max(1, rowHeight - CHIP_ROW_GAP) : rowHeight;
     }
 

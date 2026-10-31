@@ -127,8 +127,9 @@ final class RuleEditorResultsSection {
     private static final int ACTION_LIST_MIN_HEIGHT = ACTION_ROW_HEIGHT * 2 + 2;
     private static final int TOOLBAR_HEIGHT = 24;
     private static final int DETAIL_HEADER_HEIGHT = 26;
-    // 动作参数表的标签列宽：产物行复用它，轮询按钮才能与下面的表单控件左对齐
-    private static final int DETAIL_LABEL_WIDTH = 64;
+    // 动作参数表的标签列宽：产物行复用同一列宽，轮询按钮才能与下面的表单控件左右对齐。
+    // 取值与表单默认标签列宽一致，较长的英文字段标签（如「Duration (ticks)」）不必退化成省略号
+    private static final int DETAIL_LABEL_WIDTH = 88;
     private static final int DETAIL_ICON_SIZE = 18;
     private static final int DETAIL_PADDING = 8;
     private static final int EMPTY_MESSAGE_GAP = 8;
@@ -174,7 +175,7 @@ final class RuleEditorResultsSection {
         selectedAction = null;
         effectNoteRect = null;
         openActionButton = null;
-        emptyAddButton = null;
+        addEffectButton = null;
     }
 
     int candidateIndex;
@@ -213,8 +214,8 @@ final class RuleEditorResultsSection {
 
     private @Nullable UiButton openActionButton;
 
-    // 空态卡内的「添加动作」入口（仅在没有动作时创建）
-    private @Nullable UiButton emptyAddButton;
+    // 行为列表唯一的「添加动作」入口：方形加号恒定排在最后一条胶囊下方
+    private @Nullable UiButton addEffectButton;
 
     private @Nullable UiRect detailHeaderRect;
 
@@ -294,7 +295,6 @@ final class RuleEditorResultsSection {
         effectList.setRowHeight(ACTION_ROW_HEIGHT);
         effectList.setSelectionMarkerVisible(false);
         effectList.setChipRows(true);
-        effectList.setEmptyMessage(Component.translatable(RuleEditorPageSupport.UI + "summary.no_effect"));
         List<Integer> effects = new ArrayList<>();
         for (int i = 0; i < effectCount; i++) {
             effects.add(i);
@@ -313,6 +313,14 @@ final class RuleEditorResultsSection {
         });
         effectList.setOnActivate(index -> enterResultStage(2));
         content.widgets.add(effectList);
+        // 与行为列表同属一栏：加号只在列表侧显示，窄屏 stage 2 的详情页不出现
+        addEffectButton = new UiButton(THEME, font, Component.empty(), UiButtonVariant.SECONDARY, this::openEffectPicker)
+                .setChipStyle(true)
+                .setIcon(THEME.icon(UiHostTheme.ICON_ADD_CONDITION, false))
+                .setAccessibleName(Component.translatable(RuleEditorPageSupport.UI + "button.effect_add"))
+                .setTooltip(Component.translatable(RuleEditorPageSupport.UI + "button.effect_add"));
+        content.widgets.add(addEffectButton);
+        content.buttons.add(addEffectButton);
         revealSelectedEffect = true;
         if (effectCount > 0) {
             openActionButton = new UiButton(THEME, font,
@@ -356,7 +364,7 @@ final class RuleEditorResultsSection {
                     showAdvancedEffects = advanced.stream().anyMatch(field -> field.name().equals(fieldName));
                 }
                 effectForm = forms.create(session, actionPath, new TypeEditorDescriptor(descriptor.id(), descriptor.label(), primary, descriptor.readOnly()));
-                // 卡片放宽后用卡片行距与更窄的标签列：实体与年龄行的控件才拿得到足够宽度
+                // 标签列固定为产物行共用的列宽：卡片页不跟随基本页的紧凑密度，产物轮的按钮才与表单控件左右对齐
                 effectForm.setLabelWidth(DETAIL_LABEL_WIDTH);
                 if (typeId.equals(PlaceBlockEffect.ID)) bindPlaceBlockVisibility(effectForm, session, actionPath);
                 else if (typeId.equals(WeatherEffect.ID)) bindWeatherVisibility(effectForm, session, actionPath);
@@ -380,25 +388,11 @@ final class RuleEditorResultsSection {
             }
         }
 
-        if (effectCount == 0) {
-            // 无动作时入口收敛到右卡：工具条不再挂同名按钮，同屏只有一个「添加动作」
-            emptyAddButton = new UiButton(THEME, font,
-                    Component.translatable(RuleEditorPageSupport.UI + "button.effect_add"),
-                    UiButtonVariant.SECONDARY, this::openEffectPicker).setChipStyle(true);
-            content.widgets.add(emptyAddButton);
-            content.buttons.add(emptyAddButton);
-        }
         addPlanButton("results.plan_new", this::addCandidate);
         addPlanButton("results.plan_copy", this::duplicateCandidate);
         deletePlanButton = addPlanButton("results.plan_delete", this::removeCandidate);
         movePlanUpButton = addPlanButton("button.candidate_up", () -> moveCandidateBy(-1));
         movePlanDownButton = addPlanButton("button.candidate_down", () -> moveCandidateBy(1));
-        if (effectCount > 0) {
-            UiButton add = new UiButton(THEME, font, Component.translatable(RuleEditorPageSupport.UI + "button.effect_add"),
-                    UiButtonVariant.SECONDARY, this::openEffectPicker).setChipStyle(true);
-            content.effectButtons.add(add);
-            content.widgets.add(add);
-        }
     }
 
     // 表单可见性按控件类型分发：本类只持有这几种控件，与布局开关一一对应
@@ -995,7 +989,7 @@ final class RuleEditorResultsSection {
         boolean actions = split || resultStage == 1;
         boolean detail = split || resultStage == 2;
         show(effectList, actions);
-        content.effectButtons.forEach(button -> show(button, actions));
+        show(addEffectButton, actions);
         show(openActionButton, !split && actions);
         show(resultBack, !split && detail);
         show(safeSpawnBox, detail);
@@ -1004,7 +998,6 @@ final class RuleEditorResultsSection {
         show(productButton, detail);
         show(advancedButton, detail);
         show(advancedEffectForm, detail && showAdvancedEffects);
-        show(emptyAddButton, detail);
         detailHeaderRect = null;
         emptyDetailRect = null;
         actionParametersRect = null;
@@ -1069,20 +1062,45 @@ final class RuleEditorResultsSection {
         return bottom;
     }
 
+    /**
+     * 摆放左侧一栏的动作列表、加号与底部按钮：列表按实际条目收紧，加号在列内水平居中并恒等于列表底边下移一个按钮间距。
+     * <p>列表高度取「全部条目所需高」与「可视上限」的较小值：条目少时不占满整栏，加号因此紧贴最后一条胶囊；
+     * 条目多到需要滚动时列表占满可视区，加号落在视口底边，也就是最下方可见胶囊的正下方。
+     *
+     * @param x               左缘
+     * @param top             顶缘（卡片上边）
+     * @param width           卡片宽
+     * @param availableHeight 宿主给该卡片的高度下限
+     * @return 卡片底边
+     */
     private int layoutActionControls(int x, int top, int width, int availableHeight) {
         int contentX = x + DETAIL_PADDING;
         int contentWidth = Math.max(0, width - DETAIL_PADDING * 2);
         int listY = top + DETAIL_HEADER_HEIGHT + DETAIL_PADDING;
-        List<UiButton> footer = new ArrayList<>(content.effectButtons);
+        // 先按 y=第一行 量一次 footer，拿到它的高度；最终位置由卡片底边反推
+        List<UiButton> footer = new ArrayList<>();
         if (openActionButton != null && openActionButton.isVisible()) footer.addFirst(openActionButton);
         int footerHeight = EditorSectionContent.layoutButtonGroup(footer, contentX, listY, contentWidth);
-        int bottom = Math.max(top + availableHeight, listY + ACTION_LIST_MIN_HEIGHT
-                + RuleEditorPageSupport.BUTTON_GAP + footerHeight + DETAIL_PADDING);
+        int addSize = effectList == null ? ACTION_ROW_HEIGHT : effectList.rowContentHeight();
+        boolean hasAdd = addEffectButton != null && addEffectButton.isVisible();
+        int addBlock = hasAdd ? addSize + RuleEditorPageSupport.BUTTON_GAP : 0;
+        int bottom = Math.max(top + availableHeight, listY + ACTION_LIST_MIN_HEIGHT + addBlock
+                + (footer.isEmpty() ? 0 : RuleEditorPageSupport.BUTTON_GAP + footerHeight) + DETAIL_PADDING);
         int footerY = bottom - DETAIL_PADDING - footerHeight;
+        // 底边确定后按同一宽度重摆 footer，组内换行结果与上面的量高完全一致
         EditorSectionContent.layoutButtonGroup(footer, contentX, footerY, contentWidth);
-        if (effectList != null) {
-            effectList.setBounds(contentX, listY, contentWidth,
-                    Math.max(0, footerY - RuleEditorPageSupport.BUTTON_GAP - listY));
+        int listLimit = Math.max(0, footerY - (footer.isEmpty() ? 0 : RuleEditorPageSupport.BUTTON_GAP) - listY);
+        // 空列表的所需高按一行内容算：空态提示居中绘制在视口里，高度为 0 会把文字压到加号上
+        int listRequired = effectList == null ? 0
+                : effectList.size() == 0 ? effectList.rowContentHeight() : effectList.contentHeight();
+        // 视口比外框矮两像素，外框要按内容高加上内缩，条目刚好占满时才不会冒出滚动条
+        int listFit = listRequired + (effectList == null ? 0 : effectList.viewportInset());
+        int listHeight = Math.clamp(listLimit - addBlock, 0, listFit);
+        if (effectList != null) effectList.setBounds(contentX, listY, contentWidth, listHeight);
+        // 方形加号：边长取胶囊行内容高，列内水平居中，与列表底边只隔一个按钮间距
+        if (hasAdd) {
+            addEffectButton.setBounds(contentX + (contentWidth - addSize) / 2,
+                    listY + listHeight + RuleEditorPageSupport.BUTTON_GAP, addSize, addSize);
         }
         return bottom;
     }
@@ -1127,15 +1145,9 @@ final class RuleEditorResultsSection {
                 y = EditorSectionContent.layoutForm(advancedEffectForm, contentX, y, contentWidth);
             }
         } else {
-            int messageHeight = font.lineHeight + EMPTY_MESSAGE_GAP
-                    + emptyHelpLines(contentWidth).size() * (font.lineHeight + 2);
-            y += messageHeight + DETAIL_PADDING;
-            if (emptyAddButton != null) {
-                emptyAddButton.setBounds(contentX, y,
-                        Math.min(contentWidth, emptyAddButton.preferredWidth(RuleEditorPageSupport.PAD)),
-                        RuleEditorPageSupport.FORM_BUTTON_H);
-                y += RuleEditorPageSupport.FORM_BUTTON_H + DETAIL_PADDING;
-            }
+            // 空态只留标题与引导句：添加入口已收敛到左侧列表的加号，右卡不再重复按钮
+            y += font.lineHeight + EMPTY_MESSAGE_GAP
+                    + emptyHelpLines(contentWidth).size() * (font.lineHeight + 2) + DETAIL_PADDING;
         }
         int bottom = Math.max(top + availableHeight, y + DETAIL_PADDING);
         if (empty) emptyDetailRect = new UiRect(contentX, top + DETAIL_HEADER_HEIGHT + DETAIL_PADDING,
