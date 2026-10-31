@@ -253,10 +253,19 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInt
         return Math.max(1, trackRight() - trackLeft());
     }
 
-    // 指针横坐标换算成窗口内的数值（比例先钳制）
-    public double valueAtPointer(double pointerX) {
+    /**
+     * 指针横坐标换算成窗口内的数值。
+     *
+     * <p>比例先钳制到轨道内，结果再按当前档位吸附：定位与拖动必须共用同一套吸附策略，
+     * 否则点击会带出全精度小数（例如 56.04395604395606），既进精确输入框也随草稿提交。</p>
+     *
+     * @param pointerX 指针横坐标（GUI 坐标）
+     * @param fine     是否按精细档位吸附
+     * @return 吸附并钳制到合法域后的数值
+     */
+    public double valueAtPointer(double pointerX, boolean fine) {
         double fraction = (pointerX - trackLeft()) / (double) trackWidth();
-        return window.valueAt(fraction);
+        return policy.snap(window.valueAt(fraction), fine);
     }
 
     // 绘制一帧；hovered 只在可见时更新
@@ -312,13 +321,14 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInt
         capture = context.scope().interaction();
         capture.begin(this, UiInteractionSession.Source.POINTER, context.button());
 
+        boolean fine = context.shiftDown();
         if (interaction.begin(value, interactionListener)) {
-            preview(valueAtPointer(context.pointerX()));
+            preview(valueAtPointer(context.pointerX(), fine));
         }
         // 点击定位后以当前位置为拖动锚点，避免拖动时再次跳变
         dragAnchorPointer = context.pointerX();
         dragAnchorValue = value;
-        dragFineAnchor = context.shiftDown();
+        dragFineAnchor = fine;
         return true;
     }
 
