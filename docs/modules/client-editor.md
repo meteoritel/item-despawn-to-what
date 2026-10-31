@@ -214,7 +214,7 @@ flowchart TD
 - 公共高级字段 `offset` 投影为固定嵌套表单，X/Y/Z 三行复用 `NumberControl`，步长均为 1 格。`BuiltinEditorDescriptors.withEffectLimits` 将开屏限额绑定为逐轴合法域；`NumericDomain.SignedLabels` 提供西/东、下/上、北/南双端文案、显式正号和零位刻度，方向名画在轨道上方左右两端，轴名行不重复绘制，三轴滑条因此共享同一左缘。上限为 0 时保留禁用滑条，精确输入仍可将超限草稿修正为 0；回填保留原始值。
 - 参数声明的展示默认值经 `EditorField.defaultValue` 传入嵌套子表单；原字段与缺省轴在未编辑时保持省略形态。
 - 自动投影保留 `ParamSpec.tier()`；手工描述符中的高级字段使用 `.withTier(ParamTier.ADVANCED)` 标记。结果页仅按动作顶层字段分区，嵌套字段随所属顶层字段展示。
-- 引用参数可声明 `SelectionIntent`，`ParamProjection` 将该意图传给 `EditorField`；客户端目录映射按精确 registry 键解析，未知 registry 字段保留原值并显示无可用目录状态。
+- 引用参数可声明 `SelectionIntent`，`ParamProjection` 将该意图传给 `EditorField`；单个资源位置字段（`ResLocSpec`）同样声明 registry，投影后即可用目录面板挑选候选。客户端目录映射按精确 registry 键解析，未知 registry 字段保留原值并显示无可用目录状态。
 - 引用草稿投影同时保留原始 `RuleValue` 与已解析的 `TaggedId`；图标、名称和校验复用解析值，非法原文和未知 JSON 在其他元素编辑后继续保留。轻量解析严格处理文本，Codec 保持既有外围空白处理。
 - 界面层按 `EditorField` 的分类谓词判断字段归类（列表、数值、说明行、可带标签等），不对 `EditorFieldType` 做 switch；新增 `EditorFieldType` 取值时同步补谓词实现。
 - 本地未发现的类型与参数声明为空的第三方条件类型由 `descriptorFor` 返回只读回退描述，展示原始 JSON 并原样保留未识别字段；内置无参条件类型保留说明行。已发现的效果类型在装配时检查公共字段声明（见[类型系统](type-system.md#第三方类型-spi)）。

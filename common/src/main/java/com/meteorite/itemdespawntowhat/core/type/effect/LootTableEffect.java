@@ -56,7 +56,7 @@ public record LootTableEffect(
     public static final float MAX_LUCK = 100.0F;
 
     /** 参数声明：类型专属字段在前，通用字段复用 CommonFields 的声明 */
-    public static final ResLocSpec LOOT_TABLE = ResLocSpec.required(LOOT_TABLE_FIELD);
+    public static final ResLocSpec LOOT_TABLE = ResLocSpec.required(LOOT_TABLE_FIELD, "minecraft:loot_table");
     public static final FloatSpec LUCK = FloatSpec.defaulted(LUCK_FIELD, DEFAULT_LUCK, MIN_LUCK, MAX_LUCK)
             .initial(DEFAULT_LUCK);
     public static final ParamList<LootTableEffect> PARAMS = ParamList.of(LOOT_TABLE.bind(LootTableEffect::lootTable), LUCK.bind(LootTableEffect::luck)).plus(CommonFields.EFFECT_PARAMS);

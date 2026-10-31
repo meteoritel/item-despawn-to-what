@@ -225,9 +225,11 @@ public record EditorField(String name, String labelKey, EditorFieldType type, Fi
 
     /**
      * 资源位置字段（不允许标签）
+     *
+     * @param registry 注册表名，决定目录面板的候选范围
      */
-    public static EditorField resourceLocation(String name, String labelKey) {
-        return create(name, labelKey, EditorFieldType.RESOURCE_LOCATION, FieldDomain.None.INSTANCE, false, true, null, null, null);
+    public static EditorField resourceLocation(String name, String labelKey, String registry) {
+        return create(name, labelKey, EditorFieldType.RESOURCE_LOCATION, FieldDomain.None.INSTANCE, false, true, registry, null, null);
     }
 
     /** 气候区间字段的端点域与交互步长来自 core 共享声明。 */

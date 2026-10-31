@@ -63,7 +63,7 @@ public final class ParamProjection {
             case RefListSpec refListSpec -> requiredByEditor(
                     EditorField.tagList(refListSpec.name(), label, refListSpec.registry()),
                     refListSpec.editorRequired());
-            case ResLocSpec resLocSpec -> EditorField.resourceLocation(resLocSpec.name(), label);
+            case ResLocSpec resLocSpec -> EditorField.resourceLocation(resLocSpec.name(), label, resLocSpec.registry());
             case ResLocListSpec resLocListSpec -> requiredByEditor(
                     EditorField.rlList(resLocListSpec.name(), label, resLocListSpec.registry()),
                     resLocListSpec.editorRequired());

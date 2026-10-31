@@ -8,13 +8,13 @@ import org.jetbrains.annotations.Nullable;
 
 /**
  * 单个资源位置参数声明（如战利品表 id）。
- * <p>资源位置只是标识符，能否解析成真实资源由类型在使用处决定。</p>
+ * <p>注册表名只用于编辑器选择器的候选范围；资源位置只是标识符，能否解析成真实资源由类型在使用处决定。</p>
  */
-public record ResLocSpec(ParamMeta meta) implements ParamSpec<ResourceLocation> {
+public record ResLocSpec(ParamMeta meta, String registry) implements ParamSpec<ResourceLocation> {
 
     // 必填资源位置
-    public static ResLocSpec required(String name) {
-        return new ResLocSpec(ParamMeta.of(name, ParamPresence.REQUIRED, true));
+    public static ResLocSpec required(String name, String registry) {
+        return new ResLocSpec(ParamMeta.of(name, ParamPresence.REQUIRED, true), registry);
     }
 
     public ResLocSpec label(String suffix) {
@@ -44,6 +44,6 @@ public record ResLocSpec(ParamMeta meta) implements ParamSpec<ResourceLocation> 
     }
 
     private ResLocSpec withMeta(ParamMeta value) {
-        return new ResLocSpec(value);
+        return new ResLocSpec(value, registry);
     }
 }
