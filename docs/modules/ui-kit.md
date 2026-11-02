@@ -10,7 +10,7 @@ authority: common/client/ui/kit、common/client/ui/kit/package-info.java
 > **TL;DR**
 > - `client/ui/kit` 是与本模组业务无关的声明式客户端 UI 原语集：排版与几何、固定矩形控件与控件组、输入作用域与持续交互、树编辑、数值与文本契约、预览与绘制层次。
 > - 视觉规格、业务文案、模态归属与数据解释都由宿主注入：kit 提供通用算法、状态容器、接口与不可变值。
-> - 公开面以 `package-info.java` 为权威登记；依赖边界由 `tools/check-ui-kit-boundaries.ps1` 强制。
+> - 公开面以 `package-info.java` 为权威登记；依赖边界由 `tools/check-ui-kit-boundaries.py` 强制。
 
 **适用对象**：编写新界面或新控件、实现宿主主题、给画布或树增加交互、排查输入与交互生命周期问题的开发者。
 
@@ -74,7 +74,7 @@ flowchart LR
     EDIT --> KIT
 ```
 
-边界由脚本强制：`powershell -ExecutionPolicy Bypass -File tools/check-ui-kit-boundaries.ps1`，白名单为 `java.*`、`javax.*`、`net.minecraft.*`、`org.jetbrains.*`、`org.joml.*`、`org.lwjgl.*`，另按脚本的 `$allowedClasses` 精确放行光照、顶点构建、GPU 缓冲与 RenderSystem 类型。preview 单向引用基础 kit，公开面逐目录登记。退出码 0 通过、1 存在违规、2 配置错误。
+边界由脚本强制：`python tools/check-ui-kit-boundaries.py`，白名单为 `java.*`、`javax.*`、`net.minecraft.*`、`org.jetbrains.*`、`org.joml.*`、`org.lwjgl.*`，另按脚本的 `ALLOWED_CLASSES` 精确放行光照、顶点构建、GPU 缓冲与 RenderSystem 类型。preview 单向引用基础 kit，公开面逐目录登记。退出码 0 通过、1 存在违规、2 配置错误。
 
 ### 被谁依赖
 
@@ -219,7 +219,7 @@ flowchart LR
 
 ### 改动后的验证
 
-1. `powershell -ExecutionPolicy Bypass -File tools/check-ui-kit-boundaries.ps1`（改动 kit 或其依赖时必跑）。
+1. `python tools/check-ui-kit-boundaries.py`（改动 kit 或其依赖时必跑）。
 2. IDE 工作区检查 → `tools/dsh-build.ps1 -Tasks build`。
 3. 改文档链接后跑 `python tools/check-docs.py`；改语言文件跑 `python tools/check-i18n.py`。
 

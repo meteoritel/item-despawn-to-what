@@ -7,7 +7,7 @@ authority:
   - fabric/src/main/java/com/meteorite/itemdespawntowhat
   - neoforge/src/main/java/com/meteorite/itemdespawntowhat
   - tools/check-isolation.py
-  - tools/check-ui-kit-boundaries.ps1
+  - tools/check-ui-kit-boundaries.py
 ---
 
 # 包职责

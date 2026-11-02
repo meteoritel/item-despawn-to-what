@@ -22,9 +22,7 @@ tasks.register('checkProbePackaging', Exec) {
 tasks.register('checkUiKitBoundaries', Exec) {
     group = 'verification'
     workingDir rootProject.projectDir
-    def shell = System.getProperty('os.name').toLowerCase().contains('windows') ? 'powershell' : 'pwsh'
-    commandLine shell, '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
-            rootProject.file('tools/check-ui-kit-boundaries.ps1')
+    commandLine 'python', rootProject.file('tools/check-ui-kit-boundaries.py')
 }
 ['generateConfigReference': false, 'checkConfigReference': true].each { taskName, checkOnly ->
     tasks.register(taskName, Exec) {

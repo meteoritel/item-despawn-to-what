@@ -5,7 +5,7 @@
 
 ## 背景
 
-kit 由 [ADR-0022](0022-client-ui-kit-adoption.md) 同源引入、按 [ADR-0025](0025-reusable-client-ui-kit-boundary.md) 作为记录来源与差异的维护副本。kit 不依赖本模组其它包、不依赖加载器 API，边界由 `tools/check-ui-kit-boundaries.ps1` 强制。但 kit 内同时存在两类内容：可被任意宿主复用的通用能力，以及只有本项目才用到的实现；同一能力若在宿主控件层另行实现，两处会分叉（滑块与区间条核心、换行布局即属此类），kit 中另有当前没有生产调用点的公开类。
+kit 由 [ADR-0022](0022-client-ui-kit-adoption.md) 同源引入、按 [ADR-0025](0025-reusable-client-ui-kit-boundary.md) 作为记录来源与差异的维护副本。kit 不依赖本模组其它包、不依赖加载器 API，边界由 `tools/check-ui-kit-boundaries.py` 强制。但 kit 内同时存在两类内容：可被任意宿主复用的通用能力，以及只有本项目才用到的实现；同一能力若在宿主控件层另行实现，两处会分叉（滑块与区间条核心、换行布局即属此类），kit 中另有当前没有生产调用点的公开类。
 
 kit 未来要独立成库，必须先确定「什么进 kit、什么留宿主」，否则每次能力扩张都要在两类内容之间重新解释。
 

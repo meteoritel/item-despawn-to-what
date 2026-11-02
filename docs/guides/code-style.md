@@ -83,7 +83,7 @@ flowchart LR
 
 ## 复核
 
-- 结构与边界：用 `tools/check-isolation.py`、`tools/check-ui-kit-boundaries.ps1` 做机械校验。
+- 结构与边界：用 `tools/check-isolation.py`、`tools/check-ui-kit-boundaries.py` 做机械校验。
 - 文案：用 `tools/check-i18n.py` 校验语言文件同步。
 - 编译与构建：走仓库根目录的构建流程，构建通过后再实机验证。
 - 文档改动：用 `tools/check-docs.py` 校验链接与路径。

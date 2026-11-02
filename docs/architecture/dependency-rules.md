@@ -5,7 +5,7 @@ audience: 修改 import、移动类、新增平台接入或 UI kit 用法的开�
 authority:
   - tools/check-isolation.py
   - tools/java_references.py
-  - tools/check-ui-kit-boundaries.ps1
+  - tools/check-ui-kit-boundaries.py
   - settings.gradle
   - common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/package-info.java
 ---
@@ -34,7 +34,7 @@ authority:
 | D6 | 命令、调试、网络是使用方 | `core/command`、`core/debug`、`core/network` → 运行时与编辑服务 | `tools/check-isolation.py` 禁止底层实现反向引用使用方 |
 | D7 | 宿主是唯一向上装配点 | `core/host` → `core` 其余包与 `platform/Services` | `tools/check-isolation.py` 禁止底层实现反向引用宿主 |
 | D8 | 客户端单向分层 | `client/net` → 协议与业务模型；`client/edit` → core 与 `client/ui/kit`；`client/ui` → `client/edit`、`client/net` | `tools/check-isolation.py` + 评审 |
-| D9 | UI kit 不引用本模组其它包 | `client/ui/kit` 只引用自身包与白名单 | `tools/check-ui-kit-boundaries.ps1` |
+| D9 | UI kit 不引用本模组其它包 | `client/ui/kit` 只引用自身包与白名单 | `tools/check-ui-kit-boundaries.py` |
 | D10 | 平台隔离 | `net.fabricmc.*`、`net.neoforged.*` 只出现在 `fabric/`、`neoforge/` | `tools/check-isolation.py` |
 | D11 | 跨加载器隔离 | `fabric/` 引用 `net.fabricmc.*`，`neoforge/` 引用 `net.neoforged.*`，两者互不引用对方加载器 API | `tools/check-isolation.py` |
 | D12 | 端隔离 | 客户端类（`net.minecraft.client.*`、`com.meteorite.itemdespawntowhat.client.*`）只出现在路径含 `/client/` 的源码 | `tools/check-isolation.py` |
@@ -82,16 +82,16 @@ flowchart LR
 
 运行方式：`python tools/check-isolation.py`（可用 `--root` 指定仓库根）。通过时退出码为 0，存在违规时逐条列出并以 1 退出，必需输入缺失或根目录无效时以 2 退出。
 
-### `tools/check-ui-kit-boundaries.ps1`
+### `tools/check-ui-kit-boundaries.py`
 
-递归扫描 `client/ui/kit` 下全部 `.java` 的 import、全限定引用与顶层 public 登记：
+按原始文本逐行递归扫描 `client/ui/kit` 下全部 `.java` 的 import、全限定引用与顶层 public 登记：
 
 - 每个顶层 public 类型在同目录 package-info 的角色表唯一登记为 host、library 或 example，过期登记也报违规；
 - preview 允许引用基础 kit；基础 kit 对 preview 的 import 与全限定反向引用报错；
 - import 白名单为 `java.*`、`javax.*`、`net.minecraft.*`、`org.jetbrains.*`、`org.joml.*`、`org.lwjgl.*`，另有 `com.mojang.blaze3d` 的顶点与光照类型；
 - 本模组其它包、`net.fabricmc.*`、`net.neoforged.*`、`com.google.gson.*` 判违规。
 
-运行方式：`powershell -ExecutionPolicy Bypass -File tools/check-ui-kit-boundaries.ps1`；通过返回 0，有违规返回 1。
+运行方式：`python tools/check-ui-kit-boundaries.py`；通过返回 0，有违规返回 1，必需输入缺失或目录无效返回 2。PowerShell 入口保留为参数兼容转发。
 
 ### 构建与持续集成
 

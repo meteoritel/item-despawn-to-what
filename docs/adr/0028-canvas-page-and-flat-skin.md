@@ -26,4 +26,4 @@
 
 - ADR-0022 决策 6 的圆角卡片禁令由本决策取代；kit 的公开面与差异记录方式见 [UI kit 模块文档](../modules/ui-kit.md)。
 - 画布页与表单页各自维护一套视觉规格；页面职责、四页界面契约与表单/叶面板分工见[客户端 UI 模块文档](../modules/client-ui.md)。
-- 新增 kit 公开类需要登记，`tools/check-ui-kit-boundaries.ps1` 仍是唯一强制校验。
+- 新增 kit 公开类需要登记，`tools/check-ui-kit-boundaries.py` 仍是唯一强制校验。

@@ -273,7 +273,7 @@ flowchart LR
 
 1. IDE 工作区检查 → `tools/dsh-build.ps1 -Tasks build`。
 2. 界面布局按 [ADR-0022](../adr/0022-client-ui-kit-adoption.md) 的视觉基线验收：最低 320×240 GUI 逻辑坐标、页面在 GUI 缩放 1x/2x/3x 下无重叠与文本溢出，颜色线索同时给出文字或图标。可用 [GUI 探针](../guides/gui-probes.md) 在本机跑真实客户端用例，拿到判定与截图证据。
-3. 改文案跑 `python tools/check-i18n.py`；改 kit 边界的引用跑 `tools/check-ui-kit-boundaries.ps1`；改文档链接跑 `python tools/check-docs.py`。
+3. 改文案跑 `python tools/check-i18n.py`；改 kit 边界的引用跑 `tools/check-ui-kit-boundaries.py`；改文档链接跑 `python tools/check-docs.py`。
 
 ## 6. 数据与配置引用
 

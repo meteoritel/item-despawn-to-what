@@ -19,6 +19,30 @@ def code_only(text: str) -> str:
     return NON_CODE.sub(lambda match: re.sub(r"[^\n]", " ", match.group()), text)
 
 
+@dataclass(frozen=True)
+class BoundaryLine:
+    """保留原始行号的边界检查输入；逐行声明规则与 UI kit 入口一致。"""
+    number: int
+    text: str
+    imported: str | None
+    qualified: tuple[str, ...]
+    public_type: str | None
+
+
+def boundary_lines(text: str, *, prefixes=PREFIXES, raw: bool = False):
+    """提供原文或去注释视图；原文模式同时检查 Javadoc 与字符串中的依赖。"""
+    view = text if raw else code_only(text)
+    imports = re.compile(r"^\s*import\s+(?:static\s+)?([A-Za-z_][A-Za-z0-9_\.]*)\s*;", re.IGNORECASE)
+    public = re.compile(r"^public\s+(?:(?:final|abstract|sealed|non-sealed|strictfp)\s+)*(?:class|interface|enum|record|@interface)\s+([A-Za-z_][A-Za-z0-9_]*)", re.IGNORECASE)
+    qualified = re.compile(r"\b(?:" + "|".join(re.escape(prefix) for prefix in prefixes) + r")[A-Za-z_][A-Za-z0-9_\.]*")
+    for number, line in enumerate(view.splitlines(), 1):
+        imported = imports.match(line)
+        declaration = public.match(line)
+        yield BoundaryLine(number, line, imported[1] if imported else None,
+                           tuple(match[0] for match in qualified.finditer(line)) if not imported else (),
+                           declaration[1] if declaration else None)
+
+
 @dataclass
 class Source:
     path: Path
