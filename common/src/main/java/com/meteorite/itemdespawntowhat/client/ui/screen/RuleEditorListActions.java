@@ -4,7 +4,7 @@ import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDefaults;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
@@ -108,13 +108,13 @@ final class RuleEditorListActions {
         modal.layoutCentered(shell.screenWidth(), shell.screenHeight());
         modals.push(modal);
         // 登记暂时禁用的按钮，输入合法后仍可通过 Tab 到达确认按钮。
-        UiFocusManager modalFocus = modals.focusManager();
-        modalFocus.beginUpdate();
-        modalFocus.add(content);
-        for (UiButton button : modal.buttons()) {
-            modalFocus.add(button);
-        }
-        modalFocus.endUpdate();
+        UiFocusManager modalFocus = modal.inputScope().focus();
+        modalFocus.updateTargets(registration -> {
+            registration.add(content);
+            for (UiButton button : modal.buttons()) {
+                registration.add(button);
+            }
+        });
         modalFocus.focusOn(content);
         input.selectAll();
     }

@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
@@ -8,13 +8,13 @@ import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.NumericDomain;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInteractionSession;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiNumberPolicy;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiNumbers;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeEnd;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeValue;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiValueTextBinding;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiNumberPolicy;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiNumbers;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiRangeEnd;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiRangeValue;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiValueTextBinding;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCheckBox;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiRangeBar;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;

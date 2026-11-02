@@ -1,15 +1,15 @@
 package com.meteorite.itemdespawntowhat.client.ui.theme;
 
 import com.meteorite.itemdespawntowhat.Constants;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiControlStyle;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderStyle;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderPainter;
-import com.meteorite.itemdespawntowhat.client.ui.kit.PixelSliderPainter;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlStyle;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderStyle;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderPainter;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.PixelSliderPainter;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.resources.ResourceLocation;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiNineSlice;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiNineSlice;
 
 /**
  * 灰色像素主题。

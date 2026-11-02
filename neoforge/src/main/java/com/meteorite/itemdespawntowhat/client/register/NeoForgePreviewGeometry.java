@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.register;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.preview.PreviewScenes;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.preview.PreviewScenes;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import java.util.function.Function;

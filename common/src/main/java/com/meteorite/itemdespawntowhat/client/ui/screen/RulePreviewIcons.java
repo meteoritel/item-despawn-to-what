@@ -3,7 +3,7 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.shared.PreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.shared.EventPreviewIcons;

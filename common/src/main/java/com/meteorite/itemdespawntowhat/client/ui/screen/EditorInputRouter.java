@@ -1,8 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputRouter;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputScope;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputRouter;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputScope;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTypePicker;
 
 import java.util.Objects;

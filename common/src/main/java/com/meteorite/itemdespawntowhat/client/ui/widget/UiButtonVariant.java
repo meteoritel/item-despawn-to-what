@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiControlRole;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlRole;
 
 /**
  * 按钮变体。

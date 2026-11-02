@@ -1,8 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIcon;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
 import com.mojang.blaze3d.systems.RenderSystem;

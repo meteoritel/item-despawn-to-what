@@ -1,8 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphRenderer.drawBorder;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRenderLayers;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiRenderLayers;
 import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine;
 import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine.Kind;
 import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine.Tone;
@@ -52,7 +52,6 @@ public final class UiDescriptionTooltip {
     private static final String TOOLTIP_BULLET = "· ";
     // 与鼠标的间距：优先画在指针右下，越界时翻到左上
     private static final int TOOLTIP_MOUSE_OFFSET = 12;
-    private static final int TOOLTIP_LAYER = UiRenderLayers.FOREGROUND * 2 + UiRenderLayers.ICON;
 
     private final UiHostTheme theme;
     private final Font font;
@@ -135,7 +134,7 @@ public final class UiDescriptionTooltip {
         int y = resolveY(bounds, height, mouseY);
         int labelColor = theme.palette().canvasPickerTextMuted();
         List<Row> frame = rows;
-        UiRenderLayers.draw(graphics, TOOLTIP_LAYER, () -> {
+        UiRenderLayers.draw(graphics, UiRenderLayers.TOOLTIP, () -> {
             graphics.fill(x, y, x + width, y + height, theme.palette().canvasPickerFill());
             drawBorder(graphics, new UiRect(x, y, width, height), theme.palette().canvasPickerBorder());
             int textY = y + TOOLTIP_PADDING;

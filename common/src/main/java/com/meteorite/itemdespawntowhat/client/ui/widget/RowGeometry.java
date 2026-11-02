@@ -1,13 +1,13 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollView;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiScrollView;
 
 /**
- * 滚动控件的视口换算：行内容宽度、屏幕纵向坐标到内容坐标、固定行高下的行下标。
+ * 滚动控件的行内容宽度与固定行高下的行下标。
  * <p>滚动条由 {@link UiScrollView} 画在视口右侧并占用 {@link UiScrollView#SCROLLBAR_WIDTH} 宽，
  * 行宽与行命中都得分出这段宽度，所以预留值只有一处：控件不再各自声明常量，滚动条出现时
  * 各控件的行宽变化量因此一致。
- * <p>本类无状态，只做换算。命中门禁复用 {@link UiScrollView#canHoverContent}；行高策略仍由各控件决定：
+ * <p>本类无状态，只做行度量。内容命中使用 {@link UiScrollView#hitContentY}；行高策略仍由各控件决定：
  * 固定行高走 {@link #fixedRowIndex}，非等高行由控件自己做二分查找。
  */
 final class RowGeometry {
@@ -25,11 +25,6 @@ final class RowGeometry {
             width -= SCROLLBAR_RESERVE;
         }
         return Math.max(0, width);
-    }
-
-    // 屏幕纵向坐标换算为内容坐标；调用方先用 UiScrollView.canHoverContent 排除视口外与滚动条，结果非负
-    static int contentY(UiScrollView view, double mouseY) {
-        return (int) (mouseY - view.viewport().y()) + view.offset();
     }
 
     // 固定行高控件的行下标：落在行间距留白（行内容比行距矮时）或越界返回 -1

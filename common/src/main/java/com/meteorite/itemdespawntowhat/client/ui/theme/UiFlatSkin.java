@@ -1,10 +1,10 @@
 package com.meteorite.itemdespawntowhat.client.ui.theme;
 
 import com.meteorite.itemdespawntowhat.Constants;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiControlStyle;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiIconSheet;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlStyle;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIcon;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIconSheet;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.resources.ResourceLocation;
 

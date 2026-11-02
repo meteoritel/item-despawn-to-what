@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputScope;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputScope;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.ClientTypeRegistries;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorRegistries;
@@ -12,11 +12,11 @@ import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.edit.draft.DraftConflict;
 import com.meteorite.itemdespawntowhat.client.net.RuleEditClientState;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusManager;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiHistoryShortcut;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.screen.RuleEditorEditSections.EditSection;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.ConditionEditingSupport;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;

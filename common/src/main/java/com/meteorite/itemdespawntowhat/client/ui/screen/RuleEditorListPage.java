@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputScope;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputScope;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 
 import java.util.Objects;
 
@@ -10,10 +10,10 @@ import com.meteorite.itemdespawntowhat.client.edit.RuleCategorySkeleton;
 import com.meteorite.itemdespawntowhat.client.edit.RulePackExporter;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
-import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusManager;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine;
 import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine.Tone;
 import com.meteorite.itemdespawntowhat.client.ui.shared.TagPreviewIcons;

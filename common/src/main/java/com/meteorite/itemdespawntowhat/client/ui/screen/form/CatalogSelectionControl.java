@@ -2,9 +2,9 @@ package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
 import java.util.Objects;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInteractionSession;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusState;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiMarkIcons;
@@ -12,12 +12,12 @@ import com.meteorite.itemdespawntowhat.client.ui.theme.UiMarkIcons.Mark;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
-import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiControlRole;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollView;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlRole;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIcon;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiScrollView;
 import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.shared.FieldCatalogTypes;
 import com.meteorite.itemdespawntowhat.client.ui.shared.RuleDisplayLabels;
@@ -214,9 +214,10 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
     }
 
     private int indexAt(double x, double y) {
-        if (!scroll.canHoverContent(x, y)) return -1;
+        var hit = scroll.hitContentY(x, y);
+        if (hit.isEmpty()) return -1;
         for (int i = 0; i < chips.size(); i++) {
-            if (chips.get(i).contains(scroll.toContentX(x), scroll.toContentY(y))) return i;
+            if (chips.get(i).contains(scroll.toContentX(x), hit.getAsDouble())) return i;
         }
         return -1;
     }

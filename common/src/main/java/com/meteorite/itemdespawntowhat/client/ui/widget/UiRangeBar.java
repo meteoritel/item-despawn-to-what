@@ -1,19 +1,19 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
-import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInteractionSession;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiNumberPolicy;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiNumbers;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeEnd;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeSlider;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeValue;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderPainter;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderRole;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderStyle;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderWindow;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiValueTextBinding;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiNumberPolicy;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiNumbers;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiRangeEnd;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiRangeSlider;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiRangeValue;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderPainter;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderRole;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderStyle;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderWindow;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiValueTextBinding;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 
 import java.util.Objects;

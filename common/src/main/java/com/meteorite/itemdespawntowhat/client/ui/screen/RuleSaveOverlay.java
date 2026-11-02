@@ -1,14 +1,13 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
 import com.meteorite.itemdespawntowhat.client.net.RuleEditClientWorkspace;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
-import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputScope;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiProgressBar;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputScope;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiProgressBar;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
@@ -34,7 +33,6 @@ final class RuleSaveOverlay implements UiInputTarget {
     private final RuleEditClientWorkspace workspace;
     private final UiProgressBar bar;
     private final UiInputScope inputScope = new UiInputScope(this);
-    private final UiFocusManager focus = inputScope.focus();
     private final UiButton advancedButton;
     private final UiButton cancelButton;
     private RuleSaveProgress.Stage lastStage;
@@ -54,10 +52,10 @@ final class RuleSaveOverlay implements UiInputTarget {
         });
         cancelButton = new UiButton(theme, font, Component.translatable(UI + "cancel"), UiButtonVariant.SECONDARY,
                 this::requestCancel);
-        focus.beginUpdate();
-        focus.add(advancedButton);
-        focus.add(cancelButton);
-        focus.endUpdate();
+        inputScope.focus().updateTargets(registration -> {
+            registration.add(advancedButton);
+            registration.add(cancelButton);
+        });
     }
 
     private void requestCancel() {

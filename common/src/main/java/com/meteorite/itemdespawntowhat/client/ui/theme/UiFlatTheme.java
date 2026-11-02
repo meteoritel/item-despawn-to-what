@@ -1,12 +1,12 @@
 package com.meteorite.itemdespawntowhat.client.ui.theme;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.PixelSliderPainter;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiControlRole;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiControlStyle;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderRole;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderSkin;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderStyle;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.PixelSliderPainter;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlRole;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlStyle;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderRole;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderSkin;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderStyle;
 import net.minecraft.client.gui.GuiGraphics;
 
 /**

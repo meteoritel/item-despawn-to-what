@@ -2,7 +2,7 @@ package com.meteorite.itemdespawntowhat.client.ui.shared;
 
 import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiEventIcons;
 import org.jetbrains.annotations.Nullable;
 

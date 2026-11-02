@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusState;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 
 import java.util.Objects;
@@ -15,18 +15,18 @@ import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphRen
 import com.meteorite.itemdespawntowhat.client.edit.ConditionTreeNodes;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.OpaqueCondition;
-import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInteractionSession;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRubberBand;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiTransform;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeEditor;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeMoveInteraction;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreePath;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiHistoryShortcut;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutSource;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiRubberBand;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiTransform;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.tree.UiTreeEditor;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.tree.UiTreeMoveInteraction;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.tree.UiTreePath;
 import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine;
 import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine.Tone;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;

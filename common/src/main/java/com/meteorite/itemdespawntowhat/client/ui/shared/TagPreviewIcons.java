@@ -2,8 +2,8 @@ package com.meteorite.itemdespawntowhat.client.ui.shared;
 
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiCarousel;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiCarousel;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIcon;
 import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalogType;
 import java.util.List;
 import net.minecraft.Util;

@@ -1,11 +1,11 @@
 package com.meteorite.itemdespawntowhat.client.debug;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.kit.preview.PreviewMotion;
-import com.meteorite.itemdespawntowhat.client.ui.kit.preview.PreviewSubject;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIcon;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutSource;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.preview.PreviewMotion;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.preview.PreviewSubject;
 import com.meteorite.itemdespawntowhat.client.ui.shared.PreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.shared.PreviewResources;
 import com.meteorite.itemdespawntowhat.client.ui.shared.StructurePreviewResources;

@@ -16,12 +16,12 @@ import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLay
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.isContainer;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.meteorite.itemdespawntowhat.client.edit.ConditionTreeNodes;
-import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiDotGrid;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiTransform;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeEditor;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreePath;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiDotGrid;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiTransform;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.tree.UiTreeEditor;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.tree.UiTreePath;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.CardText;
 import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.Hotspot;

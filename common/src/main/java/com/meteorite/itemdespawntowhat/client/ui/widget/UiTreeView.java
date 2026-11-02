@@ -1,25 +1,25 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInteractionSession;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusState;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreePath;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeProjection;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeViewState;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeNavigation;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeRowMarker;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.tree.UiTreePath;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.tree.UiTreeProjection;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.tree.UiTreeViewState;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.tree.UiTreeNavigation;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.tree.UiTreeRowMarker;
 
 import java.util.function.Predicate;
 import java.util.HashSet;
 import java.util.Set;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiControlRole;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlatText;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollView;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlRole;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiFlatText;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutSource;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiScrollView;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 
@@ -361,10 +361,11 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
 
     // 屏幕坐标换算为内容坐标下的可见行下标；行高是否等高由 indexAtContentY 的二分决定
     private int indexAt(double mouseX, double mouseY) {
-        if (!scrollView.canHoverContent(mouseX, mouseY)) {
+        var hit = scrollView.hitContentY(mouseX, mouseY);
+        if (hit.isEmpty()) {
             return -1;
         }
-        return indexAtContentY(RowGeometry.contentY(scrollView, mouseY));
+        return indexAtContentY((int) hit.getAsDouble());
     }
 
     // 非等高行按累计位置二分查找，鼠标与翻页不再按固定行高猜测。

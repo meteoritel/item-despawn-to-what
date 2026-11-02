@@ -1,20 +1,20 @@
 package com.meteorite.itemdespawntowhat.client.debug;
 
 import com.meteorite.itemdespawntowhat.client.net.RuleEditClientWorkspace;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputRouter;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputScope;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputTarget;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiNumberPolicy;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeValue;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiScalarSlider;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderExamples;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderRole;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiValueInteraction;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputRouter;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputScope;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutSource;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiNumberPolicy;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiRangeValue;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiScalarSlider;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderExamples;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderRole;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiValueInteraction;
 import com.meteorite.itemdespawntowhat.client.ui.screen.RuleEditorScreen;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
@@ -99,9 +99,7 @@ public class DebugWorkbenchScreen extends Screen {
                 }
             });
             scope.setEscape(this::onClose);
-            scope.setFocusTargets(() -> {
-                scope.focus().beginUpdate(); buttons.forEach(scope.focus()::add); scope.focus().endUpdate();
-            });
+            scope.setFocusTargets(() -> scope.focus().updateTargets(registration -> buttons.forEach(registration::add)));
         }
         @Override protected void init() {
             if (buttons.isEmpty()) {
@@ -201,11 +199,10 @@ public class DebugWorkbenchScreen extends Screen {
                 }
             });
             scope.setEscape(this::onClose);
-            scope.setFocusTargets(() -> {
-                scope.focus().beginUpdate();
-                for (UiWidget widget : widgets) { if (widget instanceof UiFocusTarget target) { scope.focus().add(target); } }
-                scope.focus().add(scalar); fixed.forEach(scope.focus()::add); scope.focus().endUpdate();
-            });
+            scope.setFocusTargets(() -> scope.focus().updateTargets(registration -> {
+                for (UiWidget widget : widgets) { if (widget instanceof UiFocusTarget target) { registration.add(target); } }
+                registration.add(scalar); fixed.forEach(registration::add);
+            }));
             modals.setOnScopeChanged(this::synchronize); synchronize();
         }
         private void synchronize() {

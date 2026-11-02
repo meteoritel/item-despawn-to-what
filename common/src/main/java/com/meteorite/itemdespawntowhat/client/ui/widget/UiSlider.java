@@ -1,17 +1,17 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusState;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInteractionSession;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputTarget;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiNumberPolicy;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiScalarSlider;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderRole;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderSkin;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderWindow;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiValueInteraction;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiNumberPolicy;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiScalarSlider;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderRole;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderSkin;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderWindow;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiValueInteraction;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 

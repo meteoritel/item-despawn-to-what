@@ -1,13 +1,13 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInteractionSession;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusState;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiControlRole;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlatText;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollView;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlRole;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiFlatText;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiScrollView;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 
@@ -265,10 +265,11 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
 
     // 屏幕坐标换算为内容坐标下的行下标；chip 行的行内容比行距矮，行间留白不算命中
     private int indexAt(double mouseX, double mouseY) {
-        if (!scrollView.canHoverContent(mouseX, mouseY)) {
+        var hit = scrollView.hitContentY(mouseX, mouseY);
+        if (hit.isEmpty()) {
             return -1;
         }
-        return RowGeometry.fixedRowIndex(RowGeometry.contentY(scrollView, mouseY),
+        return RowGeometry.fixedRowIndex((int) hit.getAsDouble(),
                 rowHeight, rowContentHeight(), items.size());
     }
 

@@ -7,7 +7,7 @@ import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.net.RuleEditClientState;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
@@ -20,7 +20,6 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiNarration;
 import com.meteorite.itemdespawntowhat.core.api.DevelopmentDiagnostics;
 import com.meteorite.itemdespawntowhat.core.service.edit.RuleIssue;
 import com.meteorite.itemdespawntowhat.core.service.edit.RuleSnapshotEntry;
-import com.meteorite.itemdespawntowhat.platform.Services;
 
 import java.util.List;
 
@@ -124,12 +123,7 @@ final class EditorShell {
             var scope = current.inputScope();
             scope.setHistory(editPage::restoreHistory);
             scope.setEscape(this::escape);
-            scope.setFocusTargets(() -> {
-                UiFocusManager manager = scope.focus();
-                manager.beginUpdate();
-                current.addFocusTargets(manager);
-                manager.endUpdate();
-            });
+            scope.setFocusTargets(() -> scope.focus().updateTargets(current::addFocusTargets));
             UiFocusManager manager = scope.focus();
             manager.setListener((previous, next) -> {
                 UiNarration.focus(next);
@@ -360,9 +354,7 @@ final class EditorShell {
     void rebuildFocus() {
         inputChanged.run();
         UiFocusManager manager = focus();
-        manager.beginUpdate();
-        activePage().addFocusTargets(manager);
-        manager.endUpdate();
+        manager.updateTargets(registration -> activePage().addFocusTargets(registration));
         if (manager.focused() == null) manager.focusFirst();
     }
 

@@ -2,10 +2,10 @@ package com.meteorite.itemdespawntowhat.client.ui.widget;
 
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.BORDER;
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphRenderer.drawBorder;
-import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRenderLayers;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiTransform;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiRenderLayers;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiTransform;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import net.minecraft.Util;
 import net.minecraft.client.gui.Font;
@@ -19,7 +19,6 @@ final class ConditionGraphSidePanel {
     static final int SIDE_PANEL_PADDING = 4;
     static final int SIDE_PANEL_HEADER = 14;
     private static final long SIDE_PANEL_ANIM_MS = 160L;
-    private static final int SIDE_PANEL_LAYER = UiRenderLayers.FOREGROUND + UiRenderLayers.ICON;
 
     private final UiHostTheme theme;
     private final Font font;
@@ -69,7 +68,7 @@ final class ConditionGraphSidePanel {
         if (rect.width() <= 0 || rect.height() <= 0) return;
         UiTransform.enableScissor(graphics, viewport);
         try {
-            UiRenderLayers.draw(graphics, SIDE_PANEL_LAYER, () -> {
+            UiRenderLayers.draw(graphics, UiRenderLayers.SIDE_PANEL, () -> {
                 graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), theme.palette().canvasPickerFill());
                 graphics.fill(rect.x() + BORDER, rect.y() + BORDER, rect.right() - BORDER,
                         rect.y() + SIDE_PANEL_HEADER, theme.palette().canvasPickerHeaderFill());

@@ -1,18 +1,18 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusState;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlatText;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollbarGeometry;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiTextValue;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiTextAcceptance;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInteractionSession;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiTextSelection;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiTextHistory;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiFlatText;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiScrollbarGeometry;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.UiTextValue;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.UiTextAcceptance;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutSource;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.UiTextSelection;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiHistoryShortcut;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.UiTextHistory;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 

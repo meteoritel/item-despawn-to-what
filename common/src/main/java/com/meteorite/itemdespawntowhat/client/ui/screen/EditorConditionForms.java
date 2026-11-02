@@ -10,7 +10,7 @@ import com.meteorite.itemdespawntowhat.client.edit.EditorRegistries;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.ResultStructure;
 import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiHistoryShortcut;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.ConditionEditContext;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.ConditionEditingSupport;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.ConditionHostCoordination;

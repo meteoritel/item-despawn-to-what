@@ -1,12 +1,12 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiPointer;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRenderLayers;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusManager;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiHistoryShortcut;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutSource;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiRenderLayers;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 
@@ -208,13 +208,13 @@ public final class UiModalStack implements UiWidget, UiLayoutSource {
         int alpha = baseAlpha * (FADE_TICKS - fadeTicks) / FADE_TICKS;
         if (alpha > 0) {
             int dim = (alpha << 24) | (theme.palette().modalDim() & 0x00FFFFFF);
-            UiRenderLayers.draw(graphics, UiRenderLayers.MODAL_STEP,
+            UiRenderLayers.draw(graphics, UiRenderLayers.MODAL_MASK,
                     () -> graphics.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), dim));
         }
         for (int i = 0; i < modals.size(); i++) {
             UiModal modal = modals.get(i);
             UiPointer pointer = UiPointer.gated(modal.inputScope().isActive(), mouseX, mouseY);
-            UiRenderLayers.draw(graphics, (i + 1) * UiRenderLayers.MODAL_STEP + 1,
+            UiRenderLayers.draw(graphics, UiRenderLayers.modalContent(i),
                     () -> modal.render(graphics, font, pointer.x(), pointer.y()));
         }
     }

@@ -1,15 +1,15 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputScope;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInteractionSession;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiAction;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputScope;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiAction;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusManager;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiHistoryShortcut;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutSource;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 
@@ -607,16 +607,16 @@ public final class UiModal implements UiWidget {
 
     // 把自身可聚焦控件登记到焦点管理器
     public void addFocusTargets(UiFocusManager manager) {
-        manager.beginUpdate();
-        if (contentWidget instanceof UiFocusTarget target && target.canFocus()) {
-            manager.add(target);
-        }
-        for (UiButton button : buttons) {
-            if (button.canFocus()) {
-                manager.add(button);
+        manager.updateTargets(registration -> {
+            if (contentWidget instanceof UiFocusTarget target && target.canFocus()) {
+                registration.add(target);
             }
-        }
-        manager.endUpdate();
+            for (UiButton button : buttons) {
+                if (button.canFocus()) {
+                    registration.add(button);
+                }
+            }
+        });
     }
 
     // ---- 关闭 ----

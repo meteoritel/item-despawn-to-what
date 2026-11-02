@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
-import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
 import net.minecraft.network.chat.Component;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;

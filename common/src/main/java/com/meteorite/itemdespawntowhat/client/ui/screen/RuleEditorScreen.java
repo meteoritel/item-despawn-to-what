@@ -9,13 +9,13 @@ import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
 import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDescriptors;
 import com.meteorite.itemdespawntowhat.client.net.RuleEditClientWorkspace;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiPointer;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRenderLayers;
-import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlatText;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiRenderLayers;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiFlatText;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutSource;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostPalette;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
@@ -153,7 +153,7 @@ public final class RuleEditorScreen extends Screen implements UiLayoutSource {
         if (saving) {
             int overlayMouseX = mouseX;
             int overlayMouseY = mouseY;
-            UiRenderLayers.draw(graphics, UiRenderLayers.MODAL_STEP,
+            UiRenderLayers.draw(graphics, UiRenderLayers.MODAL_MASK,
                     () -> saveOverlay().render(graphics, width, height, overlayMouseX, overlayMouseY, Util.getMillis()));
             graphics.flush();
             PreviewIcons.endFrame();

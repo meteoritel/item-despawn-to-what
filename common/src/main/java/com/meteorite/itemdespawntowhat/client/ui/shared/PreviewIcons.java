@@ -1,13 +1,13 @@
 package com.meteorite.itemdespawntowhat.client.ui.shared;
 
 import com.meteorite.itemdespawntowhat.Constants;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiPreviewCache;
-import com.meteorite.itemdespawntowhat.client.ui.kit.preview.PreviewMotion;
-import com.meteorite.itemdespawntowhat.client.ui.kit.preview.PreviewScenes;
-import com.meteorite.itemdespawntowhat.client.ui.kit.preview.PreviewState;
-import com.meteorite.itemdespawntowhat.client.ui.kit.preview.PreviewSubject;
-import com.meteorite.itemdespawntowhat.client.ui.kit.preview.UiSceneStyle;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIcon;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiPreviewCache;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.preview.PreviewMotion;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.preview.PreviewScenes;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.preview.PreviewState;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.preview.PreviewSubject;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.preview.UiSceneStyle;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import net.minecraft.Util;

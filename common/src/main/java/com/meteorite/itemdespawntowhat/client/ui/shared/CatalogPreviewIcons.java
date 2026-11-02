@@ -1,8 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.ui.shared;
 
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiPreviewCache;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiPreviewCache;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalogType;

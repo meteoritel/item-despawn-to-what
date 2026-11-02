@@ -1,8 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
 import com.meteorite.itemdespawntowhat.client.edit.ConditionTreeNodes;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreePath;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeProjection;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.tree.UiTreePath;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.tree.UiTreeProjection;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.ConditionNode;
 import java.util.ArrayList;

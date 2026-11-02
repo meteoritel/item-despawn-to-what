@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.edit;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeCodec;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.tree.UiTreeCodec;
 import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.ConditionNode;

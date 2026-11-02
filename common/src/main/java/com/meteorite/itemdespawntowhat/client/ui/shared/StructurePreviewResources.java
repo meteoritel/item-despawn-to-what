@@ -1,9 +1,9 @@
 package com.meteorite.itemdespawntowhat.client.ui.shared;
 
 import com.meteorite.itemdespawntowhat.Constants;
-import com.meteorite.itemdespawntowhat.client.ui.kit.preview.PreviewState;
-import com.meteorite.itemdespawntowhat.client.ui.kit.preview.PreviewStructure;
-import com.meteorite.itemdespawntowhat.client.ui.kit.preview.PreviewSubject;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.preview.PreviewState;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.preview.PreviewStructure;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.preview.PreviewSubject;
 import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.List;

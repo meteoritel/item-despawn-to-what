@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.theme;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIcon;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import net.minecraft.client.gui.GuiGraphics;
 
 /**
