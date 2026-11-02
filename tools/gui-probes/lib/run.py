@@ -18,24 +18,15 @@ import time
 from pathlib import Path
 
 LIB_DIR = os.path.dirname(os.path.abspath(__file__))
-TOOLS_DIR = os.path.dirname(os.path.dirname(LIB_DIR))
-REPO_ROOT = os.path.dirname(TOOLS_DIR)
-LANG_DIR = os.path.join(REPO_ROOT, "common", "src", "main", "resources", "assets",
-                        "itemdespawntowhat", "lang")
-PRELUDE_PATH = os.path.join(LIB_DIR, "prelude.js")
-# prelude 里 __gp.__version 必须与这里一致：版本不同说明会话里装的是旧原语，需要重装。
-PRELUDE_VERSION = 9
-
-
 sys.path.insert(0, LIB_DIR)
 import autojs  # noqa: E402
 import report  # noqa: E402
 import sheet  # noqa: E402
+from client import Client, ProbeError, REPO_ROOT, TOOLS_DIR  # noqa: E402
 from record import RunRecord, FILES, case_verdict  # noqa: E402
+from case_contract import assertion_query, finish_check, json_equal, validate_case, check_local_handlers  # noqa: E402
 
-
-class ProbeError(RuntimeError):
-    pass
+LANG_DIR = REPO_ROOT / "common/src/main/resources/assets/itemdespawntowhat/lang"
 
 
 def load_lang():
@@ -49,50 +40,23 @@ def load_lang():
     return langs
 
 
-def unwrap(raw):
-    """折叠 MCP 返回：可能是字符串、也可能带 value 的字典，两种都还原成 eval 结果。"""
-    if isinstance(raw, dict):
-        for key in ("value", "result", "text"):
-            if key in raw:
-                raw = raw[key]
-                break
-    # 驱动统一输出一次 JSON.stringify；只解码传输层，保留 "null"、"true" 和数字文本。
-    if isinstance(raw, str):
-        try:
-            return json.loads(raw)
-        except json.JSONDecodeError:
-            return raw
-    return raw
-
-
 def clamp(value, low, high):
     return max(low, min(high, value))
 
 
 def key_signature(key):
-    """布局指纹的比较口径：屏幕、逻辑尺寸、节点哈希，加上缩放与帧缓冲尺寸。
-
-    ADR-0022 的三档缩放下逻辑尺寸都是 320x240，只比逻辑尺寸无法区分档位切换，
-    所以缩放与帧缓冲必须一起参与比较。
-    """
-    if not isinstance(key, dict):
-        return None
-    return (key.get("s"), key.get("w"), key.get("h"), key.get("k"),
-            key.get("scale"), key.get("fbw"), key.get("fbh"))
+    """比较客户端声明的稳定签名，具体字段由 prelude 管理。"""
+    return tuple(key["signature"]) if isinstance(key, dict) and isinstance(key.get("signature"), list) else None
 
 
 class Probe:
     """一次运行内复用的游戏进程句柄：原语常驻，每条表达式只发一次小往返。"""
 
-    KEY_SUFFIX = ("var t = __gp.runtime();"
-                  "k.fps = t.fps; k.scale = t.scale; k.fbw = t.fbWidth; k.fbh = t.fbHeight;")
-
     def __init__(self, run_dir, timeout_ms=90000, settle_timeout_ms=1500):
         self.run_dir = os.path.abspath(run_dir).replace("\\", "/")
         self.timeout_ms = timeout_ms
         self.settle_timeout_ms = settle_timeout_ms
-        with open(PRELUDE_PATH, encoding="utf-8") as handle:
-            self.prelude = handle.read()
+        self.client = Client(self.run_dir, self._eval_raw)
         self.env = {}
         self.eval_count = 0
         self.rtts = []
@@ -108,44 +72,22 @@ class Probe:
     # ---- 求值 ----
 
     def _eval_raw(self, code, timeout_ms=None):
-        """发一段原始 Rhino 脚本，记录 RTT 与次数，返回折叠后的结果。"""
+        """发一段原始 Rhino 脚本，记录 RTT 与次数，返回传输层的原生 value。"""
         started = time.perf_counter()
         raw = autojs.eval_js(code, side="client",
                              timeout_ms=timeout_ms or self.timeout_ms)
         self.eval_count += 1
         self.rtts.append((time.perf_counter() - started) * 1000.0)
-        return unwrap(raw)
+        return raw
 
-    def evaluate(self, expression):
-        # 求值结果统一用 JSON.stringify 收口：跨进程只能拿文本，对象要显式序列化才不会退化成 toString。
-        body = "JSON.stringify((function(){return (" + expression + ");})())"
-        return self._eval_raw("__gp.begin();\n" + body)
+    def evaluate(self, verb, payload=None):
+        return self.client.invoke(verb, payload)
 
     def install(self):
-        """确认会话里装的是当前版本的 prelude；未安装、版本不符或 RunDir 变了就重装。"""
-        status_expr = (
-            "JSON.stringify((function(){"
-            "var out = {status: (typeof __gp) + '|'"
-            " + (typeof __gpRunDir === 'string' ? __gpRunDir : '') + '|'"
-            " + (typeof __gp === 'object' && __gp && __gp.__version ? String(__gp.__version) : '0')};"
-            "if (typeof __gp === 'object' && __gp) {"
-            " try { out.env = " + env_snapshot_js() + "; } catch (e) {}"
-            "}"
-            "return out;})())")
-        probe_info = self._eval_raw(status_expr)
-        self._absorb_env(probe_info)
-        expected = "object|%s|%d" % (self.run_dir, PRELUDE_VERSION)
-        if isinstance(probe_info, dict) and probe_info.get("status") == expected:
-            return False
-        code = ("var __gpRunDir = " + json.dumps(self.run_dir) + ";\n"
-                + self.prelude
-                + "\nJSON.stringify((function(){return {installed: true, version: __gp.__version,"
-                " env: " + env_snapshot_js() + "};})());")
-        installed = self._eval_raw(code, timeout_ms=max(self.timeout_ms, 30000))
-        self._absorb_env(installed)
-        if not isinstance(installed, dict) or installed.get("version") != PRELUDE_VERSION:
-            raise ProbeError("prelude 安装失败: %r" % (installed,))
-        return True
+        """握手和安装由协议 adapter 负责，环境与 RTT 仍纳入本次运行。"""
+        hello, installed = self.client.install(self.timeout_ms)
+        self._absorb_env(hello)
+        return installed
 
     def _absorb_env(self, payload):
         """从安装/状态求值里取出环境快照，省掉一次单独的 eval。"""
@@ -158,13 +100,9 @@ class Probe:
             if fps:
                 self.fps = fps
 
-    def perform(self, expression):
-        """求值一个动作表达式，同一 eval 里取回动作后的布局指纹，作为 settle 的起点。"""
-        code = ("__gp.begin(); JSON.stringify((function(){"
-                "var r = (" + expression + ");"
-                "var k = __gp.probeKey(); " + self.KEY_SUFFIX +
-                "return {r: r, k: k};})())")
-        value = self._eval_raw(code)
+    def perform(self, action):
+        """动作只发送一次，客户端在同一次求值里返回布局指纹。"""
+        value = self.client.invoke("action", action)
         if not isinstance(value, dict) or not isinstance(value.get("k"), dict):
             raise ProbeError("动作求值返回异常: %r" % (value,))
         before = self.last_key
@@ -172,10 +110,7 @@ class Probe:
         return value.get("r"), before
 
     def _sample_key(self):
-        """一次布局指纹采样。"""
-        code = ("__gp.begin(); JSON.stringify((function(){"
-                "var k = __gp.probeKey(); " + self.KEY_SUFFIX + "return k;})())")
-        key = self._eval_raw(code)
+        key = self.client.invoke("sample")
         if isinstance(key, dict):
             self._remember_key(key)
             return key
@@ -264,11 +199,6 @@ class Probe:
         }
 
 
-def env_snapshot_js():
-    """环境快照表达式：窗口度量、会话状态与运行时信息，一次求值一起取回。"""
-    return ("{window: __gp.window(), state: __gp.state(), runtime: __gp.runtime()}")
-
-
 def wait_for_client(deadline_seconds):
     """客户端起来前 MCP 必然连不上，连不上是等待的一部分，不当失败。"""
     started = time.perf_counter()
@@ -290,12 +220,12 @@ def reach(probe, target, world=None):
     target = dict(target, world=target.get("world", world))
     recent = []
     while time.monotonic() < deadline:
-        value = probe.evaluate("__gp.reachStep(%s)" % json.dumps(target))
+        value = probe.evaluate("reach", target)
         recent.append(value)
         if isinstance(value, dict) and value.get("done"):
             return
         time.sleep(0.2)
-    raise ProbeError("导航超时 target=%r recent=%r state=%r" % (target, recent[-5:], probe.evaluate("__gp.state()")))
+    raise ProbeError("导航超时 target=%r recent=%r state=%r" % (target, recent[-5:], probe.evaluate("environment")["state"]))
 
 
 class CaseState:
@@ -318,57 +248,7 @@ class CaseState:
 
 
 def read_query(probe, query):
-    return probe.evaluate("__gp.read(%s)" % json.dumps(query, ensure_ascii=False))
-
-
-def assertion_query(check):
-    kind = check["kind"]
-    if kind in ("text_present", "text_absent", "text_count"):
-        return {"source": "count", "selector": check["selector"]}
-    if kind == "node_enabled":
-        return {"source": "enabled", "selector": check["selector"]}
-    if kind == "geometry_inside":
-        return {"source": "rect", "selector": check["selector"]}
-    return check["query"]
-
-
-def json_equal(actual, expected):
-    """JSON number 共用数值语义，集合内部同样区分 boolean 与 number。"""
-    if isinstance(actual, bool) or isinstance(expected, bool): return type(actual) is type(expected) and actual == expected
-    if isinstance(actual, (int, float)) and isinstance(expected, (int, float)): return actual == expected
-    if type(actual) is not type(expected): return False
-    if isinstance(actual, list): return len(actual) == len(expected) and all(json_equal(a, b) for a, b in zip(actual, expected))
-    if isinstance(actual, dict): return actual.keys() == expected.keys() and all(json_equal(actual[key], expected[key]) for key in actual)
-    return actual == expected
-
-
-def finish_check(check, result, langs, state):
-    """唯一断言解释器保留 JSON 原生期望与实际值。"""
-    kind = check["kind"]
-    expected = state.get(check["expected_capture"]) if "expected_capture" in check else check.get("expected")
-    if "expected_lang" in check:
-        key = check["expected_lang"]
-        for language in ("en_us", "zh_cn"):
-            if key not in langs[language]:
-                raise ProbeError("语言文件缺少 key: " + key)
-        expected = result.get("language_value")
-    if kind == "text_present": expected = {"min": 1}
-    elif kind == "text_absent": expected = 0
-    elif kind == "geometry_inside": expected = True
-    elif kind == "value_changed": expected = {"different_from": state.get(check["capture"])}
-    actual = result.get("value")
-    passed = False
-    if result.get("ok"):
-        if kind == "text_present": passed = actual >= 1
-        elif kind == "geometry_inside":
-            w = actual["window"]
-            passed = actual["x"] >= 0 and actual["y"] >= 0 and actual["x"] + actual["width"] <= w["logicalWidth"] and actual["y"] + actual["height"] <= w["logicalHeight"]
-        elif kind == "value_changed": passed = not json_equal(actual, state.get(check["capture"]))
-        else: passed = json_equal(actual, expected)
-    record = {"name": check["name"], "kind": kind, "target": check.get("selector", check.get("query")),
-              "expected": expected, "actual": actual, "pass": passed}
-    if not result.get("ok"): record["error"] = result.get("error")
-    return record
+    return probe.evaluate("read", query)
 
 
 def perform_action(probe, action):
@@ -376,7 +256,7 @@ def perform_action(probe, action):
     if action.get("unique_text"):
         action["text"] = "probe_" + str(time.time_ns())
         action.pop("unique_text")
-    value, before = probe.perform("__gp.action(%s)" % json.dumps(action, ensure_ascii=False))
+    value, before = probe.perform(action)
     if isinstance(value, dict) and value.get("handled") is False and action["kind"] != "release":
         raise ProbeError("输入未处理: %r => %r" % (action, value))
     return before
@@ -429,7 +309,7 @@ def run_case(probe, case, langs, settle_timeout_ms):
                     try:
                         value = read_query(probe, assertion_query(check))
                         result = {"ok": True, "value": value}
-                        if "expected_lang" in check: result["language_value"] = probe.evaluate("__gp.lang(%s)" % json.dumps(check["expected_lang"]))
+                        if "expected_lang" in check: result["language_value"] = probe.evaluate("language", check["expected_lang"])
                     except Exception as failure:
                         result = {"ok": False, "error": str(failure)}
                     outcome = finish_check(check, result, langs, state)
@@ -438,7 +318,7 @@ def run_case(probe, case, langs, settle_timeout_ms):
                 checks.append(outcome)
             elif "shot" in step:
                 probe.wait_frame()
-                value = probe.evaluate("__gp.shot(%s)" % json.dumps(step["shot"]))
+                value = probe.evaluate("screenshot", step["shot"])
                 path = value["path"]
                 if not os.path.isfile(path) or os.path.getsize(path) == 0: raise ProbeError("截图未落盘: " + path)
                 artifact = dict(value, kind="screenshot", name=step["shot"], step=index)
@@ -483,42 +363,10 @@ def load_cases(cases_dir, only):
         cases.append(case)
     missing = set(only) - {case["name"] for case in cases}
     if missing: raise ProbeError("未知 --only: " + ", ".join(sorted(missing)))
+    check_local_handlers(Path(LIB_DIR) / "prelude.js")
     langs = load_lang()
-    assertion_kinds = {"text_present", "text_absent", "text_count", "node_enabled", "geometry_inside", "value_equals", "value_changed"}
-    actions = {"click", "type", "clear", "key", "resize", "scroll", "drag", "press", "release"}
-    sources = {"screen_title", "window", "layout", "workspace", "nodes", "count", "text", "enabled", "rect"}
-    def validate_keys(value):
-        if isinstance(value, dict):
-            for key, item in value.items():
-                if key in ("lang", "expected_lang"):
-                    if any(item not in langs[language] for language in langs): raise ProbeError("语言 key 缺失: " + item)
-                elif key == "lang_any":
-                    for item_key in item:
-                        if any(item_key not in langs[language] for language in langs): raise ProbeError("语言 key 缺失: " + item_key)
-                else: validate_keys(item)
-        elif isinstance(value, list):
-            for item in value: validate_keys(item)
     for case in cases:
-        target = case.get("start", {})
-        if target.get("kind") not in ("editor", "workbench", "scene") or target.get("kind") == "scene" and target.get("scene") not in ("gallery", "interactions", "previews"):
-            raise ProbeError("未知 start target: " + case["name"])
-        captures = set()
-        for step in case["steps"]:
-            kinds = set(step) & {"action", "capture", "assert", "wait_for", "shot", "dump"}
-            if len(kinds) != 1 or set(step) & {"do", "expr", "check"}: raise ProbeError("未知步骤: " + str(step))
-            if "action" in step and step["action"].get("kind") not in actions: raise ProbeError("未知动作: " + str(step))
-            check = step.get("assert", step.get("wait_for"))
-            if check:
-                if check.get("kind") not in assertion_kinds: raise ProbeError("未知断言: " + str(check))
-                if "expected_capture" in check and check["expected_capture"] not in captures: raise ProbeError("缺少 capture: " + check["expected_capture"])
-                if check["kind"] == "value_changed" and check.get("capture") not in captures: raise ProbeError("缺少 capture: " + str(check.get("capture")))
-                if check["kind"] in ("value_equals", "text_count", "node_enabled") and "expected" not in check and "expected_lang" not in check and "expected_capture" not in check: raise ProbeError("断言缺少期望: " + str(check))
-            query = step.get("query", (check or {}).get("query"))
-            # dump 必须带 query：缺了它离线校验会放过，直到运行时才 KeyError
-            if "dump" in step and not step.get("query"): raise ProbeError("dump 缺少 query: " + str(step.get("dump")))
-            if query and query.get("source") not in sources: raise ProbeError("未知 query: " + str(query))
-            if "capture" in step: captures.add(step["capture"])
-            validate_keys(step)
+        validate_case(case, langs)
     return cases
 
 

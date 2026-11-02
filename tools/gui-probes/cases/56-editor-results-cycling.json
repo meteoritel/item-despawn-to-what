@@ -44,10 +44,10 @@
       }
     },
     {
+      "timeout_ms": 5000,
       "wait_for": {
         "name": "两个候选后出现组合模式按钮",
         "kind": "text_count",
-        "timeout_ms": 5000,
         "selector": {
           "kind": "CONTROL",
           "lang_any": [
@@ -97,11 +97,11 @@
       }
     },
     {
+      "timeout_ms": 5000,
       "wait_for": {
         "name": "组合模式切到下一个取值",
         "kind": "value_changed",
         "capture": "combination",
-        "timeout_ms": 5000,
         "query": {
           "source": "text",
           "selector": {
@@ -136,10 +136,10 @@
       }
     },
     {
+      "timeout_ms": 5000,
       "wait_for": {
         "name": "产物档位按钮单值轮询",
         "kind": "text_count",
-        "timeout_ms": 5000,
         "selector": {
           "kind": "CONTROL",
           "lang_any": [
@@ -197,11 +197,11 @@
       }
     },
     {
+      "timeout_ms": 5000,
       "wait_for": {
         "name": "产物档位切到下一档",
         "kind": "value_changed",
         "capture": "product",
-        "timeout_ms": 5000,
         "query": {
           "source": "text",
           "selector": {

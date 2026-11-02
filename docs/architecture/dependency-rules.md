@@ -95,9 +95,9 @@ flowchart LR
 
 ### 构建与持续集成
 
-根任务 `checkRepository` 组合隔离、文档、i18n、UI kit 和 `checkConfigReference`，各子项目 `check` 依赖同一根任务。发布包隔离仍由 `checkProbePackaging` 消费各端 assemble 产物；单次 build 中每个根任务执行一次。
+根任务 `checkRepository` 组合隔离、文档、i18n、UI kit、`checkConfigReference` 与 `checkGuiCases`，各子项目 `check` 依赖同一根任务。GUI 门禁只读核对用例、handler 和指南契约受管块。发布包隔离仍由 `checkProbePackaging` 消费各端 assemble 产物；单次 build 中每个根任务执行一次。
 
-PR、`1.21.1` 分支 push 和 release 的 build 使用同一门禁；环境提供 JDK 21、Python 与 PowerShell（Windows 使用 powershell，Linux 使用 pwsh）。Wiki 发布在写入远端前运行 `checkConfigReference`。
+PR、`1.21.1` 分支 push 和 release 的 build 使用同一门禁；环境提供 JDK 21 与 Python。Wiki 发布在写入远端前运行 `checkConfigReference`。
 
 Java 编译负责类型可见性和签名，包职责与层次设计由脚本的明确规则及评审共同核对。改包结构后先完成 IDE 检查，再运行 `tools/dsh-build.ps1 -Tasks build` 并对照[包职责](package-responsibility.md)。
 

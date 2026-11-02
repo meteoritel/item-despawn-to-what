@@ -2,7 +2,7 @@
 title: GUI 开发探针
 layer: 5
 audience: 需要验证客户端界面行为、又不愿手点一遍编辑器的开发者与 Agent
-authority: tools/gui-probes（lib/run.py、lib/prelude.js、lib/record.py、lib/sheet.py、lib/report.py）、common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiLayoutSource.java
+authority: tools/gui-probes（lib/run.py、lib/client.py、lib/prelude.js、lib/record.py、lib/sheet.py、lib/report.py）、common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiLayoutSource.java
 ---
 
 # GUI 开发探针
@@ -65,6 +65,44 @@ python tools/gui-probes/lib/run.py --run-dir .scratch/gui-check --only workbench
 
 ## 用例契约
 
+<!-- gui-case-contract:start -->
+| 类别 | 名称 | 字段/判定 |
+|---|---|---|
+| start | editor | new_rule: boolean |
+| start | workbench | 无附加字段 |
+| start | scene | scene*: string |
+| action | click | selector*: selector |
+| action | type | text: string, unique_text: boolean |
+| action | clear | 无附加字段 |
+| action | key | code*: integer, modifiers: integer |
+| action | resize | width*: integer, height*: integer, scale: integer |
+| action | scroll | selector*: selector, delta*: number |
+| action | drag | selector*: selector, from*: number, to*: number |
+| action | press | selector*: selector, at*: number |
+| action | release | 无附加字段 |
+| query | screen_title | 无附加字段 |
+| query | window | 无附加字段 |
+| query | layout | 无附加字段 |
+| query | workspace | 无附加字段 |
+| query | nodes | selector: selector |
+| query | count | selector: selector |
+| query | text | selector: selector |
+| query | enabled | selector: selector |
+| query | rect | selector: selector |
+| assertion | text_present | 节点数量至少一项 |
+| assertion | text_absent | 节点数量为零 |
+| assertion | text_count | 节点数量精确相等 |
+| assertion | node_enabled | boolean 启用态精确相等 |
+| assertion | geometry_inside | 原始矩形位于逻辑窗口内 |
+| assertion | value_equals | JSON 类型与值相等 |
+| assertion | value_changed | 与本例 capture 不同 |
+
+星号表示必需字段。start 公共字段为 world、timeout_seconds；scene 取值：gallery、interactions、previews。
+selector 字段：kind、lang、text、lang_any、text_any、enabled、within、has_text；within 仅含 kind/lang/text。
+wait_for 的轮询期限由步骤级 timeout_ms 控制，默认 2500ms；断言对象内的同名兼容字段保留校验，不改变该期限。
+expected、expected_lang、expected_capture 是互斥期望来源；capture 引用必须在同例前序步骤中存在。
+<!-- gui-case-contract:end -->
+
 每例独立声明 `start`：`editor` 表示规则列表，`new_rule: true` 在列表通过真实命名弹窗创建新草稿；`workbench` 表示目录；`scene` 配合 `gallery`、`interactions` 或 `previews`。导航每次推进一次公开输入并等待渲染。下面的用例可保存为 `.scratch/gui-control-check/cases/gallery-control-check.json`，直接验证展台控件并生成断言记录，全程不采集截图。
 
 ```json
@@ -104,7 +142,7 @@ python tools/gui-probes/lib/run.py --run-dir .scratch/gui-check --only workbench
 
 ## 执行与证据
 
-prelude 在会话内按版本和运行目录安装。每次求值的布局快照只构建一次，动作只执行一次。动作后按屏幕、几何、文案、启用态、缩放和帧缓冲指纹 settle；超时写入 metrics。异步业务结果通过 `wait_for` 轮询断言。执行 `shot` 前等待渲染帧，每条截图步骤生成全尺寸与逻辑尺寸 PNG。
+prelude 经 client adapter 按内容摘要和运行目录安装；握手校验协议主版本及驱动必需能力。驱动统一调用 invoke，传输信封和显式 JSON 结果各解码一次，保留 JSON 原生类型。每次求值的布局快照只构建一次，动作只执行一次。动作后按屏幕、几何、文案、启用态、缩放和帧缓冲指纹 settle；超时写入 metrics。异步业务结果通过 `wait_for` 轮询断言。执行 `shot` 前等待渲染帧，每条截图步骤生成全尺寸与逻辑尺寸 PNG。
 
 `RunRecord` 统一持有用例判定、原始断言、证据 id、用例和步骤关联、指标及输出文件角色。`sheet.build(record)` 生成拼图与清单，`report.render_report(record, shots)` 只渲染记录。截图采集失败记用例错误；派生拼图或报告失败记 `artifact_errors`，保留原始截图数量和已完成用例。
 

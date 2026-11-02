@@ -13,7 +13,10 @@ python tools/gui-probes/lib/run.py --run-dir .scratch/gui-check --validate
 |---|---|
 | `setup.ps1` | 安装并校验 dev-only AutoJS 与 Rhino |
 | `run-gui-probes.ps1` | 离线校验、启动或复用进程、options 恢复和退出码透传 |
-| `lib/autojs.py` | 回环 MCP 客户端，返回协议错误与原始 JSON |
+| `lib/autojs.py` | 回环 MCP 客户端，逐层解码固定信封，返回 eval 的原生 value |
+| `gen-case-reference.py` | 更新指南契约受管块；--check 只读核对用例、handler 与文档 |
+| `lib/case_contract.py` | 字段声明、递归校验、断言取数与判定、客户端能力投影 |
+| `lib/client.py` | 仓库定位、prelude 安装、协议/能力握手、单一 invoke 与内容摘要 |
 | `lib/prelude.js` | 作用域选择器、真实输入、目标导航、布局快照和截图 |
 | `lib/run.py` | 声明式动作与断言、用例状态、settle、采集和运行记录装配 |
 | `lib/record.py` | 用例及整体判定、证据身份、输出角色、记录持久化 |

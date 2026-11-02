@@ -8,7 +8,7 @@
 - 只面向本地开发客户端。AutoJS 未启动、HTTP 失败、JSON-RPC error、工具 isError、内容不是
   JSON 时统一抛 AutoJsError，由调用方决定重试还是判失败。
 - 不维护会话状态，每次调用独立建连；调用节奏由编排层控制。
-- eval_js 返回 AutoJS 包装后的 JSON（通常是 {"value": ...}），本模块不拆包。
+- eval_js 只拆开 AutoJS 的固定 value 信封；value 中的业务字符串由调用方解释。
 """
 
 import json
@@ -126,7 +126,7 @@ def status(endpoint: str = DEFAULT_ENDPOINT, timeout_s: float = 30.0) -> dict:
 
 def eval_js(code: str, side: str = "client", timeout_ms: int = 90000, *,
             endpoint: str = DEFAULT_ENDPOINT, timeout_s: float | None = None) -> object:
-    """在游戏进程里求值一段 Rhino 代码，返回 AutoJS 包装后的 JSON。
+    """在游戏进程里求值一段 Rhino 代码，返回 AutoJS value 字段的原生值。
 
     side 只能是 auto / server / client。求值在渲染线程同步执行，阻塞动作（等待进入世界等）
     必须拆成多次调用，不要在一次 eval 里长等；timeout_ms 是 AutoJS 侧超时，HTTP 超时默认
@@ -137,4 +137,7 @@ def eval_js(code: str, side: str = "client", timeout_ms: int = 90000, *,
     if timeout_ms <= 0:
         raise ValueError("timeout_ms 必须为正数")
     http_timeout = timeout_ms / 1000.0 + 15.0 if timeout_s is None else timeout_s
-    return _call_tool("eval_js", {"code": code, "side": side, "timeout_ms": timeout_ms}, endpoint, http_timeout)
+    result = _call_tool("eval_js", {"code": code, "side": side, "timeout_ms": timeout_ms}, endpoint, http_timeout)
+    if not isinstance(result, dict) or "value" not in result:
+        raise AutoJsError(f"eval_js 响应缺少 value 信封：{result!r}")
+    return result["value"]

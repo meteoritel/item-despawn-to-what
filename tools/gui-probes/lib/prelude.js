@@ -1,9 +1,10 @@
 // GUI 探针的客户端原语集合：由驱动在会话内安装一次，之后每次 eval 只发表达式本身。
 // 只做「取得真实状态 / 走真实输入路径 / 截图 / 导出布局快照」，不含任何断言与期望值。
-// 版本号与 run.py 的 PRELUDE_VERSION 一一对应：驱动发现会话里装的是旧版本会重装，
-// 复用同一个客户端会话换 RunDir 时才能同时换掉证据目录与新增原语。
+// describe 提供协议与内容身份；invoke 是驱动唯一的业务入口。
 var __gp = (function () {
-  var VERSION = 9;
+  var PROTOCOL_MAJOR = 1;
+  var SOURCE_HASH = String(__gpSourceHash);
+  var RUN_DIR = String(__gpRunDir);
   var MC = Java.loadClass('net.minecraft.client.Minecraft').getInstance();
   var SS = Java.loadClass('net.minecraft.client.Screenshot');
   var File = Java.loadClass('java.io.File');
@@ -14,9 +15,9 @@ var __gp = (function () {
   var Workspace = Java.loadClass('com.meteorite.itemdespawntowhat.client.net.RuleEditClientWorkspace');
   var Language = Java.loadClass('net.minecraft.locale.Language');
 
-  // 证据目录由驱动以 var __gpRunDir 注入；每次调用时现读，保证同一个会话换 RunDir 后路径跟着走。
+  // 证据目录与本次安装绑定，换目录时由 adapter 重装。
   function join(name) {
-    return String(__gpRunDir) + '/' + name;
+    return RUN_DIR + '/' + name;
   }
 
   // 本次求值内的布局缓存：begin() 清空，同一 eval 里多次读布局只构建一次。
@@ -212,7 +213,7 @@ var __gp = (function () {
   }
   function unique(selector) {
     var nodes = candidates(selector);
-    if (nodes.length !== 1) throw new Error('selector expected one: ' + JSON.stringify({selector:selector,candidates:nodes,screen:screenName()}));
+    if (nodes.length !== 1) throw new Error('selector expected one: ' + JSON.stringify({selector:selector,candidates:nodes,screen:screenName(),layoutCount:layoutCached().length}));
     return nodes[0];
   }
   function clickTarget(selector) {
@@ -229,44 +230,69 @@ var __gp = (function () {
     }
     throw new Error('navigation widget missing: '+JSON.stringify(labels));
   }
+  var QUERY_HANDLERS = {
+    screen_title:function(q) { return screenInfo().title; },
+    window:function(q) { return windowInfo(); },
+    layout:function(q) { return layoutCached(); },
+    workspace:function(q) { return workspace(); },
+    nodes:function(q) { return candidates(q.selector || {}); },
+    count:function(q) { return candidates(q.selector || {}).length; },
+    text:function(q) { return unique(q.selector || {}).text; },
+    enabled:function(q) { return unique(q.selector || {}).enabled; },
+    rect:function(q) { var n=unique(q.selector || {}); return {x:n.bounds.x,y:n.bounds.y,width:n.bounds.width,height:n.bounds.height,window:windowInfo()}; }
+  };
   function read(query) {
-    if (query.source === 'screen_title') return screenInfo().title;
-    if (query.source === 'window') return windowInfo();
-    if (query.source === 'layout') return layoutCached();
-    if (query.source === 'workspace') return workspace();
-    var nodes = candidates(query.selector || {});
-    if (query.source === 'nodes') return nodes;
-    if (query.source === 'count') return nodes.length;
-    var node = unique(query.selector || {});
-    if (query.source === 'text') return node.text;
-    if (query.source === 'enabled') return node.enabled;
-    if (query.source === 'rect') return {x:node.bounds.x,y:node.bounds.y,width:node.bounds.width,height:node.bounds.height,window:windowInfo()};
-    throw new Error('unknown query: '+JSON.stringify(query));
+    if (!Object.prototype.hasOwnProperty.call(QUERY_HANDLERS, query.source)) throw new Error('unknown query: '+JSON.stringify(query));
+    return QUERY_HANDLERS[query.source](query);
   }
-  function action(action) {
-    if (action.kind === 'click') return clickTarget(action.selector);
-    if (action.kind === 'type') return typeText(action.text);
-    if (action.kind === 'clear') { key(269,0,0); for(var i=0;i<256;i++) key(259,0,0); return {handled:true}; }
-    if (action.kind === 'key') return key(action.code,0,action.modifiers || 0);
-    if (action.kind === 'resize') return resize(action.width,action.height,action.scale);
-    if (action.kind === 'scroll') { var n=unique(action.selector);return wheel(n.x+n.width/2,n.y+n.height/2,action.delta); }
-    if (action.kind === 'drag') { var n=unique(action.selector);return drag(n.x+n.width*action.from,n.y+n.height/2,n.x+n.width*action.to,n.y+n.height/2,4,0); }
-    if (action.kind === 'press') {var n=unique(action.selector);var x=n.x+n.width*action.at;return {handled:Boolean(MC.screen.mouseClicked(x,n.y+n.height/2,0))};}
-    if (action.kind === 'release') return {handled:Boolean(MC.screen.mouseReleased(0,0,0))};
-    throw new Error('unknown action: '+JSON.stringify(action));
+  var ACTION_HANDLERS = {
+    click:function(a) { return clickTarget(a.selector); },
+    type:function(a) { return typeText(a.text); },
+    clear:function(a) { key(269,0,0); for(var i=0;i<256;i++) key(259,0,0); return {handled:true}; },
+    key:function(a) { return key(a.code,0,a.modifiers || 0); },
+    resize:function(a) { return resize(a.width,a.height,a.scale); },
+    scroll:function(a) { var n=unique(a.selector);return wheel(n.x+n.width/2,n.y+n.height/2,a.delta); },
+    drag:function(a) { var n=unique(a.selector);return drag(n.x+n.width*a.from,n.y+n.height/2,n.x+n.width*a.to,n.y+n.height/2,4,0); },
+    press:function(a) { var n=unique(a.selector);var x=n.x+n.width*a.at;return {handled:Boolean(MC.screen.mouseClicked(x,n.y+n.height/2,0))}; },
+    release:function(a) { return {handled:Boolean(MC.screen.mouseReleased(0,0,0))}; }
+  };
+  function action(value) {
+    if (!Object.prototype.hasOwnProperty.call(ACTION_HANDLERS, value.kind)) throw new Error('unknown action: '+JSON.stringify(value));
+    return ACTION_HANDLERS[value.kind](value);
   }
+
+  var START_HANDLERS = {
+    editor:reachEditor,
+    workbench:reachWorkbench,
+    scene:reachScene
+  };
+  var SCENE_HANDLERS = {
+    gallery:reachWorkbench,
+    interactions:reachWorkbench,
+    previews:reachWorkbench
+  };
   function reachStep(target) {
-    var screen=screenName();
-    if (target.kind === 'workbench' || target.kind === 'scene') {
+    if (!Object.prototype.hasOwnProperty.call(START_HANDLERS, target.kind)) throw new Error('unknown start: '+JSON.stringify(target));
+    return START_HANDLERS[target.kind](target);
+  }
+  function reachScene(target) {
+    if (!Object.prototype.hasOwnProperty.call(SCENE_HANDLERS, target.scene)) throw new Error('unknown scene: '+JSON.stringify(target));
+    return SCENE_HANDLERS[target.scene](target);
+  }
+  function reachWorkbench(target) {
+    var screen = screenName();
       if (target.scene === 'previews' && !inWorld()) return menuStep(target.world);
       if (screen === 'PreviewExamplesScreen' && target.scene === 'previews') return {done:true};
       if (screen === 'Gallery' && target.kind === 'scene' && candidates({lang:'gui.itemdespawntowhat.debug.workbench.'+target.scene,kind:'FRAME'}).length === 1) return {done:true};
       if (screen === 'Directory') {
+        if (layoutCached().length === 0) return {done:false,action:'wait-directory-layout'};
         if (target.kind === 'workbench') return {done:true};
         return {action:clickTarget({lang:'gui.itemdespawntowhat.debug.workbench.'+target.scene,kind:'CONTROL'})};
       }
       return {action:key(297,0,2)};
-    }
+  }
+  function reachEditor(target) {
+    var screen = screenName();
     var menu=menuStep(target.world);
     if (!menu.done) return menu;
     if (screen !== 'RuleEditorScreen') {
@@ -515,39 +541,47 @@ var __gp = (function () {
     };
   }
 
-  return {
-    __version: VERSION,
-    mc: MC,
-    begin: begin,
-    window: windowInfo,
-    resize: resize,
-    shot: shot,
-    click: click,
-    drag: drag,
-    wheel: wheel,
-    key: key,
-    typeText: typeText,
-    widgets: widgets,
-    candidates:candidates, unique:unique, read:read, action:action, reachStep:reachStep,
-    clickWidget: clickWidget,
-    clickWidgetAny: clickWidgetAny,
-    screenName: screenName,
-    menuStep: menuStep,
-    editorStep: editorStep,
-    layout: layout,
-    layoutCached: layoutCached,
-    flat: flat,
-    flatCached: flatCached,
-    probeKey: probeKey,
-    rects: rects,
-    textNodes: textNodes,
-    lang: lang,
-    screenInfo: screenInfo,
-    state: state,
-    workspace: workspace,
-    openEditor: openEditor,
-    dumpJson: dumpJson,
-    fps: fps,
-    runtime: runtime
+  function environment() {
+    return {window:windowInfo(), state:state(), runtime:runtime()};
+  }
+
+  function sample() {
+    var k = probeKey();
+    var t = runtime();
+    k.fps = t.fps; k.scale = t.scale; k.fbw = t.fbWidth; k.fbh = t.fbHeight;
+    // 比较口径只在此声明；FPS 与节点数保留为诊断。
+    k.signature = [k.s, k.w, k.h, k.k, k.scale, k.fbw, k.fbh];
+    return k;
+  }
+
+  var verbs = {
+    environment:environment,
+    sample:sample,
+    read:read,
+    action:function(payload) { var result = action(payload); return {r:result, k:sample()}; },
+    reach:reachStep,
+    language:lang,
+    screenshot:shot
   };
+
+  function describe() {
+    begin();
+    return {protocol_major:PROTOCOL_MAJOR, capabilities:Object.keys(verbs).sort(),
+      source_hash:SOURCE_HASH, run_dir:RUN_DIR, env:environment(),
+      contract:{actions:Object.keys(ACTION_HANDLERS).sort(), queries:Object.keys(QUERY_HANDLERS).sort(),
+        starts:Object.keys(START_HANDLERS).sort(), scenes:Object.keys(SCENE_HANDLERS).sort()}};
+  }
+
+  function invoke(request) {
+    begin();
+    try {
+      if (!request || request.protocol_major !== PROTOCOL_MAJOR) throw new Error('GUI protocol major mismatch');
+      if (!Object.prototype.hasOwnProperty.call(verbs, request.verb)) throw new Error('Unknown GUI verb: ' + request.verb);
+      return {protocol_major:PROTOCOL_MAJOR, ok:true, value:verbs[request.verb](request.payload)};
+    } catch (error) {
+      return {protocol_major:PROTOCOL_MAJOR, ok:false, error:String(error)};
+    }
+  }
+
+  return {describe:describe, invoke:invoke};
 })();

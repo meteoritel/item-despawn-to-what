@@ -33,10 +33,15 @@ tasks.register('checkUiKitBoundaries', Exec) {
         if (checkOnly) args '--check'
     }
 }
+tasks.register('checkGuiCases', Exec) {
+    group = 'verification'
+    workingDir rootProject.projectDir
+    commandLine 'python', rootProject.file('tools/gui-probes/gen-case-reference.py'), '--check'
+}
 tasks.register('checkRepository') {
     group = 'verification'
-    description = '校验依赖隔离、文档、语言、UI kit 与配置参考的一致性。'
-    dependsOn 'checkIsolation', 'checkDocs', 'checkI18n', 'checkUiKitBoundaries', 'checkConfigReference'
+    description = '校验依赖隔离、文档、语言、UI kit、配置参考与 GUI 用例契约的一致性。'
+    dependsOn 'checkIsolation', 'checkDocs', 'checkI18n', 'checkUiKitBoundaries', 'checkConfigReference', 'checkGuiCases'
 }
 subprojects {
     plugins.withId('java') {
