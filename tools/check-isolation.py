@@ -6,18 +6,15 @@
 """
 from __future__ import annotations
 
-import argparse
-import os
 import re
 import sys
 from pathlib import Path
 
+from toolslib.checks import CheckResult, Finding, run
+from toolslib.repo import collect_files
+
 from java_references import Source, TypeIndex
 
-EXCLUDED_DIRS = {
-    "build", ".gradle", ".git", ".local", ".scratch", "node_modules",
-    "run", "runs", "logs", ".idea",
-}
 # 平台源集到各自加载器 API 前缀的映射：加载器 API 只允许出现在这里
 PLATFORM_LOADERS = {"fabric": "net.fabricmc.", "neoforge": "net.neoforged."}
 # 判定为客户端类的 import 前缀
@@ -32,25 +29,17 @@ REGISTRAR_DIRECTIONS = {
 
 
 def collect_sources(root: Path) -> list[Path]:
-    sources: list[Path] = []
-    for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d not in EXCLUDED_DIRS]
-        for name in filenames:
-            if name.endswith(".java"):
-                sources.append(Path(dirpath) / name)
-    return sorted(sources)
-
+    return collect_files(root, ".java")
 
 def is_client_path(rel: str) -> bool:
     """判断源文件是否属于客户端侧：路径含 /client/。"""
     return "/client/" in "/" + rel
 
 
-def check(root: Path) -> int:
+def check(root: Path) -> CheckResult:
     sources = collect_sources(root)
     if not sources:
-        print("[配置错误] 未找到任何 Java 源文件：" + str(root))
-        return 2
+        raise ValueError("未找到任何 Java 源文件：" + str(root))
 
     violations: list[tuple[str, int, str, str]] = []
     parsed = [Source.read(source, root) for source in sources]
@@ -151,31 +140,18 @@ def check(root: Path) -> int:
             if target.startswith(CLIENT_IMPORT_PREFIXES) and not client_path:
                 violations.append((rel, line_no, "端隔离", target))
 
-    print("[信息] 扫描文件：" + str(len(sources)) + " 个，import：" + str(import_total) + " 条")
-    print("[信息] 顶层模块：" + "、".join(sorted(m for m in modules if m)))
-    if violations:
-        print("[违规] 共 " + str(len(violations)) + " 处：")
-        for rel, line_no, rule, detail in violations:
-            print("  " + rel + ":" + str(line_no) + " [" + rule + "] " + detail)
-        print("修正方式：平台 API 回到对应源集，客户端依赖回到客户端路径；编辑业务返回语义模型，由 transport 完成载荷映射。")
-        return 1
+    return CheckResult(
+        [Finding(rel, rule, detail, line) for rel, line, rule, detail in violations],
+        [f"扫描文件：{len(sources)} 个，import：{import_total} 条",
+         "顶层模块：" + "、".join(sorted(m for m in modules if m))],
+        "依赖方向检查通过：0 处违规。",
+        "平台 API 回到对应源集，客户端依赖回到客户端路径；编辑业务返回语义模型，由 transport 完成载荷映射。",
+    )
 
-    print("[通过] 依赖方向检查通过：0 处违规。")
-    return 0
 
 
 def main() -> int:
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    parser = argparse.ArgumentParser(description="依赖方向校验：平台隔离与端隔离")
-    parser.add_argument("--root", default=None, help="仓库根目录；默认取本脚本的上一级目录")
-    args = parser.parse_args()
-    root = Path(args.root).resolve() if args.root else Path(__file__).resolve().parent.parent
-    if not root.is_dir():
-        print("[配置错误] 根目录不存在：" + str(root))
-        return 2
-    return check(root)
-
+    return run(check, '依赖方向校验：平台隔离与端隔离')
 
 if __name__ == "__main__":
     sys.exit(main())

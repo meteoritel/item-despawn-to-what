@@ -13,16 +13,13 @@
 """
 from __future__ import annotations
 
-import argparse
-import os
 import re
 import sys
 from pathlib import Path
 
-EXCLUDED_DIRS = {
-    "build", ".gradle", ".git", ".local", ".scratch", "node_modules",
-    "run", "runs", "logs", ".idea",
-}
+from toolslib.checks import CheckResult, Finding, run
+from toolslib.repo import collect_files
+
 FORBIDDEN_PATHS = (".local/archive", "docs/archive")
 # 指针方向只由 AGENTS.md 单向发出：该文件自身豁免，其它文档出现其文件名即违规。
 POINTER_ORIGIN = "AGENTS.md"
@@ -32,14 +29,7 @@ FENCE = chr(96) * 3
 
 
 def collect_docs(root: Path) -> list[Path]:
-    docs: list[Path] = []
-    for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d not in EXCLUDED_DIRS]
-        for name in filenames:
-            if name.endswith(".md"):
-                docs.append(Path(dirpath) / name)
-    return sorted(docs)
-
+    return collect_files(root, ".md")
 
 def link_exists(base: Path, clean: str) -> bool:
     """判断相对链接目标是否存在。
@@ -53,11 +43,10 @@ def link_exists(base: Path, clean: str) -> bool:
     return (base / f"{clean}.md").resolve().exists()
 
 
-def check(root: Path) -> int:
+def check(root: Path) -> CheckResult:
     docs = collect_docs(root)
     if not docs:
-        print(f"[配置错误] 未找到任何 Markdown 文档：{root}")
-        return 2
+        raise ValueError(f"未找到任何 Markdown 文档：{root}")
 
     violations: list[tuple[str, int, str, str]] = []
     link_total = 0
@@ -87,31 +76,18 @@ def check(root: Path) -> int:
                 if not link_exists(doc.parent, clean):
                     violations.append((rel, line_no, "悬空链接", target))
 
-    print(f"[信息] 扫描文档：{len(docs)} 个，相对链接：{link_total} 条")
-    if violations:
-        print(f"[违规] 共 {len(violations)} 处：")
-        for rel, line_no, kind, detail in violations:
-            print(f"  {rel}:{line_no} [{kind}] {detail}")
-        print("修正方式：改指现行文档、删除失效指针，或把已过期文档移出仓库（归档目录不得被现役文档引用）；"
-              "反向指针删除该提及，需要长期保留的规则写进 AGENTS.md 自身。")
-        return 1
+    return CheckResult(
+        [Finding(rel, kind, detail, line) for rel, line, kind, detail in violations],
+        [f"扫描文档：{len(docs)} 个，相对链接：{link_total} 条"],
+        "文档链接、禁用路径与指针方向检查通过：0 处违规。",
+        "改指现行文档、删除失效指针，或把已过期文档移出仓库（归档目录不得被现役文档引用）；"
+        "反向指针删除该提及，需要长期保留的规则写进 AGENTS.md 自身。",
+    )
 
-    print("[通过] 文档链接、禁用路径与指针方向检查通过：0 处违规。")
-    return 0
 
 
 def main() -> int:
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    parser = argparse.ArgumentParser(description="文档链接与禁用路径校验")
-    parser.add_argument("--root", default=None, help="仓库根目录；默认取本脚本的上一级目录")
-    args = parser.parse_args()
-    root = Path(args.root).resolve() if args.root else Path(__file__).resolve().parent.parent
-    if not root.is_dir():
-        print(f"[配置错误] 根目录不存在：{root}")
-        return 2
-    return check(root)
-
+    return run(check, '文档链接与禁用路径校验')
 
 if __name__ == "__main__":
     sys.exit(main())

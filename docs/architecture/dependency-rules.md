@@ -80,7 +80,7 @@ flowchart LR
 
 开发实现位于 `common/src/dev` 与 `neoforge/src/probe`，生产观测只经 `core/api/RuntimeObserver`、`DevelopmentDiagnostics`；发布 jar 隔离由[后端探针工作流](../guides/backend-probes.md)的打包任务校验。
 
-运行方式：`python tools/check-isolation.py`（可用 `--root` 指定仓库根）。通过时退出码为 0，存在违规时逐条列出并以 1 退出。
+运行方式：`python tools/check-isolation.py`（可用 `--root` 指定仓库根）。通过时退出码为 0，存在违规时逐条列出并以 1 退出，必需输入缺失或根目录无效时以 2 退出。
 
 ### `tools/check-ui-kit-boundaries.ps1`
 

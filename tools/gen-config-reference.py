@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 from pathlib import Path
+
+from toolslib.checks import CheckResult, Finding, configure_console, execute
+from toolslib.repo import repo_root
 
 TICK = chr(96)
 LANGUAGES = {
@@ -87,7 +89,7 @@ def replace_block(source: str, name: str, body: str, page: Path) -> str:
     return source[:left] + "\n" + body + "\n" + source[right:]
 
 
-def generate(root: Path, schema: dict, check: bool) -> int:
+def generate(root: Path, schema: dict, check: bool) -> CheckResult:
     fields = schema["fields"]
     expected = field_paths(fields)
     nested = [field for field in fields if "children" in field]
@@ -114,34 +116,34 @@ def generate(root: Path, schema: dict, check: bool) -> int:
         if rendered != source:
             updates.append((page, rendered))
     if check:
-        for page, _ in updates:
-            print(f"[违规] 配置参考内容过期: {page}")
-        if updates:
-            print("请先导出配置事实，再运行 tools/gen-config-reference.py 更新双语受管块。")
-            return 1
-    else:
-        for page, content in updates:
-            page.write_text(content, encoding="utf-8", newline="\n")
-            print(f"[更新] {page}")
-    print("[通过] 配置参考内容、声明字段与双语说明一致")
-    return 0
+        return CheckResult(
+            [Finding(str(page), "配置参考内容过期", "受管块与导出声明不同") for page, _ in updates],
+            success="配置参考内容、声明字段与双语说明一致",
+            repair="先导出配置事实，再运行 tools/gen-config-reference.py 更新双语受管块。",
+        )
+    for page, content in updates:
+        page.write_text(content, encoding="utf-8", newline="\n")
+    return CheckResult(summaries=[f"已更新 {page}" for page, _ in updates],
+                       success="配置参考内容、声明字段与双语说明一致")
+
 
 
 def main() -> int:
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    configure_console()
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
+    parser.add_argument("--root", type=Path)
     parser.add_argument("--schema", type=Path)
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
-    root = args.root.resolve()
-    schema = args.schema or root / "build/config-docs/schema.json"
-    try:
-        return generate(root, read_json(schema), args.check)
-    except (OSError, ValueError, KeyError, TypeError) as failure:
-        print(f"[错误] {failure}", file=sys.stderr)
-        return 1
+    def operation() -> CheckResult:
+        root = repo_root(args.root)
+        schema = args.schema or root / "build/config-docs/schema.json"
+        try:
+            return generate(root, read_json(schema), args.check)
+        except (KeyError, TypeError) as failure:
+            raise ValueError(f"配置声明或双语说明结构错误：{failure}") from failure
+    return execute(operation)
+
 
 
 if __name__ == "__main__":
