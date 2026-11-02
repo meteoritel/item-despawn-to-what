@@ -19,7 +19,9 @@ import argparse
 import math
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+from atlas import textures_dir, require_pillow, save, run, rectangle as _rect, fill as _fill, polygon as _poly
+
+Image, ImageDraw = require_pillow()
 
 CELL = 16
 GLYPH = (255, 255, 255, 255)
@@ -37,19 +39,6 @@ MARKS = (
 
 
 # ---- 基础绘制工具：全部按整数像素落笔 ----
-
-def _rect(d, x0, y0, x1, y1, color, fill=False):
-    d.rectangle((x0, y0, x1, y1), outline=color, fill=color if fill else None)
-
-
-def _fill(d, x0, y0, x1, y1, color):
-    """闭区间填充：包含右下边界像素。"""
-    d.rectangle((x0, y0, x1, y1), fill=color)
-
-
-def _poly(d, points, color):
-    d.polygon(points, fill=color)
-
 
 def _stroke(d, points, radius, color):
     """按像素中心到线段的距离判定落笔，得到整数像素的等宽斜线。"""
@@ -135,16 +124,10 @@ def main() -> None:
     parser.add_argument("--output-dir", default=None, help="输出目录，默认写入模组资源目录")
     args = parser.parse_args()
 
-    if args.output_dir:
-        out_dir = Path(args.output_dir)
-    else:
-        repo_root = Path(__file__).resolve().parents[2]
-        out_dir = repo_root / "common/src/main/resources/assets/itemdespawntowhat/textures/gui/editor"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    target = out_dir / "marks.png"
-    render().save(target, format="PNG", optimize=False)
+    out_dir = Path(args.output_dir) if args.output_dir else textures_dir()
+    target = save(render(), out_dir, "marks.png")
     print(f"wrote {target} ({CELL}x{CELL * len(MARKS)}, {len(MARKS)} marks)")
 
 
 if __name__ == "__main__":
-    main()
+    run(main)

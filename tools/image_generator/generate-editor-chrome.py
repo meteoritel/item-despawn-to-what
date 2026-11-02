@@ -20,17 +20,17 @@
 from __future__ import annotations
 
 import argparse
-import re
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+from atlas import load_palette as load_rgba_palette, palette_path, textures_dir, require_pillow, save, run, fill as _fill
+
+Image, ImageDraw = require_pillow()
 
 TILE = 8
 TRANSPARENT = (0, 0, 0, 0)
 WHITE = (255, 255, 255, 255)
 
 # 与 client/ui/theme/UiPalette.java 对齐的取值：调色板是单一事实源，脚本只负责烘焙。
-PALETTE_ENTRY = re.compile(r"^\s*public\s+static\s+final\s+int\s+(\w+)\s*=\s*0x([0-9A-Fa-f]{8})\s*;", re.MULTILINE)
 PALETTE_CONSTANTS = (
     "SCROLL_TRACK",
     "SCROLL_THUMB",
@@ -50,28 +50,8 @@ TILES = (
 
 
 def load_palette(path: Path) -> dict[str, tuple[int, int, int, int]]:
-    """解析 UiPalette 里约定的 ARGB 常量，返回 {常量名: RGBA}。"""
-    if not path.is_file():
-        raise RuntimeError(f"未找到调色板文件：{path}")
-    declared = {name: value for name, value in PALETTE_ENTRY.findall(path.read_text(encoding="utf-8"))}
-    palette: dict[str, tuple[int, int, int, int]] = {}
-    for name in PALETTE_CONSTANTS:
-        value = declared.get(name)
-        if value is None:
-            raise RuntimeError(f"调色板 {path.name} 中未找到形如 0xAARRGGBB 的常量 {name}")
-        # 0xAARRGGBB -> RGBA；界面贴图全部不透明，alpha 仍按声明保留。
-        palette[name] = (
-            int(value[2:4], 16),
-            int(value[4:6], 16),
-            int(value[6:8], 16),
-            int(value[0:2], 16),
-        )
-    return palette
-
-
-def _fill(d: ImageDraw.ImageDraw, x0: int, y0: int, x1: int, y1: int, color) -> None:
-    """闭区间填充：包含右下边界像素。"""
-    d.rectangle((x0, y0, x1, y1), fill=color)
+    """结构图集保留调色板中完整的 RGBA。"""
+    return load_rgba_palette(path, PALETTE_CONSTANTS)
 
 
 def _bevel_light(d: ImageDraw.ImageDraw) -> None:
@@ -127,18 +107,11 @@ def main() -> None:
     parser.add_argument("--palette", default=None, help="UiPalette.java 路径，默认取仓库内文件")
     args = parser.parse_args()
 
-    repo_root = Path(__file__).resolve().parents[2]
-    palette_path = Path(args.palette) if args.palette else (
-        repo_root / "common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/theme/UiPalette.java")
-    palette = load_palette(palette_path)
-
-    out_dir = Path(args.output_dir) if args.output_dir else (
-        repo_root / "common/src/main/resources/assets/itemdespawntowhat/textures/gui/editor")
-    out_dir.mkdir(parents=True, exist_ok=True)
-    target = out_dir / "chrome.png"
-    render(palette).save(target, format="PNG", optimize=False)
+    palette = load_palette(Path(args.palette) if args.palette else palette_path())
+    out_dir = Path(args.output_dir) if args.output_dir else textures_dir()
+    target = save(render(palette), out_dir, "chrome.png")
     print(f"wrote {target} ({TILE * len(TILES)}x{TILE}, {len(TILES)} tiles)")
 
 
 if __name__ == "__main__":
-    main()
+    run(main)

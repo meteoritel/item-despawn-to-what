@@ -14,14 +14,14 @@
 control 中心取槽位色 SLOT_FILL，使其在面板带（PANEL_FILL）与卡片底（CONTROL_FILL）两个宿主上都可辨。
 """
 
-import re
-import sys
+import argparse
 from pathlib import Path
-from PIL import Image, ImageDraw
+from atlas import load_palette as load_rgba_palette, palette_path, textures_dir, require_pillow, save, run
 
-ROOT = Path(__file__).resolve().parents[1]
-OUTPUT = ROOT / "common/src/main/resources/assets/itemdespawntowhat/textures/gui/editor"
-PALETTE = ROOT / "common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/theme/UiPalette.java"
+Image, ImageDraw = require_pillow()
+
+OUTPUT = textures_dir()
+PALETTE = palette_path()
 
 SIZE = 32
 SCALE = 8
@@ -30,8 +30,6 @@ CORNER = 8
 CARD_RADIUS = 6
 CONTROL_RADIUS = 4
 
-# 匹配一行 ARGB 常量声明；行首锚定可避开注释掉的旧声明。
-PALETTE_ENTRY = re.compile(r"^\s*public\s+static\s+final\s+int\s+(\w+)\s*=\s*0x([0-9A-Fa-f]{8})\s*;", re.MULTILINE)
 # 必须从调色板解析的常量，即九宫格镜像的全部调色板取值。
 PALETTE_CONSTANTS = (
     "CONTROL_FILL",
@@ -67,21 +65,9 @@ SURFACES = (
 
 
 def load_palette(path):
-    """解析调色板源文件里约定的 ARGB 常量，返回 {常量名: "#rrggbb"}。
-
-    源文件缺失、常量缺失或取值不是 0xAARRGGBB 字面量时抛出 RuntimeError，
-    避免贴图静默沿用旧色而与调色板脱节。
-    """
-    if not path.is_file():
-        raise RuntimeError(f"未找到调色板文件：{path}")
-    declared = {name: value for name, value in PALETTE_ENTRY.findall(path.read_text(encoding="utf-8"))}
-    palette = {}
-    for name in PALETTE_CONSTANTS:
-        value = declared.get(name)
-        if value is None:
-            raise RuntimeError(f"调色板 {path.name} 中未找到形如 0xAARRGGBB 的常量 {name}")
-        palette[name] = "#" + value[2:].lower()
-    return palette
+    """九宫格沿用 RGB 烘焙，透明度由圆角和降采样决定。"""
+    return {name: "#" + "".join(f"{channel:02x}" for channel in rgba[:3])
+            for name, rgba in load_rgba_palette(path, PALETTE_CONSTANTS).items()}
 
 
 def resolve(source, palette):
@@ -93,7 +79,7 @@ def resolve(source, palette):
     return palette[source]
 
 
-def surface(name, fill, outline, radius):
+def surface(name, fill, outline, radius, output_dir=OUTPUT):
     """绘制单张九宫格：先铺圆角描边，再内缩一格铺中心色，最后降采样出抗锯齿圆角。"""
     if radius >= CORNER:
         raise ValueError(f"{name} 的圆角 {radius} 必须小于九宫格角区 {CORNER}")
@@ -103,11 +89,10 @@ def surface(name, fill, outline, radius):
                               radius=radius * SCALE, fill=outline)
     painter.rounded_rectangle((SCALE, SCALE, (SIZE - 1) * SCALE - 1, (SIZE - 1) * SCALE - 1),
                               radius=(radius - 1) * SCALE, fill=fill)
-    OUTPUT.mkdir(parents=True, exist_ok=True)
     image = image.resize((SIZE, SIZE), Image.Resampling.LANCZOS)
     # 清掉重采样产生的极低透明度振铃，保留可见的圆角抗锯齿。
     image.putalpha(image.getchannel("A").point(lambda alpha: 0 if alpha < 4 else alpha))
-    image.save(OUTPUT / f"{name}.png")
+    save(image, output_dir, f"{name}.png")
 
 
 def main(argv=None):
@@ -115,14 +100,17 @@ def main(argv=None):
 
     可选参数为调色板文件路径，用于以替身文件校验解析行为，缺省时使用仓库内调色板。
     """
-    args = list(sys.argv[1:] if argv is None else argv)
-    palette = load_palette(Path(args[0]) if args else PALETTE)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("palette", nargs="?", type=Path, default=PALETTE)
+    parser.add_argument("--output-dir", type=Path, default=OUTPUT)
+    args = parser.parse_args(argv)
+    palette = load_palette(args.palette)
     for name, fill_source, outline_source, radius in SURFACES:
         fill = resolve(fill_source, palette)
         outline = resolve(outline_source, palette)
-        surface(name, fill, outline, radius)
+        surface(name, fill, outline, radius, args.output_dir)
         print(f"{name}.png 中心 {fill}（{fill_source}） 描边 {outline}（{outline_source}） 圆角 {radius}")
 
 
 if __name__ == "__main__":
-    main()
+    run(main)

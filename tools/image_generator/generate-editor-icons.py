@@ -18,17 +18,30 @@ import argparse
 import math
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+from atlas import load_palette, palette_path, textures_dir, require_pillow, save, run, rectangle as _rect, polygon as _poly
+
+Image, ImageDraw = require_pillow()
 
 CELL = 16
 COLUMNS = 2  # 常态、禁用
 TRANSPARENT = (0, 0, 0, 0)
 
-# 与 client/ui/theme/UiPalette.java 对齐的灰阶方案
+# 深色字形的正文/禁用色与主题文本同义；其余颜色属于图标专用配色。
+DARK_ACCENT = (0x6E, 0x86, 0xA8, 255)
+LIGHT_NORMAL = (0xF2, 0xF2, 0xF2, 255)
+LIGHT_DISABLED = (0x8E, 0x8E, 0x8E, 255)
+LIGHT_ACCENT = (0x9F, 0xB6, 0xCE, 255)
 SCHEMES = {
-    "dark": {"normal": (0x1E, 0x1E, 0x1E, 255), "disabled": (0x7A, 0x7A, 0x7A, 255), "accent": (0x6E, 0x86, 0xA8, 255)},
-    "light": {"normal": (0xF2, 0xF2, 0xF2, 255), "disabled": (0x8E, 0x8E, 0x8E, 255), "accent": (0x9F, 0xB6, 0xCE, 255)},
+    "dark": {"normal": "TEXT_PRIMARY", "disabled": "TEXT_DISABLED", "accent": DARK_ACCENT},
+    "light": {"normal": LIGHT_NORMAL, "disabled": LIGHT_DISABLED, "accent": LIGHT_ACCENT},
 }
+
+
+def scheme_palette(scheme: str, path: Path):
+    """只解析该配色实际依赖的主题常量。"""
+    sources = SCHEMES[scheme]
+    palette = load_palette(path, [value for value in sources.values() if isinstance(value, str)])
+    return {key: palette[value] if isinstance(value, str) else value for key, value in sources.items()}
 
 ICON_ROWS = [
     "undo",
@@ -59,14 +72,6 @@ def _v(d, x, y0, y1, color):
     if y1 < y0:
         y0, y1 = y1, y0
     d.line((x, y0, x, y1), fill=color)
-
-
-def _rect(d, x0, y0, x1, y1, color, fill=False):
-    d.rectangle((x0, y0, x1, y1), outline=color, fill=color if fill else None)
-
-
-def _poly(d, points, color):
-    d.polygon(points, fill=color)
 
 
 def _circle(d, cx, cy, r, color, start_deg=0.0, end_deg=360.0, step_deg=12.0):
@@ -239,8 +244,8 @@ ICONS = {
 }
 
 
-def render(scheme: str) -> Image.Image:
-    palette = SCHEMES[scheme]
+def render(scheme: str, palette=None) -> Image.Image:
+    palette = scheme_palette(scheme, palette_path()) if palette is None else palette
     width = CELL * COLUMNS
     height = CELL * len(ICON_ROWS)
     image = Image.new("RGBA", (width, height), TRANSPARENT)
@@ -259,18 +264,14 @@ def main() -> None:
     parser.add_argument("--scheme", choices=sorted(SCHEMES), default="dark",
                         help="dark = 深色字形（浅色底），light = 浅色字形（深色底）")
     parser.add_argument("--output-dir", default=None, help="输出目录，默认写入模组资源目录")
+    parser.add_argument("--palette", type=Path, default=palette_path(), help="UiPalette.java 路径")
     args = parser.parse_args()
 
-    if args.output_dir:
-        out_dir = Path(args.output_dir)
-    else:
-        repo_root = Path(__file__).resolve().parents[2]
-        out_dir = repo_root / "common/src/main/resources/assets/itemdespawntowhat/textures/gui/editor"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    target = out_dir / f"icons_{args.scheme}.png"
-    render(args.scheme).save(target, format="PNG", optimize=False)
+    out_dir = Path(args.output_dir) if args.output_dir else textures_dir()
+    palette = scheme_palette(args.scheme, args.palette)
+    target = save(render(args.scheme, palette), out_dir, f"icons_{args.scheme}.png")
     print(f"wrote {target} ({CELL * COLUMNS}x{CELL * len(ICON_ROWS)}, {len(ICON_ROWS)} icons, {COLUMNS} states)")
 
 
 if __name__ == "__main__":
-    main()
+    run(main)
