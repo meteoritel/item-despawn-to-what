@@ -444,8 +444,7 @@ def main(argv):
         "harness": "AutoJS + tools/gui-probes",
     }
     env = {}
-    results = []
-    case_metrics = []
+    record = RunRecord(run_dir, metadata)
     setup_error = None
     phases = {}
     probe = None
@@ -459,11 +458,11 @@ def main(argv):
         probe.world = args.world
         phases["setup_ms"] = int((time.perf_counter() - setup_started) * 1000)
         env = build_env(probe)
+        record.set_environment(env)
         cases_started = time.perf_counter()
         for case in cases:
             result, metrics = run_case(probe, case, langs, args.settle_timeout_ms)
-            results.append(result)
-            case_metrics.append(metrics)
+            record.add_case(result, metrics)
             print("[%s] %s %dms evals=%d"
                   % (result["verdict"], result["name"], metrics["duration_ms"],
                      metrics["evals"]))
@@ -474,32 +473,14 @@ def main(argv):
         phases["cases_ms"] = int((time.perf_counter() - cases_started) * 1000)
     except Exception as failure:
         setup_error = "%s: %s" % (type(failure).__name__, failure)
+        record.fail_setup(setup_error)
         print("[error] 前置阶段失败: " + setup_error)
 
-    metrics = build_metrics(probe, phases, case_metrics, int((time.perf_counter()-started)*1000))
-    record = RunRecord(run_dir, metadata, env, results, metrics, setup_error)
-    shots = None
-    if results:
-        sheet_started = time.perf_counter()
-        try:
-            shots = sheet.build(record)
-            record.derived = shots
-            print("[shots] %d 张 %dms" % (len(record.screenshots()), shots["sheet_ms"]))
-        except Exception as failure:
-            record.artifact_errors.append({"role":"sheet", "error":str(failure)})
-            print("[shots] 拼图失败: " + str(failure))
-        phases["sheet_ms"] = int((time.perf_counter()-sheet_started)*1000)
-    metrics.update(build_metrics(probe, phases, case_metrics, int((time.perf_counter()-started)*1000)))
-    report_started = time.perf_counter()
-    try:
-        document = report.render_report(record, shots)
-        (record.directory / FILES["report"]).write_text(document, encoding="utf-8")
-    except Exception as failure:
-        record.artifact_errors.append({"role":"report", "error":str(failure)})
-    metrics["phases"]["report_ms"] = int((time.perf_counter()-report_started)*1000)
-    metrics["total_ms"] = int((time.perf_counter()-started)*1000)
-    record.save()
+    record.complete_run(build_metrics(probe, phases, record.case_metrics(), int((time.perf_counter()-started)*1000)))
+    record.derive_outputs(sheet.build, report.render_report)
     summary = record.summary()
+    metrics = summary["metrics"]
+    print("[shots] %d 张 %dms" % (summary["shots"]["count"], metrics["phases"]["sheet_ms"]))
     print("verdict=%s 用例 %d/%d 细项 %d/%d"
           % (summary["verdict"], summary["passed"], summary["total_cases"],
              summary["passed_checks"], summary["total_checks"]))
@@ -507,7 +488,7 @@ def main(argv):
           % (metrics["total_ms"] / 1000.0, metrics["evals"]["count"],
              metrics["evals"]["rtt_avg_ms"], metrics["settle"]["waited_ms"],
              metrics["shots"]["count"]))
-    for artifact_error in record.artifact_errors:
+    for artifact_error in summary["artifact_errors"]:
         print("[artifact-error] " + json.dumps(artifact_error, ensure_ascii=False))
     print("报告: " + os.path.join(run_dir, "gui-report.html"))
     if setup_error:

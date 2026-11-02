@@ -38,9 +38,9 @@ _TEXT_PRIMARY = (230, 233, 239, 255)
 _TEXT_DIM = (140, 147, 160, 255)
 
 
-def _collect(record):
+def _collect(snapshot):
     """截图元数据始终来自运行记录，字节只在生成派生图时读取。"""
-    return [dict(artifact, index=index) for index, artifact in enumerate(record.screenshots(), 1)]
+    return [dict(artifact, index=index) for index, artifact in enumerate(snapshot.screenshots(), 1)]
 
 
 def _label_lines(shot):
@@ -135,20 +135,20 @@ def _write_list(run_dir, shots, sheet_path):
     return path
 
 
-def build(record):
+def build(snapshot):
     """拼 contact sheet 并写截图清单。
 
     返回 {contact_sheet, list_path, shots, count, sheet_ms}；没有截图时 contact_sheet 为 None。
     """
     started = time.perf_counter()
-    run_dir = record.directory
-    shots = _collect(record)
+    run_dir = snapshot.directory
+    shots = _collect(snapshot)
     sheet_path = _write_contact_sheet(run_dir, shots)
-    for shot in shots:
-        if "render_error" in shot:
-            record.artifact_errors.append({"role":"screenshot", "id":shot["id"], "error":shot["render_error"]})
+    errors = [{"role":"screenshot", "id":shot["id"], "error":shot["render_error"]}
+              for shot in shots if "render_error" in shot]
     list_path = _write_list(run_dir, shots, sheet_path)
     return {
+        "artifact_errors": errors,
         "contact_sheet": sheet_path,
         "png_bytes": _read(sheet_path),
         "list_path": list_path,

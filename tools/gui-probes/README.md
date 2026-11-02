@@ -25,6 +25,6 @@ python tools/gui-probes/lib/run.py --run-dir .scratch/gui-check --validate
 | `lib/pixels.py` / `lib/bitmap_font.py` | 标准库 PNG 与拼图文字基元 |
 | `cases/` | 每例声明独立起点、动作、命名断言和证据 |
 
-`lib` 按脚本目录导入。`sheet.build(record)` 返回派生图信息，`report.render_report(record, shots)` 返回 HTML。判定只由记录提供。截图原始字节在渲染时按需读取，完整运行记录以 `idtw-gui-run-v1` 写入 `gui-run.json`。
+`lib` 按脚本目录导入。`sheet.build(snapshot)` 返回派生图信息，`report.render_report(snapshot, shots)` 返回 HTML。RunRecord 通过 add_case、set_environment、complete_run 接收采集数据，derive_outputs 先保存原始证据，再生成派生产物。snapshot 是不可变 JSON 快照，消费者取得独立数据副本；判定只由记录提供。截图原始字节在渲染时按需读取，完整运行记录以 `idtw-gui-run-v1` 写入 `gui-run.json`。
 
 启动参数、断言字段和输出角色以指南及对应实现为准。AutoJS 只装开发运行目录、只监听 `127.0.0.1:25585`。客户端运行和 Gradle 构建共用互斥锁；`-Reuse` 保留已有进程与 options。

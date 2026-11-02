@@ -6,8 +6,7 @@ import json
 import os
 from typing import Any
 
-_VERDICT_LABELS = {"pass": "通过", "warn": "警告", "fail": "失败", "skip": "跳过", "error": "异常"}
-_RUNNER_VERDICTS = {"pass": "pass", "warn": "warn", "fail": "fail", "error": "error", "skip": "skip"}
+from record import VERDICT_LABELS as _VERDICT_LABELS, require_verdict
 
 _STYLE = """
 :root { color-scheme: light; }
@@ -33,7 +32,6 @@ h1 { margin: 0 0 6px; font-size: 22px; line-height: 1.3; }
 .pass-bg { background: #1a7f37; }
 .fail-bg { background: #cf222e; }
 .skip-bg { background: #57606a; }
-.warn-bg { background: #9a6700; }
 section {
   margin-top: 24px; padding: 18px 22px; background: #fff;
   border: 1px solid #d0d7de; border-radius: 10px;
@@ -55,7 +53,6 @@ article.case {
 article.case.pass { border-left-color: #1a7f37; }
 article.case.fail { border-left-color: #cf222e; }
 article.case.skip { border-left-color: #57606a; }
-article.case.warn { border-left-color: #9a6700; }
 article.case.error { border-left-color: #bc4c00; }
 article.case h2 { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; font-size: 15px; }
 .index {
@@ -66,7 +63,6 @@ article.case h2 { display: flex; align-items: center; gap: 10px; margin: 0 0 10p
 .badge.pass { background: #1a7f37; }
 .badge.fail { background: #cf222e; }
 .badge.skip { background: #57606a; }
-.badge.warn { background: #9a6700; }
 .badge.error { background: #bc4c00; }
 .detail { margin: 0 0 10px; color: #57606a; }
 table.checks tr.bad { background: #fff5f5; }
@@ -119,8 +115,7 @@ def _cell(value: object) -> str:
 
 
 def _verdict(case: dict[str, Any]) -> str:
-    value = str(case.get("verdict", "error")).lower()
-    return value if value in _VERDICT_LABELS else "error"
+    return require_verdict(case.get("verdict"))
 
 
 def _badge(verdict: str) -> str:
@@ -197,7 +192,7 @@ def _performance_section(metrics: dict[str, Any] | None) -> str:
     evals = metrics.get("evals") or {}
     settle = metrics.get("settle") or {}
     shots = metrics.get("shots") or {}
-    rows = [("总耗时", _milliseconds(metrics.get("total_ms")))]
+    rows = [("采集与拼图耗时", _milliseconds(metrics.get("total_ms")))]
     rows += [(label, _milliseconds(phases.get(key))) for key, label in _PHASE_LABELS]
     rows += [
         ("eval 次数", evals.get("count", 0)),
@@ -343,10 +338,12 @@ def _data_script(run_metadata: dict[str, Any], env: dict[str, Any],
     return '<script type="application/json" id="gui-probe-data">\n' + text + "\n</script>"
 
 
-def render_report(record, shots=None) -> str:
+def render_report(snapshot, shots=None) -> str:
     """从运行记录渲染自包含 HTML，判定由运行记录提供。"""
-    run_metadata, cases, env, metrics = record.metadata, record.cases, record.env, record.metrics
-    summary = record.summary()
+    data = snapshot.data()
+    run_metadata, cases, env = data["metadata"], data["cases"], data["environment"]
+    summary = data["summary"]
+    metrics = summary["metrics"]
     body = "\n".join(_case_section(index, case) for index, case in enumerate(cases, start=1))
     document = "\n".join([
         "<!DOCTYPE html>",
