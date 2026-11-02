@@ -91,6 +91,8 @@ powershell -ExecutionPolicy Bypass -File tools/run-probes.ps1 -Chain save -Negat
 
 报告格式为 `idtw-backend-probe-v1`。`results` 每步含 `verdict` 和 `checks`，每项断言给出 `name`、`expected`、`actual`、`pass`。声明场景还带真实事件、账目和实物指标；世界探针含 `metrics`。`remaining` 列出尚未完成的步骤。串行场景在启动时记录 `COUNTER_BASELINE`，保留 `raw_actual`，并以本轮实际差值对照原声明期望。
 
+`probe_artifacts.py` 集中阶段文件命名、原始报告读取与身份验证。归档前先核对 `format`、`phase`、`suite`、`run_id` 以及目录中已有阶段的身份，验证通过后才替换阶段文件。同一目录的 prepare/resume 必须属于同一 suite 和 run_id；prepare 为 `RESTART_REQUIRED` 时必须有 resume。损坏 JSON、身份混用或缺少阶段文件会给出包含路径的诊断。
+
 成功要求：进程退出零、报告身份正确、结果与断言非空、每步及每项断言通过、`remaining` 为空。恢复首进程的 `RESTART_REQUIRED` 会进入第二进程。断言失败立即封存报告并停服；异常、启动失败、超时、缺报告和未完成状态均退出非零。预期的注入异常保留在日志中，使用注入次数及业务结果判定。
 
 `-Negative` 追加 `negative_control/intentionally_wrong`：预期 true、实际 false。它走相同断言与退出路径，用于检查 Agent 会看到明确失败。
@@ -110,6 +112,7 @@ powershell -ExecutionPolicy Bypass -File tools/run-probes.ps1 -Chain save -Negat
 | `neoforge/build.gradle` 的 `probe` 源集 | 编译时依赖正式代码；开发运行合并到同一 mod 类目录，符合 NeoForge 模块包隔离约束 |
 | `RuntimeObserver`、`DevelopmentDiagnostics` | 生产侧空观测契约，开发入口在服务端装配并在停止后释放 |
 | `tools/run-probes.ps1` | 隔离运行、重启编排、超时、报告校验与退出码 |
+| `tools/probe_artifacts.py` | 原始报告身份、阶段文件命名、读取与验证后归档；供 PowerShell 和性能报告共享 |
 | `DebugProbePerformance` | 自动运行逐步启停的独立 JMX 采样、阶段计时、主线程 tick 与分类耗时记录 |
 | `DebugSequenceCatalog` / `DebugSequenceRun` / `BackendProbeReport` | 统一声明、步骤所有权、环境与结果；命令和无人宿主共享推进与断言 |
 | `BackendProbeFixtures` | 正式文件规则、源/产物登记、字节快照与精确清理；世界探针只保留业务步骤与断言 |
@@ -171,6 +174,8 @@ JMX 线程只读取管理指标；世界和 scheduler 数据由服务端线程�
 通过要求：业务断言全部通过，资源与阶段非空；超过一秒的步骤有 tick 与有效 CPU 样本，tick 运行时计时完整；性能场景有全部生命周期阶段，采样线程未报错。脚本对功能失败、采样缺失或异常均返回非零，并保留已有结果。性能数值展示为观测值，统一功能入口使用机器无关的业务断言。
 
 历史比较按进程阶段和步骤配对，核对版本环境、处理器数、heap 容量、tick rate、seed、配置、工作负载和业务 PASS。匹配后展示 runtime p95、总 tick p95、进程 CPU 均值和 heap 峰值的增幅；配置不同明确列出差异。优化前后沿用同一 JVM 参数与负载比较同一指标；需要区分运行波动与变化趋势时，再补重复采样。曲线采样密度为 200 ms，短时尖峰结合逐 tick 和阶段表定位。
+
+性能报告通过 `probe_artifacts.py` 读取原始阶段报告，汇总格式为 `idtw-performance-report-v1`。本次目录和 `--compare-to` 基线目录各自验证其阶段身份；两次运行保留各自的 run_id，比较依据为环境、工作负载和业务结果。
 
 ## 验证分工
 

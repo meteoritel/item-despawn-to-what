@@ -8,10 +8,11 @@ param(
 # 单入口：隔离存档、串行 Gradle、结构化报告。每次保留现场，失败退出非零。
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
+$artifactsTool = Join-Path $PSScriptRoot 'probe_artifacts.py'
 $catalogTool = Join-Path $PSScriptRoot 'probe-catalog.py'
 if ($List) { & python $catalogTool --list; exit $LASTEXITCODE }
 & python $catalogTool --select $Chain
-if ($LASTEXITCODE -ne 0) { throw "Invalid probe selection: $Chain" }
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $runId = [guid]::NewGuid().ToString()
 if ($CompareTo) { $CompareTo = (Resolve-Path -LiteralPath $CompareTo).Path }
 $runName = (Get-Date -Format 'yyyyMMdd-HHmmss-fff') + '-' + $Chain.Replace('/', '-')
@@ -62,12 +63,10 @@ try {
         $reportFile = Join-Path $runDirectory 'probe-report.json'
         if ($process.ExitCode -ne 0) { throw "phase=$phase Gradle exit=$($process.ExitCode); log=$log" }
         if (-not (Test-Path -LiteralPath $reportFile)) { throw "phase=$phase missing report; log=$log" }
-        $report = Get-Content -LiteralPath $reportFile -Raw -Encoding UTF8 | ConvertFrom-Json
-        Copy-Item -LiteralPath $reportFile -Destination (Join-Path $runDirectory ($phase + '-report.json'))
-        $expectedPhase = $phase
-        if ($report.format -ne 'idtw-backend-probe-v1' -or $report.phase -ne $expectedPhase -or $report.suite -ne $Chain -or $report.run_id -ne $runId) {
-            throw "unexpected report identity: $reportFile"
-        }
+        $archiveOutput = & python $artifactsTool archive --directory $runDirectory --phase $phase --suite $Chain --run-id $runId
+        if ($LASTEXITCODE -ne 0) { throw "phase=$phase report identity/archive failed; report=$reportFile" }
+        $archiveInfo = $archiveOutput | ConvertFrom-Json
+        $report = Get-Content -LiteralPath $archiveInfo.path -Raw -Encoding UTF8 | ConvertFrom-Json
         foreach ($result in $report.results) {
             Write-Output ("[probe] {0}: {1}" -f $result.step, $result.verdict)
             foreach ($check in $result.checks) {

@@ -5,6 +5,9 @@ import csv
 import json
 import math
 from pathlib import Path
+import sys
+from probe_artifacts import read_reports, PERFORMANCE_FORMAT
+from toolslib.checks import configure_console
 
 
 ENVIRONMENT_KEYS = ('minecraft', 'java', 'vm', 'os', 'arch', 'processors', 'max_heap_bytes', 'tick_rate', 'world_seed', 'jvm_tuning', 'config')
@@ -12,19 +15,16 @@ ENVIRONMENT_KEYS = ('minecraft', 'java', 'vm', 'os', 'arch', 'processors', 'max_
 
 def read_runs(directory):
     runs = []
-    for phase in ('prepare', 'resume'):
-        path = directory / f'{phase}-report.json'
-        if path.is_file():
-            report = json.loads(path.read_text(encoding='utf-8-sig'))
-            for result in report['results']:
-                if 'performance' in result:
-                    runs.append(dict(phase=phase, step=result['step'], verdict=result['verdict'],
-                                     environment=report['environment'], workload=result.get('workload'),
-                                     window=result.get('window'), performance=result['performance']))
-            if report.get('interrupted_performance'):
-                runs.append(dict(phase=phase, step='interrupted', verdict=report['verdict'],
-                                 environment=report['environment'], workload=None, window=None,
-                                 performance=report['interrupted_performance']))
+    for phase, report in read_reports(directory):
+        for result in report['results']:
+            if 'performance' in result:
+                runs.append(dict(phase=phase, step=result['step'], verdict=result['verdict'],
+                                 environment=report['environment'], workload=result.get('workload'),
+                                 window=result.get('window'), performance=result['performance']))
+        if report.get('interrupted_performance'):
+            runs.append(dict(phase=phase, step='interrupted', verdict=report['verdict'],
+                             environment=report['environment'], workload=None, window=None,
+                             performance=report['interrupted_performance']))
     return runs
 
 
@@ -186,7 +186,7 @@ def main():
     for run in runs:
         run['summary'] = summary(run)
     compared = comparison(runs, read_runs(args.compare_to)) if args.compare_to else []
-    payload = dict(format='idtw-performance-report-v1', runs=runs, comparison=compared, errors=errors)
+    payload = dict(format=PERFORMANCE_FORMAT, runs=runs, comparison=compared, errors=errors)
     (args.directory / 'performance-summary.json').write_text(json.dumps(
         dict(format=payload['format'], results=[{key: value for key, value in run.items() if key != 'performance'} for run in runs],
              comparison=compared, errors=errors), ensure_ascii=False, indent=2), encoding='utf-8')
@@ -200,4 +200,10 @@ def main():
 
 
 if __name__ == '__main__':
-    raise SystemExit(main())
+    configure_console()
+    try:
+        code = main()
+    except (OSError, ValueError, KeyError, TypeError) as failure:
+        print(f"[performance] 输入错误：{failure}", file=sys.stderr)
+        code = 2
+    raise SystemExit(code)
