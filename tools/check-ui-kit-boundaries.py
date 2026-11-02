@@ -25,7 +25,7 @@ ROLE = re.compile(r"<li>\{@code ([A-Za-z_][A-Za-z0-9_]*)\}: (host|library|exampl
 
 
 def check(root: Path, kit_path: str = KIT_PATH) -> CheckResult:
-    """保留原 PowerShell 的逐行语义，公开角色从原始 Javadoc 读取。"""
+    """逐行检查原始文本，公开角色从原始 Javadoc 读取。"""
     kit = Path(kit_path)
     kit = (kit if kit.is_absolute() else root / kit).resolve()
     if not kit.is_dir():
@@ -38,7 +38,7 @@ def check(root: Path, kit_path: str = KIT_PATH) -> CheckResult:
     directories = dict.fromkeys(path.parent for path in files)
     imports = 0
     for path in files:
-        # 允许显式 KitPath 位于仓库之外，位置仍以相对根路径表示。
+        # 允许显式 kit 路径位于仓库之外，位置仍以相对根路径表示。
         relative = Path(os.path.relpath(path, root)).as_posix()
         for line in boundary_lines(path.read_text(encoding="utf-8"), prefixes=FQ_PREFIXES, raw=True):
             if line.public_type:
@@ -92,10 +92,10 @@ def check(root: Path, kit_path: str = KIT_PATH) -> CheckResult:
 
 
 def main() -> int:
-    """支持公共 --root 和历史 ProjectRoot/KitPath 的等价显式路径。"""
+    """支持公共 --root 与 --kit-path 的显式路径。"""
     configure_console()
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--root", "--project-root", dest="root")
+    parser.add_argument("--root")
     parser.add_argument("--kit-path", default=KIT_PATH)
     args = parser.parse_args()
     return execute(lambda: check(repo_root(args.root), args.kit_path))

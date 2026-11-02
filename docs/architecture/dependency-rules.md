@@ -91,7 +91,7 @@ flowchart LR
 - import 白名单为 `java.*`、`javax.*`、`net.minecraft.*`、`org.jetbrains.*`、`org.joml.*`、`org.lwjgl.*`，另有 `com.mojang.blaze3d` 的顶点与光照类型；
 - 本模组其它包、`net.fabricmc.*`、`net.neoforged.*`、`com.google.gson.*` 判违规。
 
-运行方式：`python tools/check-ui-kit-boundaries.py`；通过返回 0，有违规返回 1，必需输入缺失或目录无效返回 2。PowerShell 入口保留为参数兼容转发。
+运行方式：`python tools/check-ui-kit-boundaries.py`；通过返回 0，有违规返回 1，必需输入缺失或目录无效返回 2。
 
 ### 构建与持续集成
 

@@ -194,8 +194,8 @@
  * {@code com.mojang.blaze3d.vertex.PoseStack} 与 {@code com.mojang.blaze3d.vertex.VertexConsumer}；
  * 子包使用的顶点构建、GPU 缓冲与 RenderSystem 类型按边界脚本逐类放行。依赖方向为子包到基础 kit，基础 kit 不引用子包。
  * kit 不 import 任何项目包、不 import 两端 loader API、不引用 {@code Constants.MOD_ID}；
- * {@code client/} 以外的代码不得引用本包。该约束由 {@code tools/check-ui-kit-boundaries.ps1} 检查，
- * 运行方式：{@code powershell -ExecutionPolicy Bypass -File tools/check-ui-kit-boundaries.ps1}
+ * {@code client/} 以外的代码不得引用本包。该约束由 {@code tools/check-ui-kit-boundaries.py} 检查，
+ * 运行方式：{@code python tools/check-ui-kit-boundaries.py}
  * （退出码 0 通过、1 有违规、2 配置错误）。脚本扫描本目录全部 {@code .java} 的 import 与全限定引用：
  * import 白名单为 {@code java.*} / {@code javax.*} / {@code net.minecraft.*} / {@code org.jetbrains.*} /
  * {@code org.joml.*} / {@code org.lwjgl.*}，另精确允许脚本登记的渲染类，不放开其父包；同一 kit 包内互相引用允许；本模组其它包与
