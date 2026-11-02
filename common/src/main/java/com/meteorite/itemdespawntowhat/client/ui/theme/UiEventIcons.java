@@ -11,8 +11,8 @@ import net.minecraft.resources.ResourceLocation;
  * <p>图集是彩色成品而非白色字形：日光、雨滴、雷光与箭矢自带固有配色，按主题色相乘会失真，
  * 因此这里不提供染色入口；界面只在禁用态统一压暗，与物品图标的口径一致。</p>
  *
- * <p>切片规格与 {@code tools/image_generator/generate-event-icons.py} 一致：创作画布 32×32、
- * 单列五行，界面槽位按 16 像素绘制，缩放由 blit 的目标尺寸完成。kit 只提供
+ * <p>切片规格：创作画布 32×32、单列五行，界面槽位按 16 像素绘制，缩放由 blit 的目标尺寸完成。
+ * 图集为手工美术，调整图标时直接替换贴图并保持格子尺寸与行序不变。kit 只提供
  * {@link UiIcon} 与贴图注入点，贴图路径留在主题层。</p>
  */
 public final class UiEventIcons {
