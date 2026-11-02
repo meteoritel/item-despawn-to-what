@@ -34,7 +34,7 @@ authority:
 | D6 | 命令、调试、网络是使用方 | `core/command`、`core/debug`、`core/network` → 运行时与编辑服务 | `tools/check-isolation.py` 禁止底层实现反向引用使用方 |
 | D7 | 宿主是唯一向上装配点 | `core/host` → `core` 其余包与 `platform/Services` | `tools/check-isolation.py` 禁止底层实现反向引用宿主 |
 | D8 | 客户端单向分层 | `client/net` → 协议与业务模型；`client/edit` → core 与 `client/ui/kit`；`client/ui` → `client/edit`、`client/net` | `tools/check-isolation.py` + 评审 |
-| D9 | UI kit 不引用本模组其它包 | `client/ui/kit` 只引用自身包与白名单 | `tools/check-ui-kit-boundaries.py` |
+| D9 | UI kit 独立于本模组业务，宿主消费公开入口 | `kit` 只引用自身与白名单；宿主 → `kit/api`；api 导出声明保留在公开面内 | `tools/check-ui-kit-boundaries.py` |
 | D10 | 平台隔离 | `net.fabricmc.*`、`net.neoforged.*` 只出现在 `fabric/`、`neoforge/` | `tools/check-isolation.py` |
 | D11 | 跨加载器隔离 | `fabric/` 引用 `net.fabricmc.*`，`neoforge/` 引用 `net.neoforged.*`，两者互不引用对方加载器 API | `tools/check-isolation.py` |
 | D12 | 端隔离 | 客户端类（`net.minecraft.client.*`、`com.meteorite.itemdespawntowhat.client.*`）只出现在路径含 `/client/` 的源码 | `tools/check-isolation.py` |
@@ -84,10 +84,12 @@ flowchart LR
 
 ### `tools/check-ui-kit-boundaries.py`
 
-按原始文本逐行递归扫描 `client/ui/kit` 下全部 `.java` 的 import、全限定引用与顶层 public 登记：
+按原始文本递归扫描 kit 的外部依赖，并复用 `Source` / `TypeIndex` 核验消费与导出：
 
-- 每个顶层 public 类型在同目录 package-info 的角色表唯一登记为 host、library 或 example，过期登记也报违规；
-- preview 允许引用基础 kit；基础 kit 对 preview 的 import 与全限定反向引用报错；
+- 公开入口位于 `kit/api` 的能力包，每个顶层 public 类型在同目录 package-info 的角色表唯一登记为 host、library 或 example；过期登记也报违规。internal 的 Java 可见性服务于 kit 内跨包协作；
+- host 对应 kit 外 common/Fabric/NeoForge main 的静态引用；library 与 example 保持零生产消费，library 逐项说明用途与当前无生产引用。dev/probe 和注释分别识别；
+- kit 外源码只引用 api；公开/protected 声明、父类型、record 组件及接口隐式公开成员按有限词法规则检查 internal 类型泄漏；
+- `api/preview` 允许引用基础能力；全部基础子包对 preview 的 import 与全限定反向引用报错；
 - import 白名单为 `java.*`、`javax.*`、`net.minecraft.*`、`org.jetbrains.*`、`org.joml.*`、`org.lwjgl.*`，另有 `com.mojang.blaze3d` 的顶点与光照类型；
 - 本模组其它包、`net.fabricmc.*`、`net.neoforged.*`、`com.google.gson.*` 判违规。
 

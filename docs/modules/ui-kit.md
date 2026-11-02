@@ -2,7 +2,7 @@
 title: UI kit（client/ui/kit）
 layer: 3
 audience: 客户端界面开发者、宿主主题与控件适配实现者、需要复用通用 UI 原语的开发者
-authority: common/client/ui/kit、common/client/ui/kit/package-info.java
+authority: common/client/ui/kit/api、common/client/ui/kit/internal、tools/check-ui-kit-boundaries.py
 ---
 
 # UI kit
@@ -10,7 +10,7 @@ authority: common/client/ui/kit、common/client/ui/kit/package-info.java
 > **TL;DR**
 > - `client/ui/kit` 是与本模组业务无关的声明式客户端 UI 原语集：排版与几何、固定矩形控件与控件组、输入作用域与持续交互、树编辑、数值与文本契约、预览与绘制层次。
 > - 视觉规格、业务文案、模态归属与数据解释都由宿主注入：kit 提供通用算法、状态容器、接口与不可变值。
-> - 公开面以 `package-info.java` 为权威登记；依赖边界由 `tools/check-ui-kit-boundaries.py` 强制。
+> - 宿主从 `kit.api` 的能力包导入公开类型，各目录 `package-info.java` 登记消费角色；内部实现与依赖边界由 `tools/check-ui-kit-boundaries.py` 保护。
 
 **适用对象**：编写新界面或新控件、实现宿主主题、给画布或树增加交互、排查输入与交互生命周期问题的开发者。
 
@@ -18,7 +18,7 @@ authority: common/client/ui/kit、common/client/ui/kit/package-info.java
 
 一句话边界：把“界面怎么排版、怎么命中、一次拖动从哪里开始又怎样收尾”固定成与业务无关的原语，让主题、控件与屏幕在它之上各自生长。
 
-承接的面（每组的具体公开类型在 `package-info.java` 中逐项登记）：
+承接的面（具体公开类型在各能力目录的 `package-info.java` 中逐项登记）：
 
 - **声明式排版与几何**：文档树、内容变换、文本度量、流式与线性布局，以及命中、矩形与九宫格切片原语。
 - **固定矩形控件与控件组**：控件基类、按稳定 key 复用的一组控件、滚动视口，绘制统一走相对 z 偏移的绘制层。
@@ -28,9 +28,15 @@ authority: common/client/ui/kit、common/client/ui/kit/package-info.java
 - **树与画布原语**：不可变树的编解码注入、结构操作与移动预览、结构投影、独立视图状态与导航、tidy 布局、点阵网格、正交连线、框选。
 - **预览与层次**：统一物品、方块、流体、实体、方块实体与结构场景图标、图标图集与图标条、浮动面板、灯箱、悬停指针门禁。
 
-kit 是记录来源与差异的维护副本，按可独立发布的库 API 维护（[ADR-0025](../adr/0025-reusable-client-ui-kit-boundary.md)、[ADR-0030](../adr/0030-ui-kit-as-standalone-library-api.md)）；新增公开类需要在 `package-info.java` 登记（[ADR-0033](../adr/0033-kit-zero-reference-public-api-retention.md)）。输入所有权的取舍见 [ADR-0055](../adr/0055-ui-input-scope-ownership.md)。
+kit 是记录来源与差异的维护副本，按可独立发布的库 API 维护（[ADR-0025](../adr/0025-reusable-client-ui-kit-boundary.md)、[ADR-0030](../adr/0030-ui-kit-as-standalone-library-api.md)）；新增公开类需要在所属目录的 `package-info.java` 登记（[ADR-0033](../adr/0033-kit-zero-reference-public-api-retention.md)）。输入所有权的取舍见 [ADR-0055](../adr/0055-ui-input-scope-ownership.md)。
 
 ## 2. 模块边界
+
+### 能力包与导出
+
+公开入口位于 `client/ui/kit/api`：input 持有作用域、交互与焦点，geometry 持有坐标变换，render 持有通用绘制，control 组合控件与容器，style 接收宿主主题；number、text、layout、tree 分别持有对应契约与算法，preview 拥有场景及资源。包级入口见 [api/package-info.java](../../common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/api/package-info.java)。
+
+公开具体类直接承载状态与算法。输入和焦点的包内协作、区间滑块的 `AbstractRangeCore`、preview 的句柄与场景引擎保留在各自能力包中，由 Java 可见性保护。跨能力共用的 pose 裁剪实现位于 `internal/render`，由文本绘制与视口变换调用；宿主导入统一面向 api。
 
 ### 对外入口
 
@@ -45,7 +51,7 @@ kit 是记录来源与差异的维护副本，按可独立发布的库 API 维�
 
 ### 本项目消费与库入口
 
-`package-info.java` 逐项登记 `host`（本项目生产直接使用）、`library`（当前供其它宿主使用）与 `example`（装配示例）。三类都保留公开契约，零生产引用不作为删减依据。
+各能力目录的 `package-info.java` 逐项登记 `host`（kit 外本项目生产源码直接引用）、`library`（供其它宿主使用，逐项说明用途与当前无生产引用）与 `example`（装配示例）。三类都保留公开契约，dev/probe 使用与生产消费分别识别。
 
 本项目以固定矩形控件、滚动视口、焦点与捕获、树编辑、数值与文本交互装配页面。`UiDocument`/`UiNode`、`UiControlGroup`、`UiLightbox`、`UiFloatingPanel`、`UiNavigationHistory` 等保留为库接入能力；`UiSliderExamples` 提供无业务装配示例。公开成员与嵌套契约随所属顶层类型维护。
 
@@ -57,7 +63,7 @@ kit 的编译期依赖只有原版客户端类型、JDK、JOML、LWJGL 与 JetBr
 flowchart LR
     MC["原版客户端类型与白名单渲染类"]
     STD["JDK / JOML / LWJGL / JetBrains annotations"]
-    KIT["client/ui/kit"]
+    KIT["client/ui/kit/api"]
     THEME["client/ui/theme"]
     WIDGET["client/ui/widget"]
     SHARED["client/ui/shared"]
@@ -74,13 +80,13 @@ flowchart LR
     EDIT --> KIT
 ```
 
-边界由脚本强制：`python tools/check-ui-kit-boundaries.py`，白名单为 `java.*`、`javax.*`、`net.minecraft.*`、`org.jetbrains.*`、`org.joml.*`、`org.lwjgl.*`，另按脚本的 `ALLOWED_CLASSES` 精确放行光照、顶点构建、GPU 缓冲与 RenderSystem 类型。preview 单向引用基础 kit，公开面逐目录登记。退出码 0 通过、1 存在违规、2 配置错误。
+边界由脚本强制：`python tools/check-ui-kit-boundaries.py`，白名单为 `java.*`、`javax.*`、`net.minecraft.*`、`org.jetbrains.*`、`org.joml.*`、`org.lwjgl.*`，另按脚本的 `ALLOWED_CLASSES` 精确放行光照、顶点构建、GPU 缓冲与 RenderSystem 类型。preview 单向引用基础能力，基础能力的全部子包受同一规则约束。宿主只引用 api，api 的公开/protected 声明与父类型保持在导出面内，公开类型与消费角色逐目录核验。退出码 0 通过、1 存在违规、2 配置错误。
 
 ### 被谁依赖
 
 - `client/ui/theme`：把主题色与度量映射成 kit 的样式值后注入，是 `UiStyleSource` 在本项目的实现侧。
-- `client/ui/widget`：把可复用控件委托给 kit 核心（数值、文本、树、图标条），原版文本模型由宿主适配。滚动控件的行宽、屏幕到内容的纵向换算与固定行高命中共用本层 `RowGeometry`，滚动条预留宽度直接取 `UiScrollView.SCROLLBAR_WIDTH`；两个区间宿主控件（`UiCyclicTimeBar`、`UiRangeBar`）共用 `AbstractBarShell`，其内核 `AbstractRangeCore` 在 kit 内为包内可见，不进 kit 公开面。
-- `client/ui/shared`：目录图标与条件摘要复用 kit 的图标、滚动与布局原语；宿主把业务对象转换成 `PreviewSubject`，注入资源世代、线程池、时钟、平台几何与诊断；`preview/PreviewScenes` 持有场景、实例与 CPU/GPU 资源。
+- `client/ui/widget`：把可复用控件委托给 kit 核心（数值、文本、树、图标条），原版文本模型由宿主适配。滚动内容命中与纵向换算使用 `UiScrollView.hitContentY`，行宽与固定行高算法共用宿主层 `RowGeometry`；滚动条预留宽度直接取 `UiScrollView.SCROLLBAR_WIDTH`。两个区间宿主控件（`UiCyclicTimeBar`、`UiRangeBar`）共用 `AbstractBarShell`，其内核 `AbstractRangeCore` 在 `api/number` 内保持包内可见。
+- `client/ui/shared`：目录图标与条件摘要复用 kit 的图标、滚动与布局原语；宿主把业务对象转换成 `PreviewSubject`，注入资源世代、线程池、时钟、平台几何与诊断；`api/preview/PreviewScenes` 持有场景、实例与 CPU/GPU 资源。
 - `client/ui/screen` 与 `client/ui/screen/form`：装配控件与稳定输入作用域，接入历史、退出、旁白和焦点滚动。
 - `client/edit`：条件树的编解码与节点适配引用 `UiTreeCodec`、`UiTreeEditor`、`UiTreePath`。
 
@@ -100,7 +106,7 @@ kit 的形态由宿主的注入决定，缺一不可：
 
 仅列对外入口、扩展点、聚合根与并发/事务敏感类，非穷举。
 
-| 类型（`client/ui/kit`） | 角色 | 职责 | 协作对象 |
+| 类型（`client/ui/kit/api`） | 角色 | 职责 | 协作对象 |
 |---|---|---|---|
 | `UiStyleSource` | 扩展点 | 按语义角色给出控件样式与滑块皮肤；kit 只约定返回类型，视觉规范留在宿主 | 宿主主题、`UiControl`、`UiScalarSlider` |
 | `UiControlStyle` / `UiControlRole` / `UiSliderSkin` / `UiSliderRole` | 注入值 | 角色只表达语义（如主要、次要、危险等操作语义，以及紧凑、宽松两档几何尺度）；交互状态由样式按 `State` 解析，不属于角色；皮肤把“样式 + 画法”配成一对，使两者来自同一套主题 | 主题实现、控件渲染 |
@@ -167,9 +173,9 @@ sequenceDiagram
 
 ### 焦点与激活
 
-控件先声明焦点能力；`UiControl.setFocusable` 与动作独立。鼠标点击可聚焦目标转焦，不可聚焦的交互区域保留旧焦点，纯背景清焦。作用域退出挂起逻辑焦点，返回时恢复仍合格的目标，否则选择首个目标；交互会话随退出结束。
+控件先声明焦点能力；`UiControl.setFocusable` 与动作独立。左键点击可聚焦目标转焦，不可聚焦的交互区域保留旧焦点，纯背景清焦。作用域退出挂起逻辑焦点，返回时恢复仍合格的目标，否则选择首个目标；交互会话随退出结束。
 
-额外轮廓由 `isFocusVisible` 决定，仅键盘操作显示；文本光标、选区与业务选中保持各自语义。复合控件用 `focusWithin` 进入私有文本模式，管理器仍只持有一个目标，Tab 使用原组的位置。
+额外轮廓由 `isFocusVisible` 决定，仅键盘操作显示；文本光标、选区与业务选中保持各自语义。复合控件用 `focusWithin` 进入私有文本模式，管理器仍只持有一个目标。组已登记时 Tab 使用组的位置；展开型组只登记子目标，组内编辑沿用已有有效锚点。
 
 ### 树结构与视图同步
 
@@ -195,11 +201,18 @@ flowchart LR
     D --> E["换主题只替换注入实现，控件代码不变"]
 ```
 
+### 输入与几何调用契约
+
+- 指针释放优先交给匹配会话；同域已消费的按下在无会话时向根内容释放一次。切域、关屏使配对失效。
+- 焦点列表使用 `UiFocusManager.updateTargets` 同步收集；收集成功才提交，异常保留旧列表并退出更新状态。手工登记配对错误与刷新时漏结束显式报错。
+- 内容命中使用 `UiScrollView.hitContentY(x,y)`，视口外、滚动条与滚动条拖动期间返回空；`toContentX/Y` 保持纯坐标换算。
+- 局部 tooltip、侧板、模态遮罩与深度公式由 `UiRenderLayers` 统一，容器在宿主选定的外层深度中安排局部前景。
+
 ## 5. 扩展点与约束
 
 ### 扩展点
 
-- **新增 kit 公开原语**：在 `package-info.java` 的公开面清单登记分组、用途及 host/library/example 角色，然后跑边界脚本；随库发布的定位与命名沿用现有分组。
+- **新增 kit 公开原语**：按职责放入 `api` 能力包，在同目录 `package-info.java` 登记用途及 host/library/example 消费角色；共享内部实现按真实协作放入 `internal` 或保留包内可见。随后运行边界脚本。
 - **新增控件**：实现 `UiInputTarget`（必要时加 `UiFocusTarget`）；输入交给 `UiInputRouter` 路由，持续交互登记到作用域的 `UiInteractionSession`，值快照由控件模型保存。
 - **新增主题或皮肤**：实现 `UiStyleSource`，同一角色重复调用返回同一份值；滑块务必以 `UiSliderSkin` 成对给出样式与画法，使 `UiSliderPainter.Frame` 携带的样式与轨道用色同源。宿主侧的落点见 [client-ui](client-ui.md)。
 - **新增数值字段**：`UiNumberPolicy` 描述合法域、粗细步长与整数策略，`UiSliderWindow` 描述这一段域映射到轨道的哪一截，`UiNumbers` 负责显示与解析，精确输入用 `UiValueTextBinding` 绑定。窗口只影响几何，超出窗口但仍在合法域内的值继续精确显示与编辑。
@@ -219,8 +232,8 @@ flowchart LR
 
 ### 改动后的验证
 
-1. `python tools/check-ui-kit-boundaries.py`（改动 kit 或其依赖时必跑）。
-2. IDE 工作区检查 → `tools/dsh-build.ps1 -Tasks build`。
+1. IDEA MCP 检查受影响的 Java 文件并处理新增问题。
+2. `python tools/check-ui-kit-boundaries.py`、`python tools/check-isolation.py` → `tools/dsh-build.ps1 -Tasks build`。
 3. 改文档链接后跑 `python tools/check-docs.py`；改语言文件跑 `python tools/check-i18n.py`。
 
 ## 6. 数据与配置引用

@@ -2,7 +2,7 @@
 title: GUI 开发探针
 layer: 5
 audience: 需要验证客户端界面行为、又不愿手点一遍编辑器的开发者与 Agent
-authority: tools/gui-probes（lib/run.py、lib/client.py、lib/prelude.js、lib/record.py、lib/sheet.py、lib/report.py）、common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiLayoutSource.java
+authority: tools/gui-probes（lib/run.py、lib/client.py、lib/prelude.js、lib/record.py、lib/sheet.py、lib/report.py）、common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/api/layout/UiLayoutSource.java
 ---
 
 # GUI 开发探针

@@ -40,7 +40,7 @@ authority:
 | [conversion-runtime](../modules/conversion-runtime.md) | 追踪与触发、预检查、完整组结算、恢复与共享预算 | `common/core/runtime`、`common/core/runtime/scheduler`、`common/core/state` | `common` |
 | [authoring](../modules/authoring.md) | 候选目录、编辑会话与落盘、命令与调试场景 | `common/core/catalog`、`common/core/network`、`common/core/service` 的编辑落盘部分、`common/core/command`、`common/src/dev`、`neoforge/src/probe` | `common` |
 | [client-editor](../modules/client-editor.md) | 客户端协议工作区、草稿与撤销、类型编辑器注册表 | `common/client/net`、`common/client/edit`、`common/client/edit/draft` | `common` |
-| [ui-kit](../modules/ui-kit.md) | 声明式 UI kit 的公开面与依赖边界 | `common/client/ui/kit` | `common` |
+| [ui-kit](../modules/ui-kit.md) | 按能力组织的 UI 库公开入口与内部实现 | `common/client/ui/kit/api`、`common/client/ui/kit/internal` | `common` |
 | [client-ui](../modules/client-ui.md) | 编辑器界面、主题与控件适配 | `common/client/ui/theme`、`common/client/ui/widget`、`common/client/ui/shared`、`common/client/ui/screen`、`common/client/ui/screen/form` | `common` |
 
 ## 对外入口与依赖方
@@ -57,7 +57,7 @@ authority:
 | conversion-runtime | `ConversionRuntime`、`RuleIndex`、`ServerScheduler`、`SettlementLedger` | authoring（只读索引）、core/host、command、debug |
 | authoring | `AuthoringHost`、`RuleEditChannels`、`RuleEditTransport`、`RuleEditService`、`EditAdmission`、`EditSessionManager`、`RuleCommandTree`、`RuleCatalogService` | client-editor 与 client-ui（协议与限额）、platform（编辑上下文） |
 | client-editor | `RuleEditClientWorkspace`、`EditorSessionView`、`EditorSaveView`、`EditSession`、`RuleValue`、`ResultStructure`、`TypeEditorRegistry` | client-ui |
-| ui-kit | `UiDocument`、`UiControl`、`UiTreeEditor`、`UiInputRouter`、`UiSliderSkin` | client-ui、client-editor（树编辑契约） |
+| ui-kit | `api.layout.UiDocument`、`api.control.UiControl`、`api.tree.UiTreeEditor`、`api.input.UiInputRouter`、`api.number.UiSliderSkin` | client-ui、client-editor（树编辑契约） |
 | client-ui | `RuleEditorScreen`、`EditorScreenHooks` 的实现、`UiHostThemes` | platform 客户端入口（挂载界面） |
 
 ## 逻辑模块与 Gradle 子项目的映射

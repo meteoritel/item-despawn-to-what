@@ -156,7 +156,7 @@ flowchart TB
   - 允许：`core/api`、`core/model`、`core/network/transport`、`core/network/protocol`、`core/catalog`、`core/service/edit`、`core/service` 的限额常量、原版客户端类型。
   - 禁止：依赖 `client/edit` 与 `client/ui`。界面经 `EditorScreenHooks` 注册槽注入，由客户端入口接线。
 - **`client/edit`** — 客户端编辑数据：草稿、回调写入的撤销会话、严格只读值与结果结构判别、类型参数投影与类型化字段描述符、固定规则表单、类型编辑器注册表、条件树编解码与摘要。
-  - 允许：`core/api`、`core/model`、`core/catalog`、`core/service/edit`、`core/type/BuiltinTypeRegistries` 的冻结装配记录、`client/net`、`client/ui/kit` 的树编辑契约、`client/edit/draft`、原版客户端类型。
+  - 允许：`core/api`、`core/model`、`core/catalog`、`core/service/edit`、`core/type/BuiltinTypeRegistries` 的冻结装配记录、`client/net`、`client/ui/kit/api/tree` 的树编辑契约、`client/edit/draft`、原版客户端类型。
   - 禁止：依赖 `client/ui` 的宿主子包（`theme`、`widget`、`shared`、`screen`、`screen/form`）；不发起网络请求、不打开界面。
 - **`client/edit/draft`** — `DraftJournal` 统一草稿保留策略、保存基线与落盘生命周期，接收业务状态并输出恢复模型；文件仓库、后台写入者与磁盘格式为包内实现。
   - 允许：`core` 的公开类型与原版客户端类型。
@@ -164,6 +164,8 @@ flowchart TB
 - **`client/ui/kit`** — 声明式 UI kit：排版、控件与交互、样式注入、树编辑、输入作用域与持续交互、数值策略、滑块、文本局部历史、焦点、导航、灯箱。
   - 允许：JDK、原版客户端类型与 kit 公开面内的白名单。
   - 禁止：依赖本模组其它包。kit 不认识规则、协议与主题，样式由宿主注入。
+  - `api` 按能力提供受支持入口，公开类型与消费角色在各能力目录登记；input 的焦点协作、number 的区间内核和 preview 的场景协作保留包内可见。能力入口见 [UI kit](../modules/ui-kit.md#能力包与导出)。
+  - `internal` 持有跨能力共享实现，宿主通过 api 使用 kit；导出声明、宿主导入和 preview 的单向依赖由边界脚本核验。
 - **`client/ui/theme`** — 灰色像素主题与宿主主题入口。
   - 允许：原版客户端类型、`client/ui/kit`、`client/edit` 的命名空间常量。
   - 禁止：依赖 `core` 与平台 API。主题只管视觉，控件只管交互。
@@ -182,7 +184,7 @@ flowchart TB
 ## 包职责的维护方式
 
 - 新增包先归入一级包，再决定二级归属；跨模块协作优先落在 `core/api` 契约上。
-- `package-info` 覆盖客户端侧的 `client/edit`、`client/edit/draft`、`client/ui/kit`、`client/ui/widget`、`client/ui/shared`、`client/ui/theme`；`core` 侧的包职责以本文与源码为准。
+- `package-info` 覆盖客户端侧的 `client/edit`、`client/edit/draft`、`client/ui/kit`（含 api 能力与 internal 实现目录）、`client/ui/widget`、`client/ui/shared`、`client/ui/theme`；`core` 侧的包职责以本文与源码为准。
 - 移动类或改包名时，同步本文与 [模块地图](module-map.md)，并运行 `tools/check-docs.py`；涉及跨端与 UI kit 的改动再运行对应脚本，见 [依赖规则](dependency-rules.md)。
 
 ## 相关文档
