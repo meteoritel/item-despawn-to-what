@@ -55,6 +55,8 @@ powershell -ExecutionPolicy Bypass -File tools/run-probes.ps1 -Chain save -Negat
 
 `-Chain` 从 `common/src/dev/resources/idtw-debug/sequences/catalog.json` 读取序列，`-List` 输出入口。除 core 与专项外，可选择 p0–p4 或任意 manifest 中的 `run/<name>`、`bench/<name>` 单场景。`python tools/probe-catalog.py --coverage` 输出静态归属；声明归属和本次报告结果分别记录。`-TimeoutSeconds` 是每次进程等待上限，默认 900 秒。Gradle 通过构建互斥脚本串行运行。
 
+`probe-catalog.py` 默认从工具位置定位仓库，`--root` 可指定根目录。`--write-docs` 只生成本页的序列目录受管块，`--check-docs` 只读检查该块是否一致。无效选择显示 `[选择错误]` 并退出 2；目录内容或引用错误显示 `[目录内容错误]` 并退出 1；文件缺失等输入问题显示 `[输入错误]` 并退出 2。PowerShell 入口保留这些诊断和退出码。
+
 每次运行创建 `neoforge/build/probe-runs/<运行编号>/`，写入专用平坦世界配置、EULA 和本地服务端配置。服务端绑定 `127.0.0.1`，端口由系统分配；夹具只操作该次运行的存档和 config。该目录保留现场，使用脚本自动生成的目录进行验证。
 
 探针失败时查看失败断言和真实日志，修复后重跑相关链路。新增场景先写明它能发现的具体故障，再补最少输入与后置断言。
@@ -113,6 +115,7 @@ powershell -ExecutionPolicy Bypass -File tools/run-probes.ps1 -Chain save -Negat
 | `RuntimeObserver`、`DevelopmentDiagnostics` | 生产侧空观测契约，开发入口在服务端装配并在停止后释放 |
 | `tools/run-probes.ps1` | 隔离运行、重启编排、超时、报告校验与退出码 |
 | `tools/probe_artifacts.py` | 原始报告身份、阶段文件命名、读取与验证后归档；供 PowerShell 和性能报告共享 |
+| `tools/probe-catalog.py` | 序列选择、静态覆盖归属、序列目录受管块的生成与只读检查 |
 | `DebugProbePerformance` | 自动运行逐步启停的独立 JMX 采样、阶段计时、主线程 tick 与分类耗时记录 |
 | `DebugSequenceCatalog` / `DebugSequenceRun` / `BackendProbeReport` | 统一声明、步骤所有权、环境与结果；命令和无人宿主共享推进与断言 |
 | `BackendProbeFixtures` | 正式文件规则、源/产物登记、字节快照与精确清理；世界探针只保留业务步骤与断言 |

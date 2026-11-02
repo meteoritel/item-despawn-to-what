@@ -1,17 +1,35 @@
 """校验共用序列声明，列出可选计划及所有场景的覆盖归属。"""
 import argparse
 import json
+import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1] / "common/src/dev/resources/idtw-debug"
+from toolslib.repo import repo_root
+from toolslib.checks import configure_console
 
 
-def catalog():
-    root = json.loads((ROOT / "sequences/catalog.json").read_text(encoding="utf-8"))
+class SelectionError(ValueError):
+    """用户选择的序列或场景不存在。"""
+
+
+class CatalogError(ValueError):
+    """目录声明自身存在错误。"""
+
+
+def catalog(root=None):
+    resources = repo_root(root) / "common/src/dev/resources/idtw-debug"
+    try:
+        return _read_catalog(resources)
+    except (ValueError, KeyError, TypeError) as failure:
+        raise CatalogError(f"{resources}: {failure}") from failure
+
+
+def _read_catalog(resources):
+    root = json.loads((resources / "sequences/catalog.json").read_text(encoding="utf-8"))
     if root["schema_version"] != 1:
         raise ValueError("unsupported sequence version")
     entries = {}
-    scenes = set(json.loads((ROOT / "scenarios/manifest.json").read_text(encoding="utf-8")))
+    scenes = set(json.loads((resources / "scenarios/manifest.json").read_text(encoding="utf-8")))
     for entry in root["sequences"]:
         key = entry["id"]
         if key in entries:
@@ -61,25 +79,34 @@ def main():
     parser.add_argument("--coverage", action="store_true")
     parser.add_argument("--select")
     parser.add_argument("--write-docs", action="store_true")
+    parser.add_argument("--check-docs", action="store_true")
+    parser.add_argument("--root", help="显式仓库根目录")
     args = parser.parse_args()
-    entries, scenes, coverage = catalog()
+    project = repo_root(args.root)
+    entries, scenes, coverage = catalog(project)
     if args.select and args.select not in entries and args.select not in scenes:
-        parser.error("unknown sequence/scenario: " + args.select)
-    if args.write_docs:
-        path = ROOT.parents[4] / "docs/guides/backend-probes.md"
+        raise SelectionError("unknown sequence/scenario: " + args.select)
+    if args.write_docs or args.check_docs:
+        path = project / "docs/guides/backend-probes.md"
         start, end = "<!-- probe-catalog:start -->", "<!-- probe-catalog:end -->"
         lines = [start, "| 序列 | 用途 | 直接步骤 |", "|---|---|---|"]
         for key, entry in entries.items():
             steps = ["sequence:" + step["sequence"] if "sequence" in step else step["kind"] + ":" + step["id"] for step in entry["steps"]]
             lines.append("| " + key + " | " + entry["description"] + " | " + ", ".join(steps) + " |")
         lines += [end]
-        body = path.read_text(encoding="utf-8")
-        if start in body:
-            a, b = body.index(start), body.index(end) + len(end)
-            body = body[:a] + "\n".join(lines) + body[b:]
-        else:
-            body += "\n## 序列目录\n\n" + "\n".join(lines) + "\n"
-        path.write_text(body, encoding="utf-8")
+        body = path.read_bytes().decode("utf-8")
+        if body.count(start) != 1 or body.count(end) != 1:
+            raise CatalogError(f"{path}: 缺少唯一受管块")
+        a, b = body.index(start), body.index(end) + len(end)
+        if b - len(end) < a:
+            raise CatalogError(f"{path}: 受管块结束标记位于开始标记之前")
+        newline = "\r\n" if "\r\n" in body else "\n"
+        expected = body[:a] + newline.join(lines) + body[b:]
+        if expected != body:
+            if args.check_docs:
+                print("[目录文档过期] 运行 python tools/probe-catalog.py --write-docs", file=sys.stderr)
+                return 1
+            path.write_bytes(expected.encode("utf-8"))
     if args.list:
         for key, entry in entries.items():
             print(f"{key}: {entry['description']}")
@@ -92,4 +119,16 @@ def main():
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    configure_console()
+    try:
+        code = main()
+    except SelectionError as failure:
+        print(f"[选择错误] {failure}", file=sys.stderr)
+        code = 2
+    except CatalogError as failure:
+        print(f"[目录内容错误] {failure}", file=sys.stderr)
+        code = 1
+    except (OSError, ValueError) as failure:
+        print(f"[输入错误] {failure}", file=sys.stderr)
+        code = 2
+    raise SystemExit(code)
