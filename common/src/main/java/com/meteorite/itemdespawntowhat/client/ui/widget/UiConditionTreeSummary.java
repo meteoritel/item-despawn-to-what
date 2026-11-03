@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiRowMetrics;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
@@ -429,7 +431,7 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         if (hit.isEmpty()) {
             return -1;
         }
-        return RowGeometry.fixedRowIndex((int) hit.getAsDouble(),
+        return UiRowMetrics.fixedRowIndex(hit.getAsDouble(),
                 rowHeight, rowHeight, rows.size());
     }
 
@@ -479,7 +481,7 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
             graphics.drawString(renderFont, empty, viewport.x() + 4,
                     viewport.y() + Math.max(0, viewport.height() / 2 - 4), theme.palette().textSecondary(), false);
         } else {
-            int rowWidth = RowGeometry.contentWidth(scrollView);
+            int rowWidth = scrollView.contentWidth();
             scrollView.push(graphics);
             for (int i = 0; i < rows.size(); i++) {
                 int rowY = i * rowHeight;

@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiRowMetrics;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
@@ -269,7 +271,7 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
         if (hit.isEmpty()) {
             return -1;
         }
-        return RowGeometry.fixedRowIndex((int) hit.getAsDouble(),
+        return UiRowMetrics.fixedRowIndex(hit.getAsDouble(),
                 rowHeight, rowContentHeight(), items.size());
     }
 
@@ -292,7 +294,7 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
         if (index < 0 || index >= items.size()) return null;
         UiRect viewport = scrollView.viewport();
         return new UiRect(viewport.x(), viewport.y() + index * rowHeight - scrollView.offset(),
-                RowGeometry.contentWidth(scrollView), rowContentHeight());
+                scrollView.contentWidth(), rowContentHeight());
     }
 
     // 供宿主绘制行级覆盖层；返回与实际视口相交的可见矩形。
@@ -302,7 +304,7 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
         UiRect viewport = scrollView.viewport();
         int start = Math.max(row.y(), viewport.y());
         int end = Math.min(row.bottom(), viewport.bottom());
-        return end > start ? new UiRect(viewport.x(), start, RowGeometry.contentWidth(scrollView), end - start) : null;
+        return end > start ? new UiRect(viewport.x(), start, scrollView.contentWidth(), end - start) : null;
     }
 
     // 拖动排序使用视口偏移；指针越出列表时钳制到首尾条目。
@@ -335,7 +337,7 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
             return;
         }
         int hoveredIndex = itemIndexAt(mouseX, mouseY);
-        int rowWidth = RowGeometry.contentWidth(scrollView);
+        int rowWidth = scrollView.contentWidth();
         scrollView.push(graphics);
         for (int i = 0; i < items.size(); i++) {
             int rowY = i * rowHeight;

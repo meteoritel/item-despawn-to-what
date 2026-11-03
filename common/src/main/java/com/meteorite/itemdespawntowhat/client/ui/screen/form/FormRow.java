@@ -53,10 +53,6 @@ final class FormRow {
     int controlRelY;
     int controlWidth;
     int labelWidth;
-    int buttonHeight;
-    // 行尾按钮换行用的可用宽度：与测量共用同一口径（见 FormView.layoutRows/syncBounds）
-    int buttonWrapWidth;
-    boolean buttonsBelow;
     boolean narrow;
     // 布局结论：本行是否绘制字段标签（叠排的独立数量行同样为真）
     boolean labelShown;

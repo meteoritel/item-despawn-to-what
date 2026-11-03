@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiRowMetrics;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputScope;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
@@ -234,7 +236,7 @@ public final class UiTypePicker implements UiWidget, UiLayoutSource {
                     Component.translatable(TypeLabels.UI_PREFIX + "picker.empty")));
             return List.of(new UiLayoutNode(UiLayoutNode.Kind.MODAL, panelRect, title, font.width(title), panelRect.width(), true, true, List.copyOf(nodes)));
         }
-        int rowWidth = listRect.width() - (scroll.isScrollbarVisible() ? UiScrollView.SCROLLBAR_WIDTH + BORDER : 0);
+        int rowWidth = rowContentWidth();
         int first = scroll.offset() / PICKER_ROW_HEIGHT;
         int end = Math.min(filteredOptions.size(),
                 (scroll.offset() + listRect.height() + PICKER_ROW_HEIGHT - 1) / PICKER_ROW_HEIGHT);
@@ -333,9 +335,12 @@ public final class UiTypePicker implements UiWidget, UiLayoutSource {
 
     }
 
+    private int rowContentWidth() {
+        return Math.max(0, scroll.contentWidth() - (scroll.isScrollbarVisible() ? BORDER : 0));
+    }
+
     private void renderList(GuiGraphics graphics, Font renderFont) {
-        int rowWidth = listRect.width()
-                - (scroll.isScrollbarVisible() ? UiScrollView.SCROLLBAR_WIDTH + BORDER : 0);
+        int rowWidth = rowContentWidth();
         scroll.push(graphics);
         try {
             if (filteredOptions.isEmpty()) {
@@ -389,8 +394,9 @@ public final class UiTypePicker implements UiWidget, UiLayoutSource {
         }
         var hit = scroll.hitContentY(mouseX, mouseY);
         if (hit.isEmpty()) return -1;
-        int index = (int) (hit.getAsDouble() / PICKER_ROW_HEIGHT);
-        return index >= 0 && index < filteredOptions.size() ? index : -1;
+        if (mouseX >= listRect.x() + rowContentWidth()) return -1;
+        return UiRowMetrics.fixedRowIndex(hit.getAsDouble(),
+                PICKER_ROW_HEIGHT, PICKER_ROW_HEIGHT, filteredOptions.size());
     }
 
     void keyPressed(int keyCode) {

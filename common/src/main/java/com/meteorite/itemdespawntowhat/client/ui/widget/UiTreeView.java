@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
@@ -277,7 +278,7 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
         if (viewport.width() <= 0 || viewport.height() <= 0) {
             return List.of();
         }
-        int rowWidth = RowGeometry.contentWidth(scrollView);
+        int rowWidth = scrollView.contentWidth();
         int offset = scrollView.offset();
         List<UiLayoutNode> rows = new ArrayList<>();
         for (VisibleRow<T> row : visibleRows) {
@@ -365,11 +366,11 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
         if (hit.isEmpty()) {
             return -1;
         }
-        return indexAtContentY((int) hit.getAsDouble());
+        return indexAtContentY(hit.getAsDouble());
     }
 
     // 非等高行按累计位置二分查找，鼠标与翻页不再按固定行高猜测。
-    private int indexAtContentY(int contentY) {
+    private int indexAtContentY(double contentY) {
         int low = 0, high = visibleRows.size() - 1;
         while (low <= high) {
             int middle = (low + high) >>> 1;
@@ -394,7 +395,7 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
                 int inset = row.depth * INDENT_WIDTH + MARKER_WIDTH;
                 return new UiRect(scrollView.viewport().x() + inset,
                         scrollView.viewport().y() + row.top - scrollView.offset(),
-                        Math.max(0, RowGeometry.contentWidth(scrollView) - inset), row.height);
+                        Math.max(0, scrollView.contentWidth() - inset), row.height);
             }
         return new UiRect(0, 0, 0, 0);
     }
@@ -447,7 +448,7 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
             return;
         }
         int hoveredIndex = indexAt(mouseX, mouseY);
-        int rowWidth = RowGeometry.contentWidth(scrollView);
+        int rowWidth = scrollView.contentWidth();
         scrollView.push(graphics);
         int firstIndex = Math.max(0, indexAtContentY(scrollView.offset()));
         for (int i = firstIndex; i < visibleRows.size(); i++) {

@@ -59,6 +59,13 @@ public final class UiScrollView implements UiInteractionSession.Target {
         return viewport;
     }
 
+    /**
+     * 返回当前内容可用宽度，扣除实际可见的滚动条占用。
+     */
+    public int contentWidth() {
+        return Math.max(0, viewport.width() - (isScrollbarVisible() ? SCROLLBAR_WIDTH : 0));
+    }
+
     public void setContentHeight(int contentHeight) {
         this.contentHeight = Math.max(0, contentHeight);
         clampOffset();
