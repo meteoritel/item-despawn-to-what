@@ -12,7 +12,7 @@ import com.meteorite.itemdespawntowhat.client.ui.shared.TagPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiListView;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 import net.minecraft.Util;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;

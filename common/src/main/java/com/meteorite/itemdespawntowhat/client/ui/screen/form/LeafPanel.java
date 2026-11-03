@@ -12,7 +12,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCyclicTimeBar;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiRangeBar;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 
 import java.util.ArrayList;
 import java.util.List;
