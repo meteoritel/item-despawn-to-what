@@ -20,10 +20,10 @@ import net.minecraft.client.gui.GuiGraphics;
  * 交给 {@link UiControlGroup} 使用。</p>
  *
  * <p>偏移恒钳制在 [0, {@link #maxOffset()}]：视口尺寸变化、内容变短以及 {@link #setContentHeight(int)}
- * 之后都会重新钳制。内容高度不超过视口高度时偏移必为 0、{@link #maxOffset()} 为 0，滚动条不显示。</p>
+ * 之后都会重新钳制。内容高度不超过有效视口高度时偏移必为 0、{@link #maxOffset()} 为 0，滚动条不显示。</p>
  *
- * <p>本类只做几何与偏移，不持有任何业务状态、不负责输入分发；滚轮是否消费由宿主按
- * {@link #contains(double, double)} 决定。</p>
+ * <p>滚动偏移、轨道几何及拖动会话由本视口持有；内容与滚轮消费政策由宿主按
+ * {@link #contains(double, double)} 决定。{@link Policy} 可指定内容步长、轨道留宽及按下行为。</p>
  */
 public final class UiScrollView implements UiInteractionSession.Target {
     /**
@@ -34,6 +34,31 @@ public final class UiScrollView implements UiInteractionSession.Target {
      * 滑块最小高度：内容再长也要留出可抓取区域。
      */
     private static final int MIN_THUMB_HEIGHT = 8;
+
+    /** 滚动政策；alignment 为内容步长，其他参数仅控制轨道交互与留宽。 */
+    public record Policy(int alignment, int minimumThumb, int grabMargin,
+                         boolean centerOnPress, boolean reserveScrollbar) {
+        /** 尺寸统一规范为有效的几何输入。 */
+        public Policy {
+            alignment = Math.max(1, alignment);
+            minimumThumb = Math.max(0, minimumThumb);
+            grabMargin = Math.max(0, grabMargin);
+        }
+    }
+
+    private Policy policy = new Policy(1, MIN_THUMB_HEIGHT, 0, false, false);
+
+    /** 设置布局与交互政策；偏移随同一入口重新对齐。 */
+    public void setPolicy(Policy policy) {
+        this.policy = policy;
+        clampOffset();
+    }
+
+    // 对齐视口按完整步长计范围；不足一步仍保留一个内容单元供裁剪显示。
+    private int effectiveHeight() {
+        return policy.alignment() == 1 ? viewport.height()
+                : Math.max(policy.alignment(), viewport.height() / policy.alignment() * policy.alignment());
+    }
 
     private UiRect viewport = new UiRect(0, 0, 1, 1);
     private int contentHeight;
@@ -60,10 +85,10 @@ public final class UiScrollView implements UiInteractionSession.Target {
     }
 
     /**
-     * 返回当前内容可用宽度，扣除实际可见的滚动条占用。
+     * 返回当前内容可用宽度，按政策扣除实际可见或固定预留的滚动条占用。
      */
     public int contentWidth() {
-        return Math.max(0, viewport.width() - (isScrollbarVisible() ? SCROLLBAR_WIDTH : 0));
+        return Math.max(0, viewport.width() - (policy.reserveScrollbar() || isScrollbarVisible() ? SCROLLBAR_WIDTH : 0));
     }
 
     public void setContentHeight(int contentHeight) {
@@ -80,11 +105,13 @@ public final class UiScrollView implements UiInteractionSession.Target {
     }
 
     public int maxOffset() {
-        return Math.max(0, contentHeight - viewport.height());
+        int range = Math.max(0, contentHeight - effectiveHeight());
+        return (range + policy.alignment() - 1) / policy.alignment() * policy.alignment();
     }
 
     public void setOffset(int offset) {
-        this.offset = Math.clamp(offset, 0, maxOffset());
+        int bounded = Math.clamp(offset, 0, maxOffset());
+        this.offset = Math.min(maxOffset(), (int) Math.round(bounded / (double) policy.alignment()) * policy.alignment());
     }
 
     public void setStep(int step) {
@@ -111,12 +138,17 @@ public final class UiScrollView implements UiInteractionSession.Target {
         return viewport.contains(x, y);
     }
 
-    // 最小滚动量让矩形完整可见：先贴上边界，再下推到底边界，最后统一钳制。
+    /** 以最小位移露出目标；超高目标覆盖视口时保持位置，避免反复对齐两边。 */
     public void ensureVisible(UiRect contentRect) {
         int next = offset;
-        if (contentRect.y() < next) next = contentRect.y();
-        if (contentRect.bottom() > next + viewport.height()) next = contentRect.bottom() - viewport.height();
-        offset = Math.clamp(next, 0, maxOffset());
+        if (contentRect.height() > effectiveHeight()) {
+            if (contentRect.bottom() < next + effectiveHeight()) next = contentRect.bottom() - effectiveHeight();
+            else if (contentRect.y() > next) next = contentRect.y();
+        } else if (contentRect.y() < next) next = contentRect.y();
+        else if (contentRect.bottom() > next + effectiveHeight()) next = contentRect.bottom() - effectiveHeight();
+        if (next > offset) next = (int) Math.ceil(next / (double) policy.alignment()) * policy.alignment();
+        else if (next < offset) next = (int) Math.floor(next / (double) policy.alignment()) * policy.alignment();
+        setOffset(next);
     }
 
     public double toContentX(double screenX) {
@@ -160,7 +192,10 @@ public final class UiScrollView implements UiInteractionSession.Target {
     }
 
     public boolean hitScrollbar(double x, double y) {
-        return isScrollbarVisible() && scrollbarTrack().contains(x, y);
+        if (!isScrollbarVisible()) return false;
+        UiRect track = scrollbarTrack();
+        return x >= track.x() - policy.grabMargin() && x <= track.right() + policy.grabMargin()
+                && y >= track.y() && y < track.bottom();
     }
 
     /**
@@ -200,19 +235,20 @@ public final class UiScrollView implements UiInteractionSession.Target {
         int button = context.button();
         if (button != 0 || !hitScrollbar(x, y)) return false;
         // 点在滑块之外（轨道空白）时先把滑块中心对到指针：否则拖动时滑块带着一个很大的抓取偏移，跟不上手。
-        if (y < thumbTop() || y >= thumbTop() + thumbHeight()) {
+        if (policy.centerOnPress() || y < thumbTop() || y >= thumbTop() + thumbHeight()) {
             int travel = thumbTravel();
             if (travel > 0) {
                 double top = Math.clamp(y - viewport.y() - thumbHeight() / 2.0, 0.0, travel);
-                offset = Math.clamp((int) Math.round(top * maxOffset() / (double) travel), 0, maxOffset());
+                setOffset((int) Math.round(top * maxOffset() / travel));
             }
         }
-        context.scope().pointerHit(null);
+
         session = context.scope().interaction();
         session.begin(this, UiInteractionSession.Source.POINTER, button);
         // 抓取偏移必须在跳转之后取样，而且要用**未取整**的滑块位置：
         // 取跳转前的值会让下一次 mouseDragged 把滑块拉回原处，取跳转后的整数像素又会让第一个 drag 事件产生不足 1 像素的对齐跳动。
-        dragGrab = maxOffset() <= 0 ? 0.0 : y - viewport.y() - (double) thumbTravel() * offset / maxOffset();
+        dragGrab = policy.centerOnPress() ? thumbHeight() / 2.0
+                : maxOffset() <= 0 ? 0.0 : y - viewport.y() - (double) thumbTravel() * offset / maxOffset();
         return true;
     }
 
@@ -222,10 +258,9 @@ public final class UiScrollView implements UiInteractionSession.Target {
         int travel = thumbTravel();
         if (travel <= 0) return false;
         double top = Math.clamp(y - dragGrab - viewport.y(), 0.0, travel);
-        int next = Math.clamp((int) Math.round(top * maxOffset() / travel), 0, maxOffset());
-        if (next == offset) return false;
-        offset = next;
-        return true;
+        int previous = offset;
+        setOffset((int) Math.round(top * maxOffset() / travel));
+        return offset != previous;
     }
 
     /**
@@ -264,17 +299,24 @@ public final class UiScrollView implements UiInteractionSession.Target {
     // ---------- 内部几何 ----------
 
     private void clampOffset() {
-        offset = Math.clamp(offset, 0, maxOffset());
+        setOffset(offset);
     }
 
     // 滚动条始终贴着视口右边界；视口窄于滚动条时退化为整个视口宽。
-    private UiRect scrollbarTrack() {
+    /** 当前轨道的屏幕矩形，供宿主使用自己的主题绘制。 */
+    public UiRect scrollbarTrack() {
         return UiScrollbarGeometry.track(viewport, SCROLLBAR_WIDTH);
     }
 
     // 滑块高度按「视口/内容」比例缩放，并保底 MIN_THUMB_HEIGHT；没有可滚距离时占满轨道。
     private int thumbHeight() {
-        return UiScrollbarGeometry.thumbHeight(viewport.height(), contentHeight, MIN_THUMB_HEIGHT);
+        return UiScrollbarGeometry.thumbHeight(viewport.height(), effectiveHeight(), contentHeight, policy.minimumThumb());
+    }
+
+    /** 当前滑块矩形，命中与主题绘制共用同一几何。 */
+    public UiRect scrollbarThumb() {
+        UiRect track = scrollbarTrack();
+        return new UiRect(track.x(), thumbTop(), track.width(), thumbHeight());
     }
 
     private int thumbTravel() {

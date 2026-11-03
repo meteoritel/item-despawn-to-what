@@ -20,8 +20,12 @@ public final class UiScrollbarGeometry {
     }
     /** 按视口与内容比例计算滑块高度，无滚动内容时填满轨道。 */
     public static int thumbHeight(int view, int content, int minimum) {
-        if (view <= 0 || content <= view) return Math.max(0, view);
-        return Math.clamp((int) Math.round((double) view * view / content), Math.clamp(minimum, 0, view), view);
+        return thumbHeight(view, view, content, minimum);
+    }
+    // 行对齐视口的有效内容高度与视觉轨道高度可以不同。
+    static int thumbHeight(int track, int view, int content, int minimum) {
+        if (track <= 0 || content <= view) return Math.max(0, track);
+        return Math.clamp((int) Math.round((double) track * view / content), Math.clamp(minimum, 0, track), track);
     }
     /** 偏移映射到滑块的轨道内位置。 */
     public static int thumbTop(int top, int view, int content, int offset, int minimum) {
