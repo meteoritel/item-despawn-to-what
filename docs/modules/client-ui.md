@@ -108,7 +108,7 @@ flowchart TD
 | `EditorShell` | 编辑器外壳 | 持有当前编辑目标、编辑会话选取、提示级别、可编辑判定与跨页命令，并持有三个编辑器页面；屏幕经它取活动页与状态 | 三个编辑器页面、`RuleEditorModel`、`UiModalStack`、`UiFocusManager` |
 | `EditorPage` | 编辑器页面契约 | 三个顶层页共用的派发面：头部度量与绘制、标题与状态标签、内容与页脚排版、鼠标键盘输入、按钮状态刷新，以及可选的覆盖层与悬停说明 | `RuleEditorScreen`、编辑器外壳 |
 | `EditorInputRouter` | 屏幕输入作用域 | 选择保存遮罩、顶层 modal、页覆盖层或活动页；独占作用域终止向底页派发，释放归原按下作用域；普通页排列历史、Esc 与 Tab 的优先级 | `EditorShell`、`EditorPage`、弹窗栈 |
-| `RuleEditorScreen` | 屏幕聚合根 | 屏幕生命周期、窗口排版、绘制与输入派发：活动页从哪里取、提示带与页脚带怎么排都由屏幕决定，输入经 `EditorInputRouter` 选择作用域后派发；工作区进入可编辑态才允许编辑，应用期间冻结，工作区释放时自行关屏 | 编辑器外壳、`EditorPage`、弹窗栈、提示条 |
+| `RuleEditorScreen` | 屏幕聚合根 | 继承 kit `UiScreen`，持有业务生命周期、窗口排版与绘制：活动页从哪里取、提示带与页脚带怎么排都由屏幕决定，输入经 `EditorInputRouter` 选择作用域后派发；工作区进入可编辑态才允许编辑，应用期间冻结，工作区释放时自行关屏 | 编辑器外壳、`EditorPage`、弹窗栈、提示条 |
 | `RuleEditorListPage` | 管理页 | 搜索、状态/来源轮询筛选、分类树、规则导出与配方预览，列表底排按钮状态同步；只持有管理页控件与视图状态 | 规则会话、目录图标、`RulePackExporter`、`RuleEditorListActions` |
 | `RulePackExporter` | 规则导出口 | 把列表可导出的已保存规则写成一个数据包 zip：跳过未保存草稿与有问题条目，清单格式取当前游戏的数据包版本，规则文件按 `data/<ns>/idtw/rules/<path>.json` 落位，id 强制写回 | 列表页导出弹窗、`RulePaths`、`RuleFields` |
 | `RuleListDisplayCache` / `RuleListDisplaySnapshot` | 列表行展示 | 把快照条目、草稿会话与启停意图合成一行的展示快照：生效启用、待应用标记、本服标记、只读标记；缓存按内容版本、会话修订号与意图修订号失效 | `RuleEditorModel`、列表页 |
@@ -135,7 +135,7 @@ flowchart TD
 | `StructurePreviewResources` | 资源读取 | 枚举 assets 结构，异步有界 NBT 解码并保留资源诊断 | 资源管理器、`PreviewStructure` |
 | `PreviewExamplesScreen`（common dev） | 工作台工具 | 枚举结构与载荷示例，展示多个尺寸和预算 | 正式 `PreviewIcons` 入口 |
 | `UiFlatText` | 文本绘制原语 | 无阴影的居中、折行文本与悬停提示面板；GUI 不使用字体阴影与加粗，标题只靠颜色、缩进与分区间距区分层次 | kit 的 `UiRenderLayers`、各控件与页面 |
-| `UiSlider` / `UiRangeBar` / `UiTextInput` | 控件适配 | 原版输入模型留在宿主，文本值操作经 `UiTextValue`，码点接纳、局部历史与选择协调经 `UiTextEditSession`，数值交互委托给 kit；提交时机由宿主回调决定 | kit 数值/文本契约、主题 |
+| `UiSlider` / `UiRangeBar` / kit `UiTextInput` | 控件适配 | 原版输入模型由 kit 文本控件适配，数值宿主外壳委托 kit 核心；提交时机由宿主回调决定 | kit 数值/文本契约、主题 |
 
 ## 4. 关键流程
 
@@ -226,13 +226,19 @@ flowchart LR
 
 ### 图标开发验收入口
 
-开发客户端按 **Ctrl+F8** 进入 `DebugWorkbenchScreen` 工具目录，再选择 `PreviewExamplesScreen` 图标预览。列表从资源管理器枚举本模组的 `assets/itemdespawntowhat/structures/<path>.nbt`，逻辑 id 保留子目录；资源包覆盖同路径后用 F3+T 重载。随包 `preview/icon_gallery` 包含跨 x=16 的水体、玻璃围合、箱子、告示牌文字与实体载荷。每个结构以 16、48、80 像素绘制，显示准备状态、失败原因与 GPU／待上传预算。滚轮浏览，空格切换转台，R 清理并重读，Esc 关闭。
+开发客户端按 **Ctrl+F8** 进入 `DebugWorkbenchScreen` 工具目录，再选择 `PreviewExamplesScreen` 图标预览。B 轮换默认、小容量和过限预算，N 切换请求组，独立所有者复用宿主线程池。列表从资源管理器枚举本模组的 `assets/itemdespawntowhat/structures/<path>.nbt`，逻辑 id 保留子目录；资源包覆盖同路径后用 F3+T 重载。随包 `preview/icon_gallery` 包含跨 x=16 的水体、玻璃围合、箱子、告示牌文字与实体载荷。每个结构以 16、48、80 像素绘制，显示准备状态、失败原因与 GPU／待上传预算。滚轮浏览，空格切换转台，R 清理并重读，Esc 关闭。
 
 结构解码读取 size、palette／palettes、blocks、entities，多 palette 固定首组；压缩 NBT 使用 16 MiB 读取限额，尺寸体积在分配前检查。静态几何使用完整只读占位；需要世界的实例使用当前客户端 Level。实体与方块实体独立创建、不入世界、不 tick，方块实体邻居联动按独立实例展示。开发列表另外提供幼年实体、带物品实体、Display 与空实体，使用相同正式入口。
 
+### 运行时换肤
+
+宿主调用 `RuleEditorScreen.setTheme(UiHostThemeSet.minecraft())`、`pixel()` 或 `flat()` 发布整套正文/外壳主题；自定义主题用 `UiHostThemeSet` 配对。根持有稳定 `UiHostThemeContext`，已有及后续页面、模态、浮层共享来源，业务图标与画布色板由 `UiHostTheme` 保留。原版方案通过宿主 adapter 复用 kit 默认主题。
+
+发布前取消未提交指针预览，随后刷新模态布局并同步输入；表单和代码视图按 revision 使度量或着色缓存失效。主题入口保留已有编辑实例、文本历史、焦点与选择。
+
 ### 调试工作台
 
-`DebugWorkbenchScreen` 位于 common dev 的 client/debug，目录显式装配组件展台、组合交互、图标预览和测试规则草稿。NeoForge probe 客户端事件装配 Ctrl+F8；main 的 `DebugWorkbenchHooks` 只持有打开动作。草稿工具保留在编辑器，预览和本地场景由各自 Screen 持有状态与资源。场景使用 UiInputScope、UiInputRouter 和 UiModalStack；模态切换取消持续交互，返回编辑器时重建屏幕并复用有效工作区。
+`DebugWorkbenchScreen` 位于 common dev 的 client/debug，目录显式装配组件展台、组合交互、独立 kit 展示、图标预览和测试规则草稿。NeoForge probe 客户端事件装配 Ctrl+F8；main 的 `DebugWorkbenchHooks` 只持有打开动作。草稿工具保留在编辑器，预览和本地场景由各自 Screen 持有状态与资源。独立 kit 展示使用 UiScreen、UiInputScope 和 UiModalStack，内容只依赖 kit、原版类型与本地模型；外围目录注入宿主主题。展示包含文本/数值/列表、嵌套滚动、文档 Frame、浮板、灯箱、连线、导航和双点阵。F6 换肤，基础页 G 修改单个点阵配置、R 发起真实资源重载。世界预览复用图标预览入口。场景使用 UiInputScope、UiInputRouter 和 UiModalStack；模态切换取消持续交互，返回编辑器时重建屏幕并复用有效工作区。
 
 `FormView.layoutNodes` 保留字段作用域；CardListControl 导出卡片及子控件，UiCatalogGrid 导出当前可见目录行，RuleNameInput 导出真实文本框。自动化定位使用实际层级和几何。工作台组件状态在同一页面可见、可滚动、可重置，详见 [GUI 探针](../guides/gui-probes.md)。
 
@@ -299,6 +305,6 @@ flowchart LR
 - 条件与效果类型注册：[type-system](type-system.md)
 - 依赖规则：[依赖规则](../architecture/dependency-rules.md)
 - 跨模块链路：[关键链路](../architecture/key-flows.md)
-- 决策：[ADR-0022](../adr/0022-client-ui-kit-adoption.md)、[ADR-0028](../adr/0028-canvas-page-and-flat-skin.md)、[ADR-0029](../adr/0029-client-dependency-boundary-and-shared-subpackage.md)、[ADR-0031](../adr/0031-condition-tree-single-editor-two-renders.md)、[ADR-0032](../adr/0032-host-injected-ui-theme.md)、[ADR-0044](../adr/0044-rule-enable-state-layering.md)、[ADR-0045](../adr/0045-readonly-sandbox-editing.md)
+- 决策：[ADR-0022](../adr/0022-client-ui-kit-adoption.md)、[ADR-0028](../adr/0028-canvas-page-and-flat-skin.md)、[ADR-0029](../adr/0029-client-dependency-boundary-and-shared-subpackage.md)、[ADR-0031](../adr/0031-condition-tree-single-editor-two-renders.md)、[ADR-0061](../adr/0061-kit-default-theme-and-host-switch.md)、[ADR-0044](../adr/0044-rule-enable-state-layering.md)、[ADR-0045](../adr/0045-readonly-sandbox-editing.md)
 - 写作与命名约定：[代码风格](../guides/code-style.md)
 - 文档体系：[文档体系](../README.md)

@@ -10,7 +10,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.List;
 import java.util.Objects;
 
-/** 只读文档的声明式内容块；当前无生产引用，命中数据交给宿主解释，Frame 提供一层内容视口。 */
+/** 只读文档的声明式内容块；当前无 kit 外生产直接引用，命中数据交给宿主解释，Frame 提供一层内容视口。 */
 public sealed interface UiNode permits UiNode.Row, UiNode.Gap, UiNode.Divider, UiNode.Frame {
     /** 树的根行没有父行。 */
     int NO_PARENT = -1;
