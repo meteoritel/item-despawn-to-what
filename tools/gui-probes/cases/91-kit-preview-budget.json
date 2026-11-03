@@ -1,6 +1,6 @@
 {
   "name": "kit-preview-budget",
-  "description": "默认、小容量、过限预算及排队淘汰和资源世代",
+  "description": "默认、字节过限、请求容量拒绝与容量恢复及资源世代",
   "start": {
     "kind": "scene",
     "scene": "previews"
@@ -97,7 +97,28 @@
     },
     {
       "wait_for": {
-        "name": "所有小场景在预算内就绪",
+        "name": "容量恢复后新请求已接收，旧拒绝仍保留",
+        "kind": "text_present",
+        "selector": {
+          "kind": "ROW",
+          "lang": "gui.itemdespawntowhat.debug.workbench.showcase.preview.capacity",
+          "has_text": "READY"
+        }
+      },
+      "timeout_ms": 15000
+    },
+    {
+      "shot": "91-request-capacity.png"
+    },
+    {
+      "action": {
+        "kind": "key",
+        "code": 66
+      }
+    },
+    {
+      "wait_for": {
+        "name": "默认预算恢复就绪",
         "kind": "text_count",
         "selector": {
           "kind": "ROW",

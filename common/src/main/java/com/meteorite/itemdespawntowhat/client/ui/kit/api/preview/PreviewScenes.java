@@ -77,7 +77,8 @@ public final class PreviewScenes implements AutoCloseable {
         this.diagnostic = diagnostic; this.cull = externalCulling;
     }
 
-    /** 内容相同的请求共享句柄；同一帧使用的驻留场景不被 LRU 淘汰。 */
+    /** 内容相同的已接收请求共享句柄；容量拒绝保留终态，新请求在容量恢复后可被接收。
+     * 同一帧使用的驻留场景不被 LRU 淘汰。 */
     public PreviewScene request(String id, PreviewSubject subject) {
         PreviewScene scene = getOrCreate(id, subject);
         scene.usedFrame = frame;
@@ -94,9 +95,11 @@ public final class PreviewScenes implements AutoCloseable {
         PreviewScene scene = scenes.get(subject);
         if (scene == null) {
             if (scenes.size() >= budget.requests() && !evictOne()) {
-                PreviewScene waiting = new PreviewScene(id, subject);
-                waiting.released = true;
-                return waiting;
+                PreviewScene rejected = new PreviewScene(id, subject);
+                rejected.state = PreviewState.CAPACITY_REJECTED;
+                rejected.reason = id + ": request capacity " + budget.requests() + " is occupied";
+                rejected.released = true;
+                return rejected;
             }
             scene = new PreviewScene(id, subject);
             scenes.put(subject, scene);

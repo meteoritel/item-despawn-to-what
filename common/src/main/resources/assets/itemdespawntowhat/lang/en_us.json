@@ -1017,6 +1017,7 @@
   "gui.itemdespawntowhat.edit.preview.state.missing_subject": "Missing subject",
   "gui.itemdespawntowhat.edit.preview.state.no_level": "Client level required",
   "gui.itemdespawntowhat.edit.preview.state.too_large": "Scene too large",
+  "gui.itemdespawntowhat.edit.preview.state.capacity_rejected": "Preview request capacity reached",
   "gui.itemdespawntowhat.edit.preview.state.failed": "Preparation or rendering failed",
   "gui.itemdespawntowhat.edit.debug.button.tools": "Debug tools"
 }

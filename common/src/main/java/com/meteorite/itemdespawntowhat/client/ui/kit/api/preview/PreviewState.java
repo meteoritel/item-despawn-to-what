@@ -2,7 +2,7 @@ package com.meteorite.itemdespawntowhat.client.ui.kit.api.preview;
 
 /** 场景准备与绘制的语义状态；提示文案由宿主本地化。 */
 public enum PreviewState {
-    PREPARING, READY, EMPTY, MISSING_SUBJECT, NO_LEVEL, TOO_LARGE, FAILED;
+    PREPARING, READY, EMPTY, MISSING_SUBJECT, NO_LEVEL, TOO_LARGE, CAPACITY_REJECTED, FAILED;
 
     /** 准备等待不是失败，宿主只为终态不可用补充提示。 */
     public boolean unavailable() {

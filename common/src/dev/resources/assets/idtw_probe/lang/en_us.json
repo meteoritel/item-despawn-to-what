@@ -179,6 +179,7 @@
   "gui.itemdespawntowhat.debug.workbench.showcase.surfaces.state": "Page=%s hits=%s collapsed=%s builds=%s layouts=%s disabledNs=%s zoom=%s",
   "gui.itemdespawntowhat.debug.workbench.showcase.preview.mode": "Budget mode=%s page=%s generation=%s",
   "gui.itemdespawntowhat.debug.workbench.showcase.preview.state": "Slot %s · scale=%s",
+  "gui.itemdespawntowhat.debug.workbench.showcase.preview.capacity": "Original rejection: %s; current request: %s; %s",
   "gui.itemdespawntowhat.debug.workbench.showcase.preview.memory": "GPU=%s pending=%s limits=%s/%s bytes",
   "gui.itemdespawntowhat.debug.workbench.showcase.resources": "Grid resources (G: recolor, R: reload)",
   "gui.itemdespawntowhat.debug.workbench.showcase.resources.values": "Variant=%s owners=%s epoch=%s"

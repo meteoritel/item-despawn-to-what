@@ -179,6 +179,7 @@
   "gui.itemdespawntowhat.debug.workbench.showcase.surfaces.state": "页=%s 命中=%s 折叠=%s 构建=%s 排版=%s 关闭计时ns=%s 缩放=%s",
   "gui.itemdespawntowhat.debug.workbench.showcase.preview.mode": "预算模式=%s 页=%s 世代=%s",
   "gui.itemdespawntowhat.debug.workbench.showcase.preview.state": "槽位 %s · scale=%s",
+  "gui.itemdespawntowhat.debug.workbench.showcase.preview.capacity": "原拒绝：%s；当前请求：%s；%s",
   "gui.itemdespawntowhat.debug.workbench.showcase.preview.memory": "GPU=%s 待处理=%s 上限=%s/%s bytes",
   "gui.itemdespawntowhat.debug.workbench.showcase.resources": "点阵资源（G：改单实例，R：资源重载）",
   "gui.itemdespawntowhat.debug.workbench.showcase.resources.values": "配色=%s 所有者=%s 世代=%s"

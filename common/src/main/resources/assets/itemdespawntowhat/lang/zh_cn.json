@@ -1017,6 +1017,7 @@
   "gui.itemdespawntowhat.edit.preview.state.missing_subject": "资源缺失",
   "gui.itemdespawntowhat.edit.preview.state.no_level": "需要客户端世界",
   "gui.itemdespawntowhat.edit.preview.state.too_large": "场景超限",
+  "gui.itemdespawntowhat.edit.preview.state.capacity_rejected": "预览请求容量已满",
   "gui.itemdespawntowhat.edit.preview.state.failed": "准备或绘制失败",
   "gui.itemdespawntowhat.edit.debug.button.tools": "调试工具"
 }
