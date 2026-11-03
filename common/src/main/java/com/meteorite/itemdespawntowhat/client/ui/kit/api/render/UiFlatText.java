@@ -85,15 +85,19 @@ public final class UiFlatText {
      * @param mouseY 指针屏幕 Y 坐标
      */
     public static void tooltip(GuiGraphics graphics, Font font, List<FormattedCharSequence> lines, int mouseX, int mouseY) {
-        if (lines.isEmpty()) {
-            return;
-        }
+        tooltip(graphics, font, new UiRect(0, 0, graphics.guiWidth(), graphics.guiHeight()), lines, mouseX, mouseY);
+    }
+
+    private static void tooltip(GuiGraphics graphics, Font font, UiRect host,
+                                List<FormattedCharSequence> lines, int mouseX, int mouseY) {
+        if (lines.isEmpty() || UiTooltipPanel.contentWidth(host, Integer.MAX_VALUE,
+                TOOLTIP_PADDING + 1, TOOLTIP_SCREEN_MARGIN) == 0) return;
         int widest = 0;
         for (FormattedCharSequence line : lines) {
             widest = Math.max(widest, font.width(line));
         }
         int height = lines.size() * font.lineHeight + (lines.size() > 1 ? TOOLTIP_FIRST_LINE_GAP : 0);
-        UiTooltipPanel panel = UiTooltipPanel.layout(new UiRect(0, 0, graphics.guiWidth(), graphics.guiHeight()),
+        UiTooltipPanel panel = UiTooltipPanel.layout(host,
                 widest, height, TOOLTIP_PADDING + 1, mouseX, mouseY, TOOLTIP_MOUSE_OFFSET,
                 TOOLTIP_SCREEN_MARGIN, UiTooltipPlacement.VerticalPreference.ABOVE);
         panel.render(graphics, rect -> background(graphics, rect), content -> {
@@ -116,7 +120,7 @@ public final class UiFlatText {
      * @param mouseY 指针屏幕 Y 坐标
      */
     public static void tooltip(GuiGraphics graphics, Font font, Component text, int maxWidth, int mouseX, int mouseY) {
-        tooltip(graphics, font, font.split(text, wrapWidth(graphics, maxWidth)), mouseX, mouseY);
+        componentTooltip(graphics, font, List.of(text), maxWidth, mouseX, mouseY);
     }
 
     /**
@@ -130,16 +134,18 @@ public final class UiFlatText {
      * @param mouseY 指针屏幕 Y 坐标
      */
     public static void componentTooltip(GuiGraphics graphics, Font font, List<Component> lines, int maxWidth, int mouseX, int mouseY) {
-        List<FormattedCharSequence> sequences = new ArrayList<>();
-        for (Component line : lines) {
-            sequences.addAll(font.split(line, wrapWidth(graphics, maxWidth)));
-        }
-        tooltip(graphics, font, sequences, mouseX, mouseY);
+        componentTooltip(graphics, font, new UiRect(0, 0, graphics.guiWidth(), graphics.guiHeight()),
+                lines, maxWidth, mouseX, mouseY);
     }
 
-    private static int wrapWidth(GuiGraphics graphics, int maxWidth) {
-        return Math.clamp(maxWidth, 1, Math.max(1,
-                graphics.guiWidth() - (TOOLTIP_SCREEN_MARGIN + TOOLTIP_PADDING + 1) * 2));
+    /** 在有限宿主内先预算正文宽度，再折行和放置面板。 */
+    public static void componentTooltip(GuiGraphics graphics, Font font, UiRect host, List<Component> lines,
+                                        int maxWidth, int mouseX, int mouseY) {
+        int width = UiTooltipPanel.contentWidth(host, maxWidth, TOOLTIP_PADDING + 1, TOOLTIP_SCREEN_MARGIN);
+        if (width == 0) return;
+        List<FormattedCharSequence> sequences = new ArrayList<>();
+        for (Component line : lines) sequences.addAll(font.split(line, width));
+        tooltip(graphics, font, host, sequences, mouseX, mouseY);
     }
 
     // 底板与描边沿用原版提示观感：深色底、四周一圈暗边、内侧自上而下由紫蓝渐变到深紫
