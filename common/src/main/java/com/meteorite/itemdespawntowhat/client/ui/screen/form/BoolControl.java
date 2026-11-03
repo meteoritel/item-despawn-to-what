@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
@@ -51,8 +52,9 @@ final class BoolControl extends FormControl {
     }
 
     @Override
-    void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
-        checkBox.render(graphics, font, mouseX, mouseY);
+    void render(GuiGraphics graphics, Font font, UiPointer incomingPointer) {
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
+        checkBox.render(graphics, font, pointer);
     }
 
     @Override

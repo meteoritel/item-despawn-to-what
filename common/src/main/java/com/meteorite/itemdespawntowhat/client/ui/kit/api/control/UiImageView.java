@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.control;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiTransform;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
@@ -159,7 +160,7 @@ public final class UiImageView implements UiLightbox.Content {
     @Override
     public boolean mousePressed(UiInputContext context) {
         if (context.button() != 0 || !viewport.contains(context.pointerX(), context.pointerY())) return false;
-        context.scope().pointerHit(null);
+
         session = context.scope().interaction();
         session.begin(this, UiInteractionSession.Source.POINTER, context.button());
         return true;
@@ -207,8 +208,9 @@ public final class UiImageView implements UiLightbox.Content {
 
     // ---------- 绘制 ----------
 
+    /** {@inheritDoc} */
     @Override
-    public void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+    public void render(GuiGraphics graphics, Font font, UiPointer incomingPointer) {
         if (!available || viewport.width() <= 0 || viewport.height() <= 0) return;
         double destWidth = image.width() * scale;
         double destHeight = image.height() * scale;

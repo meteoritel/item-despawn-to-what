@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.control;
 
+import org.jetbrains.annotations.Nullable;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiTransform;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
@@ -325,6 +327,13 @@ public final class UiScrollView implements UiInteractionSession.Target {
 
     // 滑块位置按偏移占可滚距离的比例映射；无位移空间时停在轨道顶部。
     private int thumbTop() {
-        return UiScrollbarGeometry.thumbTop(viewport.y(), viewport.height(), contentHeight, offset, MIN_THUMB_HEIGHT);
+        return viewport.y() + (maxOffset() == 0 ? 0
+                : (int) Math.round((double) thumbTravel() * offset / maxOffset()));
     }
+    /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        return hitScrollbar(x, y) ? UiPointerHit.leaf(this, x, y).preservingFocus() : null;
+    }
+
 }

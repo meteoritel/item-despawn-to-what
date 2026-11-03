@@ -116,6 +116,7 @@ public final class UiModalStack implements UiWidget, UiLayoutSource {
     // 压入一个弹窗
     public UiModal push(UiModal modal) {
         modal.setCloseHandler(this::close);
+        modal.inputScope().focus().setListener(UiFocusManager.Listener.narrate(UiNarration::say));
         modals.add(modal);
         modal.inputScope().setHistory(this::requestHistory);
         onScopeChanged.run();
@@ -200,8 +201,11 @@ public final class UiModalStack implements UiWidget, UiLayoutSource {
         return !modals.isEmpty();
     }
 
+    /** {@inheritDoc} */
     @Override
-    public void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+    public void render(GuiGraphics graphics, Font font, UiPointer pointer) {
+        int mouseX = (int) pointer.x();
+        int mouseY = (int) pointer.y();
         if (modals.isEmpty()) {
             return;
         }
@@ -214,9 +218,9 @@ public final class UiModalStack implements UiWidget, UiLayoutSource {
         }
         for (int i = 0; i < modals.size(); i++) {
             UiModal modal = modals.get(i);
-            UiPointer pointer = UiPointer.gated(modal.inputScope().isActive(), mouseX, mouseY);
+            UiPointer modalPointer = modal.inputScope().pointer(mouseX, mouseY).resolve(modal);
             UiRenderLayers.draw(graphics, UiRenderLayers.modalContent(i),
-                    () -> modal.render(graphics, font, pointer.x(), pointer.y()));
+                    () -> modal.render(graphics, font, modalPointer));
         }
     }
 

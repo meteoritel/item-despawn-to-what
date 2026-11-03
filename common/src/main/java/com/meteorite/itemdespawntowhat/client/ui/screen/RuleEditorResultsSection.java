@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.ui.shared.RuleDisplayLabels;
@@ -1244,7 +1245,9 @@ final class RuleEditorResultsSection {
     }
 
     // 描述只挂在详情卡片的标题上：行内动作卡片已有名称与图标，悬停不再重复解释。
-    boolean renderDescriptionTooltip(GuiGraphics graphics, int mouseX, int mouseY) {
+    boolean renderDescriptionTooltip(GuiGraphics graphics, UiPointer pointer) {
+        int mouseX = (int) pointer.x();
+        int mouseY = (int) pointer.y();
         if (typePicker.isOpen() || selectedAction == null || !selectedAction.isMapping()) return false;
         if (detailHeaderRect == null || !hitsDocumentRect(detailHeaderRect, mouseX, mouseY)) return false;
         new UiDescriptionTooltip(THEME, font).render(graphics,
@@ -1387,11 +1390,10 @@ final class RuleEditorResultsSection {
          *
          * @param graphics 绘制上下文
          * @param font     绘制字体
-         * @param mouseX   鼠标屏幕 X 坐标
-         * @param mouseY   鼠标屏幕 Y 坐标
+     * @param pointer 已解析的绘制指针与作用域门禁
          */
         @Override
-        public void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        public void render(GuiGraphics graphics, Font font, UiPointer pointer) {
             String text = TextScroll.trimToWidth(font, label.getString(), labelRect.width());
             graphics.drawString(font, text, labelRect.x() + (labelRect.width() - font.width(text)) / 2,
                     labelRect.y() + (labelRect.height() - font.lineHeight) / 2, THEME.palette().textPrimary(), false);

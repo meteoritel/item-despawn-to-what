@@ -36,7 +36,7 @@ public final class UiFocusState {
     }
 
     /**
-     * 请求组内编辑目标；已登记组使用自身的 Tab 位置，展开组沿用已有锚点。
+     * 请求组内编辑目标；按该组的当前、最近或首个合格叶子选择 Tab 锚点。
      */
     public boolean focusWithin(UiFocusTarget child) {
         return owner != null && owner.focusWithin(target, child);

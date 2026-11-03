@@ -1,5 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import org.jetbrains.annotations.Nullable;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiRowMetrics;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
@@ -143,11 +146,12 @@ public final class UiTypePicker implements UiWidget, UiLayoutSource {
      * @param renderFont 内容字体
      */
     @Override
-    public void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
+    public void render(GuiGraphics graphics, Font renderFont, UiPointer incomingPointer) {
         if (!open) return;
         panel.tick();
         updateBounds();
-        updateHover(mouseX, mouseY);
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
+        if (pointer.allowed()) updateHover((int) pointer.x(), (int) pointer.y());
         panel.render(graphics, bounds,
                 title,
                 () -> renderContents(graphics, renderFont));
@@ -309,6 +313,14 @@ public final class UiTypePicker implements UiWidget, UiLayoutSource {
             int index = indexAt(mouseX, mouseY);
             if (index >= 0) cursor = index;
         }
+    }
+
+    /** 面板使用当前动画几何解析，轨道保留自己的捕获身份。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        if (!open || !panelRect.contains(x, y)) return null;
+        UiPointerHit hit = scroll.hitTest(x, y);
+        return hit == null ? UiPointerHit.leaf(this, x, y) : hit.within(this);
     }
 
     private void renderContents(GuiGraphics graphics, Font renderFont) {

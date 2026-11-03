@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
@@ -333,12 +335,23 @@ abstract class AbstractBarShell<C extends UiRangeControl>
     public abstract void setBounds(int x, int y, int width, int height);
 
     @Override
-    public abstract void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY);
+    public abstract void render(GuiGraphics graphics, Font renderFont, UiPointer pointer);
 
     @Override
     public abstract Component accessibleName();
 
     // 精确输入的取值、回填与格式化规则随核心不同，由子类装配
     protected abstract UiValueTextBinding<Double, String> preciseBinding();
+
+    /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        if (!visible || !enabled || !bounds.contains(x, y)) return null;
+        if (preciseActive) {
+            UiPointerHit hit = precise.hitTest(x, y);
+            if (hit != null) return hit.within(this).preservingFocus();
+        }
+        return UiPointerHit.leaf(this, x, y).within(core);
+    }
 
 }

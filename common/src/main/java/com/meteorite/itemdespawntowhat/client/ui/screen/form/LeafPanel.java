@@ -1,5 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import org.jetbrains.annotations.Nullable;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
@@ -195,15 +198,17 @@ public final class LeafPanel implements UiWidget, UiFocusTarget {
         return targets;
     }
 
+    /** {@inheritDoc} */
     @Override
-    public void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
+    public void render(GuiGraphics graphics, Font renderFont, UiPointer incomingPointer) {
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
         for (UiWidget extra : extras) {
-            extra.render(graphics, renderFont, mouseX, mouseY);
+            extra.render(graphics, renderFont, pointer);
         }
         for (UiButton button : buttons) {
-            button.render(graphics, renderFont, mouseX, mouseY);
+            button.render(graphics, renderFont, pointer);
         }
-        form.render(graphics, renderFont, mouseX, mouseY);
+        form.render(graphics, renderFont, pointer);
         for (int index = 0; index < notes.size() && index < noteRects.size(); index++) {
             Component note = notes.get(index).get();
             if (note == null) {
@@ -336,4 +341,14 @@ public final class LeafPanel implements UiWidget, UiFocusTarget {
     public Component accessibleName() {
         return Component.translatable(UI + "diagram.leaf").copy().append(" (" + extras.size() + ")");
     }
+    /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        if (!bounds().contains(x, y)) return null;
+        UiPointerHit hit = UiPointerHit.topmost(x, y, buttons);
+        if (hit == null) hit = UiPointerHit.topmost(x, y, extras);
+        if (hit == null) hit = form.hitTest(x, y);
+        return hit == null ? null : hit.within(this);
+    }
+
 }

@@ -1,5 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import org.jetbrains.annotations.Nullable;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
@@ -92,13 +95,16 @@ final class RuleChangesView implements UiWidget, UiFocusTarget {
      * 绘制条目后展示完整配方提示，滚动条拖动时不产生悬停提示。
      */
     @Override
-    public void render(GuiGraphics graphics, Font rowFont, int mouseX, int mouseY) {
+    public void render(GuiGraphics graphics, Font rowFont, UiPointer incomingPointer) {
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
+        int mouseX = (int) pointer.x();
+        int mouseY = (int) pointer.y();
         int y = bounds.y();
         for (var line : rowFont.split(Component.translatable(UI + "changes.note"), Math.max(1, bounds.width()))) {
             graphics.drawString(rowFont, line, bounds.x(), y, THEME.palette().textSecondary(), false);
             y += rowFont.lineHeight;
         }
-        list.render(graphics, rowFont, mouseX, mouseY);
+        list.render(graphics, rowFont, pointer);
         int index = list.itemIndexAt(mouseX, mouseY);
         if (index < 0) return;
         Change change = list.items().get(index);
@@ -190,4 +196,12 @@ final class RuleChangesView implements UiWidget, UiFocusTarget {
     public Component accessibleName() {
         return Component.translatable(UI + "button.changes");
     }
+    /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        if (!isVisible()) return null;
+        UiPointerHit hit = list.hitTest(x, y);
+        return hit == null ? null : hit.within(this);
+    }
+
 }

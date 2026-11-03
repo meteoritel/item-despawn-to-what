@@ -1,5 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import org.jetbrains.annotations.Nullable;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
@@ -435,8 +438,12 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
         return visible;
     }
 
+    /** {@inheritDoc} */
     @Override
-    public void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+    public void render(GuiGraphics graphics, Font font, UiPointer incomingPointer) {
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
+        int mouseX = (int) pointer.x();
+        int mouseY = (int) pointer.y();
         if (!visible) {
             return;
         }
@@ -447,7 +454,7 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
                     viewport.y() + Math.max(0, viewport.height() / 2 - 4), theme.palette().textSecondary());
             return;
         }
-        int hoveredIndex = indexAt(mouseX, mouseY);
+        int hoveredIndex = pointer.allowed() ? indexAt(mouseX, mouseY) : -1;
         int rowWidth = scrollView.contentWidth();
         scrollView.push(graphics);
         int firstIndex = Math.max(0, indexAtContentY(scrollView.offset()));
@@ -485,7 +492,7 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
 
     @Override
     public boolean mousePressed(UiInputContext context) {
-        if (canFocus() && bounds.contains(context.pointerX(), context.pointerY())) context.scope().pointerHit(this);
+
         double mouseX = context.pointerX();
         double mouseY = context.pointerY();
         int button = context.button();
@@ -583,12 +590,6 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
     }
 
     @Override
-    public boolean canFocus() {
-        return visible;
-    }
-
-
-    @Override
     public boolean isFocused() {
         return focusState.isFocused();
     }
@@ -612,4 +613,12 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
     public Component accessibleName() {
         return emptyMessage;
     }
+    /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        if (!isVisible() || !bounds().contains(x, y)) return null;
+        UiPointerHit hit = scrollView.hitTest(x, y);
+        return hit != null ? hit.within(this) : UiPointerHit.leaf(this, x, y);
+    }
+
 }

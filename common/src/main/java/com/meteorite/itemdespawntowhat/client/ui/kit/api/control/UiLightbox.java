@@ -1,12 +1,13 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.control;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputScope;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiFlatText;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiNineSlice;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiRenderLayers;
@@ -114,6 +115,12 @@ public final class UiLightbox implements UiInputTarget {
      * 所有坐标都是宿主 GUI 逻辑坐标；实现方必须把绘制严格裁剪在视口内。
      */
     public interface Content extends UiInteractionSession.Target {
+        /** 内容默认报告自身和提示；复合内容可返回更深的归属链。 */
+        @Override
+        default UiPointerHit hitTest(double x, double y) {
+            return UiPointerHit.leaf(this, x, y).withTooltip(hit(x, y));
+        }
+
         /**
          * 内容原始尺寸，用于 fit 与调试读数；**未知时返回 0，外壳会据此把 fit 延后到尺寸就绪那一帧**。
          */
@@ -130,7 +137,7 @@ public final class UiLightbox implements UiInputTarget {
         /**
          * 在视口内绘制内容。
          */
-        void render(GuiGraphics graphics, Font font, int mouseX, int mouseY);
+        void render(GuiGraphics graphics, Font font, UiPointer pointer);
 
         /**
          * 滚轮缩放，锚点为宿主 GUI 坐标；返回是否消费。
@@ -370,18 +377,19 @@ public final class UiLightbox implements UiInputTarget {
     // ---------- 绘制 ----------
 
     /** 在宿主选定的作用域内绘制遮罩、内容、前景与唯一提示。 */
-    public void render(GuiGraphics graphics, Font font, int mouseX, int mouseY, float partialTick) {
+    public void render(GuiGraphics graphics, Font font, UiPointer incomingPointer, float partialTick) {
         this.font = font;
         layout(font);
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
         graphics.fill(0, 0, width, height, maskColor);
         if (surface != null) surface.render(graphics,
                 new UiRect(panelX - 6, panelY - 6, panelWidth + 12, panelHeight + 12));
-        UiRenderLayers.draw(graphics, 0, () -> content.render(graphics, font, mouseX, mouseY));
-        UiRenderLayers.draw(graphics, UiRenderLayers.FOREGROUND, () -> renderForeground(graphics, font, mouseX, mouseY));
-        renderTooltip(graphics, font, mouseX, mouseY);
+        UiRenderLayers.draw(graphics, 0, () -> content.render(graphics, font, pointer));
+        UiRenderLayers.draw(graphics, UiRenderLayers.FOREGROUND, () -> renderForeground(graphics, font, pointer));
+        renderTooltip(graphics, font, pointer);
     }
 
-    private void renderForeground(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+    private void renderForeground(GuiGraphics graphics, Font font, UiPointer pointer) {
         if (title != null) {
             graphics.drawString(font, title, panelX, panelY, textColor, false);
         }
@@ -396,21 +404,11 @@ public final class UiLightbox implements UiInputTarget {
                     viewport.y() + (viewport.height() - font.lineHeight) / 2, textColor, false);
         }
         renderBar(graphics, font);
-        controls.render(graphics, font, mouseX, mouseY);
+        controls.render(graphics, font, pointer);
     }
 
-    private void renderTooltip(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
-        // 同一位置只允许一个 tooltip 来源：控件优先，没有控件命中时才问内容（例如条件树里的行）。
-        // 命中只查一次：原实现先用 targetAt 判空、再交给 renderTooltip 重扫同一坐标。
-        UiTarget hoveredControl = controls.targetAt(mouseX, mouseY);
-        if (hoveredControl == null) {
-            UiTarget target = content.hit(mouseX, mouseY);
-            if (target != null && !target.tooltip().isEmpty()) {
-                UiFlatText.componentTooltip(graphics, font, target.tooltip(), Math.max(1, graphics.guiWidth() - 16), mouseX, mouseY);
-            }
-        } else if (!hoveredControl.tooltip().isEmpty()) {
-            UiFlatText.componentTooltip(graphics, font, hoveredControl.tooltip(), Math.max(1, graphics.guiWidth() - 16), mouseX, mouseY);
-        }
+    private void renderTooltip(GuiGraphics graphics, Font font, UiPointer pointer) {
+        controls.renderTooltip(graphics, font, pointer);
     }
 
     // 底部控制栏：左侧图集导航与页码、右侧缩放读数与缩放/适应窗口按钮；内容视口在它上方，因此不会被覆盖。
@@ -634,4 +632,14 @@ public final class UiLightbox implements UiInputTarget {
     private void layoutIfPossible() {
         if (font != null) layout(font);
     }
+    /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        UiPointerHit hit = controls.hitTest(x, y);
+        if (hit == null && viewport.contains(x, y)) {
+            hit = content.hitTest(x, y);
+        }
+        return hit == null ? null : hit.within(this);
+    }
+
 }

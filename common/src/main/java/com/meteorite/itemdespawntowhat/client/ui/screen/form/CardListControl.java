@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogSelectionBinding.Mode;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
@@ -365,11 +367,12 @@ final class CardListControl extends FormControl implements UiLayoutSource {
     // ---- 绘制 ----
 
     @Override
-    void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
+    void render(GuiGraphics graphics, Font renderFont, UiPointer incomingPointer) {
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
         graphics.drawString(renderFont, label(), titleBounds.x(),
                 titleBounds.y() + Math.max(0, (titleBounds.height() - renderFont.lineHeight) / 2),
                 THEME.palette().textSecondary(), false);
-        addButton.render(graphics, renderFont, mouseX, mouseY);
+        addButton.render(graphics, renderFont, pointer);
         if (emptyBounds != null) {
             graphics.drawString(renderFont, Component.translatable(TypeLabels.UI_PREFIX + "list.empty"),
                     emptyBounds.x() + CARD_PADDING,
@@ -383,11 +386,11 @@ final class CardListControl extends FormControl implements UiLayoutSource {
             }
         }
         for (Entry entry : entries) {
-            entry.choice.render(graphics, renderFont, mouseX, mouseY);
-            entry.remove.render(graphics, renderFont, mouseX, mouseY);
+            entry.choice.render(graphics, renderFont, pointer);
+            entry.remove.render(graphics, renderFont, pointer);
             for (int i = 0; i < entry.values.size(); i++) {
                 drawCaption(graphics, renderFont, valueFields.get(i), entry.captions.get(i));
-                entry.values.get(i).render(graphics, renderFont, mouseX, mouseY);
+                entry.values.get(i).render(graphics, renderFont, pointer);
             }
         }
     }
@@ -670,5 +673,17 @@ final class CardListControl extends FormControl implements UiLayoutSource {
         private boolean referenceEdited;
         private @Nullable RuleValue original;
         private @Nullable UiRect card;
+    }
+    /** 按实际子控件解析指针，保留组合层的归属。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        for (int i = entries.size() - 1; i >= 0; i--) {
+            Entry entry = entries.get(i);
+            UiPointerHit hit = UiPointerHit.topmost(x, y, entry.values);
+            if (hit == null) hit = UiPointerHit.first(x, y, entry.remove, entry.choice);
+            if (hit != null) return hit.within(this);
+        }
+        UiPointerHit hit = addButton.hitTest(x, y);
+        return hit == null ? null : hit.within(this);
     }
 }

@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.control;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
@@ -144,10 +146,11 @@ public final class UiControlGroup implements UiInputTarget {
 
     // 不可见控件直接跳过（UiControl.render 同样会提前返回），省掉一次逐帧虚调用。
     // 本类不自行设置视口裁剪：宿主把它放在 UiScrollView 的平移 pose 内时，裁剪已由滚动视口给出。
-    public void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+    public void render(GuiGraphics graphics, Font font, UiPointer incomingPointer) {
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
 
         for (UiControl control : ordered) {
-            if (control.isVisible()) control.render(graphics, font, mouseX, mouseY);
+            if (control.isVisible()) control.render(graphics, font, pointer);
         }
     }
 
@@ -156,10 +159,9 @@ public final class UiControlGroup implements UiInputTarget {
      */
     @Nullable
     public UiControl controlAt(double x, double y) {
-        for (int i = ordered.size() - 1; i >= 0; i--) {
-            UiControl control = ordered.get(i);
-            if (control.hit(x, y) != null) return control;
-        }
+        UiPointerHit hit = hitTest(x, y);
+        if (hit == null) return null;
+        for (UiInputTarget owner : hit.owners()) if (owner instanceof UiControl control) return control;
         return null;
     }
 
@@ -168,17 +170,18 @@ public final class UiControlGroup implements UiInputTarget {
      */
     @Nullable
     public UiTarget targetAt(double x, double y) {
-        UiControl control = controlAt(x, y);
-        return control == null ? null : control.hit(x, y);
+        UiPointerHit hit = hitTest(x, y);
+        return hit == null ? null : hit.tooltip();
     }
 
     /**
      * 同一位置只能有一个 tooltip 来源：只画最上层命中且提示非空的目标。
      */
-    public void renderTooltip(GuiGraphics graphics, Font font, int x, int y) {
-        UiTarget target = targetAt(x, y);
+    public void renderTooltip(GuiGraphics graphics, Font font, UiPointer pointer) {
+        if (!pointer.allowsTooltip() || pointer.hit() == null) return;
+        UiTarget target = pointer.hit().tooltip();
         if (target != null && !target.tooltip().isEmpty()) {
-            UiFlatText.componentTooltip(graphics, font, target.tooltip(), Math.max(1, graphics.guiWidth() - 16), x, y);
+            UiFlatText.componentTooltip(graphics, font, target.tooltip(), graphics.guiWidth(), (int) pointer.x(), (int) pointer.y());
         }
     }
 
@@ -190,4 +193,11 @@ public final class UiControlGroup implements UiInputTarget {
         UiControl control = controlAt(context.pointerX(), context.pointerY());
         return control != null && control.mousePressed(context);
     }
+    /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        UiPointerHit hit = UiPointerHit.topmost(x, y, ordered);
+        return hit == null ? null : hit.within(this);
+    }
+
 }

@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
@@ -961,8 +963,10 @@ public final class FormView implements UiWidget, UiLayoutSource {
         }
     }
 
+    /** {@inheritDoc} */
     @Override
-    public void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
+    public void render(GuiGraphics graphics, Font renderFont, UiPointer incomingPointer) {
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
         if (!visible) {
             return;
         }
@@ -991,15 +995,15 @@ public final class FormView implements UiWidget, UiLayoutSource {
                             THEME.palette().textPrimary(), false);
                     continue;
                 }
-                row.control.render(graphics, renderFont, mouseX, mouseY);
+                row.control.render(graphics, renderFont, pointer);
                 if (row.control.issues(row.path).stream().anyMatch(FormIssue::blocking)) {
                     int left = viewportX + row.controlRelX;
                     int top = screenY + row.controlRelY;
                     graphics.fill(left, top + row.control.layoutHeight() - 1,
                             left + row.controlWidth, top + row.control.layoutHeight(), THEME.palette().danger());
                 }
-                for (var pickerButton : row.pickers) pickerButton.render(graphics, renderFont, mouseX, mouseY);
-                for (UiButton action : row.actions) action.render(graphics, renderFont, mouseX, mouseY);
+                for (var pickerButton : row.pickers) pickerButton.render(graphics, renderFont, pointer);
+                for (UiButton action : row.actions) action.render(graphics, renderFont, pointer);
             }
             if (highlightTicks > 0 && highlightBounds != null) {
                 THEME.drawFocusOutline(graphics, highlightBounds);
@@ -1061,6 +1065,28 @@ public final class FormView implements UiWidget, UiLayoutSource {
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
         return inputRouter.charTyped(codePoint, modifiers);
+    }
+
+    /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        if (!visible || !enabled || !bounds().contains(x, y)) return null;
+        syncBounds();
+        for (int index = rows.size() - 1; index >= 0; index--) {
+            FormRow row = rows.get(index);
+            if (!row.visible) continue;
+            UiPointerHit hit = UiPointerHit.topmost(x, y, row.actions);
+            if (hit == null) hit = UiPointerHit.topmost(x, y, row.pickers);
+            if (hit == null) hit = row.control.hitTest(x, y);
+            if (hit != null) return hit.within(this);
+            int screenY = rowScreenY(row);
+            int labelHeight = row.narrow ? font.lineHeight : row.contentHeight;
+            int labelWidth = row.field.isNote() || row.narrow ? row.controlWidth : row.labelWidth;
+            if ((row.labelShown || row.field.isNote()) && x < viewportX + labelWidth
+                    && y >= screenY && y < screenY + labelHeight)
+                return UiPointerHit.leaf(this, x, y).preservingFocus();
+        }
+        return null;
     }
 
 }

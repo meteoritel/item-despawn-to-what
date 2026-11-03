@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.debug;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.net.RuleEditClientWorkspace;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
@@ -93,6 +94,9 @@ public class DebugWorkbenchScreen extends Screen {
                         screen.showDebugDrafts();
                     }));
             scope = new UiInputScope(new UiInputTarget() {
+                @Override public UiPointerHit hitTest(double x, double y) {
+                    return UiPointerHit.topmost(x, y, buttons);
+                }
                 @Override public boolean mousePressed(UiInputContext context) {
                     for (UiButton button : buttons) { if (button.mousePressed(context)) { return true; } }
                     return false;
@@ -115,10 +119,15 @@ public class DebugWorkbenchScreen extends Screen {
             for (int i = 0; i < tools.size(); i++) {
                 var tool = tools.get(i); var button = buttons.get(i);
                 button.setEnabled(tool.available().getAsBoolean()); button.setBounds(10, 30 + i * Math.clamp((height - 64) / tools.size(), 28, 42), Math.min(190, width - 20), 18);
-                button.render(graphics, font, x, y);
+            }
+            var back = buttons.getLast(); back.setBounds(10, height - 24, 90, 18);
+            var pointer = scope.pointer(x, y).resolve(scope.content());
+            for (int i = 0; i < tools.size(); i++) {
+                var tool = tools.get(i); var button = buttons.get(i);
+                button.render(graphics, font, pointer);
                 graphics.drawString(font, text(tool.id() + ".description"), 12, 51 + i * Math.clamp((height - 64) / tools.size(), 28, 42), theme.palette().textSecondary(), false);
             }
-            var back = buttons.getLast(); back.setBounds(10, height - 24, 90, 18); back.render(graphics, font, x, y);
+            back.render(graphics, font, pointer);
         }
         @Override public List<UiLayoutNode> layoutNodes() {
             List<UiLayoutNode> nodes = new ArrayList<>(); buttons.forEach(button -> nodes.addAll(button.layoutNodes())); return nodes;
@@ -182,6 +191,12 @@ public class DebugWorkbenchScreen extends Screen {
             var skin = theme.sliderSkin(UiSliderRole.COMPACT); scalar.setStyle(skin.style()); scalar.setPainter(skin.painter());
             fixed.add(button("reset", this::assemble)); fixed.add(button("modal", this::openModal)); fixed.add(button("back", this::onClose));
             scope = new UiInputScope(new UiInputTarget() {
+                @Override public UiPointerHit hitTest(double x, double y) {
+                    UiPointerHit hit = UiPointerHit.topmost(x, y, fixed);
+                    if (hit != null || y < 30 || y >= height - 30) return hit;
+                    hit = scalar.hitTest(x, y);
+                    return hit != null ? hit : UiPointerHit.topmost(x, y, widgets);
+                }
                 @Override public boolean mousePressed(UiInputContext context) {
                     for (UiButton button : fixed) { if (button.mousePressed(context)) { return true; } }
                     if (context.pointerY() < 30 || context.pointerY() >= height - 30) { return false; }
@@ -218,12 +233,22 @@ public class DebugWorkbenchScreen extends Screen {
             modals.setBounds(0, 0, width, height); nodes.clear(); overlayNodes.clear();
             graphics.drawString(font, text(interactions ? "interactions" : "gallery"), 10, 10, theme.palette().textPrimary(), false);
             int w = Math.max(60, width - 24); int y = 34 - scroll;
+            for (UiWidget widget : widgets) {
+                int h = widget == range ? 40 : widget == list ? 72 : 20;
+                widget.setBounds(12, y, w, h);
+                y += h + 8;
+            }
+            scalar.setBounds(12, y, w, 20);
+            for (int i = 0; i < fixed.size(); i++) {
+                fixed.get(i).setBounds(8 + i * (width - 16) / 3, height - 24, (width - 24) / 3, 18);
+            }
+            var pointer = scope.pointer(mx, my).resolve(scope.content());
+            y = 34 - scroll;
             graphics.enableScissor(8, 30, width - 8, height - 30);
             try {
                 for (UiWidget widget : widgets) { int h = widget == range ? 40 : widget == list ? 72 : 20;
-                    widget.setBounds(12, y, w, h);
                     if (y + h > 30 && y < height - 30) {
-                        widget.render(graphics, font, modals.isEmpty() ? mx : -1, modals.isEmpty() ? my : -1);
+                        widget.render(graphics, font, pointer);
                         if (widget instanceof UiLayoutSource source) {
                             List<UiLayoutNode> children = source.layoutNodes();
                             if (widget == textInput || widget == number) {
@@ -240,7 +265,7 @@ public class DebugWorkbenchScreen extends Screen {
                     }
                     y += h + 8;
                 }
-                scalar.setBounds(12, y, w, 20); scalar.render(graphics, font, UiInputContext.pointer(scope, modals.isEmpty() ? mx : -1, modals.isEmpty() ? my : -1, -1, 0));
+                scalar.render(graphics, font, pointer);
                 addNode(UiLayoutNode.Kind.CONTROL, scalar.bounds(), text("scalar"));
                 y += 32;
                 Component values = Component.translatable(UI + "values", clicks, textInput.value(), number.value(), selection, scalar.value(), committed, list.selectedIndex());
@@ -251,11 +276,10 @@ public class DebugWorkbenchScreen extends Screen {
                 nodes.add(new UiLayoutNode(UiLayoutNode.Kind.FRAME, valuesRect, text("values.label"), 0, 0,
                         true, valueNode.visible(), List.of(valueNode)));
             } finally { graphics.disableScissor(); }
-            for (int i = 0; i < fixed.size(); i++) {
-                var button = fixed.get(i); button.setBounds(8 + i * (width - 16) / 3, height - 24, (width - 24) / 3, 18);
-                button.render(graphics, font, mx, my); overlayNodes.addAll(button.layoutNodes());
+            for (UiButton button : fixed) {
+                button.render(graphics, font, pointer); overlayNodes.addAll(button.layoutNodes());
             }
-            modals.render(graphics, font, mx, my); overlayNodes.addAll(modals.layoutNodes()); synchronize();
+            modals.render(graphics, font, scope.pointer(mx, my)); overlayNodes.addAll(modals.layoutNodes()); synchronize();
         }
         private void addNode(UiLayoutNode.Kind kind, UiRect rect, Component label) {
             boolean visible = rect.bottom() > 30 && rect.y() < height - 30;

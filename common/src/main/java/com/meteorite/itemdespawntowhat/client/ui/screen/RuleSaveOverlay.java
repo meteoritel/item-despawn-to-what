@@ -1,6 +1,9 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import org.jetbrains.annotations.Nullable;
 import com.meteorite.itemdespawntowhat.client.net.RuleEditClientWorkspace;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
@@ -20,6 +23,12 @@ import net.minecraft.network.chat.Component;
  * 保存模态的宿主适配；取消只发送信号，终态回执到达前不提供关闭入口。
  */
 final class RuleSaveOverlay implements UiInputTarget {
+    /** 只把实际按钮报告给作用域；遮罩仍按背景点击处理。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        return UiPointerHit.first(x, y, cancelButton, advancedButton);
+    }
+
     private static final String UI = TypeLabels.UI_PREFIX + "save.";
     private static final int PANEL_WIDTH = 340;
     private static final int COLLAPSED_HEIGHT = 128;
@@ -68,7 +77,7 @@ final class RuleSaveOverlay implements UiInputTarget {
         advancedButton.setLabel(Component.translatable(UI + (advanced ? "advanced.hide" : "advanced.show")));
     }
 
-    void render(GuiGraphics graphics, int screenWidth, int screenHeight, int mouseX, int mouseY, long milliseconds) {
+    void render(GuiGraphics graphics, int screenWidth, int screenHeight, UiPointer pointer, long milliseconds) {
         RuleSaveProgress progress = workspace.saving().progress();
         if (progress == null) {
             progress = new RuleSaveProgress(RuleSaveProgress.Stage.PREPARING, 0, 0, "", false);
@@ -104,7 +113,7 @@ final class RuleSaveOverlay implements UiInputTarget {
             drawLine(graphics, count, left, y, innerWidth, false);
             y += font.lineHeight + ROW_GAP;
             advancedButton.setBounds(left, y, innerWidth, RuleEditorPageSupport.DIALOG_BUTTON_H);
-            advancedButton.render(graphics, font, mouseX, mouseY);
+            advancedButton.render(graphics, font, pointer);
             y += RuleEditorPageSupport.DIALOG_BUTTON_H + ROW_GAP;
             if (advanced) {
                 drawLine(graphics, Component.translatable(UI + "step", Component.translatable(com.meteorite.itemdespawntowhat.core.network.transport.RuleEditMessages.progressKey(progress.stage()))),
@@ -118,7 +127,7 @@ final class RuleSaveOverlay implements UiInputTarget {
                 }
             }
             cancelButton.setBounds(left, panel.bottom() - PADDING - RuleEditorPageSupport.DIALOG_BUTTON_H, innerWidth, RuleEditorPageSupport.DIALOG_BUTTON_H);
-            cancelButton.render(graphics, font, mouseX, mouseY);
+            cancelButton.render(graphics, font, pointer);
         } finally {
             graphics.disableScissor();
         }

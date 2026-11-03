@@ -125,11 +125,11 @@ final class EditorShell {
             scope.setEscape(this::escape);
             scope.setFocusTargets(() -> scope.focus().updateTargets(current::addFocusTargets));
             UiFocusManager manager = scope.focus();
-            manager.setListener((previous, next) -> {
-                UiNarration.focus(next);
-                manager.setSpaceActivates((next == null || !next.acceptsTextInput()) && !(next instanceof UiListEditor));
-                editPage.ensureVisible(next);
-            });
+            manager.setListener(UiFocusManager.Listener.compose(
+                    (previous, next) -> editPage.ensureVisible(next),
+                    UiFocusManager.Listener.narrate(UiNarration::say),
+                    (previous, next) -> manager.setSpaceActivates(
+                            (next == null || !next.acceptsTextInput()) && !(next instanceof UiListEditor))));
         }
         model.refresh();
     }

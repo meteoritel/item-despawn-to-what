@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
@@ -296,22 +298,24 @@ public final class UiButton implements UiWidget, UiFocusTarget, UiLayoutSource, 
         return visible;
     }
 
+    /** {@inheritDoc} */
     @Override
-    public void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+    public void render(GuiGraphics graphics, Font font, UiPointer incomingPointer) {
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
         if (!visible) {
             return;
         }
         if (capsule()) {
-            renderChip(graphics, font, mouseX, mouseY);
+            renderChip(graphics, font, pointer);
             return;
         }
-        control.render(graphics, font, mouseX, mouseY);
+        control.render(graphics, font, pointer);
         theme.drawBevel(graphics, control.bounds(), theme.palette().controlBevelLight(), theme.palette().controlBevelDark());
     }
 
-    private void renderChip(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+    private void renderChip(GuiGraphics graphics, Font font, UiPointer pointer) {
         UiRect rect = bounds();
-        boolean hovered = control.isHittable() && rect.contains(mouseX, mouseY);
+        boolean hovered = control.isHittable() && pointer.contains(rect);
         if (control.isEnabled()) theme.drawChip(graphics, rect, isPressed(), hovered);
         else theme.drawSegment(graphics, rect, false, false, false);
         int iconWidth = icon == null ? 0 : icon.width() + ICON_GAP;
@@ -354,7 +358,7 @@ public final class UiButton implements UiWidget, UiFocusTarget, UiLayoutSource, 
         if (!control.bounds().contains(mouseX, mouseY)) {
             return false;
         }
-        context.scope().pointerHit(this);
+
         session = context.scope().interaction();
         session.begin(this, UiInteractionSession.Source.POINTER, button);
         control.setPressed(true);
@@ -414,4 +418,12 @@ public final class UiButton implements UiWidget, UiFocusTarget, UiLayoutSource, 
         control.setAccessibleName(name);
         return this;
     }
+    /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        if (!isVisible()) return null;
+        UiPointerHit hit = control.hitTest(x, y);
+        return hit == null ? null : hit.within(this);
+    }
+
 }

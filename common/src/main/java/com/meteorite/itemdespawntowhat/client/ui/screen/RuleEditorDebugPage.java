@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputScope;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.DebugTestRules;
@@ -205,25 +207,30 @@ final class RuleEditorDebugPage implements EditorPage {
         return bottomBar.preferredHeight(width);
     }
 
-    public void renderFooter(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY, UiRect footer) {
+    public void renderFooter(GuiGraphics graphics, Font renderFont, UiPointer pointer, UiRect footer) {
+        bottomBar.render(graphics, renderFont, pointer);
+    }
+
+    @Override
+    public void layout(UiRect area, UiRect footer) {
+        updateButtons();
         bottomBar.layout(footer.x(), footer.y(), footer.width());
-        bottomBar.render(graphics, renderFont, mouseX, mouseY);
+        int labelWidth = font.width(Component.translatable(UI + "count_label"));
+        int fieldWidth = Math.clamp(area.width() - labelWidth - RuleEditorPageSupport.PAD, 0, COUNT_FIELD_MAX_WIDTH);
+        if (countField != null) countField.setBounds(area.x() + labelWidth + RuleEditorPageSupport.PAD,
+                area.y() + font.lineHeight + RuleEditorPageSupport.PAD, fieldWidth, INPUT_H);
     }
 
     // 调试页布局：数量摘要、数量输入与只写草稿的说明
-    public void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY, UiRect area) {
-        updateButtons();
+    public void render(GuiGraphics graphics, Font renderFont, UiPointer pointer, UiRect area) {
         int y = area.y();
         graphics.drawString(renderFont, summary(), area.x(), y, THEME.palette().textPrimary(), false);
         y += renderFont.lineHeight + RuleEditorPageSupport.PAD;
         Component label = Component.translatable(UI + "count_label");
-        int labelWidth = renderFont.width(label);
         graphics.drawString(renderFont, label, area.x(),
                 y + (INPUT_H - renderFont.lineHeight) / 2, THEME.palette().textSecondary(), false);
-        int fieldWidth = Math.clamp(area.width() - labelWidth - RuleEditorPageSupport.PAD, 0, COUNT_FIELD_MAX_WIDTH);
         if (countField != null) {
-            countField.setBounds(area.x() + labelWidth + RuleEditorPageSupport.PAD, y, fieldWidth, INPUT_H);
-            countField.render(graphics, renderFont, mouseX, mouseY);
+            countField.render(graphics, renderFont, pointer);
         }
         y += INPUT_H + RuleEditorPageSupport.PAD;
         int hintColor = THEME.palette().textSecondary();
@@ -294,4 +301,10 @@ final class RuleEditorDebugPage implements EditorPage {
             focus.add(button);
         }
     }
+    /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        return UiPointerHit.first(x, y, bottomBar, countField);
+    }
+
 }

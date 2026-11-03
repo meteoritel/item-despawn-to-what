@@ -74,6 +74,11 @@ public final class UiInteractionSession {
         return target;
     }
 
+    /** 只有 POINTER 会话独占绘制指针，键盘重复和文本编辑保持普通悬停。 */
+    public @Nullable Target pointerTarget() {
+        return source == Source.POINTER ? target : null;
+    }
+
     /**
      * 获取匹配来源与按键的目标，迟到释放没有目标。
      */

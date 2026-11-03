@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiRowMetrics;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
@@ -468,14 +470,18 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         return visible;
     }
 
+    /** {@inheritDoc} */
     @Override
-    public void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
+    public void render(GuiGraphics graphics, Font renderFont, UiPointer incomingPointer) {
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
+        int mouseX = (int) pointer.x();
+        int mouseY = (int) pointer.y();
         if (!visible || bounds.width() <= 0 || bounds.height() <= 0) {
             return;
         }
         theme.drawInset(graphics, bounds);
         UiRect viewport = scrollView.viewport();
-        hoveredIndex = indexAt(mouseX, mouseY);
+        hoveredIndex = pointer.allowed() ? indexAt(mouseX, mouseY) : -1;
         if (rows.isEmpty()) {
             String empty = emptyText(renderFont, Math.max(0, viewport.width() - 8));
             graphics.drawString(renderFont, empty, viewport.x() + 4,
@@ -550,8 +556,7 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
     /**
      * 悬停行的完整文案，供宿主显示提示；窄树中被截断的文本可由此读取。
      *
-     * @param mouseX 鼠标横坐标
-     * @param mouseY 鼠标纵坐标
+     * 指针坐标使用 GUI 逻辑坐标。
      * @return 完整行文案；指针不在内容区或无命中行时为 null
      */
     public @Nullable Component tooltipAt(double mouseX, double mouseY) {
@@ -639,7 +644,7 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
 
     @Override
     public boolean mousePressed(UiInputContext context) {
-        if (canFocus() && bounds.contains(context.pointerX(), context.pointerY())) context.scope().pointerHit(this);
+
         double mouseX = context.pointerX();
         double mouseY = context.pointerY();
         if (!visible || !enabled || !bounds.contains(mouseX, mouseY)) {
@@ -720,12 +725,6 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
     }
 
     @Override
-    public boolean canFocus() {
-        return visible && enabled;
-    }
-
-
-    @Override
     public boolean isFocused() {
         return focusState.isFocused();
     }
@@ -743,4 +742,16 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
     public Component accessibleName() {
         return Component.translatable(TypeLabels.UI_PREFIX + "tree.accessible_name");
     }
+    /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        if (!isVisible() || !bounds().contains(x, y)) return null;
+        UiPointerHit hit = scrollView.hitTest(x, y);
+        return hit != null ? hit.within(this) : UiPointerHit.leaf(this, x, y);
+    }
+
+    /** 当前输入可用状态。 */
+    @Override
+    public boolean isEnabled() { return enabled; }
+
 }

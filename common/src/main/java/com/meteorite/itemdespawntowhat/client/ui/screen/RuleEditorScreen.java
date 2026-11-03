@@ -117,8 +117,6 @@ public final class RuleEditorScreen extends Screen implements UiLayoutSource {
         // 实时尺寸由外壳持有：页与外壳都按它排版
         shell.setScreenSize(this.width, this.height);
         this.renderBackground(graphics, mouseX, mouseY, partialTick);
-        int actualMouseX = mouseX;
-        int actualMouseY = mouseY;
         EditorPage page = shell.activePage();
         UiTypePicker picker = page.overlay();
         boolean saving = shell.saving();
@@ -127,9 +125,7 @@ public final class RuleEditorScreen extends Screen implements UiLayoutSource {
         } else {
             saveOverlay = null;
         }
-        var pointer = UiPointer.gated(input.pageActive(), mouseX, mouseY);
-        mouseX = pointer.x();
-        mouseY = pointer.y();
+        input.pageActive();
         int w = this.width;
         int h = this.height;
         shell.modals().setBounds(0, 0, w, h);
@@ -140,31 +136,31 @@ public final class RuleEditorScreen extends Screen implements UiLayoutSource {
         drawHeaderText(graphics, page);
         int availableWidth = Math.max(0, w - pagePad * 2);
         // 头部附加内容（页签条）由页自己排布，返回内容区起点
-        int y = page.layoutHeader(graphics, font, mouseX, mouseY, pagePad, headerHeight + PAD);
+        int y = page.layoutHeader(pagePad, headerHeight + PAD);
         int footerHeight = page.footerHeight(availableWidth);
         int footerY = h - pagePad - footerHeight;
         int noticeY = footerY - PAD - (shell.notice() == null ? 0 : NOTICE_H);
         UiRect contentArea = new UiRect(pagePad, y, availableWidth, Math.max(0, noticeY - y - pagePad));
-        page.render(graphics, font, mouseX, mouseY, contentArea);
+        UiRect footerArea = new UiRect(pagePad, footerY, availableWidth, footerHeight);
+        page.layout(contentArea, footerArea);
+        UiPointer pointer = page.inputScope().pointer(mouseX, mouseY).resolve(page);
+        page.renderHeader(graphics, font, pointer);
+        page.render(graphics, font, pointer, contentArea);
         drawNotice(graphics, noticeY, w);
-        page.renderFooter(graphics, font, mouseX, mouseY, new UiRect(pagePad, footerY, availableWidth, footerHeight));
-        mouseX = actualMouseX;
-        mouseY = actualMouseY;
+        page.renderFooter(graphics, font, pointer, footerArea);
         if (saving) {
-            int overlayMouseX = mouseX;
-            int overlayMouseY = mouseY;
             UiRenderLayers.draw(graphics, UiRenderLayers.MODAL_MASK,
-                    () -> saveOverlay().render(graphics, width, height, overlayMouseX, overlayMouseY, Util.getMillis()));
+                    () -> saveOverlay().render(graphics, width, height, saveOverlay().inputScope().pointer(mouseX, mouseY), Util.getMillis()));
             graphics.flush();
             PreviewIcons.endFrame();
             return;
         }
-        shell.modals().render(graphics, font, mouseX, mouseY);
+        shell.modals().render(graphics, font, UiPointer.at(mouseX, mouseY));
         if (shell.modals().isEmpty() && picker != null) {
             picker.setBounds(contentArea.x(), contentArea.y(), contentArea.width(), contentArea.height());
-            picker.render(graphics, font, mouseX, mouseY);
+            picker.render(graphics, font, picker.inputScope().pointer(mouseX, mouseY));
         }
-        if (shell.modals().isEmpty() && picker == null) {
+        if (shell.modals().isEmpty() && picker == null && pointer.allowsTooltip()) {
             Component tip = null;
             if (shell.notice() != null && noticeTruncated && noticeRect != null && noticeRect.contains(mouseX, mouseY)) {
                 tip = shell.notice();
@@ -175,7 +171,7 @@ public final class RuleEditorScreen extends Screen implements UiLayoutSource {
                             List.of(DescriptionLine.text(Component.literal(detail),
                                     DescriptionLine.Tone.VALUE, 0)), mouseX, mouseY);
                 }
-            } else if (!page.renderDescriptionTooltip(graphics, mouseX, mouseY)) {
+            } else if (!page.renderDescriptionTooltip(graphics, pointer)) {
                 // 字段说明提示：没有弹窗且页未自行绘制说明时才显示，避免盖住上层内容
                 tip = page.tooltipAt(mouseX, mouseY);
             }

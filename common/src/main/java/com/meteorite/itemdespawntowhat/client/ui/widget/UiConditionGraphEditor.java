@@ -1,5 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
@@ -93,14 +96,14 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
      *
      * <p>画布负责右侧面板的背景、标题、裁剪与 160ms ease-out 滑入动画；宿主只需实现表单本体。</p>
      */
-    public interface InlineEditor {
+    public interface InlineEditor extends UiInputTarget {
         int preferredHeight(int width);
 
         UiRect bounds();                       // GUI 屏幕坐标
 
         void setBounds(int x, int y, int width, int height);
 
-        void render(GuiGraphics graphics, Font font, int mouseX, int mouseY);   // GUI 屏幕坐标
+        void render(GuiGraphics graphics, Font font, UiPointer pointer);   // GUI 屏幕坐标
 
         boolean mousePressed(UiInputContext context);
 
@@ -1130,8 +1133,12 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
 
     // ---- 渲染 ----
 
+    /** {@inheritDoc} */
     @Override
-    public void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
+    public void render(GuiGraphics graphics, Font renderFont, UiPointer incomingPointer) {
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
+        int mouseX = (int) pointer.x();
+        int mouseY = (int) pointer.y();
         if (!visible || bounds.width() <= 0 || bounds.height() <= 0) {
             return;
         }
@@ -1141,11 +1148,11 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
             fitToContent();
         }
         UiRect viewport = transform.viewport();
-        boolean inside = bounds.contains(mouseX, mouseY);
+        boolean inside = pointer.contains(bounds);
         boolean emptyTree = expression.root() == null;
         double localX = transform.toLocalX(mouseX);
         double localY = transform.toLocalY(mouseY);
-        boolean overPanel = inlinePanel.contains(mouseX, mouseY);
+        boolean overPanel = pointer.allowed() && inlinePanel.contains(pointer.x(), pointer.y());
         ConditionNode hoveredNode = !picker.isOpen() && !kindMenuOpen && !overPanel && inside ? graph.nodeAt(localX, localY) : null;
         // 空树空闲态也要亮出中央大 [+]，让人一眼看出这里可以点
         Hotspot hoveredHotspot = !picker.isOpen() && !kindMenuOpen && !overPanel && inside
@@ -1179,17 +1186,17 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
             renderer.drawDragGhost(graphics, renderFont, bounds, dragLabel, mouseX, mouseY);
         }
         if (!picker.isOpen()) {
-            inlinePanel.render(graphics, renderFont, mouseX, mouseY);
+            inlinePanel.render(graphics, renderFont, pointer);
         }
         if (picker.isOpen()) {
-            picker.render(graphics, renderFont, mouseX, mouseY);
+            picker.render(graphics, renderFont, pointer);
         }
         if (kindMenuOpen) {
             updateKindMenuRect();
-            updateKindMenuHover(mouseX, mouseY);
+            if (pointer.allowed()) updateKindMenuHover(mouseX, mouseY);
             renderKindMenu(graphics, renderFont);
         }
-        List<DescriptionLine> tip = tooltipAt(mouseX, mouseY);
+        List<DescriptionLine> tip = pointer.allowsTooltip() ? tooltipAt(mouseX, mouseY) : null;
         if (tip != null) {
             tooltip.render(graphics, bounds, tip, mouseX, mouseY);
         }
@@ -1426,7 +1433,7 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
             return true;
         }
         if (button != GLFW.GLFW_MOUSE_BUTTON_LEFT && button != GLFW.GLFW_MOUSE_BUTTON_MIDDLE) return false;
-        context.scope().pointerHit(this);
+
         interaction = context.scope().interaction();
         interaction.begin(this, UiInteractionSession.Source.POINTER, button);
         // 中键与「空格 + 左键」是附加平移手势；空白区左键本身也能平移
@@ -2172,5 +2179,19 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
     @Override
     public Component accessibleName() {
         return Component.translatable(TypeLabels.UI_PREFIX + "tree.accessible_name");
+    }
+    /** 根据实际子控件解析当前命中。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        if (!visible || !bounds.contains(x, y)) return null;
+        if (picker.isOpen()) {
+            UiPointerHit hit = picker.hitTest(x, y);
+            return hit == null ? UiPointerHit.leaf(this, x, y).preservingFocus() : hit.within(this);
+        }
+        if (kindMenuOpen) {
+            return UiPointerHit.leaf(this, x, y).preservingFocus();
+        }
+        UiPointerHit hit = inlinePanel.hitTest(x, y);
+        return hit == null ? UiPointerHit.leaf(this, x, y) : hit.within(this);
     }
 }

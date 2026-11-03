@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiFlatText;
@@ -298,8 +300,9 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
                 budget, editable, true, List.of()));
     }
 
+    /** {@inheritDoc} */
     @Override
-    public void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
+    public void render(GuiGraphics graphics, Font renderFont, UiPointer incomingPointer) {
         if (!visible) {
             return;
         }
@@ -407,7 +410,7 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
     @Override
     public boolean mousePressed(UiInputContext context) {
         if (!editSession.beginSelection(context, bounds, canFocus())) return false;
-        context.scope().pointerHit(this);
+
         return true;
     }
 
@@ -601,5 +604,11 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
 
     private int maxScroll() {
         return Math.max(0, textField.getLineCount() * font.lineHeight - innerHeight());
+    }
+    /** 文本选择器与可见输入框共用指针归属。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        UiPointerHit hit = UiWidget.super.hitTest(x, y);
+        return hit == null ? null : editSession.includeSelectionOwner(hit);
     }
 }

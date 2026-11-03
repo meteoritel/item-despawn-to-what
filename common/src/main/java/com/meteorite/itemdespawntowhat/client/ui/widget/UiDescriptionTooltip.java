@@ -162,8 +162,8 @@ public final class UiDescriptionTooltip {
 
     // 折行宽度上限：由面板可用宽度决定换行位置，避免折行后再次超出屏幕
     private int textWidthLimit(UiRect bounds) {
-        int available = Math.min(maxWidth, bounds.width() - TOOLTIP_MARGIN * 2);
-        return Math.max(1, available - TOOLTIP_PADDING * 2);
+        return UiTooltipPanel.contentWidth(bounds, maxWidth - TOOLTIP_PADDING * 2,
+                TOOLTIP_PADDING, TOOLTIP_MARGIN);
     }
 
     // 去掉空文本行与多余的间距行：间距行只保留一个，且不出现在首尾

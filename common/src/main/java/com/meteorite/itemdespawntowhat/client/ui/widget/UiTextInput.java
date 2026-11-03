@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiNumberField;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.UiTextEditSession;
@@ -322,8 +324,12 @@ public final class UiTextInput implements UiNumberField.Editor, UiLayoutSource, 
                 budget, editable, true, List.of()));
     }
 
+    /** {@inheritDoc} */
     @Override
-    public void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+    public void render(GuiGraphics graphics, Font font, UiPointer incomingPointer) {
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
+        int mouseX = (int) pointer.x();
+        int mouseY = (int) pointer.y();
         if (!visible) {
             return;
         }
@@ -339,7 +345,7 @@ public final class UiTextInput implements UiNumberField.Editor, UiLayoutSource, 
     @Override
     public boolean mousePressed(UiInputContext context) {
         if (!editSession.beginSelection(context, bounds, canFocus())) return false;
-        context.scope().pointerHit(this);
+
         return true;
     }
 
@@ -471,5 +477,11 @@ public final class UiTextInput implements UiNumberField.Editor, UiLayoutSource, 
     public UiTextInput setAccessibleName(Component name) {
         this.accessibleName = name;
         return this;
+    }
+    /** 文本选择器与可见输入框共用指针归属。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        UiPointerHit hit = UiNumberField.Editor.super.hitTest(x, y);
+        return hit == null ? null : editSession.includeSelectionOwner(hit);
     }
 }

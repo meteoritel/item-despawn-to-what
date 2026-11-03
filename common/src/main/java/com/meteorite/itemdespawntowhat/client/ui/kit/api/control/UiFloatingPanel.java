@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.control;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
@@ -46,7 +48,7 @@ public final class UiFloatingPanel implements UiInteractionSession.Target, UiFoc
 
         void setBounds(int x, int y, int width, int height);
 
-        void render(GuiGraphics graphics, Font font, int mouseX, int mouseY);
+        void render(GuiGraphics graphics, Font font, UiPointer pointer);
 
         default boolean isVisible() {
             return true;
@@ -163,22 +165,23 @@ public final class UiFloatingPanel implements UiInteractionSession.Target, UiFoc
     /**
      * 在宿主选定的作用域内绘制背景、内容与标题前景。
      */
-    public void render(GuiGraphics graphics, int mouseX, int mouseY) {
+    public void render(GuiGraphics graphics, UiPointer incomingPointer) {
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
         graphics.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), style.background());
         Content target = content;
         if (target != null && !collapsed && target.isVisible() && contentRect().height() > 0) {
-            UiRenderLayers.draw(graphics, 0, () -> target.render(graphics, font, mouseX, mouseY));
+            UiRenderLayers.draw(graphics, 0, () -> target.render(graphics, font, pointer));
         }
-        UiRenderLayers.draw(graphics, UiRenderLayers.FOREGROUND, () -> renderForeground(graphics, mouseX, mouseY));
+        UiRenderLayers.draw(graphics, UiRenderLayers.FOREGROUND, () -> renderForeground(graphics, pointer));
     }
 
-    private void renderForeground(GuiGraphics graphics, int mouseX, int mouseY) {
+    private void renderForeground(GuiGraphics graphics, UiPointer pointer) {
         UiRect bar = titleBar();
         graphics.fill(bar.x(), bar.y(), bar.right(), bar.bottom(), style.hoverBackground());
         outline(graphics, bounds, style.scrollbarThumb());
         String label = TextScroll.trimToWidth(font, title.getString(), Math.max(0, bar.width() - titleInset()));
         graphics.drawString(font, label, bar.x() + TITLE_INSET, bar.y() + TITLE_PADDING, titleColor, false);
-        collapseButton.render(graphics, font, mouseX, mouseY);
+        collapseButton.render(graphics, font, pointer);
     }
 
     // ---------- UiInputTarget ----------
@@ -192,7 +195,7 @@ public final class UiFloatingPanel implements UiInteractionSession.Target, UiFoc
             return collapseButton.mousePressed(context);
         }
         if (titleBar().contains(x, y)) {
-            context.scope().pointerHit(null);
+
             session = context.scope().interaction();
             session.begin(this, UiInteractionSession.Source.POINTER, context.button());
             dragOffsetX = x - bounds.x();
@@ -415,4 +418,13 @@ public final class UiFloatingPanel implements UiInteractionSession.Target, UiFoc
         graphics.fill(rect.x(), rect.y() + 1, rect.x() + 1, rect.bottom() - 1, color);
         graphics.fill(rect.right() - 1, rect.y() + 1, rect.right(), rect.bottom() - 1, color);
     }
+    /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        if (!bounds.contains(x, y)) return null;
+        UiPointerHit hit = collapseButton.hitTest(x, y);
+        if (hit == null && !collapsed && content != null && content.isVisible()) hit = content.hitTest(x, y);
+        return hit == null ? UiPointerHit.leaf(this, x, y).preservingFocus() : hit.within(this);
+    }
+
 }

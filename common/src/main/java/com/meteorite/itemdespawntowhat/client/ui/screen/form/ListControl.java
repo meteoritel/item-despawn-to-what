@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
@@ -71,8 +73,9 @@ final class ListControl extends FormControl {
     }
 
     @Override
-    void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
-        editor.render(graphics, font, mouseX, mouseY);
+    void render(GuiGraphics graphics, Font font, UiPointer incomingPointer) {
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
+        editor.render(graphics, font, pointer);
     }
 
     @Override
@@ -191,4 +194,10 @@ final class ListControl extends FormControl {
         return TaggedId.tryParse(value) != null;
     }
 
+    /** 按实际子控件解析指针，保留组合层的归属。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        UiPointerHit hit = editor.hitTest(x, y);
+        return hit == null ? null : hit.within(this);
+    }
 }

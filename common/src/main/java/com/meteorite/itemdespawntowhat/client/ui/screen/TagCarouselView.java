@@ -1,5 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import org.jetbrains.annotations.Nullable;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
@@ -75,8 +78,10 @@ public final class TagCarouselView implements UiWidget, UiFocusTarget {
         list.setBounds(x, y + LIST_TOP, width, Math.max(0, height - LIST_TOP));
     }
 
+    /** {@inheritDoc} */
     @Override
-    public void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+    public void render(GuiGraphics graphics, Font font, UiPointer incomingPointer) {
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
         THEME.drawInset(graphics, new UiRect(bounds.x(), bounds.y(), bounds.width(), HEADER_HEIGHT));
         tag.carousel().render(graphics,
                 new UiRect(bounds.x() + (bounds.width() - PREVIEW_SIZE) / 2, bounds.y() + 2, PREVIEW_SIZE, PREVIEW_SIZE),
@@ -88,7 +93,7 @@ public final class TagCarouselView implements UiWidget, UiFocusTarget {
                     TextScroll.trimToWidth(font, name.getString(), bounds.width() - 8),
                     bounds.x() + bounds.width() / 2, bounds.y() + 60, THEME.palette().textPrimary()));
         }
-        list.render(graphics, font, mouseX, mouseY);
+        list.render(graphics, font, pointer);
     }
 
     /**
@@ -170,4 +175,12 @@ public final class TagCarouselView implements UiWidget, UiFocusTarget {
     public Component accessibleName() {
         return tag.label();
     }
+    /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        if (!isVisible()) return null;
+        UiPointerHit hit = list.hitTest(x, y);
+        return hit == null ? null : hit.within(this);
+    }
+
 }

@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.control;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
@@ -157,12 +159,13 @@ public final class UiIconStrip implements UiInteractionSession.Target, UiFocusTa
     /**
      * 绘制全部可见格子；{@code mouseX/mouseY} 为宿主 GUI 逻辑坐标。
      */
-    public void render(GuiGraphics graphics, int mouseX, int mouseY) {
+    public void render(GuiGraphics graphics, UiPointer incomingPointer) {
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
         for (int i = 0; i < cells.size(); i++) {
             UiControl control = cells.get(i).control;
             if (!control.isVisible()) continue;
 
-            control.render(graphics, font, mouseX, mouseY);
+            control.render(graphics, font, pointer);
             if (isFocusVisible() && i == focusedIndex) control.renderFocusOutline(graphics);
         }
     }
@@ -188,7 +191,7 @@ public final class UiIconStrip implements UiInteractionSession.Target, UiFocusTa
         if (index < 0) return false;
         UiControl control = cells.get(index).control;
         if (!control.isHittable()) return false;
-        context.scope().pointerHit(this);
+
         session = context.scope().interaction();
         session.begin(this, UiInteractionSession.Source.POINTER, context.button());
         clearPress();
@@ -454,5 +457,13 @@ public final class UiIconStrip implements UiInteractionSession.Target, UiFocusTa
                     tooltipOrNull == null ? List.of() : List.of(tooltipOrNull),
                     action);
         }
+    }
+    /** 根据实际子控件解析当前命中。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        int index = indexAt(x, y);
+        if (index < 0) return null;
+        UiPointerHit hit = cells.get(index).control.hitTest(x, y);
+        return hit == null ? null : new UiPointerHit(hit.within(this).owners(), x, y, this, hit.tooltip());
     }
 }

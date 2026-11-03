@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.control;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiTransform;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
@@ -217,7 +219,7 @@ public final class UiControl implements UiFocusTarget, UiInteractionSession.Targ
     public boolean mousePressed(UiInputContext context) {
         if (context.button() != 0 || hit(context.pointerX(), context.pointerY()) == null || action == null)
             return false;
-        context.scope().pointerHit(this);
+
         session = context.scope().interaction();
         session.begin(this, UiInteractionSession.Source.POINTER, context.button());
         setPressed(true);
@@ -267,13 +269,13 @@ public final class UiControl implements UiFocusTarget, UiInteractionSession.Targ
     /**
      * 绘制控件；只在内容确实越出控件矩形时才设置裁剪（见 {@code needsClip}）。
      *
-     * @param mouseX 指针 X 坐标，用于悬停判定
-     * @param mouseY 指针 Y 坐标，用于悬停判定
+     * @param incomingPointer 已解析的绘制指针与作用域门禁
      */
-    public void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+    public void render(GuiGraphics graphics, Font font, UiPointer incomingPointer) {
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
         if (!visible) return;
         refreshMetrics(font);
-        boolean hovered = enabled && bounds.contains(mouseX, mouseY);
+        boolean hovered = enabled && pointer.contains(bounds);
         graphics.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), style.background(stateFor(hovered)));
         int iconWidth = icon == null ? 0 : icon.width();
         int iconHeight = icon == null ? 0 : icon.height();
@@ -339,4 +341,11 @@ public final class UiControl implements UiFocusTarget, UiInteractionSession.Targ
         graphics.fill(bounds.x(), bounds.y() + 1, bounds.x() + 1, bounds.bottom() - 1, outline);
         graphics.fill(bounds.right() - 1, bounds.y() + 1, bounds.right(), bounds.bottom() - 1, outline);
     }
+    /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        UiTarget target = hit(x, y);
+        return target == null ? null : UiPointerHit.leaf(this, x, y).withTooltip(target);
+    }
+
 }

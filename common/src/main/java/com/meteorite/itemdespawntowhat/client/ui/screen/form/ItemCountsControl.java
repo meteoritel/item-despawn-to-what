@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
@@ -354,7 +356,10 @@ final class ItemCountsControl extends FormControl {
     }
 
     @Override
-    void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
+    void render(GuiGraphics graphics, Font renderFont, UiPointer incomingPointer) {
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
+        int mouseX = (int) pointer.x();
+        int mouseY = (int) pointer.y();
         for (Entry entry : entries.values()) {
             // 配对下行只画滑条：物品名、图标与两行文案都由上行统一绘制
             if (pairRole != PairRole.LOWER) {
@@ -374,7 +379,7 @@ final class ItemCountsControl extends FormControl {
                     drawRowLabel(graphics, renderFont, secondRowLabel, entry.rowY + lastRowHeight + PAIR_GAP);
                 }
             }
-            entry.control.render(graphics, renderFont, mouseX, mouseY);
+            entry.control.render(graphics, renderFont, pointer);
         }
     }
 
@@ -488,6 +493,15 @@ final class ItemCountsControl extends FormControl {
                 return Component.translatable(QUANTITY_ROW_KEY, entry.name, label()).copy()
                         .append("\n").append(entry.reference);
             }
+        }
+        return null;
+    }
+    /** 按实际子控件解析指针，保留组合层的归属。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        for (Entry entry : entries.values()) {
+            UiPointerHit hit = entry.control.hitTest(x, y);
+            if (hit != null) return hit.within(this);
         }
         return null;
     }

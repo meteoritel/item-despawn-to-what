@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
@@ -216,12 +217,16 @@ public final class UiSegmentedControl implements UiWidget, UiFocusTarget, UiLayo
         return nodes;
     }
 
+    /** {@inheritDoc} */
     @Override
-    public void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
+    public void render(GuiGraphics graphics, Font renderFont, UiPointer incomingPointer) {
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
+        int mouseX = (int) pointer.x();
+        int mouseY = (int) pointer.y();
         if (!visible || options.isEmpty()) {
             return;
         }
-        int hovered = enabled ? indexAt(mouseX, mouseY) : -1;
+        int hovered = enabled && pointer.allowed() ? indexAt(mouseX, mouseY) : -1;
         int chosen = selectedIndex();
         for (int i = 0; i < options.size(); i++) {
             UiRect segment = segmentRect(i);
@@ -274,7 +279,7 @@ public final class UiSegmentedControl implements UiWidget, UiFocusTarget, UiLayo
         int index = indexAt(mouseX, mouseY);
         if (index < 0) return false;
         navigationIndex = index;
-        context.scope().pointerHit(this);
+
         return select(index);
     }
 

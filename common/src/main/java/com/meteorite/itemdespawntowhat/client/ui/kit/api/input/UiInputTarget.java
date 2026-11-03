@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.input;
 
+import org.jetbrains.annotations.Nullable;
+
 /**
  * kit 的统一输入契约：指针、滚轮、键盘与字符输入。
  *
@@ -8,6 +10,12 @@ package com.meteorite.itemdespawntowhat.client.ui.kit.api.input;
  * {@link UiInputRouter} 直接交给作用域登记的目标。</p>
  */
 public interface UiInputTarget {
+
+    /** 无副作用解析实际叶子；容器按逆绘制顺序与裁剪换算后查询子目标。 */
+    default @Nullable UiPointerHit hitTest(double x, double y) {
+        return this instanceof UiFocusTarget target && target.canFocus() && target.bounds().contains(x, y)
+                ? UiPointerHit.leaf(this, x, y) : null;
+    }
 
     /**
      * 离开整个作用域时清理按住的修饰态；会话已由作用域结束。

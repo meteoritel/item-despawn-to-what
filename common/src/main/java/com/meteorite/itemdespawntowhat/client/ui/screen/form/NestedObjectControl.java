@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
@@ -72,8 +74,9 @@ final class NestedObjectControl extends FormControl {
     }
 
     @Override
-    void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
-        child.render(graphics, font, mouseX, mouseY);
+    void render(GuiGraphics graphics, Font font, UiPointer incomingPointer) {
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
+        child.render(graphics, font, pointer);
     }
 
     @Override
@@ -172,5 +175,11 @@ final class NestedObjectControl extends FormControl {
     // 子表单把输入保留在自己的 FormView 里，本控件不再贡献文本
     @Override
     void appendInputText(List<String> out) {
+    }
+    /** 根据实际子控件解析当前命中。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        UiPointerHit hit = child.hitTest(x, y);
+        return hit == null ? null : hit.within(this);
     }
 }

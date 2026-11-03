@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
@@ -113,9 +115,11 @@ final class RuleNameInput implements UiWidget, UiFocusTarget, UiLayoutSource {
         input.setBounds(x, y, width, INPUT_HEIGHT);
     }
 
+    /** {@inheritDoc} */
     @Override
-    public void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
-        input.render(graphics, font, mouseX, mouseY);
+    public void render(GuiGraphics graphics, Font font, UiPointer incomingPointer) {
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
+        input.render(graphics, font, pointer);
         int errorY = drawLines(graphics, help, input.bounds().bottom() + GAP, THEME.palette().textSecondary()) + GAP;
         if (problem != null) {
             drawLines(graphics, problem, errorY, THEME.palette().danger());
@@ -184,4 +188,12 @@ final class RuleNameInput implements UiWidget, UiFocusTarget, UiLayoutSource {
     public Component accessibleName() {
         return input.accessibleName();
     }
+    /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        if (!isVisible()) return null;
+        UiPointerHit hit = input.hitTest(x, y);
+        return hit == null ? null : hit.within(this);
+    }
+
 }

@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
@@ -27,7 +28,7 @@ final class NoteControl extends FormControl {
     }
 
     @Override
-    void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+    void render(GuiGraphics graphics, Font font, UiPointer incomingPointer) {
     }
 
     @Override

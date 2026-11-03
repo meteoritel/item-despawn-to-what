@@ -4,6 +4,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiHistoryShortcut;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 import java.util.function.BooleanSupplier;
 
@@ -88,7 +89,12 @@ public final class UiTextEditSession implements UiInputTarget {
         acceptance.notifyChanged();
     }
 
-    /** 使用当前几何和焦点资格开始指针选择，焦点命中仍由宿主报告。 */
+    /** 为宿主的命中链附加内部选择器身份，指针捕获与绘制使用同一归属。 */
+    public UiPointerHit includeSelectionOwner(UiPointerHit hit) {
+        return hit.within(selection);
+    }
+
+    /** 使用当前几何和焦点资格开始指针选择；焦点候选由输入路由统一处理。 */
     public boolean beginSelection(UiInputContext context, UiRect bounds, boolean enabled) {
         selection.setBounds(bounds);
         selection.setEnabled(enabled);

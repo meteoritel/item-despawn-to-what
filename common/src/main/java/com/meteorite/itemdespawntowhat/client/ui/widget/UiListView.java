@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiRowMetrics;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
@@ -323,8 +325,12 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
         return visible;
     }
 
+    /** {@inheritDoc} */
     @Override
-    public void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+    public void render(GuiGraphics graphics, Font font, UiPointer incomingPointer) {
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
+        int mouseX = (int) pointer.x();
+        int mouseY = (int) pointer.y();
         if (!visible) {
             return;
         }
@@ -336,7 +342,7 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
                     viewport.y() + Math.max(0, viewport.height() / 2 - 4), theme.palette().textPrimary());
             return;
         }
-        int hoveredIndex = itemIndexAt(mouseX, mouseY);
+        int hoveredIndex = pointer.allowed() ? itemIndexAt(mouseX, mouseY) : -1;
         int rowWidth = scrollView.contentWidth();
         scrollView.push(graphics);
         for (int i = 0; i < items.size(); i++) {
@@ -370,7 +376,7 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
 
     @Override
     public boolean mousePressed(UiInputContext context) {
-        if (canFocus() && bounds.contains(context.pointerX(), context.pointerY())) context.scope().pointerHit(this);
+
         double mouseX = context.pointerX();
         double mouseY = context.pointerY();
         if (!visible || !bounds.contains(mouseX, mouseY)) {
@@ -469,11 +475,6 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
     }
 
     @Override
-    public boolean canFocus() {
-        return visible;
-    }
-
-    @Override
     public void focusChanged(boolean focused) {
         if (onFocusChanged != null) {
             onFocusChanged.accept(focused);
@@ -499,4 +500,12 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
     public Component accessibleName() {
         return emptyMessage;
     }
+    /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        if (!isVisible() || !bounds().contains(x, y)) return null;
+        UiPointerHit hit = scrollView.hitTest(x, y);
+        return hit != null ? hit.within(this) : UiPointerHit.leaf(this, x, y);
+    }
+
 }

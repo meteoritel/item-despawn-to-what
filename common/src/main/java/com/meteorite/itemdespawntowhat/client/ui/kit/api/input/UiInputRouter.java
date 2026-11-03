@@ -45,10 +45,10 @@ public final class UiInputRouter {
         scope.focus().setKeyboardMode(false);
         scope.interaction().end(UiInteractionSession.EndReason.FOCUS_TRANSFER);
         if (scope != active || scopeVersion != version) return true;
-        scope.beginPointer();
+        UiPointerHit hit = scope.content().hitTest(context.pointerX(), context.pointerY());
         boolean consumed = scope.content().mousePressed(context);
         if (scope == active && scopeVersion == version) {
-            if (context.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT) scope.finishPointer();
+            if (context.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT) scope.finishPointer(hit);
             if (consumed && scope == active && scopeVersion == version) pressedButtons.add(context.button());
         }
         return consumed;

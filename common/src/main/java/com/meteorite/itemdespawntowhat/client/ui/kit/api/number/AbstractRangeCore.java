@@ -181,7 +181,7 @@ abstract class AbstractRangeCore<V> implements UiRangeControl {
         }
         UiRangeEnd target = this.hitEnd(context.pointerX());
         this.selectedEnd = target != null ? target : this.cycleSelectedEnd();
-        context.scope().pointerHit(this);
+
         this.capture = context.scope().interaction();
         this.capture.begin(this, UiInteractionSession.Source.POINTER, context.button());
 

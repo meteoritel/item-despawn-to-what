@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 
@@ -156,7 +158,7 @@ final class ConditionGraphInlinePanel {
                 panelRect.y() + SIDE_PANEL_HEADER + SIDE_PANEL_PADDING, width, availableHeight);
     }
 
-    void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
+    void render(GuiGraphics graphics, Font renderFont, UiPointer pointer) {
         updateBounds();
         InlineEditor editor = form;
         if (editor == null || !editor.isVisible()) {
@@ -168,10 +170,9 @@ final class ConditionGraphInlinePanel {
         panel.render(graphics, bounds, title, () -> {
             UiTransform.enableScissor(graphics, editor.bounds());
             try {
-                boolean interactive = !closing && bounds.contains(mouseX, mouseY)
-                        && panelRect.contains(mouseX, mouseY);
-                editor.render(graphics, renderFont, interactive ? mouseX : Integer.MIN_VALUE,
-                        interactive ? mouseY : Integer.MIN_VALUE);
+                boolean interactive = !closing && pointer.contains(bounds)
+                        && pointer.contains(panelRect);
+                editor.render(graphics, renderFont, pointer.restrict(interactive));
             } finally {
                 UiTransform.disableScissor(graphics);
             }
@@ -188,6 +189,11 @@ final class ConditionGraphInlinePanel {
             return false;
         }
         return bounds.contains(screenX, screenY) && panelRect.contains(screenX, screenY);
+    }
+
+    UiPointerHit hitTest(double x, double y) {
+        updateBounds();
+        return form != null && !closing && panelRect.contains(x, y) ? form.hitTest(x, y) : null;
     }
 
 }

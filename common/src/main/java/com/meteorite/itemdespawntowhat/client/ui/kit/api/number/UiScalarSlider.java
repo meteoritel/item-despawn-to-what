@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.number;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
@@ -279,11 +280,12 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInt
     }
 
     // 绘制一帧；hovered 只在可见时更新
-    public void render(GuiGraphics graphics, Font font, UiInputContext context) {
+    public void render(GuiGraphics graphics, Font font, UiPointer incomingPointer) {
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
         if (!visible) {
             return;
         }
-        hovered = enabled && bounds.contains(context.pointerX(), context.pointerY());
+        hovered = enabled && pointer.forTarget(this).contains(bounds);
         painter.paint(graphics, buildFrame(font));
         int textY = bounds.y() + Math.max(0, (bounds.height() - font.lineHeight) / 2);
         String labelText = TextScroll.trimToWidth(font, label.getString(), Math.max(0, bounds.width() / 2));
@@ -327,7 +329,7 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInt
                 || !bounds.contains(context.pointerX(), context.pointerY())) {
             return false;
         }
-        context.scope().pointerHit(this);
+
         capture = context.scope().interaction();
         capture.begin(this, UiInteractionSession.Source.POINTER, context.button());
 

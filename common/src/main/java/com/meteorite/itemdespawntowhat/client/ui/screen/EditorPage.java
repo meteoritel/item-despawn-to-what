@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputScope;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
@@ -78,9 +79,16 @@ interface EditorPage extends UiInputTarget {
     /**
      * 头部附加内容（编辑页的页签条）：返回内容区起始 y，默认不占高度。
      */
-    default int layoutHeader(GuiGraphics graphics, Font font, int mouseX, int mouseY, int pagePad, int top) {
+    default int layoutHeader(int pagePad, int top) {
         return top;
     }
+
+    /** 布局完成后绘制头部，指针已经由页面统一解析。 */
+    default void renderHeader(GuiGraphics graphics, Font font, UiPointer pointer) {
+    }
+
+    /** 同步内容与页脚几何；屏幕随后解析一次指针供各绘制分支共用。 */
+    void layout(UiRect content, UiRect footer);
 
     // ---- 渲染与布局 ----
 
@@ -90,9 +98,9 @@ interface EditorPage extends UiInputTarget {
 
     int footerHeight(int width);
 
-    void render(GuiGraphics graphics, Font font, int mouseX, int mouseY, UiRect content);
+    void render(GuiGraphics graphics, Font font, UiPointer pointer, UiRect content);
 
-    void renderFooter(GuiGraphics graphics, Font font, int mouseX, int mouseY, UiRect footer);
+    void renderFooter(GuiGraphics graphics, Font font, UiPointer pointer, UiRect footer);
 
     void addFocusTargets(UiFocusManager focus);
 
@@ -142,7 +150,7 @@ interface EditorPage extends UiInputTarget {
     /**
      * 绘制本页自己的悬停说明；返回 true 表示已绘制。
      */
-    default boolean renderDescriptionTooltip(GuiGraphics graphics, int mouseX, int mouseY) {
+    default boolean renderDescriptionTooltip(GuiGraphics graphics, UiPointer pointer) {
         return false;
     }
 

@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputScope;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.ClientTypeRegistries;
@@ -160,8 +162,8 @@ final class RuleEditorEditPage implements EditorPage {
         return shell.editingId() == null ? null : shell.labelText(shell.editingId());
     }
 
-    public int layoutHeader(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY, int pagePad, int top) {
-        return layoutTabs(graphics, renderFont, mouseX, mouseY, pagePad, top);
+    public int layoutHeader(int pagePad, int top) {
+        return layoutTabs(pagePad, top);
     }
 
     // ---- 初始化 ----
@@ -270,22 +272,23 @@ final class RuleEditorEditPage implements EditorPage {
 
     // ---- 渲染与布局 ----
 
-    // 页签行布局并渲染；返回内容区起点（未创建页签控件时原样返回）
-    int layoutTabs(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY, int pagePad, int y) {
+    // 页签行布局；返回内容区起点（未创建页签控件时原样返回）
+    int layoutTabs(int pagePad, int y) {
         if (tabControl == null) {
             return y;
         }
         tabControl.setBounds(pagePad, y, Math.max(0, shell.screenWidth() - pagePad * 2), TAB_H);
-        tabControl.render(graphics, renderFont, mouseX, mouseY);
         return y + TAB_H + EDIT_PAD;
     }
 
-    // 编辑页布局：四个页签各自在内容区里排布控件（含窄屏分层）
-    public void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY, UiRect contentArea) {
-        // 内容区整块铺面板底：页签条与各分区在这块底上排布
-        graphics.fill(contentArea.x() - 2, contentArea.y() - 2,
-                contentArea.x() + contentArea.width() + 2, contentArea.y() + contentArea.height(),
-                THEME.palette().panelFill());
+    @Override
+    public void renderHeader(GuiGraphics graphics, Font renderFont, UiPointer pointer) {
+        if (tabControl != null) tabControl.render(graphics, renderFont, pointer);
+    }
+
+    @Override
+    public void layout(UiRect contentArea, UiRect footer) {
+        footerBar.layout(footer.x(), footer.y(), footer.width());
         // 内容区只在矩形真的变化时替换记录：静止帧不分配新矩形，也不触发重排
         if (!contentArea.equals(lastEditArea)) {
             lastEditArea = new UiRect(contentArea.x(), contentArea.y(), contentArea.width(), contentArea.height());
@@ -296,7 +299,16 @@ final class RuleEditorEditPage implements EditorPage {
         syncEditableState();
         // 布局按需执行：几何输入未变时这里只命中缓存，渲染帧不再做任何测量
         pages.ensureLayout(lastEditArea);
-        pages.render(graphics, renderFont, mouseX, mouseY);
+    }
+
+    // 编辑页布局：四个页签各自在内容区里排布控件（含窄屏分层）
+    public void render(GuiGraphics graphics, Font renderFont, UiPointer pointer, UiRect contentArea) {
+        // 内容区整块铺面板底：页签条与各分区在这块底上排布
+        graphics.fill(contentArea.x() - 2, contentArea.y() - 2,
+                contentArea.x() + contentArea.width() + 2, contentArea.y() + contentArea.height(),
+                THEME.palette().panelFill());
+        if (pages == null) return;
+        pages.render(graphics, renderFont, pointer);
     }
 
     /**
@@ -324,14 +336,13 @@ final class RuleEditorEditPage implements EditorPage {
         return footerBar.preferredHeight(width);
     }
 
-    public void renderFooter(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY, UiRect footer) {
+    public void renderFooter(GuiGraphics graphics, Font renderFont, UiPointer pointer, UiRect footer) {
         THEME.drawDivider(graphics, footer.x(), footer.y() - RuleEditorPageSupport.PAD, footer.width());
-        footerBar.layout(footer.x(), footer.y(), footer.width());
-        footerBar.render(graphics, renderFont, mouseX, mouseY);
+        footerBar.render(graphics, renderFont, pointer);
     }
 
-    public boolean renderDescriptionTooltip(GuiGraphics graphics, int mouseX, int mouseY) {
-        return pages != null && pages.renderDescriptionTooltip(graphics, mouseX, mouseY);
+    public boolean renderDescriptionTooltip(GuiGraphics graphics, UiPointer pointer) {
+        return pages != null && pages.renderDescriptionTooltip(graphics, pointer);
     }
 
 
@@ -750,4 +761,10 @@ final class RuleEditorEditPage implements EditorPage {
             }
         };
     }
+    /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        return UiPointerHit.first(x, y, footerBar, pages, tabControl);
+    }
+
 }

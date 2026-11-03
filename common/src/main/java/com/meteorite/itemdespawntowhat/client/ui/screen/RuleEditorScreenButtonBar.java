@@ -1,5 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiFlowLayout;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
@@ -22,7 +25,7 @@ import org.jetbrains.annotations.Nullable;
  * {@link RuleEditorListPage} 用它承载管理页工具排与列表底排，
  * {@link RuleEditorEditPage} 用它承载编辑页底排。</p>
  */
-final class RuleEditorScreenButtonBar implements UiLayoutSource {
+final class RuleEditorScreenButtonBar implements UiLayoutSource, UiInputTarget {
 
     // 上次布局的几何与按钮宽度签名：逐帧重排时相同输入直接跳过测量与换行分配
     private int generation;
@@ -154,10 +157,10 @@ final class RuleEditorScreenButtonBar implements UiLayoutSource {
         }
     }
 
-    void render(@NotNull GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
+    void render(@NotNull GuiGraphics graphics, Font renderFont, UiPointer pointer) {
         for (UiButton button : buttons) {
             if (button.isVisible()) {
-                button.render(graphics, renderFont, mouseX, mouseY);
+                button.render(graphics, renderFont, pointer);
             }
         }
     }
@@ -176,7 +179,7 @@ final class RuleEditorScreenButtonBar implements UiLayoutSource {
         return nodes;
     }
 
-    boolean mousePressed(UiInputContext context) {
+    public boolean mousePressed(UiInputContext context) {
         for (UiButton candidate : buttons) {
             if (candidate.isVisible() && candidate.mousePressed(context)) {
                 return true;
@@ -185,7 +188,7 @@ final class RuleEditorScreenButtonBar implements UiLayoutSource {
         return false;
     }
 
-    boolean mouseReleased(UiInputContext context) {
+    public boolean mouseReleased(UiInputContext context) {
         boolean consumed = false;
         for (UiButton candidate : buttons) {
             if (candidate.isVisible()) {
@@ -194,4 +197,10 @@ final class RuleEditorScreenButtonBar implements UiLayoutSource {
         }
         return consumed;
     }
+    /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        return UiPointerHit.topmost(x, y, buttons);
+    }
+
 }

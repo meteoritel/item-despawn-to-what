@@ -3,7 +3,12 @@ package com.meteorite.itemdespawntowhat.client.ui.kit.api.input;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.IdentityHashMap;
+import java.util.Map;
+import java.util.Collections;
+import java.util.Set;
 import java.util.function.Consumer;
+import net.minecraft.network.chat.Component;
 
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
@@ -20,11 +25,71 @@ public final class UiFocusManager {
          * 焦点已切换，原生控件适配亦已同步。
          */
         void focusChanged(@Nullable UiFocusTarget previous, @Nullable UiFocusTarget current);
+
+        /** 按声明顺序执行效果，便于组合滚动、播报与宿主键政策。 */
+        static Listener compose(Listener... effects) {
+            List<Listener> ordered = List.of(effects);
+            return (previous, current) -> ordered.forEach(effect -> effect.focusChanged(previous, current));
+        }
+
+        /** 焦点名称交给宿主播报；平台 narrator 的选择由 sink 负责。 */
+        static Listener narrate(Consumer<Component> sink) {
+            return (previous, current) -> {
+                Component name = current == null ? null : current.accessibleName();
+                if (name != null && !name.getString().isBlank()) sink.accept(name);
+            };
+        }
     }
 
     private final UiInputScope scope;
-    private final List<UiFocusTarget> targets = new ArrayList<>();
-    private final List<UiFocusTarget> nextTargets = new ArrayList<>();
+    private Index index = new Index();
+    private Index pending = new Index();
+    private final Map<UiFocusTarget, UiFocusTarget> lastWithin = new IdentityHashMap<>();
+    private @Nullable UiFocusTarget withinGroup;
+    private boolean registeredChild;
+
+    private static final class Index {
+        final List<UiFocusTarget> leaves = new ArrayList<>();
+        final Map<UiFocusTarget, List<UiFocusTarget>> members = new IdentityHashMap<>();
+        final Set<UiFocusTarget> path = Collections.newSetFromMap(new IdentityHashMap<>());
+
+        List<UiFocusTarget> collect(UiFocusTarget target) {
+            Objects.requireNonNull(target);
+            if (path.contains(target))
+                throw new IllegalArgumentException("Cyclic focusTargets: " + target.getClass().getName());
+            List<UiFocusTarget> known = members.get(target);
+            if (known != null) return known;
+            List<UiFocusTarget> children = List.copyOf(target.focusTargets());
+            if (children.size() == 1 && children.getFirst() == target) {
+                leaves.add(target);
+                List<UiFocusTarget> result = List.of(target);
+                members.put(target, result);
+                return result;
+            }
+            path.add(target);
+            List<UiFocusTarget> result = new ArrayList<>();
+            Set<UiFocusTarget> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+            try {
+                for (UiFocusTarget child : children)
+                    for (UiFocusTarget leaf : collect(child)) if (seen.add(leaf)) result.add(leaf);
+            } finally {
+                path.remove(target);
+            }
+            List<UiFocusTarget> resolved = List.copyOf(result);
+            members.put(target, resolved);
+            return resolved;
+        }
+
+        boolean contains(UiFocusTarget group, UiFocusTarget leaf) {
+            List<UiFocusTarget> children = members.get(group);
+            return children != null && children.stream().anyMatch(target -> target == leaf);
+        }
+
+        int leafIndex(@Nullable UiFocusTarget target) {
+            for (int i = 0; i < leaves.size(); i++) if (leaves.get(i) == target) return i;
+            return -1;
+        }
+    }
     private @Nullable UiFocusTarget focused;
     private @Nullable UiFocusTarget anchor;
     private @Nullable Listener listener;
@@ -51,7 +116,8 @@ public final class UiFocusManager {
     }
 
     boolean containsFocus(@Nullable UiFocusTarget target) {
-        return !suspended && focused != null && target != null && (focused == target || anchor == target || target.focusTargets().contains(focused));
+        return !suspended && focused != null && target != null
+                && (focused == target || anchor != null && index.contains(target, anchor));
     }
 
     /**
@@ -68,7 +134,7 @@ public final class UiFocusManager {
      */
     public void beginUpdate() {
         if (updating) throw new IllegalStateException("UiFocusManager.beginUpdate: update already started");
-        nextTargets.clear();
+        pending = new Index();
         updating = true;
     }
 
@@ -94,16 +160,20 @@ public final class UiFocusManager {
      * 登记目标，同时将包装控件与核心的焦点视图接入本作用域。
      */
     public void add(UiFocusTarget target) {
-        Objects.requireNonNull(target);
-        target.focusState().attach(this, target);
-        List<UiFocusTarget> children = target.focusTargets();
-        if (!(children.size() == 1 && children.getFirst() == target)) {
-            for (UiFocusTarget child : children) add(child);
+        if (updating) {
+            pending.collect(target);
             return;
         }
-        List<UiFocusTarget> destination = updating ? nextTargets : targets;
-        if (!destination.contains(target)) destination.add(target);
-        target.focusState().attach(this, target);
+        beginUpdate();
+        pending.leaves.addAll(index.leaves);
+        pending.members.putAll(index.members);
+        try {
+            pending.collect(target);
+        } catch (RuntimeException failure) {
+            abortUpdate();
+            throw failure;
+        }
+        endUpdate();
     }
 
     /**
@@ -113,12 +183,14 @@ public final class UiFocusManager {
      */
     public void endUpdate() {
         if (!updating) throw new IllegalStateException("UiFocusManager.endUpdate: update not started");
-        boolean unmounted = focused != null && !nextTargets.contains(anchor == null ? focused : anchor);
-        targets.clear();
-        targets.addAll(nextTargets);
-        nextTargets.clear();
+        index = pending;
+        pending = new Index();
         updating = false;
-        if (unmounted) invalidate(UiInteractionSession.EndReason.UNMOUNTED);
+        // 先挂组，再挂叶子：共享视图最终指向实际 Tab 目标。
+        for (UiFocusTarget target : index.members.keySet()) target.focusState().attach(this, target);
+        for (UiFocusTarget target : index.leaves) target.focusState().attach(this, target);
+        if (focused != null && withinGroup != null) focused.focusState().attach(this, focused);
+        lastWithin.entrySet().removeIf(entry -> !index.contains(entry.getKey(), entry.getValue()));
         refresh();
     }
 
@@ -129,7 +201,7 @@ public final class UiFocusManager {
     }
 
     private void abortUpdate() {
-        nextTargets.clear();
+        pending = new Index();
         updating = false;
     }
 
@@ -138,23 +210,24 @@ public final class UiFocusManager {
      */
     public void clear() {
         invalidate(UiInteractionSession.EndReason.UNMOUNTED);
-        targets.clear();
-        nextTargets.clear();
+        index = new Index();
+        pending = new Index();
         updating = false;
+        lastWithin.clear();
     }
 
     /**
      * 登记数量。
      */
     public int size() {
-        return targets.size();
+        return index.leaves.size();
     }
 
     /**
      * 只读视觉顺序。
      */
     public List<UiFocusTarget> targets() {
-        return List.copyOf(targets);
+        return List.copyOf(index.leaves);
     }
 
     /**
@@ -170,37 +243,43 @@ public final class UiFocusManager {
      */
     public int focusedIndex() {
         UiFocusTarget target = focused();
-        return target == null ? -1 : targets.indexOf(anchor == null ? target : anchor);
+        return target == null ? -1 : index.leafIndex(anchor == null ? target : anchor);
     }
 
     /**
-     * 进入复合控件的内部文本模式；组已登记时使用组位置，否则要求已有有效锚点。
+     * 进入已登记组的内部模式，按请求组选择当前、最近或首个合格 Tab 锚点。
      */
     public boolean focusWithin(UiFocusTarget group, UiFocusTarget child) {
-        UiFocusTarget stop = targets.contains(group) ? group : anchor;
-        if (stop == null || !targets.contains(stop) || !child.canFocus()) return false;
-        child.focusState().attach(this, child);
-        setFocusedInternal(child);
-        anchor = stop;
+        List<UiFocusTarget> members = index.members.get(group);
+        if (members == null || !group.canFocus() || !child.canFocus()) return false;
+        if (index.members.containsKey(child) && !index.contains(group, child)) return false;
+        UiFocusTarget stop = index.contains(group, child) ? child
+                : anchor != null && index.contains(group, anchor) && anchor.canFocus() ? anchor
+                : lastWithin.get(group);
+        if (stop == null || !index.contains(group, stop) || !stop.canFocus())
+            stop = members.stream().filter(UiFocusTarget::canFocus).findFirst().orElse(null);
+        if (stop == null) return false;
+        setFocusedInternal(child, stop, group, index.members.containsKey(child));
         return true;
     }
 
     /**
-     * 请求焦点；目标须已登记且当前具备焦点资格。
+     * 请求已登记叶子或组；共享视图的包装对象解析为实际 Tab 目标。
      */
     public boolean focusOn(@Nullable UiFocusTarget target) {
         if (target == null) return clearFocus();
-        if (!targets.contains(target)) {
-            for (UiFocusTarget registered : targets) {
-                if (registered.focusState() == target.focusState()) {
-                    target = registered;
-                    break;
-                }
+        if (!target.canFocus()) return false;
+        UiFocusTarget requested = target;
+        if (index.leafIndex(target) < 0) {
+            target = index.leaves.stream().filter(leaf -> leaf.focusState() == requested.focusState())
+                    .findFirst().orElse(null);
+            if (target == null) {
+                List<UiFocusTarget> members = index.members.get(requested);
+                if (members != null) target = members.stream().filter(UiFocusTarget::canFocus).findFirst().orElse(null);
             }
         }
-        if (!targets.contains(target) || !target.canFocus()) return false;
-        setFocusedInternal(target);
-        anchor = target;
+        if (target == null || !target.canFocus()) return false;
+        setFocusedInternal(target, target, null, false);
         return true;
     }
 
@@ -217,7 +296,7 @@ public final class UiFocusManager {
      * 选择首个合格目标。
      */
     public boolean focusFirst() {
-        for (UiFocusTarget target : targets) if (target.canFocus()) return focusOn(target);
+        for (UiFocusTarget target : index.leaves) if (target.canFocus()) return focusOn(target);
         return false;
     }
 
@@ -226,10 +305,12 @@ public final class UiFocusManager {
      */
     public boolean moveFocus(int delta) {
         refresh();
-        List<UiFocusTarget> available = targets.stream().filter(UiFocusTarget::canFocus).toList();
+        List<UiFocusTarget> available = index.leaves.stream().filter(UiFocusTarget::canFocus).toList();
         if (available.isEmpty()) return false;
-        int index = available.indexOf(anchor == null ? focused : anchor);
-        int next = index < 0 ? (delta < 0 ? available.size() - 1 : 0) : Math.floorMod(index + delta, available.size());
+        UiFocusTarget stop = anchor == null ? focused : anchor;
+        int currentIndex = -1;
+        for (int i = 0; i < available.size(); i++) if (available.get(i) == stop) { currentIndex = i; break; }
+        int next = currentIndex < 0 ? (delta < 0 ? available.size() - 1 : 0) : Math.floorMod(currentIndex + delta, available.size());
         return focusOn(available.get(next));
     }
 
@@ -290,8 +371,11 @@ public final class UiFocusManager {
     }
 
     private void refresh() {
-        if (focused != null && (!targets.contains(anchor == null ? focused : anchor) || !focused.canFocus()))
-            invalidate(UiInteractionSession.EndReason.UNMOUNTED);
+        if (focused == null) return;
+        boolean mounted = anchor != null && index.leafIndex(anchor) >= 0 && anchor.canFocus();
+        if (withinGroup != null) mounted &= index.contains(withinGroup, anchor)
+                && withinGroup.canFocus() && (!registeredChild || index.contains(withinGroup, focused));
+        if (!mounted || !focused.canFocus()) invalidate(UiInteractionSession.EndReason.UNMOUNTED);
     }
 
     private void invalidate(UiInteractionSession.EndReason reason) {
@@ -308,12 +392,22 @@ public final class UiFocusManager {
     }
 
     private void setFocusedInternal(@Nullable UiFocusTarget next) {
-        if (focused == next) return;
+        setFocusedInternal(next, next, null, false);
+    }
+
+    private void setFocusedInternal(@Nullable UiFocusTarget next, @Nullable UiFocusTarget nextAnchor,
+                                    @Nullable UiFocusTarget nextGroup, boolean nextRegisteredChild) {
         UiFocusTarget previous = focused;
-        endFocusedInteraction(UiInteractionSession.EndReason.FOCUS_TRANSFER);
+        if (previous != next) endFocusedInteraction(UiInteractionSession.EndReason.FOCUS_TRANSFER);
         focused = next;
-        if (next == null) anchor = null;
-        if (!suspended) {
+        anchor = nextAnchor;
+        withinGroup = nextGroup;
+        registeredChild = nextRegisteredChild;
+        if (next != null) next.focusState().attach(this, next);
+        if (nextAnchor != null) for (UiFocusTarget group : index.members.keySet())
+            if (index.contains(group, nextAnchor)) lastWithin.put(group, nextAnchor);
+        // 通知前提交完整归属，滚动 adapter 可立即查询当前组与锚点。
+        if (!suspended && previous != next) {
             if (previous != null) previous.focusChanged(false);
             if (next != null) next.focusChanged(true);
             if (listener != null) listener.focusChanged(previous, next);

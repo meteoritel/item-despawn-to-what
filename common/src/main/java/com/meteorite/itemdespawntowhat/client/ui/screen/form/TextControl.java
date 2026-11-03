@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
@@ -119,10 +121,11 @@ final class TextControl extends FormControl {
     }
 
     @Override
-    void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
-        widget.render(graphics, font, mouseX, mouseY);
+    void render(GuiGraphics graphics, Font font, UiPointer incomingPointer) {
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
+        widget.render(graphics, font, pointer);
         for (UiButton button : presetButtons) {
-            button.render(graphics, font, mouseX, mouseY);
+            button.render(graphics, font, pointer);
         }
     }
 
@@ -289,4 +292,11 @@ final class TextControl extends FormControl {
         reportRejected(tooLongKey());
     }
 
+    /** 按实际子控件解析指针，保留组合层的归属。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        UiPointerHit hit = UiPointerHit.topmost(x, y, presetButtons);
+        if (hit == null) hit = widget.hitTest(x, y);
+        return hit == null ? null : hit.within(this);
+    }
 }

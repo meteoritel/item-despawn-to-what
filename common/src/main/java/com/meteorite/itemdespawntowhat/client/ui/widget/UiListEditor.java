@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
@@ -288,8 +290,10 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
         offset = Math.clamp(offset, 0, maxOffset);
     }
 
+    /** {@inheritDoc} */
     @Override
-    public void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
+    public void render(GuiGraphics graphics, Font renderFont, UiPointer incomingPointer) {
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
         if (!visible) {
             return;
         }
@@ -309,7 +313,7 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
                 }
                 UiRect rowRect = new UiRect(area.x(), area.y() + row * ROW_HEIGHT, area.width(), ROW_HEIGHT);
                 boolean isSelected = index == selected;
-                boolean hovered = enabled && rowRect.contains(mouseX, mouseY);
+                boolean hovered = enabled && pointer.contains(rowRect);
                 if (isSelected) {
                     theme.drawSelection(graphics, rowRect);
                     theme.drawSelectMarker(graphics, rowRect);
@@ -324,7 +328,7 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
             }
         }
         if (enabled) {
-            input.render(graphics, renderFont, mouseX, mouseY);
+            input.render(graphics, renderFont, pointer);
         }
         if (isFocusVisible()) {
             theme.drawFocusOutline(graphics, bounds);
@@ -351,7 +355,7 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
         }
         int index = offset + (int) ((mouseY - area.y()) / ROW_HEIGHT);
         if (index >= 0 && index < items.size()) {
-            context.scope().pointerHit(this);
+
             selected = index;
             return true;
         }
@@ -482,5 +486,12 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
     @Override
     public Component accessibleName() {
         return Component.translatable(TypeLabels.UI_PREFIX + "list.accessible_name");
+    }
+    /** 按实际子控件解析指针，保留组合层的归属。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        if (!visible || !enabled || !bounds.contains(x, y)) return null;
+        UiPointerHit hit = input.hitTest(x, y);
+        return hit == null ? UiPointerHit.leaf(this, x, y) : hit.within(this);
     }
 }

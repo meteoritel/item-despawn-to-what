@@ -1,5 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusFollow;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
@@ -46,7 +49,7 @@ import org.jetbrains.annotations.Nullable;
  * <p>输入页编辑规则源数量、催化剂门槛与实际消耗、共享半径及流体源消耗开关；结果页编辑产出和
  * 世界效果。输入支付统一由结算层执行。</p>
  */
-final class RuleEditorEditSections {
+final class RuleEditorEditSections implements UiInputTarget {
 
     // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
     final UiHostTheme THEME;
@@ -112,6 +115,7 @@ final class RuleEditorEditSections {
 
     // 输入事件分发与拖动状态
     private final RuleEditorPageInput input;
+    private final UiFocusFollow focusFollow;
 
     RuleEditorEditSections(EditorShell shell, RuleEditorModel model, Font font, UiFocusManager focus, ConditionEditingSupport conditionEditingSupport, Runnable finishEditing) {
         this.THEME = shell.theme();
@@ -127,6 +131,15 @@ final class RuleEditorEditSections {
         this.resultsSection = new RuleEditorResultsSection(shell, font, forms, actions, pageScroll);
         this.content = infoSection.content;
         this.input = new RuleEditorPageInput(this);
+        this.focusFollow = new UiFocusFollow(pageScroll,
+                target -> lastArea != null && focusTargets().stream().anyMatch(registered ->
+                        registered == target || registered.focusState() == target.focusState()
+                                || target.isFocused() && registered.focusState().containsFocus()),
+                target -> {
+                    UiRect rect = target.bounds();
+                    return new UiRect((int) pageScroll.toContentX(rect.x()), (int) pageScroll.toContentY(rect.y()),
+                            rect.width(), rect.height());
+                }, () -> applyScroll(pageScroll.offset()));
     }
 
     // ---- 页签与重建 ----
@@ -330,13 +343,11 @@ final class RuleEditorEditSections {
         return nodes;
     }
 
-    public void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
+    public void render(GuiGraphics graphics, Font renderFont, UiPointer incomingPointer) {
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
         if (lastArea == null || lastArea.height() == 0) {
             return;
         }
-        var pointer = UiPointer.gated(!pageScroll.isDragging(), mouseX, mouseY);
-        mouseX = pointer.x();
-        mouseY = pointer.y();
         // 卡片与页内文字按文档坐标绘制，滚动由 pose 平移体现：这两类不参与命中，无需坐标换算
         graphics.pose().pushPose();
         graphics.pose().translate(0, -appliedOffset, 0);
@@ -364,7 +375,7 @@ final class RuleEditorEditSections {
         try {
             for (UiWidget widget : content.widgets) {
                 if (widget.isVisible()) {
-                    widget.render(graphics, renderFont, mouseX, mouseY);
+                    widget.render(graphics, renderFont, pointer);
                 }
             }
             input.renderDragPreview(graphics);
@@ -534,13 +545,12 @@ final class RuleEditorEditSections {
      * 绘制当前结果动作的自绘说明，保持与页面滚动一致的命中范围。
      *
      * @param graphics 绘制上下文
-     * @param mouseX   鼠标屏幕 X 坐标
-     * @param mouseY   鼠标屏幕 Y 坐标
+     * @param pointer 已解析的绘制指针与作用域门禁
      * @return 是否已绘制说明面板
      */
-    public boolean renderDescriptionTooltip(GuiGraphics graphics, int mouseX, int mouseY) {
-        return page == EditSection.RESULTS && !pageScroll.isDragging() && pageScroll.contains(mouseX, mouseY)
-                && resultsSection.renderDescriptionTooltip(graphics, mouseX, mouseY);
+    public boolean renderDescriptionTooltip(GuiGraphics graphics, UiPointer pointer) {
+        return page == EditSection.RESULTS && !pageScroll.isDragging() && pointer.contains(pageScroll.viewport())
+                && resultsSection.renderDescriptionTooltip(graphics, pointer);
     }
 
     public @Nullable Component tooltipAt(double mouseX, double mouseY) {
@@ -694,14 +704,7 @@ final class RuleEditorEditSections {
      * Tab 和问题定位都需把焦点滚进外层页面视口。
      */
     public void ensureVisible(UiFocusTarget target) {
-        if (lastArea == null || !focusTargets().contains(target)) {
-            return;
-        }
-        UiRect rect = target.bounds();
-        pageScroll.ensureVisible(new UiRect(rect.x() - lastArea.x(),
-                rect.y() - lastArea.y() + pageScroll.offset(), rect.width(), rect.height()));
-        // 只改变滚动位置：平移已排好的控件，不重新测量
-        applyScroll(pageScroll.offset());
+        focusFollow.reveal(target);
     }
 
     // 冻结或会话缺失时恢复开关显示，不重建输入控件。
@@ -715,4 +718,13 @@ final class RuleEditorEditSections {
         EditSession session = shell.editingSession();
         return session == null ? null : session.root();
     }
+    /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        if (!pageScroll.contains(x, y)) return null;
+        UiPointerHit hit = pageScroll.hitTest(x, y);
+        if (hit == null) hit = UiPointerHit.topmost(x, y, content.widgets);
+        return hit == null ? null : hit.within(this).within(input);
+    }
+
 }

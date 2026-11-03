@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionTreeViewModel;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
@@ -190,7 +192,8 @@ final class ConditionTreeControl extends FormControl {
     }
 
     @Override
-    void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+    void render(GuiGraphics graphics, Font font, UiPointer incomingPointer) {
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
         if (fallbackRaw != null) {
             THEME.drawInset(graphics, editor.bounds());
             String text = TextScroll.trimToWidth(font,
@@ -204,9 +207,9 @@ final class ConditionTreeControl extends FormControl {
             return;
         }
         for (UiButton button : toolbar) {
-            button.render(graphics, font, mouseX, mouseY);
+            button.render(graphics, font, pointer);
         }
-        editor.render(graphics, font, mouseX, mouseY);
+        editor.render(graphics, font, pointer);
     }
 
     @Override
@@ -365,5 +368,13 @@ final class ConditionTreeControl extends FormControl {
     @Override
     boolean isEditing() {
         return fallbackRaw == null && editor.isFocused();
+    }
+    /** 根据实际子控件解析当前命中。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        if (!enabled || fallbackRaw != null) return null;
+        UiPointerHit hit = UiPointerHit.topmost(x, y, toolbar);
+        if (hit == null) hit = editor.hitTest(x, y);
+        return hit == null ? null : hit.within(this);
     }
 }

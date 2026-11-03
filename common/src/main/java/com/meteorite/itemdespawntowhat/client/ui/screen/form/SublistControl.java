@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
@@ -117,11 +119,12 @@ final class SublistControl extends FormControl {
     }
 
     @Override
-    void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
-        addButton.render(graphics, font, mouseX, mouseY);
+    void render(GuiGraphics graphics, Font font, UiPointer incomingPointer) {
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
+        addButton.render(graphics, font, pointer);
         for (int i = 0; i < children.size(); i++) {
-            removeButtons.get(i).render(graphics, font, mouseX, mouseY);
-            children.get(i).render(graphics, font, mouseX, mouseY);
+            removeButtons.get(i).render(graphics, font, pointer);
+            children.get(i).render(graphics, font, pointer);
         }
     }
 
@@ -266,5 +269,13 @@ final class SublistControl extends FormControl {
             }
         }
         return false;
+    }
+    /** 按实际子控件解析指针，保留组合层的归属。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        UiPointerHit hit = UiPointerHit.topmost(x, y, children);
+        if (hit == null) hit = UiPointerHit.topmost(x, y, removeButtons);
+        if (hit == null) hit = addButton.hitTest(x, y);
+        return hit == null ? null : hit.within(this);
     }
 }

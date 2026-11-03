@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import java.util.Objects;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
@@ -120,8 +122,11 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
     }
 
     @Override
-    void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
-        int hovered = indexAt(mouseX, mouseY);
+    void render(GuiGraphics graphics, Font renderFont, UiPointer incomingPointer) {
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
+        int mouseX = (int) pointer.x();
+        int mouseY = (int) pointer.y();
+        int hovered = pointer.allowed() ? indexAt(mouseX, mouseY) : -1;
         scroll.push(graphics);
         try {
             if (values.isEmpty()) graphics.drawString(renderFont, Component.translatable(UI +
@@ -356,4 +361,11 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
         return label();
     }
 
+    /** 按实际子控件解析指针，保留组合层的归属。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        if (!enabled || !bounds().contains(x, y)) return null;
+        UiPointerHit hit = scroll.hitTest(x, y);
+        return hit == null ? UiPointerHit.leaf(this, x, y) : hit.within(this);
+    }
 }

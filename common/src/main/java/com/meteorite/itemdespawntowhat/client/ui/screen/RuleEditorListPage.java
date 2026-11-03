@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputScope;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 
@@ -475,32 +477,36 @@ final class RuleEditorListPage implements EditorPage {
         return listBar.preferredHeight(width);
     }
 
-    public void renderFooter(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY, UiRect footer) {
-        listBar.layout(footer.y(), footer.width());
-        listBar.render(graphics, renderFont, mouseX, mouseY);
+    public void renderFooter(GuiGraphics graphics, Font renderFont, UiPointer pointer, UiRect footer) {
+        listBar.render(graphics, renderFont, pointer);
     }
 
-    // 管理页布局：工具排、搜索框与筛选、规则树
-    public void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY, UiRect area) {
+    @Override
+    public void layout(UiRect area, UiRect footer) {
+        listBar.layout(footer.y(), footer.width());
         updateButtons();
         int headerHeight = globalBar.preferredHeight(area.width());
         globalBar.layout(area.y(), area.width());
-        globalBar.render(graphics, renderFont, mouseX, mouseY);
         int searchY = area.y() + headerHeight + RuleEditorPageSupport.PAD;
         int searchWidth = Math.clamp(area.width() / 3, SEARCH_MIN_WIDTH, SEARCH_MAX_WIDTH);
         if (searchField != null) {
             searchField.setBounds(area.x(), searchY, searchWidth, ROW_H);
-            searchField.render(graphics, renderFont, mouseX, mouseY);
         }
         int filterWidth = Math.max(0, area.width() - searchWidth - 2);
         filterBar.layout(area.x() + searchWidth + 2, searchY, filterWidth);
-        filterBar.render(graphics, renderFont, mouseX, mouseY);
         int listY = searchY + Math.max(ROW_H, filterBar.preferredHeight(filterWidth)) + RuleEditorPageSupport.PAD;
         int available = Math.max(0, area.bottom() - listY);
         if (ruleList != null) {
             ruleList.setBounds(area.x(), listY, area.width(), available);
-            ruleList.render(graphics, renderFont, mouseX, mouseY);
         }
+    }
+
+    // 管理页布局：工具排、搜索框与筛选、规则树
+    public void render(GuiGraphics graphics, Font renderFont, UiPointer pointer, UiRect area) {
+        globalBar.render(graphics, renderFont, pointer);
+        if (searchField != null) searchField.render(graphics, renderFont, pointer);
+        filterBar.render(graphics, renderFont, pointer);
+        if (ruleList != null) ruleList.render(graphics, renderFont, pointer);
     }
 
     /**
@@ -898,8 +904,10 @@ final class RuleEditorListPage implements EditorPage {
 
     // 规则条目整行都进入条件提示的悬停范围；配方标签框优先，只有没命中标签时才展开条件树。
     // 条件正文、状态与不可用提示按语义分行，各自保持主题配色。
-    public boolean renderDescriptionTooltip(GuiGraphics graphics, int mouseX, int mouseY) {
-        if (ruleList == null || !ruleList.bounds().contains(mouseX, mouseY)) {
+    public boolean renderDescriptionTooltip(GuiGraphics graphics, UiPointer pointer) {
+        int mouseX = (int) pointer.x();
+        int mouseY = (int) pointer.y();
+        if (ruleList == null || !pointer.contains(ruleList.bounds())) {
             return false;
         }
         UiTreeNode<String> node = ruleList.nodeAt(mouseX, mouseY);
@@ -949,6 +957,12 @@ final class RuleEditorListPage implements EditorPage {
         for (UiButton button : listButtons) {
             focus.add(button);
         }
+    }
+
+    /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        return UiPointerHit.first(x, y, listBar, ruleList, filterBar, searchField, globalBar);
     }
 
 }

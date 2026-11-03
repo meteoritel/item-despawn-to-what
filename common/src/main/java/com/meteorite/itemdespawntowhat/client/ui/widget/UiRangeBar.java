@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiValueInteraction;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
@@ -199,17 +200,19 @@ public final class UiRangeBar extends AbstractBarShell<UiRangeSlider> {
 
     // ---- 渲染 ----
 
+    /** {@inheritDoc} */
     @Override
-    public void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
+    public void render(GuiGraphics graphics, Font renderFont, UiPointer incomingPointer) {
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
         if (!visible) {
             return;
         }
         UiRangeValue value = core.value();
         // 没有独立提示行时，聚焦提示挤进标签行的空白处，避免压住轨道
         drawLabelRow(graphics, hintRow == null && isFocused() && !preciseActive);
-        drawTrack(graphics, value, mouseX, mouseY);
+        drawTrack(graphics, value, pointer);
         if (preciseActive) {
-            precise.render(graphics, renderFont, mouseX, mouseY);
+            precise.render(graphics, renderFont, pointer);
         } else {
             drawHintRow(graphics, hintText(value));
         }
@@ -243,7 +246,7 @@ public final class UiRangeBar extends AbstractBarShell<UiRangeSlider> {
         return value.lowPresent() && value.highPresent() ? texts.preciseHint() : texts.absentHint();
     }
 
-    private void drawTrack(GuiGraphics graphics, UiRangeValue value, int mouseX, int mouseY) {
+    private void drawTrack(GuiGraphics graphics, UiRangeValue value, UiPointer pointer) {
         int trackY = trackRow.y() + Math.max(0, (trackRow.height() - style.trackHeight()) / 2);
         UiRect track = new UiRect(core.trackLeft(), trackY, Math.max(1, core.trackRight() - core.trackLeft()),
                 Math.max(1, style.trackHeight()));
@@ -259,7 +262,7 @@ public final class UiRangeBar extends AbstractBarShell<UiRangeSlider> {
                 Double.isFinite(selected) ? core.thumbWidth() : 0,
                 Math.max(1, trackRow.height()));
         UiRect textSlot = new UiRect(0, 0, 0, 0);
-        boolean hovered = enabled && bounds.contains(mouseX, mouseY);
+        boolean hovered = enabled && pointer.contains(bounds);
         painter.paint(graphics, new UiSliderPainter.Frame(bounds, track, filled, thumb, textSlot, style,
                 enabled, hovered, core.isDragging(), isFocusVisible(), core.isDragging(), false, false, false));
         UiRangeEnd other = core.selectedEnd().other();
@@ -269,7 +272,7 @@ public final class UiRangeBar extends AbstractBarShell<UiRangeSlider> {
             UiRect empty = new UiRect(0, 0, 0, 0);
             // 第二个手柄复用主题绘制，不重复覆盖轨道或当前手柄的焦点框。
             painter.paint(graphics, new UiSliderPainter.Frame(empty, empty, empty, otherThumb, empty, style,
-                    enabled, enabled && otherThumb.contains(mouseX, mouseY), false, false, false,
+                    enabled, enabled && pointer.contains(otherThumb), false, false, false,
                     false, false, false));
         }
         // 端点缺失时给出文字提示：颜色不是唯一线索

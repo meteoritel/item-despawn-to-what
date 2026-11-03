@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiCyclicRangeValue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiValueInteraction;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
@@ -174,17 +175,19 @@ public final class UiCyclicTimeBar extends AbstractBarShell<UiCyclicRange> {
 
     // ---- 渲染 ----
 
+    /** {@inheritDoc} */
     @Override
-    public void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
+    public void render(GuiGraphics graphics, Font renderFont, UiPointer incomingPointer) {
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
         if (!visible) {
             return;
         }
         // 没有独立提示行时，聚焦提示挤进标签行的空白处，避免压住预设按钮
         drawLabelRow(graphics, hintRow == null && isFocused() && !preciseActive);
         drawTrack(graphics);
-        drawPresets(graphics, mouseX, mouseY);
+        drawPresets(graphics, pointer);
         if (preciseActive) {
-            precise.render(graphics, renderFont, mouseX, mouseY);
+            precise.render(graphics, renderFont, pointer);
         } else {
             drawHintRow(graphics, texts.preciseHint());
         }
@@ -253,7 +256,7 @@ public final class UiCyclicTimeBar extends AbstractBarShell<UiCyclicRange> {
                 enabled ? color : theme.palette().controlDisabled());
     }
 
-    private void drawPresets(GuiGraphics graphics, int mouseX, int mouseY) {
+    private void drawPresets(GuiGraphics graphics, UiPointer pointer) {
         if (presets.isEmpty() || presetRow.height() <= 0) {
             return;
         }
@@ -266,7 +269,7 @@ public final class UiCyclicTimeBar extends AbstractBarShell<UiCyclicRange> {
             UiRect rect = new UiRect(x, presetRow.y(), width, presetRow.height());
             boolean activePreset = Math.abs(preset.fromTick() - core.from()) < 0.5D
                     && Math.abs(preset.toTick() - core.to()) < 0.5D;
-            boolean hovered = enabled && rect.contains(mouseX, mouseY);
+            boolean hovered = enabled && pointer.contains(rect);
             int fill = activePreset ? theme.palette().controlSelected()
                     : (hovered ? theme.palette().controlHover() : theme.palette().controlFill());
             graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), fill);

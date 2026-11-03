@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiAction;
@@ -39,6 +41,12 @@ final class ConditionTreeChrome {
      */
     static final class Strip implements UiWidget, UiFocusTarget, UiLayoutSource {
 
+        /** 图标条与外壳共用实际命中。 */
+        @Override
+        public @Nullable UiPointerHit hitTest(double x, double y) {
+            UiPointerHit hit = strip.hitTest(x, y);
+            return hit == null ? null : hit.within(this);
+        }
         private final UiIconStrip strip;
 
         Strip(UiHostTheme theme, Font font, UiIconStrip.Orientation orientation) {
@@ -67,9 +75,11 @@ final class ConditionTreeChrome {
             strip.setBounds(x, y, width, height);
         }
 
+        /** {@inheritDoc} */
         @Override
-        public void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
-            strip.render(graphics, mouseX, mouseY);
+        public void render(GuiGraphics graphics, Font font, UiPointer incomingPointer) {
+            UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
+            strip.render(graphics, pointer);
         }
 
         @Override
@@ -156,6 +166,12 @@ final class ConditionTreeChrome {
         // 测量用的临时高度：取足够大的值，避免表单按可用高度折算滚动条宽度而低估自然高度
         private static final int MEASURE_PROBE_HEIGHT = Integer.MAX_VALUE / 4;
 
+        /** 内联表单的叶子与画布共用输入身份。 */
+        @Override
+        public @Nullable UiPointerHit hitTest(double x, double y) {
+            UiPointerHit hit = panel.hitTest(x, y);
+            return hit == null ? null : hit.within(this);
+        }
         private final LeafPanel panel;
         private final FormView form;
         // 当前帧鼠标下的字段提示（校验问题优先）：内联框契约没有 tooltip 通道，
@@ -192,10 +208,14 @@ final class ConditionTreeChrome {
             panel.setBounds(x, y, width, height);
         }
 
+        /** {@inheritDoc} */
         @Override
-        public void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
-            hoverTooltip = form.tooltipAt(mouseX, mouseY);
-            panel.render(graphics, font, mouseX, mouseY);
+        public void render(GuiGraphics graphics, Font font, UiPointer incomingPointer) {
+            UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
+            int mouseX = (int) pointer.x();
+            int mouseY = (int) pointer.y();
+            hoverTooltip = pointer.allowsTooltip() ? form.tooltipAt(mouseX, mouseY) : null;
+            panel.render(graphics, font, pointer);
         }
 
         @Override

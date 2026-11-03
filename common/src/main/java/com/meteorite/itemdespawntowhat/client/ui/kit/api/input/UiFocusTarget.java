@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.client.ui.kit.api.input;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 
 import net.minecraft.network.chat.Component;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 
 import java.util.List;
 
@@ -15,7 +16,10 @@ public interface UiFocusTarget extends UiInputTarget {
     /**
      * 控件声明的焦点能力与当前可用性共同决定资格。
      */
-    boolean canFocus();
+    default boolean canFocus() {
+        return !(this instanceof UiWidget widget)
+                || widget.isVisible() && widget.isEnabled();
+    }
 
     /**
      * 持久焦点视图；宿主包装与核心可共享同一视图。
@@ -23,7 +27,8 @@ public interface UiFocusTarget extends UiInputTarget {
     UiFocusState focusState();
 
     /**
-     * 复合面板可展开实际 Tab 目标，展开后组本身不登记；组内编辑沿用已有 Tab 锚点。
+     * 复合面板可展开实际 Tab 目标，组保留归属但不额外占 Tab 位。
+     * 默认单元素自身列表表示叶子，展开关系支持共享节点并拒绝循环。
      * 分面等组内导航控件返回自身，保持一个停靠点。
      */
     default List<UiFocusTarget> focusTargets() {

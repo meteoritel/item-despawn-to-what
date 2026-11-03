@@ -5,7 +5,9 @@
  * 消费角色中 host 表示 kit 外生产源码直接引用，library 表示供其它宿主使用，example 表示装配示例。
  * library 项逐项注明用途与当前无生产引用；嵌套公开契约随顶层类型维护。</p>
  * <ul>
+ *   <li>{@code UiPointerHit}: host</li>
  *   <li>{@code UiFocusManager}: host</li>
+ *   <li>{@code UiFocusFollow}: host</li>
  *   <li>{@code UiFocusState}: host</li>
  *   <li>{@code UiFocusTarget}: host</li>
  *   <li>{@code UiHistoryShortcut}: host</li>

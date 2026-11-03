@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
@@ -114,7 +116,7 @@ abstract class FormControl implements UiInputTarget {
     // 设置控件矩形（高度按 height() 决定）
     abstract void setBounds(int x, int y, int width);
 
-    abstract void render(GuiGraphics graphics, Font font, int mouseX, int mouseY);
+    abstract void render(GuiGraphics graphics, Font font, UiPointer pointer);
 
     // 把草稿值装载进控件
     abstract void load(@Nullable RuleValue value);
@@ -470,4 +472,13 @@ abstract class FormControl implements UiInputTarget {
     static String trimDouble(double value) {
         return UiNumbers.trimTrailingZeros(UiNumbers.plainExact(value, DECIMAL_DECIMALS, DECIMAL_INTEGER_LIMIT));
     }
+    /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        List<UiFocusTarget> targets = new ArrayList<>();
+        addFocusTargets(targets);
+        UiPointerHit hit = UiPointerHit.topmost(x, y, targets);
+        return hit == null ? null : hit.within(this);
+    }
+
 }

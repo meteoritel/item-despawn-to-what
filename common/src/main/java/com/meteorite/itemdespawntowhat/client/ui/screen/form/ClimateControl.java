@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
@@ -156,11 +157,12 @@ final class ClimateControl extends FormControl {
     }
 
     @Override
-    void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
-        matching.render(graphics, font, mouseX, mouseY);
-        range.render(graphics, font, mouseX, mouseY);
-        minInput.render(graphics, font, mouseX, mouseY);
-        maxInput.render(graphics, font, mouseX, mouseY);
+    void render(GuiGraphics graphics, Font font, UiPointer incomingPointer) {
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
+        matching.render(graphics, font, pointer);
+        range.render(graphics, font, pointer);
+        minInput.render(graphics, font, pointer);
+        maxInput.render(graphics, font, pointer);
     }
 
     @Override

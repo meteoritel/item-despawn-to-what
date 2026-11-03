@@ -10,7 +10,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.List;
 import java.util.Objects;
 
-/** 声明式块序列；仅 Frame 可拥有一层子内容，不实现通用嵌套容器。 */
+/** 只读文档的声明式内容块；当前无生产引用，命中数据交给宿主解释，Frame 提供一层内容视口。 */
 public sealed interface UiNode permits UiNode.Row, UiNode.Gap, UiNode.Divider, UiNode.Frame {
     /** 树的根行没有父行。 */
     int NO_PARENT = -1;
@@ -44,7 +44,7 @@ public sealed interface UiNode permits UiNode.Row, UiNode.Gap, UiNode.Divider, U
         }
     }
 
-    /** 行内图标的独立交互信息；空提示仍会阻止同一位置回退到行提示。 */
+    /** 行内图标的独立命中数据；空提示仍会阻止同一位置回退到行提示。 */
     record InlineIcon(UiIcon icon, List<Component> tooltip, @Nullable Object payload, @Nullable UiAction action) {
         public InlineIcon {
             Objects.requireNonNull(icon);
@@ -70,7 +70,7 @@ public sealed interface UiNode permits UiNode.Row, UiNode.Gap, UiNode.Divider, U
         }
     }
 
-    /** 专用于条件树的内容视口；边框、框角按钮及输入优先级由面板管理。 */
+    /** 文档内容的裁剪视口；宿主解释命中结果并管理边框、视口操作与输入。 */
     record Frame(FrameSpec spec, List<UiNode> content) implements UiNode {
         public Frame {
             Objects.requireNonNull(spec);

@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.number;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
@@ -173,10 +175,12 @@ public final class UiNumberField implements UiWidget {
         editor.setBounds(x + sliderWidth + gap, y, editorWidth, bounds.height());
     }
 
+    /** {@inheritDoc} */
     @Override
-    public void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
-        slider.render(graphics, font, UiInputContext.pointer(null, mouseX, mouseY, -1, 0));
-        editor.render(graphics, font, mouseX, mouseY);
+    public void render(GuiGraphics graphics, Font font, UiPointer incomingPointer) {
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
+        slider.render(graphics, font, pointer);
+        editor.render(graphics, font, pointer);
     }
 
     @Override
@@ -228,4 +232,11 @@ public final class UiNumberField implements UiWidget {
         slider.endInteraction(reason);
         editor.endInteraction(reason);
     }
+    /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        UiPointerHit hit = UiPointerHit.first(x, y, editor, slider);
+        return hit == null ? null : hit.within(this);
+    }
+
 }

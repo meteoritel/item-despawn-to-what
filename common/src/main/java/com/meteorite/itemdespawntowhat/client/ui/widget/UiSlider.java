@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
@@ -174,12 +176,14 @@ public final class UiSlider implements UiWidget, UiFocusTarget, UiInputTarget {
         this.core.setBounds(x, y, width, height);
     }
 
+    /** {@inheritDoc} */
     @Override
-    public void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
+    public void render(GuiGraphics graphics, Font renderFont, UiPointer incomingPointer) {
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
         if (!this.core.isVisible()) {
             return;
         }
-        this.core.render(graphics, renderFont, UiInputContext.pointer(null, mouseX, mouseY, -1, 0));
+        this.core.render(graphics, renderFont, pointer);
     }
 
     @Override
@@ -254,6 +258,14 @@ public final class UiSlider implements UiWidget, UiFocusTarget, UiInputTarget {
 
     private static double sanitizeStep(double nextStep) {
         return Double.isFinite(nextStep) && nextStep > 0.0D ? nextStep : 0.0D;
+    }
+
+    /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        if (!isVisible()) return null;
+        UiPointerHit hit = core.hitTest(x, y);
+        return hit == null ? null : hit.within(this);
     }
 
 }

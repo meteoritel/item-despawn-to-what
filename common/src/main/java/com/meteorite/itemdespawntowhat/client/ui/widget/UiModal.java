@@ -1,5 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import org.jetbrains.annotations.Nullable;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputScope;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
@@ -48,7 +51,7 @@ public final class UiModal implements UiWidget {
      */
     @FunctionalInterface
     public interface ContentRenderer {
-        void renderContent(GuiGraphics graphics, Font font, UiRect content, int mouseX, int mouseY);
+        void renderContent(GuiGraphics graphics, Font font, UiRect content, UiPointer pointer);
     }
 
     // 弹窗宽度
@@ -468,8 +471,10 @@ public final class UiModal implements UiWidget {
         return visible;
     }
 
+    /** {@inheritDoc} */
     @Override
-    public void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+    public void render(GuiGraphics graphics, Font font, UiPointer incomingPointer) {
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
         if (!visible) {
             return;
         }
@@ -484,9 +489,9 @@ public final class UiModal implements UiWidget {
         }
         if (contentWidget != null) {
             // 内容控件自带边框，这里不再重复画内凹底
-            contentWidget.render(graphics, font, mouseX, mouseY);
+            contentWidget.render(graphics, font, pointer);
         } else if (contentRenderer != null) {
-            contentRenderer.renderContent(graphics, font, contentRect, mouseX, mouseY);
+            contentRenderer.renderContent(graphics, font, contentRect, pointer);
         } else {
             theme.drawInset(graphics, contentRect);
             List<FormattedCharSequence> lines = messageLines(contentRect.width() - theme.padding() * 2);
@@ -500,7 +505,7 @@ public final class UiModal implements UiWidget {
         }
         for (UiButton button : buttons) {
             if (button.isVisible()) {
-                button.render(graphics, font, mouseX, mouseY);
+                button.render(graphics, font, pointer);
             }
         }
     }
@@ -515,7 +520,7 @@ public final class UiModal implements UiWidget {
             return false;
         }
         if (!bounds.contains(mouseX, mouseY)) {
-            context.scope().pointerHit(null);
+
             if (closeOnBackdrop()) requestClose();
             return true;
         }
@@ -632,4 +637,13 @@ public final class UiModal implements UiWidget {
             closeHandler.accept(this);
         }
     }
+    /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        if (!visible || !bounds.contains(x, y)) return null;
+        UiPointerHit hit = UiPointerHit.topmost(x, y, buttons);
+        if (hit == null && contentWidget != null && contentRect.contains(x, y)) hit = contentWidget.hitTest(x, y);
+        return hit == null ? null : hit.within(this);
+    }
+
 }

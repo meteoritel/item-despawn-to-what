@@ -1,6 +1,9 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.control;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+import org.jetbrains.annotations.Nullable;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -20,7 +23,18 @@ public interface UiWidget extends UiInputTarget {
     void setBounds(int x, int y, int width, int height);
 
     /** 使用宿主字体与指针快照绘制控件。 */
-    void render(GuiGraphics graphics, Font font, int mouseX, int mouseY);
+    void render(GuiGraphics graphics, Font font, UiPointer pointer);
+
+    /** 普通矩形控件的默认命中；复合控件返回实际子目标。 */
+    @Override
+    default @Nullable UiPointerHit hitTest(double x, double y) {
+        return isVisible() && isEnabled() && bounds().contains(x, y) ? UiPointerHit.leaf(this, x, y) : null;
+    }
+
+    /** 默认可用；已有状态由实际控件提供，不另持有副本。 */
+    default boolean isEnabled() {
+        return true;
+    }
 
     /** 是否参与绘制与输入；默认可见，宿主按实际状态过滤。 */
     default boolean isVisible() {

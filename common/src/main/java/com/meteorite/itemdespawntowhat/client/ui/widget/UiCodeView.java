@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
@@ -297,8 +298,9 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
 
     // ---- 渲染 ----
 
+    /** {@inheritDoc} */
     @Override
-    public void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
+    public void render(GuiGraphics graphics, Font renderFont, UiPointer incomingPointer) {
         if (!visible) {
             return;
         }
@@ -395,7 +397,7 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
         if (!visible || !bounds.contains(mouseX, mouseY)) {
             return false;
         }
-        context.scope().pointerHit(this);
+
         return true;
     }
 
@@ -443,12 +445,6 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
     public UiFocusState focusState() {
         return focusState;
     }
-
-    @Override
-    public boolean canFocus() {
-        return visible;
-    }
-
 
     @Override
     public boolean isFocused() {

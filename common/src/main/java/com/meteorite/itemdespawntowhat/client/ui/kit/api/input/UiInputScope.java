@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.input;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+
 import java.util.Objects;
 import java.util.function.Consumer;
 
@@ -18,8 +20,6 @@ public final class UiInputScope {
     private Runnable refreshFocus = () -> {
     };
     private boolean active;
-    private boolean pointerHit;
-    private @Nullable UiFocusTarget pointerFocus;
 
     /**
      * 宿主注入内容，作用域不解释页面或模态类型。
@@ -54,6 +54,11 @@ public final class UiInputScope {
      */
     public boolean isActive() {
         return active;
+    }
+
+    /** 布局完成后创建绘制快照，作用域与持续指针交互共同决定门禁。 */
+    public UiPointer pointer(double x, double y) {
+        return new UiPointer(x, y, active, interaction.pointerTarget(), null);
     }
 
     /**
@@ -105,22 +110,9 @@ public final class UiInputScope {
         focus.suspend();
     }
 
-    void beginPointer() {
-        pointerHit = false;
-        pointerFocus = null;
-    }
-
-    /**
-     * 实际命中的叶子报告焦点候选；null 是可交互但保留原焦点的区域。
-     */
-    public void pointerHit(@Nullable UiFocusTarget target) {
-        pointerHit = true;
-        pointerFocus = target;
-    }
-
-    void finishPointer() {
+    void finishPointer(@Nullable UiPointerHit hit) {
         if (!active) return;
-        if (!pointerHit) focus.clearFocus();
-        else if (pointerFocus != null && pointerFocus.canFocus()) focus.focusOn(pointerFocus);
+        if (hit == null) focus.clearFocus();
+        else if (hit.focus() != null && hit.focus().canFocus()) focus.focusOn(hit.focus());
     }
 }

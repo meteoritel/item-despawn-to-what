@@ -1,5 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.layout;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiTransform;
@@ -20,7 +23,8 @@ import java.util.Objects;
 import java.util.function.Supplier;
 
 /**
- * 声明式文档：内容版本门控构建，脏标记门控排版，绘制与命中复用同一份几何缓存。
+ * 只读文档渲染器：声明式内容版本门控构建，脏标记门控排版，绘制与命中复用同一份几何缓存。
+ * 作为 library 入口保留，当前无生产引用；命中数据由宿主解释。
  * 仅在客户端线程使用；视口及鼠标均使用调用方 GUI 坐标，外部 pose 仅支持正向轴对齐缩放和平移。
  *
  * <p>排版按**自然尺寸**且不折行；行文本的可用宽度以视口宽度（1 倍档参考）为上限，
@@ -30,7 +34,7 @@ import java.util.function.Supplier;
  * <p>Frame 内的子文档与父文档共用同一坐标系：父文档把收到的鼠标坐标换算到内容坐标后透传，
  * 子文档的悬停滚动与命中使用同一套几何。</p>
  */
-public final class UiDocument {
+public final class UiDocument implements UiInputTarget {
     private static final int PADDING = 2;
     private static final int ICON_GAP = 3;
     /** 行文本带的最小宽度：图标再多也留出这一截，让超宽文本仍可悬停滚动。 */
@@ -308,14 +312,18 @@ public final class UiDocument {
 
     /** 无鼠标位置的绘制：等价于整篇（含 Frame 内子文档）都不悬停，长文本不滚动。 */
     public void render(GuiGraphics graphics, Font font) {
-        render(graphics, font, Double.NaN, Double.NaN);
+        render(graphics, font, UiPointer.at(Double.NaN, Double.NaN));
     }
 
-    public void render(GuiGraphics graphics, Font font, double mouseX, double mouseY) {
+    /** 使用已解析指针绘制；编辑输入由宿主另外装配。 */
+    public void render(GuiGraphics graphics, Font font, UiPointer incomingPointer) {
         layout();
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
+        double mouseX = pointer.x();
+        double mouseY = pointer.y();
         long start = metrics.start();
         if (viewport.width() > 0 && viewport.height() > 0) {
-            boolean hovering = viewport.contains(mouseX, mouseY);
+            boolean hovering = pointer.contains(viewport);
             double localX = transform.toLocalX(mouseX);
             double localY = transform.toLocalY(mouseY);
             UiTransform.enableScissor(graphics, viewport);
@@ -338,7 +346,7 @@ public final class UiDocument {
                         renderRow(graphics, font, block.row(), left, top, right, bottom, thickness, hovered, ticks);
                     } else if (block.frame() != null) {
                         // 鼠标坐标先换算到内容坐标再透传，Frame 内子文档才能像根文档一样判悬停。
-                        block.frame().render(graphics, font, localX, localY);
+                        block.frame().render(graphics, font, pointer.withPosition(localX, localY));
                     } else {
                         graphics.fill(block.rect().x(), block.rect().y(), block.rect().right(),
                                 block.rect().bottom(), block.dividerColor());
@@ -391,31 +399,13 @@ public final class UiDocument {
     public UiTarget hit(double mouseX, double mouseY) {
         layout();
         long start = metrics.start();
-        UiTarget result = hitContent(mouseX, mouseY);
+        UiPointerHit resolved = hitTest(mouseX, mouseY);
+        UiTarget result = resolved == null ? null : resolved.tooltip();
         metrics.hit(start);
         return result;
     }
 
-    @Nullable
-    private UiTarget hitContent(double mouseX, double mouseY) {
-        if (!viewport.contains(mouseX, mouseY)) return null;
-        double x = transform.toLocalX(mouseX);
-        double y = transform.toLocalY(mouseY);
-        int index = firstBlockAt(y);
-        if (index >= blocks.length) return null;
-        LayoutBlock block = blocks[index];
-        if (!block.rect().contains(x, y)) return null;
-        if (block.frame() != null) return block.frame().hit(x, y);
-        RowPaint row = block.row();
-        if (row == null) return null;
-        if (row.leadingTarget() != null && row.leadingTarget().rect().contains(x, y)) return row.leadingTarget();
-        for (int i = 0; i < row.iconTargets().length; i++) {
-            if (row.iconTargets()[i].rect().contains(x, y)) return row.iconTargets()[i];
-        }
-        return row.target();
-    }
 
-    // 块按纵坐标排序，定位可见起点和命中行无需扫描整篇文档。
     private int firstBlockAt(double y) {
         int low = 0;
         int high = blocks.length;
@@ -444,4 +434,29 @@ public final class UiDocument {
      */
     private record BranchPaint(int trunkX, int verticalFromY, int verticalToY,
                                int horizontalToX, int[] continuations) {}
+    /** 只读命中与绘制共享排版缓存，Frame 保留子文档归属。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        layout();
+        if (!viewport.contains(x, y)) return null;
+        double localX = transform.toLocalX(x);
+        double localY = transform.toLocalY(y);
+        int index = firstBlockAt(localY);
+        if (index >= blocks.length || !blocks[index].rect().contains(localX, localY)) return null;
+        LayoutBlock block = blocks[index];
+        if (block.frame() != null) {
+            UiPointerHit child = block.frame().hitTest(localX, localY);
+            return child == null ? null : child.within(this);
+        }
+        RowPaint row = block.row();
+        if (row == null) return null;
+        UiTarget target = row.target();
+        if (row.leadingTarget() != null && row.leadingTarget().rect().contains(localX, localY))
+            target = row.leadingTarget();
+        else for (UiTarget icon : row.iconTargets()) {
+            if (icon.rect().contains(localX, localY)) { target = icon; break; }
+        }
+        return UiPointerHit.leaf(this, localX, localY).withTooltip(target);
+    }
+
 }

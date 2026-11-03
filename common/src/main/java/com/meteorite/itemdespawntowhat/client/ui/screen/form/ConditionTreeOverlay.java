@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionTreeViewModel;
@@ -725,8 +727,12 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
 
     // ---- 渲染 ----
 
+    /** {@inheritDoc} */
     @Override
-    public void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
+    public void render(GuiGraphics graphics, Font renderFont, UiPointer incomingPointer) {
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
+        int mouseX = (int) pointer.x();
+        int mouseY = (int) pointer.y();
         if (parameters != null) {
             parameters.form().tick();
         }
@@ -742,13 +748,13 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
             syncSelection();
         }
         drawShell(graphics);
-        functionBar.render(graphics, renderFont, mouseX, mouseY);
+        functionBar.render(graphics, renderFont, pointer);
         if (sourceView) {
-            source.render(graphics, renderFont, mouseX, mouseY);
+            source.render(graphics, renderFont, pointer);
             renderCopyButton(graphics);
         } else {
-            toolColumn.render(graphics, renderFont, mouseX, mouseY);
-            editor.render(graphics, renderFont, mouseX, mouseY);
+            toolColumn.render(graphics, renderFont, pointer);
+            editor.render(graphics, renderFont, pointer);
             if (!editor.isEnabled()) {
                 drawReadOnlyOverlay(graphics);
             }
@@ -759,7 +765,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
         if (helpOpen) {
             renderHelp(graphics);
         }
-        Component tip = tooltipAt(mouseX, mouseY);
+        Component tip = pointer.allowsTooltip() ? tooltipAt(mouseX, mouseY) : null;
         if (tip != null) {
             UiFlatText.tooltip(graphics, renderFont, tip,
                     Math.clamp(bounds.width(), TOOLTIP_MIN_WIDTH, TOOLTIP_MAX_WIDTH), mouseX, mouseY);
@@ -1275,5 +1281,15 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
         return targets;
     }
 
+
+    /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        if (!bounds.contains(x, y)) return null;
+        if (helpOpen || sourceView && copyJsonRect.contains(x, y) || statusRect.contains(x, y))
+            return UiPointerHit.leaf(this, x, y).preservingFocus();
+        UiPointerHit hit = UiPointerHit.first(x, y, functionBar, sourceView ? source : toolColumn, sourceView ? null : editor);
+        return hit == null ? null : hit.within(this);
+    }
 
 }

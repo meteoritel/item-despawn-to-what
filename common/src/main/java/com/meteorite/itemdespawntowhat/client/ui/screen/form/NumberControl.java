@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.EditorPreset;
@@ -378,7 +380,8 @@ final class NumberControl extends FormControl {
     }
 
     @Override
-    void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
+    void render(GuiGraphics graphics, Font renderFont, UiPointer incomingPointer) {
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
         graphics.drawString(renderFont, unitLabel(), unitBounds.x(),
                 unitBounds.y() + Math.max(0, (unitBounds.height() - renderFont.lineHeight) / 2),
                 THEME.palette().textSecondary(), false);
@@ -386,7 +389,7 @@ final class NumberControl extends FormControl {
             drawEndpoint(graphics, renderFont, lowerLabel(), lowerLabelBounds);
             drawEndpoint(graphics, renderFont, upperLabel(), upperLabelBounds);
         }
-        numberField.render(graphics, renderFont, mouseX, mouseY);
+        numberField.render(graphics, renderFont, pointer);
         if (signedLabels != null && windowMin <= 0 && windowMax >= 0) {
             UiRect bounds = slider.bounds();
             int zeroX = slider.trackLeft() + (int) Math.round(
@@ -395,7 +398,7 @@ final class NumberControl extends FormControl {
             graphics.fill(zeroX, bounds.bottom() - 2, zeroX + 1, bounds.bottom(), THEME.palette().textSecondary());
         }
         for (UiButton button : presetButtons) {
-            button.render(graphics, renderFont, mouseX, mouseY);
+            button.render(graphics, renderFont, pointer);
         }
     }
 
@@ -578,5 +581,12 @@ final class NumberControl extends FormControl {
     private void applyPreset(String presetValue) {
         markEdited();
         if (parseText(presetValue) != null) numberField.commitText(presetValue);
+    }
+    /** 根据实际子控件解析当前命中。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        UiPointerHit hit = UiPointerHit.topmost(x, y, presetButtons);
+        if (hit == null) hit = numberField.hitTest(x, y);
+        return hit == null ? null : hit.within(this);
     }
 }

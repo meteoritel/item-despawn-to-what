@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
@@ -120,14 +121,16 @@ public final class UiCheckBox implements UiWidget, UiFocusTarget {
         this.bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
     }
 
+    /** {@inheritDoc} */
     @Override
-    public void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
+    public void render(GuiGraphics graphics, Font renderFont, UiPointer incomingPointer) {
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
         if (!visible) {
             return;
         }
         // 绘制与命中共用同一份方框几何：只有方框本身响应悬停
         UiRect box = bounds.centeredSquare(BOX_SIZE);
-        boolean hovered = enabled && box.contains(mouseX, mouseY);
+        boolean hovered = enabled && pointer.contains(box);
         theme.drawInset(graphics, box);
         if (checked) {
             graphics.fill(box.x() + 2, box.y() + 2, box.right() - 2, box.bottom() - 2,
@@ -151,7 +154,7 @@ public final class UiCheckBox implements UiWidget, UiFocusTarget {
         if (!visible || !enabled || button != 0 || !bounds.centeredSquare(BOX_SIZE).contains(mouseX, mouseY)) {
             return false;
         }
-        context.scope().pointerHit(this);
+
         return toggle();
     }
 
@@ -170,12 +173,6 @@ public final class UiCheckBox implements UiWidget, UiFocusTarget {
     public UiFocusState focusState() {
         return focusState;
     }
-
-    @Override
-    public boolean canFocus() {
-        return visible && enabled;
-    }
-
 
     @Override
     public boolean isFocused() {
