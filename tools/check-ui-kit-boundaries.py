@@ -86,6 +86,33 @@ def exported_headers(source: Source):
         start = token.end()
 
 
+def exported_type_graph(sources: list[Source], index: TypeIndex, kit: Path) -> dict[str, set[str]]:
+    """只沿公开声明建立类型图；闭包表示公开契约可达，不推断某段 Java 调用已经执行。"""
+    graph: dict[str, set[str]] = {}
+    for source in sources:
+        if not source.path.is_relative_to(kit):
+            continue
+        targets: set[str] = set()
+        for _, header in exported_headers(source):
+            declaration = replace(source, code=header, imports=[(0, name) for _, name in source.imports])
+            targets.update(target for line, target in index.references(declaration)
+                           if line > 0 and target.startswith(API_PACKAGE + "."))
+        for owner in source.declarations:
+            graph[owner] = targets - {owner}
+    return graph
+
+
+def contract_closure(roots: set[str], graph: dict[str, set[str]]) -> set[str]:
+    """生产直接引用为根，返回值、参数、父类型和嵌套公开声明共同构成公开契约闭包。"""
+    reachable = set(roots)
+    pending = list(roots)
+    while pending:
+        for target in graph.get(pending.pop(), set()) - reachable:
+            reachable.add(target)
+            pending.append(target)
+    return reachable
+
+
 def check_exports(sources: list[Source], index: TypeIndex, kit: Path, result: CheckResult) -> None:
     """宿主只引用 api；api 的父类型和公开/protected 声明保留在导出面内。"""
     for source in sources:
@@ -172,6 +199,18 @@ def check(root: Path, kit_path: str = KIT_PATH) -> CheckResult:
             result.findings.append(Finding(str(directory) + "|" + name, "公开面", "角色缺失"))
     check_exports(sources, index, kit, result)
     consumers = production_consumers(sources, index, kit)
+    graph = exported_type_graph(sources, index, kit)
+    reachable = contract_closure(set(consumers) & graph.keys(), graph)
+    registered = {by_path[directory / (name + ".java")].package + "." + name for directory, name in public_types}
+    for owner, targets in graph.items():
+        owner_source = index.types[owner][0]
+        # Java 允许 public 具体类继承包内实现壳；宿主使用具体类和公开接口，不需要命名该壳。
+        inherited = re.search(r"\bclass\s+\w+(?:<[^{}]+?>)?\s+extends\s+(\w+)", owner_source.code)
+        implementation_base = owner_source.package + "." + inherited[1] if inherited else None
+        for target in targets - registered:
+            if target == implementation_base and target in index.types:
+                continue
+            result.findings.append(Finding(owner, "公开契约闭包", "引用未登记公开类型：" + target))
     for directory, name in public_types:
         identity = str(directory).casefold(), name.casefold()
         role = roles.get(identity)
@@ -182,10 +221,11 @@ def check(root: Path, kit_path: str = KIT_PATH) -> CheckResult:
             result.findings.append(Finding(label, "消费角色", "host 缺少 kit 外生产源码引用"))
         elif role in {"library", "example"} and hosts:
             result.findings.append(Finding(label, "消费角色", "存在生产消费：" + "、".join(sorted(hosts))))
-        if role == "library" and ("用途：" not in notes[identity] or "当前无生产引用" not in notes[identity]):
-            result.findings.append(Finding(label, "公开面", "library 须说明用途与当前无生产引用"))
+        if role == "library" and ("用途：" not in notes[identity] or "当前无直接生产引用" not in notes[identity]):
+            result.findings.append(Finding(label, "公开面", "library 须说明用途与当前无直接生产引用"))
     result.summaries = [f"扫描目录：{kit}", f"扫描文件：{len(files)} 个，import：{imports} 条",
-                        f"顶层 public 类型：{len(public_types)} 个，package-info 已登记：{len(public_types) - unregistered} 个"]
+                        f"顶层 public 类型：{len(public_types)} 个，package-info 已登记：{len(public_types) - unregistered} 个",
+                        f"生产直接引用：{len(set(consumers) & graph.keys())} 个，公开契约闭包可达：{len(reachable)} 个（词法口径）"]
     result.success = f"kit 依赖边界检查通过：{len(files)} 个文件，{len(public_types)} 个顶层 public 类型全部登记，0 处违规。"
     return result
 

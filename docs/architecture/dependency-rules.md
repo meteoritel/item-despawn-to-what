@@ -87,8 +87,8 @@ flowchart LR
 按原始文本递归扫描 kit 的外部依赖，并复用 `Source` / `TypeIndex` 核验消费与导出：
 
 - 公开入口位于 `kit/api` 的能力包，每个顶层 public 类型在同目录 package-info 的角色表唯一登记为 host、library 或 example；过期登记也报违规。internal 的 Java 可见性服务于 kit 内跨包协作；
-- host 对应 kit 外 common/Fabric/NeoForge main 的静态引用；library 与 example 保持零生产消费，library 逐项说明用途与当前无生产引用。dev/probe 和注释分别识别；
-- kit 外源码只引用 api；公开/protected 声明、父类型、record 组件及接口隐式公开成员按有限词法规则检查 internal 类型泄漏；
+- host 对应 kit 外 common/Fabric/NeoForge main 的静态引用；library 与 example 保持零直接生产消费，library 逐项说明用途与当前无直接生产引用。dev/probe 和注释分别识别；公开声明闭包另外报告类型可达，实际返回链由调用点核对；
+- kit 外源码只引用 api；公开/protected 声明、父类型、record 组件及接口隐式公开成员按有限词法规则检查 internal 类型泄漏；公开签名类型须登记，具体类的包内实现父类保留 Java 可见性；
 - `api/preview` 允许引用基础能力；全部基础子包对 preview 的 import 与全限定反向引用报错；
 - import 白名单为 `java.*`、`javax.*`、`net.minecraft.*`、`org.jetbrains.*`、`org.joml.*`、`org.lwjgl.*`，另有 `com.mojang.blaze3d` 的顶点与光照类型；
 - 本模组其它包、`net.fabricmc.*`、`net.neoforged.*`、`com.google.gson.*` 判违规。
