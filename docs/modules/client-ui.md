@@ -23,7 +23,7 @@ authority: common/client/ui/theme、common/client/ui/widget、common/client/ui/s
 | 子包 | 一句话职责 |
 |---|---|
 | `client/ui/theme` | 把灰色像素与扁平两套外观映射成 kit 的样式值，并以 `UiHostTheme` 作为唯一注入入口 |
-| `client/ui/widget` | 在 kit 基础上提供可直接使用的输入框、列表、树、弹窗、按钮变体与条件树控件；滚动控件的行宽与行命中换算（`RowGeometry`）、区间宿主控件的公共外壳（`AbstractBarShell`）也收在这一层 |
+| `client/ui/widget` | 在 kit 基础上提供可直接使用的输入框、列表、树、弹窗、按钮变体与条件树控件；滚动控件使用 kit 的内容宽度与行命中度量，文本控件通过 `UiTextEditSession` 协调原版模型，区间宿主控件的公共外壳（`AbstractBarShell`）也收在这一层 |
 | `client/ui/shared` | `screen` 与 `screen/form` 共享的纯值与展示类型：目录图标分发、展示名称、字段到目录类型的映射、条件摘要、悬停说明的语义行模型 |
 | `client/ui/screen` | 编辑器外壳、三个编辑器页面、编辑分区组合、保存遮罩与页内输入分发 |
 | `client/ui/screen/form` | 描述符驱动的表单视图、字段控件基类与注册表 |
@@ -41,7 +41,7 @@ authority: common/client/ui/theme、common/client/ui/widget、common/client/ui/s
 - **表单装配**：`FormView` + `FormControl` + `FormControlRegistry`，把类型描述符的字段列表渲染成可滚动的一列控件；`FormField#addAction` 向同一行追加行尾动作按钮，基本信息分区的本服开关与「恢复默认」由此挂到「默认启用」行。
 - **结果页字段层级**：效果参数的主区/高级区由动作顶层 `EditorField` 的层级决定，嵌套字段随所属顶层字段展示；高级折叠状态归结果分区持有。问题定位在表单装配时按所选动作路径下的首个字段确定展开状态，同一次重建完成表单、布局和焦点树更新。
 - **条件树界面**：`ConditionTreeOverlay`（画布页外壳）、`UiConditionGraphEditor`（画布编辑）、`UiConditionTreeSummary`（只读摘要兼入口）、`ConditionTreeContract`（宿主注入契约与选中路径同步）。
-- **控件与弹窗契约**：`UiWidget` 继承 kit 的统一输入契约；`UiModalStack` 负责层次、遮罩和栈变化通知，每个模态拥有独立输入作用域。
+- **控件与弹窗契约**：`api.control.UiWidget` 提供统一渲染与输入契约；`UiModalStack` 负责层次、遮罩和栈变化通知，每个模态拥有独立输入作用域。
 - **排版快照**：`RuleEditorScreen` 与承载控件的 widget、页面、按钮条实现 kit 的 `UiLayoutSource`，把已排版的控件矩形、文案与文本带宽导出为只读快照，供 GUI 探针断言布局不变量与真实文案；快照不参与绘制与命中，也不触发重排。
 
 ### 依赖方向
@@ -96,6 +96,8 @@ flowchart TD
 
 `client/net` 通过 `EditorScreenHooks`/`EditorScreenOpener` 调用 `RuleEditorOpener`；客户端入口负责把 opener 注册进去。kit 与本层之间只有 kit 被依赖这一个方向。
 
+表单由 `FormRowLayout` 解释字段标签、说明行和数量配对，再用 `UiFormLayout` 测量相对几何。`NumberControl` 把轨道与精确文本的组合交给 `UiNumberField`，自身处理字段单位、空值、原始值、预设和草稿提交。
+
 ## 3. 关键类地图
 
 仅列对外入口、扩展点、聚合根与并发/事务敏感类，非穷举。
@@ -133,7 +135,7 @@ flowchart TD
 | `StructurePreviewResources` | 资源读取 | 枚举 assets 结构，异步有界 NBT 解码并保留资源诊断 | 资源管理器、`PreviewStructure` |
 | `PreviewExamplesScreen`（common dev） | 工作台工具 | 枚举结构与载荷示例，展示多个尺寸和预算 | 正式 `PreviewIcons` 入口 |
 | `UiFlatText` | 文本绘制原语 | 无阴影的居中、折行文本与悬停提示面板；GUI 不使用字体阴影与加粗，标题只靠颜色、缩进与分区间距区分层次 | kit 的 `UiRenderLayers`、各控件与页面 |
-| `UiSlider` / `UiRangeBar` / `UiTextInput` | 控件适配 | 原版输入模型留在宿主，文本值操作经 `UiTextValue`，码点接纳与回填抑制经 `UiTextAcceptance`，数值交互委托给 kit；提交时机由宿主回调决定 | kit 数值/文本契约、主题 |
+| `UiSlider` / `UiRangeBar` / `UiTextInput` | 控件适配 | 原版输入模型留在宿主，文本值操作经 `UiTextValue`，码点接纳、局部历史与选择协调经 `UiTextEditSession`，数值交互委托给 kit；提交时机由宿主回调决定 | kit 数值/文本契约、主题 |
 
 ## 4. 关键流程
 
