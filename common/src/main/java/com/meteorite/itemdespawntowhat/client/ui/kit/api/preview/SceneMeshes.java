@@ -36,7 +36,7 @@ final class SceneMeshes {
     private SceneMeshes() { }
 
     static final class TooLarge extends RuntimeException {
-        TooLarge() { super("单场景几何超过 8 MiB"); }
+        TooLarge(long limit) { super("单场景几何超过 " + limit + " bytes"); }
     }
 
     static final class Building implements AutoCloseable {
@@ -61,24 +61,24 @@ final class SceneMeshes {
         @Override public void close() { layers.values().forEach(Building::close); layers.clear(); }
     }
 
-    static Prepared compile(SceneBlocks blocks, PreviewScenes.Geometry geometry, boolean cull) {
+    static Prepared compile(SceneBlocks blocks, PreviewScenes.Geometry geometry, boolean cull, long byteLimit) {
         Prepared result = new Prepared();
-        Function<RenderType, VertexConsumer> buffers = budgetedBuffers(result);
+        Function<RenderType, VertexConsumer> buffers = budgetedBuffers(result, byteLimit);
         ModelBlockRenderer.enableCaching();
         try {
             compileBlocks(blocks, geometry, cull, buffers);
-            finish(result);
+            finish(result, byteLimit);
             return result;
         } catch (RuntimeException exception) {
             result.close();
             // 原版 dispatcher 会包装顶点提交异常，预算终态仍按原始触发原因分类。
-            if (result.exceeded) throw new TooLarge();
+            if (result.exceeded) throw new TooLarge(byteLimit);
             throw exception;
         }
         finally { ModelBlockRenderer.clearCache(); }
     }
 
-    private static Function<RenderType, VertexConsumer> budgetedBuffers(Prepared result) {
+    private static Function<RenderType, VertexConsumer> budgetedBuffers(Prepared result, long byteLimit) {
         long[] allocated = {0};
         return type -> {
             Building layer = result.layers.computeIfAbsent(type, ignored -> new Building());
@@ -87,7 +87,7 @@ final class SceneMeshes {
                 long oldIndices = (long) (before / 4) * 6 * VertexFormat.IndexType.least(before).bytes;
                 long newIndices = (long) (layer.vertexCount / 4) * 6 * VertexFormat.IndexType.least(layer.vertexCount).bytes;
                 allocated[0] += DefaultVertexFormat.BLOCK.getVertexSize() + newIndices - oldIndices;
-                if (allocated[0] > PreviewScenes.SCENE_LIMIT) { result.exceeded = true; throw new TooLarge(); }
+                if (allocated[0] > byteLimit) { result.exceeded = true; throw new TooLarge(byteLimit); }
             });
         };
     }
@@ -123,7 +123,7 @@ final class SceneMeshes {
         }
     }
 
-    private static void finish(Prepared result) {
+    private static void finish(Prepared result, long byteLimit) {
         float minX = Float.POSITIVE_INFINITY, minY = Float.POSITIVE_INFINITY, minZ = Float.POSITIVE_INFINITY;
         float maxX = Float.NEGATIVE_INFINITY, maxY = Float.NEGATIVE_INFINITY, maxZ = Float.NEGATIVE_INFINITY;
         for (var entry : result.layers.entrySet()) {
@@ -136,7 +136,7 @@ final class SceneMeshes {
             layer.bytes = (long) draw.vertexCount() * draw.format().getVertexSize()
                     + (long) draw.indexCount() * draw.indexType().bytes;
             result.bytes += layer.bytes;
-            if (result.bytes > PreviewScenes.SCENE_LIMIT) throw new TooLarge();
+            if (result.bytes > byteLimit) throw new TooLarge(byteLimit);
             ByteBuffer data = layer.mesh.vertexBuffer().order(ByteOrder.nativeOrder());
             for (int i = 0; i < draw.vertexCount(); i++) {
                 int offset = i * draw.format().getVertexSize();

@@ -12,7 +12,7 @@ public final class UiSpinner {
             double angle = phase - i * 0.34 - Math.PI / 2;
             int dx = x + 5 + (int) Math.round(Math.cos(angle) * 4);
             int dy = y + 5 + (int) Math.round(Math.sin(angle) * 4);
-            int alpha = 255 - i * 35;
+            int alpha = (color >>> 24) * (255 - i * 35) / 255;
             graphics.fill(dx, dy, dx + 2, dy + 2, (color & 0xFFFFFF) | alpha << 24);
         }
     }

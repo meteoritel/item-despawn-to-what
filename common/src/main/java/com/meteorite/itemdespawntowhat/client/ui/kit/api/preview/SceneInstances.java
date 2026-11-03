@@ -1,7 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.preview;
 
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiModelBounds;
 import java.util.ArrayList;
 import java.util.List;
@@ -23,7 +22,6 @@ import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Quaternionf;
 
-import org.jetbrains.annotations.NotNull;
 
 /** 实例只在渲染线程创建和访问，不加入世界、不推进 tick。 */
 final class SceneInstances {
@@ -72,14 +70,12 @@ final class SceneInstances {
     }
 
     @Nullable UiModelBounds measure() {
-        Bounds vertices = new Bounds();
         var dispatcher = Minecraft.getInstance().getEntityRenderDispatcher();
         Quaternionf camera = new Quaternionf(dispatcher.cameraOrientation());
         try {
             dispatcher.overrideCameraOrientation(new Quaternionf());
-            draw(new PoseStack(), ignored -> vertices);
+            return UiModelBounds.measure(this::draw);
         } finally { dispatcher.overrideCameraOrientation(camera); }
-        return vertices.bounds();
     }
 
     void draw(PoseStack pose, MultiBufferSource buffers) {
@@ -124,24 +120,4 @@ final class SceneInstances {
         return new UiModelBounds((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2, x1 - x0, y1 - y0, z1 - z0);
     }
 
-    private static final class Bounds implements VertexConsumer {
-        float x0 = Float.POSITIVE_INFINITY, y0 = Float.POSITIVE_INFINITY, z0 = Float.POSITIVE_INFINITY;
-        float x1 = Float.NEGATIVE_INFINITY, y1 = Float.NEGATIVE_INFINITY, z1 = Float.NEGATIVE_INFINITY;
-        @Override public @NotNull VertexConsumer addVertex(float x, float y, float z) {
-            if (!Float.isFinite(x) || !Float.isFinite(y) || !Float.isFinite(z))
-                throw new IllegalArgumentException("renderer 输出非有限坐标");
-            x0 = Math.min(x0, x); y0 = Math.min(y0, y); z0 = Math.min(z0, z);
-            x1 = Math.max(x1, x); y1 = Math.max(y1, y); z1 = Math.max(z1, z);
-            return this;
-        }
-        @Nullable UiModelBounds bounds() {
-            return Float.isFinite(x0) ? new UiModelBounds((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2,
-                    x1 - x0, y1 - y0, z1 - z0) : null;
-        }
-        @Override public @NotNull VertexConsumer setColor(int r, int g, int b, int a) { return this; }
-        @Override public @NotNull VertexConsumer setUv(float u, float v) { return this; }
-        @Override public @NotNull VertexConsumer setUv1(int u, int v) { return this; }
-        @Override public @NotNull VertexConsumer setUv2(int u, int v) { return this; }
-        @Override public @NotNull VertexConsumer setNormal(float x, float y, float z) { return this; }
-    }
 }

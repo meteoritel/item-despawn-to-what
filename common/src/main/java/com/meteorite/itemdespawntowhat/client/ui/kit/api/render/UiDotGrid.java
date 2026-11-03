@@ -8,6 +8,8 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FastColor;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Objects;
+
 /**
  * 画布点阵网格：在给定屏幕矩形内按缩放档位换算步长，绘制 1 像素方格。
  *
@@ -20,22 +22,42 @@ import org.jetbrains.annotations.Nullable;
  * 纹理背景透明，混合状态由调用方负责：本类只提交 blit，不读也不改渲染状态；调用方须在绘制前提交批次并开启混合，
  * 否则透明间隙会按混合关闭的结果写成黑色。</p>
  */
-public final class UiDotGrid {
+public final class UiDotGrid implements AutoCloseable {
     /** 单次绘制的点数上限：异常大的矩形直接放弃绘制，避免平铺次数把一帧拖死。 */
     private static final long MAX_DOTS = 4_000_000L;
     /** 单块点阵纹理的最大边长：纹理只含一个周期内的重复点，边长取步长整数倍并封顶，避免超大纹理。 */
     private static final int MAX_TILE = 512;
 
-    // 单条目纹理缓存：步长与颜色决定纹理内容，管理器实例与注册项用来确认缓存仍然有效
-    private static @Nullable DynamicTexture tileTexture;
-    private static @Nullable ResourceLocation tileId;
-    private static @Nullable TextureManager tileManager;
-    private static int tileStep = -1;
-    private static int tileColor;
-    private static int tileWidth;
-    private static int tileHeight;
+    // 每个实例独占一个周期纹理；宿主在资源重载后调用 invalidate，在卸载时 close。
+    private final TextureManager manager;
+    private boolean closed;
+    private @Nullable DynamicTexture tileTexture;
+    private @Nullable ResourceLocation tileId;
+    private int tileStep = -1;
+    private int tileColor;
+    private int tileWidth;
+    private int tileHeight;
 
-    private UiDotGrid() {
+    /** 使用客户端纹理管理器；创建与释放均在渲染线程执行。 */
+    public UiDotGrid() {
+        this(Minecraft.getInstance().getTextureManager());
+    }
+
+    /** 使用调用方指定的管理器，实例只注销自己注册的资源。 */
+    public UiDotGrid(TextureManager manager) {
+        this.manager = Objects.requireNonNull(manager, "manager");
+    }
+
+    /** 资源重载后丢弃周期纹理，下次绘制按当前配置重新创建。 */
+    public void invalidate() {
+        releaseTile();
+    }
+
+    /** 永久释放本实例资源；关闭后须创建新实例再绘制。 */
+    @Override
+    public void close() {
+        releaseTile();
+        closed = true;
     }
 
     /**
@@ -49,8 +71,9 @@ public final class UiDotGrid {
      * @param baseStep 未缩放的基准步长（像素）
      * @param color 方格颜色
      */
-    public static void draw(GuiGraphics graphics, double scale, int x0, int y0, int x1, int y1,
+    public void draw(GuiGraphics graphics, double scale, int x0, int y0, int x1, int y1,
                             int baseStep, int color) {
+        if (closed) throw new IllegalStateException("UiDotGrid is closed");
         int left = Math.min(x0, x1);
         int top = Math.min(y0, y1);
         int right = Math.max(x0, x1);
@@ -77,10 +100,9 @@ public final class UiDotGrid {
     }
 
     // 取步长 + 颜色对应的点阵纹理；缓存命中直接复用，否则释放旧纹理后重建
-    private static @Nullable ResourceLocation tileFor(int step, int color) {
-        TextureManager manager = Minecraft.getInstance().getTextureManager();
-        // 注册项只由本类注销，纹理管理器实例在客户端生命周期内唯一，因此管理器 + 步长 + 颜色一致即为命中
-        if (tileTexture != null && step == tileStep && color == tileColor && manager == tileManager) {
+    private @Nullable ResourceLocation tileFor(int step, int color) {
+        // 管理器由实例固定持有；重载由所有者显式失效。
+        if (tileTexture != null && step == tileStep && color == tileColor) {
             return tileId;
         }
         releaseTile();
@@ -106,25 +128,21 @@ public final class UiDotGrid {
         // 点阵按 1:1 显示：最近邻采样、无 mipmap，避免采样把 1 像素点糊开
         texture.setFilter(false, false);
         tileTexture = texture;
-        tileManager = manager;
         tileStep = step;
         tileColor = color;
         tileWidth = side;
         tileHeight = side;
         // 名称由管理器分配（minecraft:dynamic/...），重建时按返回的 id 注销旧纹理
-        tileId = manager.register("itemdespawntowhat_ui_dot_grid", texture);
+        tileId = manager.register("ui_dot_grid", texture);
         return tileId;
     }
 
-    // 注销并释放旧纹理；管理器关闭时其纹理随 close 一并关闭，这里只丢弃引用
-    private static void releaseTile() {
+    // 注册后仅由管理器释放，避免直接关闭与注销重复释放。
+    private void releaseTile() {
         if (tileTexture == null) return;
-        if (tileManager != null && tileId != null) {
-            tileManager.release(tileId);
-        }
+        if (tileId != null) manager.release(tileId);
         tileTexture = null;
         tileId = null;
-        tileManager = null;
         tileStep = -1;
         tileWidth = 0;
         tileHeight = 0;

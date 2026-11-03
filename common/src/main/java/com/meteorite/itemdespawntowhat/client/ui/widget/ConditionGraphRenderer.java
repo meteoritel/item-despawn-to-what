@@ -17,6 +17,7 @@ import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLay
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.meteorite.itemdespawntowhat.client.edit.ConditionTreeNodes;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
+import com.meteorite.itemdespawntowhat.client.ui.shared.PreviewResources;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiDotGrid;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiTransform;
@@ -56,6 +57,8 @@ final class ConditionGraphRenderer {
     private final Font font;
     private final ConditionGraphLayout graph;
     private final int markWidth;
+    private @Nullable UiDotGrid dotGrid;
+    private @Nullable Object resources;
 
     ConditionGraphRenderer(UiHostTheme theme, Font font, ConditionGraphLayout graph) {
         this.theme = theme;
@@ -64,7 +67,17 @@ final class ConditionGraphRenderer {
         this.markWidth = font.width(MARK_TEXT);
     }
 
+    void releaseResources() {
+        if (dotGrid != null) dotGrid.close();
+        dotGrid = null;
+        resources = null;
+    }
+
     void drawDotGrid(GuiGraphics graphics, UiTransform transform, UiRect viewport) {
+        Object nextResources = PreviewResources.generation();
+        if (dotGrid == null) dotGrid = new UiDotGrid();
+        else if (resources != nextResources) dotGrid.invalidate();
+        resources = nextResources;
         int step = Math.max(1, (int) Math.round(DOT_BASE_STEP * transform.scale()));
         int gridX = alignToGrid(transform.toScreenX(0), viewport.x(), step);
         int gridY = alignToGrid(transform.toScreenY(0), viewport.y(), step);
@@ -73,7 +86,7 @@ final class ConditionGraphRenderer {
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
         try {
-            UiDotGrid.draw(graphics, transform.scale(), gridX, gridY, viewport.right(), viewport.bottom(),
+            dotGrid.draw(graphics, transform.scale(), gridX, gridY, viewport.right(), viewport.bottom(),
                     DOT_BASE_STEP, theme.palette().canvasGridDot());
         } finally {
             graphics.flush();

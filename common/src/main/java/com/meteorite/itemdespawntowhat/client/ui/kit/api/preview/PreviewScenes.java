@@ -32,11 +32,7 @@ import org.jetbrains.annotations.NotNull;
 /** 有界的场景所有者；宿主每帧推进一次，所有公开方法由渲染线程调用。 */
 @SuppressWarnings("resource") // 场景与交接缓冲由本所有者跨帧统一释放。
 public final class PreviewScenes implements AutoCloseable {
-    static final long SCENE_LIMIT = 8L * 1024 * 1024;
-    private static final long TOTAL_LIMIT = 32L * 1024 * 1024;
-    private static final int REQUEST_LIMIT = 256;
-    private static final int UPLOADS_PER_FRAME = 2;
-    private static final long UPLOAD_NANOS = 1_500_000;
+    private final PreviewBudget budget;
     private final ExecutorService executor;
     private final LongSupplier clock;
     private final Geometry geometry;
@@ -70,6 +66,13 @@ public final class PreviewScenes implements AutoCloseable {
     /** 注入宿主线程池、时钟、平台适配与诊断；关闭场景不会关闭宿主线程池。 */
     public PreviewScenes(ExecutorService executor, LongSupplier clock, Geometry geometry,
                          BiConsumer<String, Throwable> diagnostic, boolean externalCulling) {
+        this(executor, clock, geometry, diagnostic, externalCulling, PreviewBudget.DEFAULT);
+    }
+
+    /** 注入完整资源预算；executor 仍由宿主持有，动画时钟以毫秒为单位。 */
+    public PreviewScenes(ExecutorService executor, LongSupplier clock, Geometry geometry,
+                         BiConsumer<String, Throwable> diagnostic, boolean externalCulling, PreviewBudget budget) {
+        this.budget = budget;
         this.executor = executor; this.clock = clock; this.geometry = geometry;
         this.diagnostic = diagnostic; this.cull = externalCulling;
     }
@@ -90,7 +93,7 @@ public final class PreviewScenes implements AutoCloseable {
         if (closed) throw new IllegalStateException("场景所有者已关闭");
         PreviewScene scene = scenes.get(subject);
         if (scene == null) {
-            if (scenes.size() >= REQUEST_LIMIT && !evictOne()) {
+            if (scenes.size() >= budget.requests() && !evictOne()) {
                 PreviewScene waiting = new PreviewScene(id, subject);
                 waiting.released = true;
                 return waiting;
@@ -155,7 +158,7 @@ public final class PreviewScenes implements AutoCloseable {
     }
 
     private boolean hasPreparationBudget() {
-        return framePreparations < UPLOADS_PER_FRAME && framePreparationNanos < UPLOAD_NANOS;
+        return framePreparations < budget.uploadsPerFrame() && framePreparationNanos < budget.uploadNanos();
     }
 
     private boolean canPrepare(PreviewScene scene) {
@@ -209,20 +212,21 @@ public final class PreviewScenes implements AutoCloseable {
         var level = Minecraft.getInstance().level;
         var biome = level == null ? null : level.registryAccess().registryOrThrow(Registries.BIOME).get(Biomes.PLAINS);
         synchronized (completions) {
-            if (pendingBytes + SCENE_LIMIT > TOTAL_LIMIT) return;
-            pendingBytes += SCENE_LIMIT;
-            scene.pendingBytes = SCENE_LIMIT;
+            if (pendingBytes > budget.pendingBytes() - budget.singleSceneBytes()) return;
+            pendingBytes += budget.singleSceneBytes();
+            scene.pendingBytes = budget.singleSceneBytes();
         }
         scene.started = true;
         scene.task = executor.submit(() -> {
             SceneMeshes.Prepared mesh = null;
             RuntimeException failure = null;
-            try { mesh = SceneMeshes.compile(new SceneBlocks(structure, biome), geometry, cull); }
+            try { mesh = SceneMeshes.compile(new SceneBlocks(structure, biome), geometry, cull, budget.singleSceneBytes()); }
             catch (RuntimeException exception) { failure = exception; }
             synchronized (completions) {
                 if (closed || scene.released) {
                     if (mesh != null) mesh.close();
-                    if (!closed) { pendingBytes -= scene.pendingBytes; scene.pendingBytes = 0; }
+                    if (!closed) pendingBytes -= scene.pendingBytes;
+                    scene.pendingBytes = 0;
                 } else {
                     pendingBytes -= scene.pendingBytes;
                     scene.pendingBytes = mesh == null ? 0 : mesh.bytes;
@@ -250,7 +254,7 @@ public final class PreviewScenes implements AutoCloseable {
     }
 
     private boolean makeRoom(long bytes, PreviewScene protectedScene) {
-        while (gpuBytes + bytes > TOTAL_LIMIT) if (!evictOne(protectedScene)) return false;
+        while (gpuBytes > budget.gpuBytes() - bytes) if (!evictOne(protectedScene)) return false;
         return true;
     }
     private boolean evictOne() { return evictOne(null); }

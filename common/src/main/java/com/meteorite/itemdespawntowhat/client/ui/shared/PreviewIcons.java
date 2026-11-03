@@ -4,6 +4,7 @@ import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiPreviewCache;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.preview.PreviewMotion;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.preview.PreviewBudget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.preview.PreviewScenes;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.preview.PreviewState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.preview.PreviewSubject;
@@ -33,6 +34,7 @@ public final class PreviewIcons {
     private static @Nullable PreviewScenes scenes;
     private static Object generation;
     private static boolean rotating = true;
+    private static PreviewBudget budget = PreviewBudget.DEFAULT;
     private static final long RETAIN_MILLIS = 15_000;
     private static final int RETAIN_SCENES = 64;
     private static final int RETAIN_INSTANCES = 64;
@@ -48,12 +50,24 @@ public final class PreviewIcons {
         Object current = PreviewResources.generation();
         if (scenes == null || generation != current) {
             clear();
-            if (geometry == null) throw new IllegalStateException("预览平台适配尚未安装");
-            scenes = new PreviewScenes(WORKERS, Util::getMillis, geometry,
-                    (id, failure) -> Constants.LOG.warn("Preview {}", id, failure), true);
+            scenes = createScenes(budget);
             generation = current;
         }
         return scenes;
+    }
+
+    /** 创建独立场景所有者；调用方负责 close 与资源世代，工作线程仍归宿主。 */
+    public static PreviewScenes createScenes(PreviewBudget budget) {
+        if (geometry == null) throw new IllegalStateException("预览平台适配尚未安装");
+        return new PreviewScenes(WORKERS, Util::getMillis, geometry,
+                (id, failure) -> Constants.LOG.warn("Preview {}", id, failure), true, budget);
+    }
+
+    /** 更换资源预算时释放旧账本；已有图标下一帧自动使用新所有者。 */
+    public static void setBudget(PreviewBudget next) {
+        if (budget.equals(next)) return;
+        clear();
+        budget = next;
     }
 
     /** 每个宿主屏幕在绘制第一枚图标前调用一次。 */

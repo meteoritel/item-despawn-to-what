@@ -26,16 +26,15 @@ public record UiModelBounds(float centerX, float centerY, float centerZ,
         void render(PoseStack pose, MultiBufferSource buffers);
     }
 
+    /** 空几何返回 null；渲染异常和非有限顶点由调用方按实际失败处理。 */
     public static @Nullable UiModelBounds measure(Renderer renderer) {
         BoundsConsumer vertices = new BoundsConsumer();
-        try {
-            renderer.render(new PoseStack(), type -> vertices);
-            if (!vertices.present) return null;
-            return new UiModelBounds((vertices.minX + vertices.maxX) / 2,
-                    (vertices.minY + vertices.maxY) / 2, (vertices.minZ + vertices.maxZ) / 2,
-                    Math.max(0.01F, vertices.maxX - vertices.minX), Math.max(0.01F, vertices.maxY - vertices.minY),
-                    Math.max(0.01F, vertices.maxZ - vertices.minZ));
-        } catch (RuntimeException exception) { return null; }
+        renderer.render(new PoseStack(), type -> vertices);
+        if (!vertices.present) return null;
+        return new UiModelBounds((vertices.minX + vertices.maxX) / 2,
+                (vertices.minY + vertices.maxY) / 2, (vertices.minZ + vertices.maxZ) / 2,
+                Math.max(0.01F, vertices.maxX - vertices.minX), Math.max(0.01F, vertices.maxY - vertices.minY),
+                Math.max(0.01F, vertices.maxZ - vertices.minZ));
     }
 
     /** 只累计空间范围，颜色、贴图、法线和光照不影响几何测量。 */
@@ -45,11 +44,11 @@ public record UiModelBounds(float centerX, float centerY, float centerZ,
         private boolean present;
 
         @Override public @NotNull VertexConsumer addVertex(float x, float y, float z) {
-            if (Float.isFinite(x) && Float.isFinite(y) && Float.isFinite(z)) {
-                minX = Math.min(minX, x); minY = Math.min(minY, y); minZ = Math.min(minZ, z);
-                maxX = Math.max(maxX, x); maxY = Math.max(maxY, y); maxZ = Math.max(maxZ, z);
-                present = true;
-            }
+            if (!Float.isFinite(x) || !Float.isFinite(y) || !Float.isFinite(z))
+                throw new IllegalArgumentException("renderer 输出非有限坐标");
+            minX = Math.min(minX, x); minY = Math.min(minY, y); minZ = Math.min(minZ, z);
+            maxX = Math.max(maxX, x); maxY = Math.max(maxY, y); maxZ = Math.max(maxZ, z);
+            present = true;
             return this;
         }
         @Override public @NotNull VertexConsumer setColor(int red, int green, int blue, int alpha) { return this; }
