@@ -53,3 +53,16 @@ tasks.register('exportConfigReference', JavaExec) {
     inputs.files(sourceSets.main.runtimeClasspath, configDocsClasses)
     outputs.file(output)
 }
+
+// 同一份开发样板只与 kit 源码、MC 及许可依赖编译，产品 main 产物不进入 classpath。
+tasks.register('compileUiKitSamples', JavaCompile) {
+    group = 'verification'
+    description = '独立编译 UI kit 与纯样板，拦截对产品实现的隐式依赖。'
+    source fileTree('src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit') { include '**/*.java' }
+    source fileTree('src/dev/java/com/meteorite/itemdespawntowhat/client/debug/kit') { include '**/*.java' }
+    classpath = sourceSets.main.compileClasspath.minus(sourceSets.main.output)
+    destinationDirectory = layout.buildDirectory.dir('ui-kit-samples/classes')
+    javaCompiler = javaToolchains.compilerFor { languageVersion = JavaLanguageVersion.of(21) }
+    options.encoding = 'UTF-8'
+}
+tasks.named('check') { dependsOn tasks.named('compileUiKitSamples') }

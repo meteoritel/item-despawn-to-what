@@ -14,8 +14,8 @@ from toolslib.repo import collect_files, repo_root
 
 KIT_PATH = "common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit"
 KIT_PACKAGE = "com.meteorite.itemdespawntowhat.client.ui.kit"
-API_PACKAGE = KIT_PACKAGE + ".api"
-INTERNAL_PACKAGE = KIT_PACKAGE + ".internal"
+HOST_PREFIX = "com.meteorite"
+SAMPLE_PATH = "common/src/dev/java/com/meteorite/itemdespawntowhat/client/debug/kit"
 ALLOWED_PREFIXES = ("java.", "javax.", "net.minecraft.", "org.jetbrains.", "org.joml.", "org.lwjgl.")
 ALLOWED_CLASSES = frozenset("com.mojang.blaze3d." + name for name in (
     "platform.Lighting", "vertex.PoseStack", "vertex.VertexConsumer", "systems.RenderSystem",
@@ -23,7 +23,6 @@ ALLOWED_CLASSES = frozenset("com.mojang.blaze3d." + name for name in (
     "vertex.VertexBuffer", "vertex.VertexFormat", "vertex.VertexSorting"))
 ALLOWED_CLASS_KEYS = frozenset(name.casefold() for name in ALLOWED_CLASSES)
 FORBIDDEN_PREFIXES = ("net.fabricmc.", "net.neoforged.", "com.google.gson.")
-FQ_PREFIXES = ("com.meteorite.", "com.mojang.blaze3d.", *FORBIDDEN_PREFIXES)
 ROLE = re.compile(r"<li>\{@code ([A-Za-z_][A-Za-z0-9_]*)\}: (host|library|example)(?:；([^<]*))?</li>")
 
 
@@ -31,7 +30,8 @@ def source_index(root: Path, kit: Path, files: list[Path]) -> tuple[list[Source]
     """共用仓库类型索引；显式外部 kit 路径也纳入引用解析。"""
     sources = [Source.read(path, root) for path in collect_files(root, ".java")]
     known = {source.path for source in sources}
-    sources.extend(Source.read(path, kit) for path in files if path not in known)
+    sources.extend(Source.read(path, root if path.is_relative_to(root) else path.parent)
+                   for path in files if path not in known)
     return sources, TypeIndex(sources)
 
 
@@ -86,8 +86,9 @@ def exported_headers(source: Source):
         start = token.end()
 
 
-def exported_type_graph(sources: list[Source], index: TypeIndex, kit: Path) -> dict[str, set[str]]:
+def exported_type_graph(sources: list[Source], index: TypeIndex, kit: Path, kit_package: str = KIT_PACKAGE) -> dict[str, set[str]]:
     """只沿公开声明建立类型图；闭包表示公开契约可达，不推断某段 Java 调用已经执行。"""
+    api_package = kit_package + ".api"
     graph: dict[str, set[str]] = {}
     for source in sources:
         if not source.path.is_relative_to(kit):
@@ -96,7 +97,7 @@ def exported_type_graph(sources: list[Source], index: TypeIndex, kit: Path) -> d
         for _, header in exported_headers(source):
             declaration = replace(source, code=header, imports=[(0, name) for _, name in source.imports])
             targets.update(target for line, target in index.references(declaration)
-                           if line > 0 and target.startswith(API_PACKAGE + "."))
+                           if line > 0 and target.startswith(api_package + "."))
         for owner in source.declarations:
             graph[owner] = targets - {owner}
     return graph
@@ -113,23 +114,42 @@ def contract_closure(roots: set[str], graph: dict[str, set[str]]) -> set[str]:
     return reachable
 
 
-def check_exports(sources: list[Source], index: TypeIndex, kit: Path, result: CheckResult) -> None:
+def check_exports(sources: list[Source], index: TypeIndex, kit: Path, result: CheckResult, kit_package: str = KIT_PACKAGE) -> None:
     """宿主只引用 api；api 的父类型和公开/protected 声明保留在导出面内。"""
+    api_package = kit_package + ".api"
+    internal_package = kit_package + ".internal"
     for source in sources:
         if not source.path.is_relative_to(kit):
             for line, target in index.references(source):
-                if target.startswith(KIT_PACKAGE + ".") and not target.startswith(API_PACKAGE + "."):
+                if target.startswith(kit_package + ".") and not target.startswith(api_package + "."):
                     result.findings.append(Finding(source.relative, "宿主只允许引用 kit.api", target, line))
-        elif source.package == API_PACKAGE or source.package.startswith(API_PACKAGE + "."):
+        elif source.package == api_package or source.package.startswith(api_package + "."):
             for start_line, header in exported_headers(source):
                 declaration = replace(source, code=header, imports=[(0, name) for _, name in source.imports])
                 for line, target in index.references(declaration):
-                    if line > 0 and target.startswith(INTERNAL_PACKAGE + "."):
+                    if line > 0 and target.startswith(internal_package + "."):
                         result.findings.append(Finding(source.relative, "公开声明泄漏 internal 类型", target, start_line + line - 1))
 
 
-def check(root: Path, kit_path: str = KIT_PATH) -> CheckResult:
+def check(root: Path, kit_path: str = KIT_PATH, kit_package: str = KIT_PACKAGE,
+          host_prefix: str = HOST_PREFIX, sample_paths: tuple[str, ...] = ()) -> CheckResult:
     """逐行检查原始文本，公开角色从原始 Javadoc 读取。"""
+    for label, prefix in (("kit-package", kit_package), ("host-prefix", host_prefix)):
+        if not re.fullmatch(r"[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*", prefix):
+            raise ValueError(f"{label} 不是合法 Java 包前缀：{prefix}")
+    api_package = kit_package + ".api"
+    internal_package = kit_package + ".internal"
+    fq_prefixes = (kit_package + ".", host_prefix + ".", "com.mojang.blaze3d.", *FORBIDDEN_PREFIXES)
+    sample_files = []
+    for sample_path in sample_paths:
+        sample = Path(sample_path)
+        sample = (sample if sample.is_absolute() else root / sample).resolve()
+        if not sample.is_dir():
+            raise ValueError(f"样板目录不存在：{sample}")
+        found = sorted(sample.rglob("*.java"))
+        if not found:
+            raise ValueError(f"样板目录下没有 .java 文件：{sample}")
+        sample_files.extend(found)
     kit = Path(kit_path)
     kit = (kit if kit.is_absolute() else root / kit).resolve()
     if not kit.is_dir():
@@ -139,30 +159,32 @@ def check(root: Path, kit_path: str = KIT_PATH) -> CheckResult:
         raise ValueError(f"kit 目录下没有 .java 文件：{kit}")
     result = CheckResult(repair="修正 kit 依赖边界及同目录 package-info.java 的角色登记。")
     public_types = []
-    sources, index = source_index(root, kit, files)
+    sources, index = source_index(root, kit, files + sample_files)
     by_path = {source.path: source for source in sources}
     directories = dict.fromkeys(path.parent for path in files)
     imports = 0
     for path in files:
         package = by_path[path].package
+        if package != kit_package and not package.startswith(kit_package + "."):
+            result.findings.append(Finding(str(path), "包前缀不匹配", package))
         # 允许显式 kit 路径位于仓库之外，位置仍以相对根路径表示。
         relative = Path(os.path.relpath(path, root)).as_posix()
-        for line in boundary_lines(path.read_text(encoding="utf-8"), prefixes=FQ_PREFIXES, raw=True):
-            if line.public_type and not package.startswith(INTERNAL_PACKAGE + "."):
+        for line in boundary_lines(path.read_text(encoding="utf-8"), prefixes=fq_prefixes, raw=True):
+            if line.public_type and not package.startswith(internal_package + "."):
                 public_types.append((path.parent, line.public_type))
-                if not package.startswith(API_PACKAGE + "."):
+                if not package.startswith(api_package + "."):
                     result.findings.append(Finding(relative, "公开入口须位于 kit.api 能力包", line.public_type, line.number))
             if line.imported:
                 imports += 1
             for target in (line.imported,) if line.imported else line.qualified:
-                preview = (API_PACKAGE + ".preview.", INTERNAL_PACKAGE + ".preview.")
+                preview = (api_package + ".preview.", internal_package + ".preview.")
                 if not (package + ".").startswith(preview) and target.startswith(preview):
                     result.findings.append(Finding(relative, "基础 kit 反向引用 preview", target, line.number))
-                if target == KIT_PACKAGE or target.startswith(KIT_PACKAGE + "."):
+                if target == kit_package or target.startswith(kit_package + "."):
                     continue
                 if line.imported:
                     reason = next(("禁用依赖 " + prefix for prefix in FORBIDDEN_PREFIXES if target.startswith(prefix)), None)
-                    if reason is None and target.startswith("com.meteorite."):
+                    if reason is None and target.startswith(host_prefix + "."):
                         reason = "本模组非 kit 包"
                     if reason is None and target.casefold() not in ALLOWED_CLASS_KEYS and not target.startswith(ALLOWED_PREFIXES):
                         reason = "白名单外 import"
@@ -170,7 +192,7 @@ def check(root: Path, kit_path: str = KIT_PATH) -> CheckResult:
                 else:
                     if target.casefold() in ALLOWED_CLASS_KEYS:
                         continue
-                    reason = "本模组非 kit 包的全限定引用" if target.startswith("com.meteorite.") else "禁用依赖的全限定引用"
+                    reason = "本模组非 kit 包的全限定引用" if target.startswith(host_prefix + ".") else "禁用依赖的全限定引用"
                     detail = target
                 if reason:
                     result.findings.append(Finding(relative, reason, detail, line.number))
@@ -197,9 +219,9 @@ def check(root: Path, kit_path: str = KIT_PATH) -> CheckResult:
         if (str(directory).casefold(), name.casefold()) not in roles:
             unregistered += 1
             result.findings.append(Finding(str(directory) + "|" + name, "公开面", "角色缺失"))
-    check_exports(sources, index, kit, result)
+    check_exports(sources, index, kit, result, kit_package)
     consumers = production_consumers(sources, index, kit)
-    graph = exported_type_graph(sources, index, kit)
+    graph = exported_type_graph(sources, index, kit, kit_package)
     reachable = contract_closure(set(consumers) & graph.keys(), graph)
     registered = {by_path[directory / (name + ".java")].package + "." + name for directory, name in public_types}
     for owner, targets in graph.items():
@@ -223,21 +245,52 @@ def check(root: Path, kit_path: str = KIT_PATH) -> CheckResult:
             result.findings.append(Finding(label, "消费角色", "存在生产消费：" + "、".join(sorted(hosts))))
         if role == "library" and ("用途：" not in notes[identity] or "当前无直接生产引用" not in notes[identity]):
             result.findings.append(Finding(label, "公开面", "library 须说明用途与当前无直接生产引用"))
-    result.summaries = [f"扫描目录：{kit}", f"扫描文件：{len(files)} 个，import：{imports} 条",
+    check_samples(sample_files, by_path, index, kit_package, host_prefix, registered, fq_prefixes, result)
+    result.summaries = [f"扫描目录：{kit}", f"纯样板源码：{len(sample_files)} 个", f"扫描文件：{len(files)} 个，import：{imports} 条",
                         f"顶层 public 类型：{len(public_types)} 个，package-info 已登记：{len(public_types) - unregistered} 个",
                         f"生产直接引用：{len(set(consumers) & graph.keys())} 个，公开契约闭包可达：{len(reachable)} 个（词法口径）"]
     result.success = f"kit 依赖边界检查通过：{len(files)} 个文件，{len(public_types)} 个顶层 public 类型全部登记，0 处违规。"
     return result
 
 
+def check_samples(files: list[Path], sources: dict[Path, Source], index: TypeIndex,
+                  kit_package: str, host_prefix: str, public_types: set[str],
+                  fq_prefixes: tuple[str, ...], result: CheckResult) -> None:
+    """样板只使用 kit 公开面、同目录演示模型与许可依赖；成员可见性由独立编译核验。"""
+    local_types = {name for path in files for name in sources[path].declarations}
+    for path in files:
+        source = sources[path]
+        references = set(index.references(source))
+        for line in boundary_lines(source.code, prefixes=fq_prefixes):
+            references.update((line.number, index.owner_name(name)) for name in line.qualified
+                              if name != source.package)
+        for line, target in sorted(references):
+            if target in local_types:
+                continue
+            if target.startswith(kit_package + "."):
+                reason = None if target in public_types else "纯样板只能消费已登记的 kit.api 公开类型"
+            elif target.startswith(host_prefix + "."):
+                reason = "纯样板引用产品实现"
+            elif target.casefold() in ALLOWED_CLASS_KEYS or target.startswith(ALLOWED_PREFIXES):
+                reason = None
+            else:
+                reason = "纯样板白名单外依赖"
+            if reason:
+                result.findings.append(Finding(source.relative, reason, target, line))
+
+
 def main() -> int:
-    """支持公共 --root 与 --kit-path 的显式路径。"""
+    """按显式源码路径、包前缀与样例路径执行同一套边界检查。"""
     configure_console()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root")
     parser.add_argument("--kit-path", default=KIT_PATH)
+    parser.add_argument("--kit-package", default=KIT_PACKAGE)
+    parser.add_argument("--host-prefix", default=HOST_PREFIX)
+    parser.add_argument("--sample-path", action="append", help="纯样板目录，可重复传入；默认检查本项目样板")
     args = parser.parse_args()
-    return execute(lambda: check(repo_root(args.root), args.kit_path))
+    return execute(lambda: check(repo_root(args.root), args.kit_path, args.kit_package,
+                                 args.host_prefix, tuple(args.sample_path or (SAMPLE_PATH,))))
 
 
 if __name__ == "__main__":

@@ -93,11 +93,13 @@ flowchart LR
 - import 白名单为 `java.*`、`javax.*`、`net.minecraft.*`、`org.jetbrains.*`、`org.joml.*`、`org.lwjgl.*`，另有 `com.mojang.blaze3d` 的顶点与光照类型；
 - 本模组其它包、`net.fabricmc.*`、`net.neoforged.*`、`com.google.gson.*` 判违规。
 
-运行方式：`python tools/check-ui-kit-boundaries.py`；通过返回 0，有违规返回 1，必需输入缺失或目录无效返回 2。
+纯样例根还核对本地模型、kit.api 公开入口与原版/许可依赖，产品类型和 kit.internal 均报违规。`common:compileUiKitSamples` 同时以 kit + 纯样例作为源码输入，classpath 排除产品 main 输出，Java 编译负责实际类型可见性。
+
+运行方式：`python tools/check-ui-kit-boundaries.py`；可通过 `--root`、`--kit-path`、`--kit-package`、`--host-prefix` 与可重复的 `--sample-path` 配置扫描目标，默认值对应当前项目。通过返回 0，有违规返回 1，必需输入缺失或目录无效返回 2。
 
 ### 构建与持续集成
 
-根任务 `checkRepository` 组合隔离、文档、i18n、UI kit、`checkConfigReference` 与 `checkGuiCases`，各子项目 `check` 依赖同一根任务。GUI 门禁只读核对用例、handler 和指南契约受管块。发布包隔离仍由 `checkProbePackaging` 消费各端 assemble 产物；单次 build 中每个根任务执行一次。
+根任务 `checkRepository` 组合隔离、文档、i18n、UI kit、`checkConfigReference` 与 `checkGuiCases`，各子项目 `check` 依赖同一根任务，common 的 `check` 另依赖 `compileUiKitSamples`。GUI 门禁只读核对用例、handler 和指南契约受管块。发布包隔离仍由 `checkProbePackaging` 消费各端 assemble 产物；单次 build 中每个根任务执行一次。
 
 PR、`1.21.1` 分支 push 和 release 的 build 使用同一门禁；环境提供 JDK 21 与 Python。Wiki 发布在写入远端前运行 `checkConfigReference`。
 
