@@ -53,7 +53,7 @@ kit 是记录来源与差异的维护副本，按可独立发布的库 API 维�
 
 各能力目录的 `package-info.java` 逐项登记 `host`（kit 外本项目生产源码直接引用）、`library`（供其它宿主使用，逐项说明用途与当前无生产引用）与 `example`（装配示例）。三类都保留公开契约，dev/probe 使用与生产消费分别识别。
 
-本项目以固定矩形控件、滚动视口、焦点与捕获、树编辑、数值与文本交互装配页面。`UiDocument`/`UiNode`、`UiControlGroup`、`UiLightbox`、`UiFloatingPanel`、`UiNavigationHistory` 等保留为库接入能力；`UiSliderExamples` 提供无业务装配示例。公开成员与嵌套契约随所属顶层类型维护。
+本项目以固定矩形控件、滚动视口、焦点与捕获、树编辑、数值与文本交互装配页面。`UiDocument`/`UiNode` 是只读文档排版、渲染与命中查询入口，当前无生产引用；`UiControlGroup`、`UiLightbox`、`UiFloatingPanel`、`UiNavigationHistory` 等保留为库接入能力；`UiSliderExamples` 提供无业务装配示例。公开成员与嵌套契约随所属顶层类型维护。
 
 ### 依赖方向
 
@@ -110,17 +110,20 @@ kit 的形态由宿主的注入决定，缺一不可：
 |---|---|---|---|
 | `UiStyleSource` | 扩展点 | 按语义角色给出控件样式与滑块皮肤；kit 只约定返回类型，视觉规范留在宿主 | 宿主主题、`UiControl`、`UiScalarSlider` |
 | `UiControlStyle` / `UiControlRole` / `UiSliderSkin` / `UiSliderRole` | 注入值 | 角色只表达语义（如主要、次要、危险等操作语义，以及紧凑、宽松两档几何尺度）；交互状态由样式按 `State` 解析，不属于角色；皮肤把“样式 + 画法”配成一对，使两者来自同一套主题 | 主题实现、控件渲染 |
-| `UiDocument` / `UiNode` | 排版聚合根 | 把声明式节点排成块几何并缓存；命中与绘制共用同一份几何 | 布局类型、`TextMeasurer`、`UiRenderLayers` |
+| `UiDocument` / `UiNode` | 只读排版聚合根 | 把文档内容块排成几何并缓存；渲染、提示和命中查询共用几何，命中数据由宿主解释 | 布局类型、`UiPointerHit`、`UiRenderLayers` |
 | `UiControl` / `UiControlGroup` | 控件聚合根 | 控件按角色取样式并解析交互状态；控件组按稳定 key 复用实例、按层序命中并给 tooltip | `UiStyleSource`、`UiFocusManager` |
 | `UiInputTarget` / `UiInputContext` | 输入契约 | 指针、滚轮、键盘与字符输入都以“是否消费”返回；上下文是显式快照，坐标为 GUI 逻辑坐标 | 全部 kit 控件、宿主控件适配 |
 | `UiInputRouter` / `UiInputScope` | 输入作用域与路由 | 实例路由器选择活动作用域；作用域持有内容、唯一焦点与会话；普通内容派发一次，持续输入按会话归属送达 | 宿主屏幕、模态、控件 |
+| `UiPointerHit` / `UiPointer` | 命中与绘制快照 | 命中结果保存所有者链、局部坐标、焦点候选与提示来源；绘制指针结合 active 与 POINTER 捕获选择可悬停分支 | `UiInputTarget.hitTest`、控件、容器与文档 |
 | `UiInteractionSession` | 唯一持续交互 | 按 POINTER / KEY / TEXT 登记目标；结束先摘除所有权再通知，控件负责提交或恢复自己的值与手势模型 | `UiInputScope`、数值、文本、按钮及视图手势 |
 | `UiValueInteraction<V>` | 操作生命周期 | begin → preview → commit 或 cancel；真实模型注入有效性与等价判断，取消先由核心恢复实际值，所有结束路径通知 finished | 滑条、精确输入行、宿主历史 |
 | `UiFocusManager` / `UiFocusTarget` / `UiFocusState` | 唯一焦点与控件视图 | 作用域按视觉顺序登记目标；资格、逻辑焦点、键盘提示与激活分别表达；复合控件内部编辑共用外部 Tab 位置 | `UiInputScope`、宿主旁白与自动滚动 |
+| `UiFocusFollow` / `UiFocusManager.Listener` | 焦点效果 | 用注入的归属与内容坐标把目标滚入视口；组合效果按顺序执行，名称交给宿主播报 | `UiScrollView`、宿主 `UiNarration` |
 | `UiTreeEditor` / `UiTreeEditor.Adapter` / `UiTreeCodec` | 树聚合根与扩展点 | 绑定宿主不可变节点做结构操作，配置变更与视图变更分开上报；一次操作以一条 `Change` 提交 | `UiTreePath`、`UiTreeMoveInteraction`、宿主节点 |
 | `UiTreeProjection` / `UiTreeViewState` / `UiTreeNavigation` / `UiTreeRowMarker` | 树展示原语 | 每个结构版本建立先序索引；每个视图独立保存选择与折叠；可见行统一导航与标记命中，完整旧新路径映射迁移状态 | 管理树、条件摘要、`UiTreeEditor` |
 | `UiTextValue` / `UiTextEditSession` | 文本契约与协调 | session 组合码点接纳、局部历史与指针选择；回填和历史恢复共用原版 Model adapter，光标与锚点按 UTF-16 保存 | 单行、多行文本与字段控件 |
 | `UiScrollbarGeometry` | 纯几何 | 共用轨道、比例、最小滑块与偏移映射；滚动偏移由视口唯一持有 | `UiScrollView`、多行文本 |
+| `UiScrollView` / `UiScrollView.Policy` | 滚动所有者 | 统一偏移、范围、对齐、视口变换与拖动；政策配置步长对齐、滑块、抓取外扩、按下居中与轨道留宽 | 列表、树、目录网格、焦点跟随 |
 | `preview/PreviewScenes` | 场景所有者 | 有界请求、异步几何交接、实例准备、逐帧上传与释放 | 宿主 `PreviewIcons`、平台 `Geometry` |
 | `preview/PreviewSubject` / `PreviewStructure` | 内容契约 | 物品、状态与 NBT 快照，原版结构解码与完整占位 | 场景缓存与资源读取 |
 | `preview/UiSceneView` | 绘制入口 | 模型空间包围、固定整圈适框、旋转、深度与裁剪恢复 | `PreviewScene`、相机与样式值 |
@@ -129,8 +132,8 @@ kit 的形态由宿主的注入决定，缺一不可：
 | `UiNumberPolicy` / `UiSliderWindow` / `UiNumbers` | 数值契约值 | 合法域与粗细步长吸附、轨道显示窗口、数值文本显示与解析各由唯一实现承担 | 滑条、精确输入、宿主字段 |
 | `UiNumberField` | 数值字段组合 | 注入单行 Editor，统一双向绑定、相对几何、输入与绘制；两个子控件分别参与 Tab，空文本缺席由宿主回调处理 | `UiScalarSlider`、`UiValueTextBinding`、宿主数值字段 |
 | `UiValueTextBinding` | 双向绑定 | 统一数值预览/提交/取消与程序回填的重入保护；解析暂不可用时保留原文并停在最近有效值，未开始文本预览的取消保持原文 | 数值控件、精确输入行 |
-| `UiRenderLayers` / `UiPointer` | 绘制与悬停门禁 | 在相对 z 偏移内绘制并提交批次；被遮挡的作用域用屏幕外指针统一禁用 hover 与 tooltip 命中 | 弹窗栈、屏幕、预览类原语 |
-| `UiTooltipPlacement` / `UiTooltipPanel` | 提示面板 | 按宿主区域翻转和钳制完整外框，统一 TOOLTIP 层与正文裁剪；背景和内容由宿主绘制 | `UiFlatText`、宿主语义说明面板 |
+| `UiRenderLayers` | 绘制层序 | 在相对 z 偏移内绘制并提交批次，模态层按深度展开 | 弹窗栈、屏幕、预览类原语 |
+| `UiTooltipPlacement` / `UiTooltipPanel` | 提示面板 | 折行前按宿主、上限、margin 与 padding 计算正文宽度，再翻转和钳制外框，统一 TOOLTIP 层与正文裁剪 | `UiFlatText`、宿主语义说明面板 |
 | `UiFlatText` | 文本绘制原语 | 无阴影的居中、折行文本与悬停提示面板；深色底板的悬停提示只去掉文字阴影，文字颜色由调用方给定 | 控件、列表与树的空状态文案、页面提示 |
 | `UiFloatingPanel` / `UiIconStrip` / `UiLightbox` | 复合原语 | 面板停靠与折叠、图标条按格子命中、灯箱的缩放与焦点登记 | 屏幕装配、`UiFocusManager` |
 
@@ -138,7 +141,7 @@ kit 的形态由宿主的注入决定，缺一不可：
 
 ### 一次拖动从按下到提交
 
-宿主创建稳定作用域并登记焦点目标，用 `UiInputRouter.select` 选择当前作用域。真实命中由内容树完成，叶子通过 `pointerHit(target)` 报告焦点候选；非聚焦交互区域报告 `null`，纯背景没有命中。
+宿主创建稳定作用域并登记焦点目标，用 `UiInputRouter.select` 选择当前作用域。路由器在按下派发前调用内容的 `hitTest`，保存本次真实命中；内容只派发一次，消费 boolean 与命中结果分别表达。普通 `UiWidget` 默认按可见性和 bounds 命中，可聚焦目标自动携带候选；复合容器返回实际叶子，滚动条等操作区返回保焦命中。左键按下派发后按结果执行空白清焦、合格候选转焦或命中保焦，切域后跳过旧结果。
 
 ```mermaid
 sequenceDiagram
@@ -150,6 +153,7 @@ sequenceDiagram
     S->>R: select(scope)
     S->>R: mousePressed(context)
     R->>CAP: 完成同域旧交互
+    R->>C: hitTest(x, y)，保存命中快照
     R->>C: mousePressed(context)
     C->>CAP: begin(Target, POINTER, button)
     C->>V: begin(startValue, listener)
@@ -177,7 +181,15 @@ sequenceDiagram
 
 控件先声明焦点能力；`UiControl.setFocusable` 与动作独立。左键点击可聚焦目标转焦，不可聚焦的交互区域保留旧焦点，纯背景清焦。作用域退出挂起逻辑焦点，返回时恢复仍合格的目标，否则选择首个目标；交互会话随退出结束。
 
-额外轮廓由 `isFocusVisible` 决定，仅键盘操作显示；文本光标、选区与业务选中保持各自语义。复合控件用 `focusWithin` 进入私有文本模式，管理器仍只持有一个目标。组已登记时 Tab 使用组的位置；展开型组只登记子目标，组内编辑沿用已有有效锚点。
+额外轮廓由 `isFocusVisible` 决定，仅键盘操作显示；文本光标、选区与业务选中保持各自语义。`UiFocusTarget.canFocus` 默认组合 `UiWidget` 的可见和启用状态，特殊资格由控件声明。复合控件用 `focusWithin` 进入私有文本模式，管理器仍只持有一个目标。展开组保留组到叶子的归属索引，Tab 序列只含去重的叶子；内部模式使用组内实际子目标、当前锚点、该组最近锚点或首个合格叶子续接。未登记或没有合格叶子的组拒绝进入，展开环在登记时显式报错，收集失败保留已提交索引。
+
+焦点效果用 `UiFocusManager.Listener.compose` 按顺序装配：`UiFocusFollow` 把目标滚入视口，`Listener.narrate` 将 `accessibleName` 交给宿主 sink，再执行业务激活键政策。嵌套视口由内到外组合，每层读取滚动后的边界；超高目标覆盖视口时保持位置。Minecraft narrator 的选项与调用留在宿主 `UiNarration`。
+
+### 指针解析与提示
+
+宿主先完成布局和作用域同步，再调用 `scope.pointer(x, y).resolve(content)`；控件组内绘制共用此快照，以 `forTarget` 选择所属分支，坐标变换保留同一所有者链。容器按逆绘制顺序、裁剪和变换实现 `hitTest`；列表与网格直接定位行列。点击按事件时几何重新解析。快照只读，不保存另一棵输入树。
+
+活动作用域允许 hover；POINTER 会话只允许捕获目标所属分支反馈，并在持续交互期间关闭 tooltip。KEY/TEXT 会话保留普通 hover。最上层命中即确定唯一提示来源，空提示也阻断向下查找；`UiControlGroup` 与 `UiLightbox` 共用这一结果。`UiTooltipPanel.contentWidth` 在折行前扣除宿主边距和 padding，普通提示与语义说明面板保留各自宽度上限和画法；正文无可用宽度时跳过绘制。
 
 ### 树结构与视图同步
 
@@ -207,6 +219,7 @@ flowchart LR
 
 - 指针释放优先交给匹配会话；同域已消费的按下在无会话时向根内容释放一次。切域、关屏使配对失效。
 - 焦点列表使用 `UiFocusManager.updateTargets` 同步收集；收集成功才提交，异常保留旧列表并退出更新状态。手工登记配对错误与刷新时漏结束显式报错。
+- `UiScrollView` 默认按像素滚动；`Policy` 的对齐步长作用于所有偏移写入、范围和 ensure-visible。目录网格按整行配置，视口不足一行时保留一个裁剪显示的内容单元。
 - 内容命中使用 `UiScrollView.hitContentY(x,y)`，视口外、滚动条与滚动条拖动期间返回空；`toContentX/Y` 保持纯坐标换算。
 - 局部 tooltip、侧板、模态遮罩与深度公式由 `UiRenderLayers` 统一，容器在宿主选定的外层深度中安排局部前景。
 
