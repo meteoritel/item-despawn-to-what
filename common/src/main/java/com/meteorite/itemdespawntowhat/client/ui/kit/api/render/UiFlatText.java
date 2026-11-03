@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.render;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.client.gui.Font;
@@ -11,7 +12,7 @@ import net.minecraft.util.FormattedCharSequence;
  * 全 GUI 共用的无阴影文本绘制：原版 {@code drawCenteredString}、{@code drawWordWrap} 与悬停提示都会给字形叠加暗色阴影，
  * 深色文本叠在浅色底板上时阴影与笔画糊在一起，因此这些场景统一改由本类逐行 {@code drawString(..., false)} 绘制。
  *
- * <p>悬停提示保留原版的深色底板与渐变描边观感，只去掉文字阴影；定位按指针右下展开，越界时翻到指针左上方并钳制在屏幕内。</p>
+ * <p>悬停提示保留原版的深色底板与渐变描边观感，只去掉文字阴影；顶部优先从指针上方展开，越界时翻转并钳制在屏幕内。</p>
  */
 public final class UiFlatText {
     // 提示底板内边距（四周描边外的留白）
@@ -91,25 +92,14 @@ public final class UiFlatText {
         for (FormattedCharSequence line : lines) {
             widest = Math.max(widest, font.width(line));
         }
-        int width = widest;
-        // 单行提示比正文行矮两像素，与原版提示底板口径一致
-        int height = lines.size() * font.lineHeight + (lines.size() == 1 ? -2 : 0);
-        int x = mouseX + TOOLTIP_MOUSE_OFFSET;
-        int y = mouseY - TOOLTIP_MOUSE_OFFSET;
-        if (x + width > graphics.guiWidth()) {
-            x = Math.max(x - 24 - width, TOOLTIP_SCREEN_MARGIN);
-        }
-        int bottomMargin = height + TOOLTIP_PADDING;
-        if (y + bottomMargin > graphics.guiHeight()) {
-            y = graphics.guiHeight() - bottomMargin;
-        }
-        int frameX = x;
-        int frameY = y;
-        UiRenderLayers.draw(graphics, UiRenderLayers.TOOLTIP, () -> {
-            background(graphics, frameX, frameY, width, height);
-            int lineY = frameY;
+        int height = lines.size() * font.lineHeight + (lines.size() > 1 ? TOOLTIP_FIRST_LINE_GAP : 0);
+        UiTooltipPanel panel = UiTooltipPanel.layout(new UiRect(0, 0, graphics.guiWidth(), graphics.guiHeight()),
+                widest, height, TOOLTIP_PADDING + 1, mouseX, mouseY, TOOLTIP_MOUSE_OFFSET,
+                TOOLTIP_SCREEN_MARGIN, UiTooltipPlacement.VerticalPreference.ABOVE);
+        panel.render(graphics, rect -> background(graphics, rect), content -> {
+            int lineY = content.y();
             for (int index = 0; index < lines.size(); index++) {
-                graphics.drawString(font, lines.get(index), frameX, lineY, TOOLTIP_TEXT, false);
+                graphics.drawString(font, lines.get(index), content.x(), lineY, TOOLTIP_TEXT, false);
                 lineY += font.lineHeight + (index == 0 ? TOOLTIP_FIRST_LINE_GAP : 0);
             }
         });
@@ -126,7 +116,7 @@ public final class UiFlatText {
      * @param mouseY 指针屏幕 Y 坐标
      */
     public static void tooltip(GuiGraphics graphics, Font font, Component text, int maxWidth, int mouseX, int mouseY) {
-        tooltip(graphics, font, font.split(text, Math.max(1, maxWidth)), mouseX, mouseY);
+        tooltip(graphics, font, font.split(text, wrapWidth(graphics, maxWidth)), mouseX, mouseY);
     }
 
     /**
@@ -142,17 +132,22 @@ public final class UiFlatText {
     public static void componentTooltip(GuiGraphics graphics, Font font, List<Component> lines, int maxWidth, int mouseX, int mouseY) {
         List<FormattedCharSequence> sequences = new ArrayList<>();
         for (Component line : lines) {
-            sequences.addAll(font.split(line, Math.max(1, maxWidth)));
+            sequences.addAll(font.split(line, wrapWidth(graphics, maxWidth)));
         }
         tooltip(graphics, font, sequences, mouseX, mouseY);
     }
 
+    private static int wrapWidth(GuiGraphics graphics, int maxWidth) {
+        return Math.clamp(maxWidth, 1, Math.max(1,
+                graphics.guiWidth() - (TOOLTIP_SCREEN_MARGIN + TOOLTIP_PADDING + 1) * 2));
+    }
+
     // 底板与描边沿用原版提示观感：深色底、四周一圈暗边、内侧自上而下由紫蓝渐变到深紫
-    private static void background(GuiGraphics graphics, int x, int y, int width, int height) {
-        int left = x - TOOLTIP_PADDING;
-        int top = y - TOOLTIP_PADDING;
-        int outerWidth = width + TOOLTIP_PADDING * 2;
-        int outerHeight = height + TOOLTIP_PADDING * 2;
+    private static void background(GuiGraphics graphics, UiRect bounds) {
+        int left = bounds.x() + 1;
+        int top = bounds.y() + 1;
+        int outerWidth = bounds.width() - 2;
+        int outerHeight = bounds.height() - 2;
         graphics.fill(left, top - 1, left + outerWidth, top, TOOLTIP_BACKGROUND);
         graphics.fill(left, top + outerHeight, left + outerWidth, top + outerHeight + 1, TOOLTIP_BACKGROUND);
         graphics.fill(left, top, left + outerWidth, top + outerHeight, TOOLTIP_BACKGROUND);

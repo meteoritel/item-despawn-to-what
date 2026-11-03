@@ -2,7 +2,8 @@ package com.meteorite.itemdespawntowhat.client.ui.widget;
 
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphRenderer.drawBorder;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiRenderLayers;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiTooltipPanel;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiTooltipPlacement;
 import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine;
 import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine.Kind;
 import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine.Tone;
@@ -102,7 +103,8 @@ public final class UiDescriptionTooltip {
      * @param mouseY 鼠标屏幕 Y 坐标
      */
     public void render(GuiGraphics graphics, UiRect bounds, List<DescriptionLine> lines, int mouseX, int mouseY) {
-        if (lines.isEmpty() || bounds.width() <= 0 || bounds.height() <= 0) {
+        if (lines.isEmpty() || bounds.width() <= (TOOLTIP_MARGIN + TOOLTIP_PADDING) * 2
+                || bounds.height() <= (TOOLTIP_MARGIN + TOOLTIP_PADDING) * 2) {
             return;
         }
         int textWidth = textWidthLimit(bounds);
@@ -130,14 +132,17 @@ public final class UiDescriptionTooltip {
         int widthLimit = Math.min(maxWidth, bounds.width() - TOOLTIP_MARGIN * 2);
         int width = Math.clamp(contentWidth + TOOLTIP_PADDING * 2, minWidth, widthLimit);
         int height = panelHeight(rows);
-        int x = resolveX(bounds, width, mouseX);
-        int y = resolveY(bounds, height, mouseY);
+        UiTooltipPanel panel = UiTooltipPanel.layout(bounds, width - TOOLTIP_PADDING * 2,
+                height - TOOLTIP_PADDING * 2, TOOLTIP_PADDING, mouseX, mouseY, TOOLTIP_MOUSE_OFFSET,
+                TOOLTIP_MARGIN, UiTooltipPlacement.VerticalPreference.BELOW);
         int labelColor = theme.palette().canvasPickerTextMuted();
         List<Row> frame = rows;
-        UiRenderLayers.draw(graphics, UiRenderLayers.TOOLTIP, () -> {
-            graphics.fill(x, y, x + width, y + height, theme.palette().canvasPickerFill());
-            drawBorder(graphics, new UiRect(x, y, width, height), theme.palette().canvasPickerBorder());
-            int textY = y + TOOLTIP_PADDING;
+        panel.render(graphics, rect -> {
+            graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), theme.palette().canvasPickerFill());
+            drawBorder(graphics, rect, theme.palette().canvasPickerBorder());
+        }, contentBounds -> {
+            int x = contentBounds.x() - TOOLTIP_PADDING;
+            int textY = contentBounds.y();
             for (int index = 0; index < frame.size(); index++) {
                 Row row = frame.get(index);
                 textY += row.topGap();
@@ -307,24 +312,6 @@ public final class UiDescriptionTooltip {
             height += row.height() + row.topGap();
         }
         return height + Math.max(0, rows.size() - 1) * TOOLTIP_LINE_GAP;
-    }
-
-    private static int resolveX(UiRect bounds, int width, int mouseX) {
-        int left = mouseX + TOOLTIP_MOUSE_OFFSET;
-        if (left + width > bounds.right() - TOOLTIP_MARGIN) {
-            left = mouseX - TOOLTIP_MOUSE_OFFSET - width;
-        }
-        return Math.clamp(left, bounds.x() + TOOLTIP_MARGIN,
-                Math.max(bounds.x() + TOOLTIP_MARGIN, bounds.right() - TOOLTIP_MARGIN - width));
-    }
-
-    private static int resolveY(UiRect bounds, int height, int mouseY) {
-        int top = mouseY + TOOLTIP_MOUSE_OFFSET;
-        if (top + height > bounds.bottom() - TOOLTIP_MARGIN) {
-            top = mouseY - TOOLTIP_MOUSE_OFFSET - height;
-        }
-        return Math.clamp(top, bounds.y() + TOOLTIP_MARGIN,
-                Math.max(bounds.y() + TOOLTIP_MARGIN, bounds.bottom() - TOOLTIP_MARGIN - height));
     }
 
     /**

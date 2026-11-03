@@ -16,6 +16,8 @@
  *   <li>{@code UiRenderLayers}: host</li>
  *   <li>{@code UiRubberBand}: host</li>
  *   <li>{@code UiSpinner}: host</li>
+ *   <li>{@code UiTooltipPlacement}: host</li>
+ *   <li>{@code UiTooltipPanel}: host</li>
  * </ul>
  */
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.render;
