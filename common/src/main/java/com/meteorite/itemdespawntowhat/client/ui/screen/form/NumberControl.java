@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import java.util.function.Consumer;
+
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
@@ -16,14 +18,13 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiNumberPolicy;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiNumbers;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderRole;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderSkin;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderWindow;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiScalarSlider;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiNumberField;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiTextInput;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -120,9 +121,7 @@ final class NumberControl extends FormControl {
                 (int) Math.round(numbers.step()), (int) Math.round(fine))
                 : UiNumberPolicy.of(policyMin, policyMax, numbers.step(), fine);
         this.slider = new UiScalarSlider(policy, new UiSliderWindow(windowMin, windowMax));
-        UiSliderSkin skin = THEME.sliderSkin(UiSliderRole.COMPACT);
-        slider.setStyle(skin.style());
-        slider.setPainter(skin.painter());
+        slider.setTheme(THEME, UiSliderRole.COMPACT);
         slider.setFormatter(value -> Component.empty());
         slider.setPageStep(0.0D);
         slider.setValue(neutralValue());
@@ -311,9 +310,7 @@ final class NumberControl extends FormControl {
         int bodyHeight = rowHeight - labelRowHeight;
         int bodyY = y + labelRowHeight;
         // 加高行改用宽松档滑块外观：样式与画法成对取自注入主题，避免两套来源混用
-        UiSliderSkin skin = THEME.sliderSkin(bodyHeight >= 18 ? UiSliderRole.ROOMY : UiSliderRole.COMPACT);
-        slider.setStyle(skin.style());
-        slider.setPainter(skin.painter());
+        slider.setTheme(THEME, bodyHeight >= 18 ? UiSliderRole.ROOMY : UiSliderRole.COMPACT);
         int reserved = 0;
         for (UiButton button : presetButtons) {
             reserved += buttonWidth(button) + GAP;
@@ -525,7 +522,7 @@ final class NumberControl extends FormControl {
     }
 
     @Override
-    void addFocusTargets(List<UiFocusTarget> out) {
+    void addFocusTargets(Consumer<UiFocusTarget> out) {
         numberField.addFocusTargets(out);
     }
 

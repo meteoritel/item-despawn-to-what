@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import java.util.function.Consumer;
+
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
@@ -18,7 +20,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiRangeValue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiValueTextBinding;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCheckBox;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiRangeBar;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiTextInput;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -221,11 +223,11 @@ final class ClimateControl extends FormControl {
     }
 
     @Override
-    void addFocusTargets(List<UiFocusTarget> out) {
-        out.add(matching);
-        out.add(range);
-        out.add(minInput);
-        out.add(maxInput);
+    void addFocusTargets(Consumer<UiFocusTarget> out) {
+        out.accept(matching);
+        out.accept(range);
+        out.accept(minInput);
+        out.accept(maxInput);
     }
 
     @Override

@@ -357,6 +357,9 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
      * 宿主在切页、历史回填、卸载或关闭时取消手势；失去输入作用域时同时释放键盘修饰态，只有正常释放可提交移动。
      */
     public void endInteractions(UiInteractionSession.EndReason reason) {
+        if (reason == UiInteractionSession.EndReason.UNMOUNTED || reason == UiInteractionSession.EndReason.HOST_CLOSED) {
+            renderer.releaseResources();
+        }
         if (interaction != null) interaction.end(this, reason);
         armedDrag = null;
         clickedLeafPath = null;
@@ -388,6 +391,7 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
 
     @Override
     public void scopeExited(UiInteractionSession.EndReason reason) {
+        if (reason == UiInteractionSession.EndReason.HOST_CLOSED) renderer.releaseResources();
         spaceDown = false;
         closePicker();
         closeKindMenu();

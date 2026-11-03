@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import java.util.function.Consumer;
+
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
@@ -12,10 +14,10 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextArea;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiTextArea;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.UiTextValue;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiTextInput;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 
 import java.util.ArrayList;
@@ -177,8 +179,8 @@ final class TextControl extends FormControl {
     }
 
     @Override
-    void addFocusTargets(List<UiFocusTarget> out) {
-        out.add(input);
+    void addFocusTargets(Consumer<UiFocusTarget> out) {
+        out.accept(input);
     }
 
     @Override

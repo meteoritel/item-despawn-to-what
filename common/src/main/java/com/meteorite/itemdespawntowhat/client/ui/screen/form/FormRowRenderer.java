@@ -3,7 +3,6 @@ package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import java.util.List;
 import net.minecraft.client.gui.Font;
@@ -12,15 +11,13 @@ import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 字段行渲染与命中提示：标签、说明行、滚动条与悬停提示。
+ * 字段行渲染与命中提示：标签、说明行与悬停提示。
  *
  * <p>只读几何：全部参数由 {@link FormView} 的布局结果给出（行矩形、视口与滚动偏移），
  * 本类不改行状态、不分发输入，因此测量与命中共用同一份坐标。</p>
  */
 final class FormRowRenderer {
 
-    // 滚动条最小高度
-    private static final int MIN_THUMB_HEIGHT = 8;
     // 字段名与控件之间的留白（提示换行判定用）
     private static final int TEXT_SLACK = 6;
     // 行内问题文案与标签之间的留白
@@ -82,19 +79,6 @@ final class FormRowRenderer {
     }
 
     // 滚动条：轨道固定，滑块按内容比高
-    static void renderScrollbar(GuiGraphics graphics, int viewportX, int viewportY, int viewportWidth,
-                                int viewportHeight, int contentHeight, int scrollOffset, int maxScroll,
-                                int scrollbarWidth, UiHostTheme theme) {
-        int x = viewportX + viewportWidth - scrollbarWidth;
-        theme.drawScrollTrack(graphics, new UiRect(x, viewportY, scrollbarWidth, viewportHeight));
-        if (maxScroll <= 0) {
-            return;
-        }
-        int thumbHeight = Math.max(MIN_THUMB_HEIGHT, viewportHeight * viewportHeight / Math.max(1, contentHeight));
-        int thumbY = viewportY + (viewportHeight - thumbHeight) * scrollOffset / maxScroll;
-        theme.drawScrollThumb(graphics, new UiRect(x, thumbY, scrollbarWidth, thumbHeight));
-    }
-
     // 鼠标位置下的提示：说明行给完整说明，其它行优先显示校验问题，其次字段提示与完整标签
     static @Nullable Component tooltipAt(double mouseX, double mouseY, Font font, List<FormRow> rows,
                                          int viewportX, int viewportY, int viewportWidth, int viewportHeight,

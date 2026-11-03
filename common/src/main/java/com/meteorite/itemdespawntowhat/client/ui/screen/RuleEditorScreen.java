@@ -5,6 +5,8 @@ import com.meteorite.itemdespawntowhat.client.ui.shared.PreviewIcons;
 import org.lwjgl.glfw.GLFW;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiConditionTreeSummary;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemeContext;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemeSet;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
 import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDescriptors;
 import com.meteorite.itemdespawntowhat.client.net.RuleEditClientWorkspace;
@@ -18,7 +20,6 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostPalette;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiDescriptionTooltip;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTypePicker;
@@ -29,7 +30,8 @@ import java.util.List;
 
 import net.minecraft.Util;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.screens.Screen;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiScreen;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputScope;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 import net.minecraft.client.Minecraft;
@@ -44,10 +46,11 @@ import net.minecraft.client.Minecraft;
  * {@link UiConditionTreeSummary}，界面任何位置都不出现可编辑 JSON 文本框。
  * <p>只有工作区处于 ACTIVE 时可编辑；APPLYING 冻结；工作区进入 FREE 时外壳登记关屏请求。
  */
-public final class RuleEditorScreen extends Screen implements UiLayoutSource {
+public final class RuleEditorScreen extends UiScreen implements UiLayoutSource {
 
     // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
-    private final UiHostTheme THEME = UiHostThemes.defaultTheme();
+    private final UiHostThemeContext THEME = new UiHostThemeContext(UiHostThemes.defaultTheme());
+    private final UiHostThemeContext chromeTheme = new UiHostThemeContext(UiHostThemes.flatTheme());
 
     // 布局常量（页自身的内边距由页声明）
     private static final int PAD = 4;
@@ -71,8 +74,17 @@ public final class RuleEditorScreen extends Screen implements UiLayoutSource {
         BuiltinEditorDescriptors.bootstrap();
         RuleEditorModel model = new RuleEditorModel(workspace);
         // 屏幕构造期 this.font 尚未注入，外壳与页面直接取客户端字体实例
-        this.shell = new EditorShell(THEME, UiHostThemes.flatTheme(), workspace, model, new RuleListDisplayCache(model), Minecraft.getInstance().font);
-        this.input = new EditorInputRouter(shell, this::saveOverlay);
+        this.shell = new EditorShell(THEME, chromeTheme, workspace, model, new RuleListDisplayCache(model), Minecraft.getInstance().font);
+        this.input = new EditorInputRouter(shell, this::saveOverlay, inputRouter());
+    }
+
+    /** 一次替换正文与画布主题；保留页面、控件和文本编辑状态。 */
+    public void setTheme(UiHostThemeSet theme) {
+        input.cancelPointerPreview();
+        THEME.setTheme(theme.content());
+        chromeTheme.setTheme(theme.chrome());
+        shell.modals().refreshLayout();
+        input.synchronize();
     }
 
     // 编辑器不做游戏内暂停
@@ -113,6 +125,7 @@ public final class RuleEditorScreen extends Screen implements UiLayoutSource {
     // 每帧重算布局并绘制
     @Override
     public void render(@NotNull GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        prepareUiFrame();
         PreviewIcons.beginFrame();
         // 实时尺寸由外壳持有：页与外壳都按它排版
         shell.setScreenSize(this.width, this.height);
@@ -185,7 +198,7 @@ public final class RuleEditorScreen extends Screen implements UiLayoutSource {
 
     // Component 的单行 tooltip 重载不处理换行；按窗口宽度折行后交给无阴影提示面板定位。
     private void renderTooltip(GuiGraphics graphics, Component tip, int mouseX, int mouseY) {
-        UiFlatText.tooltip(graphics, font, tip, Math.clamp(width - 16, 1, 240), mouseX, mouseY);
+        UiFlatText.tooltip(graphics, font, tip, Math.clamp(width - 16, 1, 240), mouseX, mouseY, THEME.surfaces());
     }
 
     /**
@@ -280,51 +293,22 @@ public final class RuleEditorScreen extends Screen implements UiLayoutSource {
 
     // ---- 焦点 / 事件 / 生命周期 ----
 
-    @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        return input.mouseClicked(mouseX, mouseY, button);
-    }
-
-    @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        return input.mouseReleased(mouseX, mouseY, button);
-    }
-
-    @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        return input.mouseDragged(mouseX, mouseY, button, dragX, dragY);
-    }
-
-    @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        return input.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
-    }
+    @Override protected UiInputScope inputScope() { return input.activeScope(); }
+    @Override protected boolean inputFinished(boolean consumed, UiInputScope scope) { return input.finish(consumed, scope); }
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (keyCode == GLFW.GLFW_KEY_F8 && (modifiers & GLFW.GLFW_MOD_CONTROL) != 0) {
+        if (keyCode == GLFW.GLFW_KEY_F8 && (modifiers & GLFW.GLFW_MOD_CONTROL) != 0)
             return canOpenDebugTools() && DebugWorkbenchHooks.open();
-        }
-        return input.keyPressed(keyCode, scanCode, modifiers);
-    }
-
-    @Override
-    public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
-        return input.keyReleased(keyCode, scanCode, modifiers);
-    }
-
-    @Override
-    public boolean charTyped(char codePoint, int modifiers) {
-        return input.charTyped(codePoint, modifiers);
+        if (keyCode >= GLFW.GLFW_KEY_F1 && keyCode <= GLFW.GLFW_KEY_F12) return false;
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     // 外部切屏或断线也会调用 removed：这条路径不走 onClose，未应用的修改必须在这里写盘。
     @Override
-    public void removed() {
-        input.close();
+    protected void releaseUiResources() {
         shell.flushDrafts();
         PreviewResources.screenClosed();
-        super.removed();
     }
 
     // 只关屏，不动工作区会话（工作区由服务端租约与协议驱动）

@@ -48,8 +48,11 @@ final class ConditionTreeChrome {
             return hit == null ? null : hit.within(this);
         }
         private final UiIconStrip strip;
+        private final UiHostTheme theme;
+        private long themeRevision = -1;
 
         Strip(UiHostTheme theme, Font font, UiIconStrip.Orientation orientation) {
+            this.theme = theme;
             this.strip = new UiIconStrip(font, orientation);
             // 画布页外壳使用扁平宿主主题的条带样式（仅显式取用时生效）
             strip.setStyle(theme.stripStyle());
@@ -79,6 +82,10 @@ final class ConditionTreeChrome {
         @Override
         public void render(GuiGraphics graphics, Font font, UiPointer incomingPointer) {
             UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
+            if (themeRevision != theme.revision()) {
+                strip.setStyle(theme.stripStyle());
+                themeRevision = theme.revision();
+            }
             strip.render(graphics, pointer);
         }
 

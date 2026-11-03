@@ -12,7 +12,7 @@ import com.meteorite.itemdespawntowhat.client.ui.shared.PreviewResources;
 import net.minecraft.locale.Language;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCatalogGrid;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiModal;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalogType;
 import java.util.ArrayList;

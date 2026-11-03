@@ -1,5 +1,9 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiFooterHost;
+
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiTextInput;
+
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
@@ -760,7 +764,8 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         if (lines.isEmpty()) {
             return;
         }
-        UiFlatText.componentTooltip(graphics, font, lines, TOOLTIP_MAX_WIDTH, mouseX, mouseY);
+        UiFlatText.componentTooltip(graphics, font, new UiRect(0, 0, graphics.guiWidth(), graphics.guiHeight()),
+                lines, TOOLTIP_MAX_WIDTH, mouseX, mouseY, theme.surfaces());
     }
 
     private void drawToolbar(GuiGraphics graphics, UiPointer pointer) {

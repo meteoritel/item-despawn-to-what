@@ -8,7 +8,6 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.UiTextValue;
-import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import net.minecraft.client.gui.Font;
@@ -216,9 +215,9 @@ public final class UiNumberField implements UiWidget {
     }
 
     /** 以视觉顺序追加两个真实 Tab 目标，组合本身不持有额外焦点。 */
-    public void addFocusTargets(List<UiFocusTarget> out) {
-        out.add(slider);
-        out.add(editor);
+    public void addFocusTargets(Consumer<UiFocusTarget> out) {
+        out.accept(slider);
+        out.accept(editor);
     }
 
     /** 分别设置精确编辑与轨道资格，供固定域保留禁用轨道。 */

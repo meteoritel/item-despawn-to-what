@@ -1,21 +1,24 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
+
+import java.util.function.Consumer;
+
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputScope;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.DebugTestRules;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiModalStack;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiModal;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiModalStack;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiTextInput;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -293,12 +296,13 @@ final class RuleEditorDebugPage implements EditorPage {
         }
     }
 
-    public void addFocusTargets(UiFocusManager focus) {
+    /** 依视觉顺序贡献焦点目标；登记事务由作用域根统一提交。 */
+    public void addFocusTargets(Consumer<UiFocusTarget> focus) {
         if (countField != null) {
-            focus.add(countField);
+            focus.accept(countField);
         }
         for (UiButton button : buttons) {
-            focus.add(button);
+            focus.accept(button);
         }
     }
     /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */

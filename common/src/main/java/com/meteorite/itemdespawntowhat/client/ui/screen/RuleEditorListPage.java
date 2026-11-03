@@ -1,5 +1,9 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
+
+import java.util.function.Consumer;
+
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputScope;
@@ -13,7 +17,6 @@ import com.meteorite.itemdespawntowhat.client.edit.RulePackExporter;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine;
@@ -24,10 +27,10 @@ import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiDescriptionTooltip;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiListView;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiModalStack;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiListView;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiModal;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiModalStack;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiTextInput;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTreeNode;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTreeView;
 import com.meteorite.itemdespawntowhat.core.api.DevelopmentDiagnostics;
@@ -325,7 +328,7 @@ final class RuleEditorListPage implements EditorPage {
     // 导出弹窗：两个范围选项直接显示各自可导出的条数，避免导出后才发现选错范围
     private void openExport() {
         UiModal modal = UiModal.create(THEME, font).title(Component.translatable(UI + "export.title"));
-        UiListView<ExportScope> list = new UiListView<>(THEME, font,
+        UiListView<ExportScope> list = new UiListView<>(THEME,
                 (graphics, rowFont, item, index, row, selected, hovered, focused) -> {
                     graphics.drawString(rowFont, Component.translatable(UI + item.labelKey()),
                             row.x() + 4, row.y() + 6, THEME.palette().textPrimary(), false);
@@ -944,18 +947,19 @@ final class RuleEditorListPage implements EditorPage {
 
     // ---- 焦点与使能 ----
 
-    public void addFocusTargets(UiFocusManager focus) {
+    /** 依视觉顺序贡献焦点目标；登记事务由作用域根统一提交。 */
+    public void addFocusTargets(Consumer<UiFocusTarget> focus) {
         if (searchField != null) {
-            focus.add(searchField);
+            focus.accept(searchField);
         }
         for (UiButton button : filterButtons) {
-            focus.add(button);
+            focus.accept(button);
         }
         if (ruleList != null) {
-            focus.add(ruleList);
+            focus.accept(ruleList);
         }
         for (UiButton button : listButtons) {
-            focus.add(button);
+            focus.accept(button);
         }
     }
 

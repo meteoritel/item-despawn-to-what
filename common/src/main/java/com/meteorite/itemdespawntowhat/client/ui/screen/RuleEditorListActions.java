@@ -8,9 +8,10 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiModalStack;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiModal;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiButtonWidget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiModalStack;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiTextInput;
 import com.meteorite.itemdespawntowhat.core.service.edit.RuleEdit;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -111,7 +112,7 @@ final class RuleEditorListActions {
         UiFocusManager modalFocus = modal.inputScope().focus();
         modalFocus.updateTargets(registration -> {
             registration.add(content);
-            for (UiButton button : modal.buttons()) {
+            for (UiButtonWidget button : modal.buttons()) {
                 registration.add(button);
             }
         });

@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import java.util.function.Consumer;
+
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogSelectionBinding.Mode;
@@ -353,7 +355,7 @@ final class CardListControl extends FormControl implements UiLayoutSource {
             children.addAll(entry.remove.layoutNodes());
             for (FormControl value : entry.values) {
                 List<UiFocusTarget> targets = new ArrayList<>();
-                value.addFocusTargets(targets);
+                value.addFocusTargets(targets::add);
                 for (UiFocusTarget target : targets) {
                     if (target instanceof UiLayoutSource source) { children.addAll(source.layoutNodes()); }
                 }
@@ -562,14 +564,14 @@ final class CardListControl extends FormControl implements UiLayoutSource {
     }
 
     @Override
-    void addFocusTargets(List<UiFocusTarget> out) {
-        out.add(addButton);
+    void addFocusTargets(Consumer<UiFocusTarget> out) {
+        out.accept(addButton);
         for (Entry entry : entries) {
-            out.add(entry.choice);
+            out.accept(entry.choice);
             for (FormControl value : entry.values) {
                 value.addFocusTargets(out);
             }
-            out.add(entry.remove);
+            out.accept(entry.remove);
         }
     }
 

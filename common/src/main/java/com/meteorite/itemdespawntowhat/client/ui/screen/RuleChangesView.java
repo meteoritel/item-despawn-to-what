@@ -12,7 +12,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiListView;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiListView;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 import com.meteorite.itemdespawntowhat.core.service.edit.RuleEdit;
 
@@ -42,7 +42,7 @@ final class RuleChangesView implements UiWidget, UiFocusTarget {
         this.THEME = UiHostThemes.require(theme);
         this.font = font;
         rowHeight = font.lineHeight + 5 + RuleRecipeView.CONTENT_HEIGHT;
-        list = new UiListView<>(THEME, font, (graphics, rowFont, change, index, row, selected, hovered, focused) ->
+        list = new UiListView<>(THEME, (graphics, rowFont, change, index, row, selected, hovered, focused) ->
                 RuleRecipeView.renderRow(graphics, rowFont, row, change.title(), change.kind(),
                         THEME.palette().textPrimary(), THEME.palette().textSecondary(), change.recipe(), hovered));
         list.setRowHeight(rowHeight);
@@ -110,7 +110,7 @@ final class RuleChangesView implements UiWidget, UiFocusTarget {
         Change change = list.items().get(index);
         Component tip = Component.literal(change.title()).append("\n").append(change.recipe().tooltip())
                 .append("\n").append(change.kind());
-        UiFlatText.tooltip(graphics, rowFont, tip, Math.clamp(bounds.width(), 1, TOOLTIP_WIDTH), mouseX, mouseY);
+        UiFlatText.tooltip(graphics, rowFont, tip, Math.clamp(bounds.width(), 1, TOOLTIP_WIDTH), mouseX, mouseY, THEME.surfaces());
     }
 
     /**

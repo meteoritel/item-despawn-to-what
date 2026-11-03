@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import java.util.function.Consumer;
+
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
@@ -114,9 +116,9 @@ final class ListControl extends FormControl {
     }
 
     @Override
-    void addFocusTargets(List<UiFocusTarget> out) {
-        out.add(editor);
-        out.add(editor.input());
+    void addFocusTargets(Consumer<UiFocusTarget> out) {
+        out.accept(editor);
+        out.accept(editor.input());
     }
 
     @Override

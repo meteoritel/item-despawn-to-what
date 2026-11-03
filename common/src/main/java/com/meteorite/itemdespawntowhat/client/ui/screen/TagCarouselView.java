@@ -14,7 +14,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiRenderLayers;
 import com.meteorite.itemdespawntowhat.client.ui.shared.TagPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiListView;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiListView;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 import net.minecraft.Util;
 import net.minecraft.client.gui.Font;
@@ -49,7 +49,7 @@ public final class TagCarouselView implements UiWidget, UiFocusTarget {
     public TagCarouselView(UiHostTheme theme, Font font, TagPreviewIcons.Tag tag) {
         this.THEME = UiHostThemes.require(theme);
         this.tag = tag;
-        list = new UiListView<>(THEME, font, (g, f, member, index, row, selected, hovered, focused) -> {
+        list = new UiListView<>(THEME, (g, f, member, index, row, selected, hovered, focused) -> {
             member.icon().render(g, row.x() + 2, row.y() + 2);
             UiRenderLayers.draw(g, UiRenderLayers.FOREGROUND, () -> g.drawString(f,
                     TextScroll.trimToWidth(f, member.name().getString(), row.width() - ROW_LABEL_X - 2),

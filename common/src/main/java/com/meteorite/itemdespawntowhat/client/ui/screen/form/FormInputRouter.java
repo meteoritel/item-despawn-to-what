@@ -13,8 +13,7 @@ import org.lwjgl.glfw.GLFW;
 /**
  * 表单输入分发：把指针 / 键盘 / 滚轮事件按「选择框 → 行尾按钮 → 字段控件 → 表单滚动」的顺序派发。
  *
- * <p>按下归属（pressedWidget / pressedControl）由本类记录，释放与拖动只发给同一目标；
- * 事件只消费一次。几何与滚动状态仍由 {@link FormView} 持有。</p>
+ * <p>持续交互由作用域路由到实际所有者；表单滚动由 UiScrollView 持有，字段输入只派发一次。</p>
  */
 final class FormInputRouter {
 
@@ -37,6 +36,7 @@ final class FormInputRouter {
             return false;
         }
         view.syncBounds();
+        if (view.scroll.mousePressed(context)) return true;
         for (FormRow row : view.rows) {
             if (!row.visible) continue;
             for (var pickerButton : row.pickers) {
@@ -56,16 +56,6 @@ final class FormInputRouter {
         return false;
     }
 
-    // 记录本次按下的归属：只允许这个控件接收随后的释放与拖动
-
-
-    public boolean mouseReleased(UiInputContext context) {
-        return false;
-    }
-
-    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
-        return false;
-    }
 
     public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
         double mouseX = context.pointerX();
@@ -81,9 +71,7 @@ final class FormInputRouter {
         if (view.maxScroll() <= 0) {
             return false;
         }
-        int delta = (int) Math.round(scrollY * SCROLL_STEP);
-        view.scrollOffset = Math.clamp(view.scrollOffset - delta, 0, view.maxScroll());
-        return true;
+        return view.scroll.scrollByPixels(scrollY * SCROLL_STEP);
     }
 
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
@@ -101,11 +89,11 @@ final class FormInputRouter {
             }
         }
         if (keyCode == GLFW.GLFW_KEY_PAGE_UP) {
-            view.scrollOffset = Math.max(0, view.scrollOffset - view.viewportHeight);
+            view.scroll.setOffset(view.scroll.offset() - view.viewportHeight);
             return true;
         }
         if (keyCode == GLFW.GLFW_KEY_PAGE_DOWN) {
-            view.scrollOffset = Math.min(view.maxScroll(), view.scrollOffset + view.viewportHeight);
+            view.scroll.setOffset(view.scroll.offset() + view.viewportHeight);
             return true;
         }
         return false;
@@ -134,7 +122,7 @@ final class FormInputRouter {
     // 该控件当前是否持有焦点（键盘输入只发给持有焦点的控件）
     private boolean handlesInput(FormControl control) {
         List<UiFocusTarget> targets = new ArrayList<>();
-        control.addFocusTargets(targets);
+        control.addFocusTargets(targets::add);
         for (UiFocusTarget target : targets) {
             if (target.isFocused()) {
                 return true;

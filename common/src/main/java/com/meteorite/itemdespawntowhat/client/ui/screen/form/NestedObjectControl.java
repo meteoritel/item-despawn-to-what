@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import java.util.function.Consumer;
+
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
@@ -115,7 +117,7 @@ final class NestedObjectControl extends FormControl {
     }
 
     @Override
-    void addFocusTargets(List<UiFocusTarget> out) {
+    void addFocusTargets(Consumer<UiFocusTarget> out) {
         child.addFocusTargets(out);
     }
 

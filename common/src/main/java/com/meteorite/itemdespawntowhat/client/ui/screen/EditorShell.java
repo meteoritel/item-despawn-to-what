@@ -14,8 +14,8 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCodeView;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiListEditor;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiModalStack;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiModal;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiModalStack;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiNarration;
 import com.meteorite.itemdespawntowhat.core.api.DevelopmentDiagnostics;
 import com.meteorite.itemdespawntowhat.core.service.edit.RuleIssue;
@@ -110,6 +110,7 @@ final class EditorShell {
         this.THEME = UiHostThemes.require(theme);
         this.chromeTheme = UiHostThemes.require(chromeTheme);
         this.modals = new UiModalStack(THEME);
+        this.modals.setFocusListener(UiFocusManager.Listener.narrate(UiNarration::say));
         this.workspace = workspace;
         this.model = model;
         this.display = display;
@@ -123,7 +124,7 @@ final class EditorShell {
             var scope = current.inputScope();
             scope.setHistory(editPage::restoreHistory);
             scope.setEscape(this::escape);
-            scope.setFocusTargets(() -> scope.focus().updateTargets(current::addFocusTargets));
+            scope.setFocusTargets(() -> scope.focus().updateTargets(registration -> current.addFocusTargets(registration::add)));
             UiFocusManager manager = scope.focus();
             manager.setListener(UiFocusManager.Listener.compose(
                     (previous, next) -> editPage.ensureVisible(next),
@@ -354,7 +355,7 @@ final class EditorShell {
     void rebuildFocus() {
         inputChanged.run();
         UiFocusManager manager = focus();
-        manager.updateTargets(registration -> activePage().addFocusTargets(registration));
+        manager.updateTargets(registration -> activePage().addFocusTargets(registration::add));
         if (manager.focused() == null) manager.focusFirst();
     }
 

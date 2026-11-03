@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import java.util.function.Consumer;
+
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
@@ -452,7 +454,7 @@ final class ItemCountsControl extends FormControl {
     }
 
     @Override
-    void addFocusTargets(List<UiFocusTarget> out) {
+    void addFocusTargets(Consumer<UiFocusTarget> out) {
         entries.values().forEach(entry -> entry.control.addFocusTargets(out));
     }
 

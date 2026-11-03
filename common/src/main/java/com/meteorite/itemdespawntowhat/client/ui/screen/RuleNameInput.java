@@ -12,7 +12,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutSource;
 import java.util.List;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiTextInput;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;

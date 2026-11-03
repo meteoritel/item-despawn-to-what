@@ -1,5 +1,9 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiScrollView;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
+
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
@@ -91,6 +95,7 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
     private final UiHostTheme theme;
     // 按 JsonText 类别取色的颜色表
     private final int[] kindColors;
+    private long themeRevision = -1;
     // 代码块及其正文的字符类别
     private List<Section> sections = List.of();
     private List<byte[]> kinds = List.of();
@@ -104,7 +109,7 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
     // 控件矩形
     private UiRect bounds = new UiRect(0, 0, 0, 0);
     // 垂直滚动偏移（像素）
-    private int scrollOffset;
+    private final UiScrollView scroll = new UiScrollView();
     private boolean lineNumbers = true;
     private boolean visible = true;
     private final UiFocusState focusState = new UiFocusState();
@@ -117,16 +122,23 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
      */
     public UiCodeView(UiHostTheme theme, Font font) {
         this.theme = UiHostThemes.require(theme);
+        scroll.setScrollbarWidth(SCROLLBAR_WIDTH);
         this.font = font;
         this.kindColors = new int[UiJsonText.KIND_COUNT];
+        refreshTheme();
+    }
+
+    // ---- 配置 ----
+
+    private void refreshTheme() {
+        if (themeRevision == theme.revision()) return;
         kindColors[UiJsonText.PUNCTUATION] = theme.palette().codePunctuation();
         kindColors[UiJsonText.KEY] = theme.palette().codeKey();
         kindColors[UiJsonText.STRING] = theme.palette().codeString();
         kindColors[UiJsonText.NUMBER] = theme.palette().codeNumber();
         kindColors[UiJsonText.LITERAL] = theme.palette().codeLiteral();
+        themeRevision = theme.revision();
     }
-
-    // ---- 配置 ----
 
     /**
      * 替换全部代码块：重新分类正文并把滚动位置退回顶部。
@@ -163,6 +175,7 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
 
     public UiCodeView setVisible(boolean visible) {
         this.visible = visible;
+        if (!visible) scroll.endInteraction(UiInteractionSession.EndReason.HIDDEN);
         return this;
     }
 
@@ -190,6 +203,7 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
     @Override
     public void setBounds(int x, int y, int width, int height) {
         this.bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
+        ensureRows(Math.max(1, innerWidth() - gutterWidth()));
         clampScroll();
     }
 
@@ -301,6 +315,7 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
     /** {@inheritDoc} */
     @Override
     public void render(GuiGraphics graphics, Font renderFont, UiPointer incomingPointer) {
+        refreshTheme();
         if (!visible) {
             return;
         }
@@ -331,7 +346,7 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
         } finally {
             graphics.disableScissor();
         }
-        renderScrollbar(graphics, innerY, innerHeight);
+        renderScrollbar(graphics);
         if (isFocusVisible()) {
             theme.drawFocusOutline(graphics, bounds);
         }
@@ -340,12 +355,12 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
     // 只绘制可视区内的行
     private void renderRows(GuiGraphics graphics, Font renderFont, int innerX, int codeX, int innerY,
                             int innerWidth, int rowHeight) {
-        int first = Math.max(0, scrollOffset / rowHeight);
+        int first = Math.max(0, scroll.offset() / rowHeight);
         int last = Math.min(rows.size(), first + innerHeight() / rowHeight + 2);
         int gutter = gutterWidth();
         for (int index = first; index < last; index++) {
             Row row = rows.get(index);
-            int y = innerY + index * rowHeight - scrollOffset;
+            int y = innerY + index * rowHeight - scroll.offset();
             Section section = sections.get(row.section);
             switch (row.kind) {
                 case TITLE, DETAIL -> {
@@ -375,17 +390,10 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
     }
 
     // 内容超出可视高度时在右侧绘制滚动条
-    private void renderScrollbar(GuiGraphics graphics, int innerY, int innerHeight) {
-        int maxScroll = maxScroll();
-        if (maxScroll <= 0) {
-            return;
-        }
-        int x = bounds.right() - SCROLLBAR_WIDTH - 1;
-        theme.drawScrollTrack(graphics, new UiRect(x, innerY, SCROLLBAR_WIDTH, innerHeight));
-        int total = totalHeight();
-        int thumbHeight = Math.max(8, innerHeight * innerHeight / Math.max(1, total));
-        int thumbY = innerY + (innerHeight - thumbHeight) * scrollOffset / maxScroll;
-        theme.drawScrollThumb(graphics, new UiRect(x, thumbY, SCROLLBAR_WIDTH, thumbHeight));
+    private void renderScrollbar(GuiGraphics graphics) {
+        if (!scroll.isScrollbarVisible()) return;
+        theme.drawScrollTrack(graphics, scroll.scrollbarTrack());
+        theme.drawScrollThumb(graphics, scroll.scrollbarThumb());
     }
 
     // ---- 输入 ----
@@ -397,7 +405,7 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
         if (!visible || !bounds.contains(mouseX, mouseY)) {
             return false;
         }
-
+        scroll.mousePressed(context);
         return true;
     }
 
@@ -412,9 +420,7 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
         if (maxScroll <= 0) {
             return false;
         }
-        this.scrollOffset = Math.clamp(
-                scrollOffset - (int) Math.round(scrollY * font.lineHeight * WHEEL_ROWS), 0, maxScroll);
-        return true;
+        return scroll.scrollByPixels(scrollY * font.lineHeight * WHEEL_ROWS);
     }
 
     @Override
@@ -435,8 +441,16 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
         if (step == 0) {
             return false;
         }
-        this.scrollOffset = Math.clamp(scrollOffset + step, 0, maxScroll);
+        scroll.setOffset(scroll.offset() + step);
         return true;
+    }
+
+    /** 滚动条保持现有焦点，正文使用默认焦点候选。 */
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        if (!visible) return null;
+        UiPointerHit hit = scroll.hitTest(x, y);
+        return hit == null ? UiWidget.super.hitTest(x, y) : hit.within(this);
     }
 
     // ---- 焦点 ----
@@ -465,7 +479,7 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
 
     // 回到顶部
     public void scrollToTop() {
-        this.scrollOffset = 0;
+        scroll.setOffset(0);
     }
 
     // 文本可用宽度（右侧预留滚动条）
@@ -484,10 +498,13 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
     }
 
     private int maxScroll() {
-        return Math.max(0, totalHeight() - innerHeight());
+        return scroll.maxOffset();
     }
 
     private void clampScroll() {
-        this.scrollOffset = Math.clamp(scrollOffset, 0, maxScroll());
+        scroll.setViewport(bounds.x() + PADDING_X, bounds.y() + PADDING_Y,
+                Math.max(0, bounds.width() - PADDING_X - 1), innerHeight());
+        scroll.setContentHeight(totalHeight());
+        scroll.setScrollbarVisible(scroll.maxOffset() > 0);
     }
 }

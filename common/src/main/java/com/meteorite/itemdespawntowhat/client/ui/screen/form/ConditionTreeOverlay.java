@@ -768,7 +768,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
         Component tip = pointer.allowsTooltip() ? tooltipAt(mouseX, mouseY) : null;
         if (tip != null) {
             UiFlatText.tooltip(graphics, renderFont, tip,
-                    Math.clamp(bounds.width(), TOOLTIP_MIN_WIDTH, TOOLTIP_MAX_WIDTH), mouseX, mouseY);
+                    Math.clamp(bounds.width(), TOOLTIP_MIN_WIDTH, TOOLTIP_MAX_WIDTH), mouseX, mouseY, CHROME_THEME.surfaces());
         }
     }
 

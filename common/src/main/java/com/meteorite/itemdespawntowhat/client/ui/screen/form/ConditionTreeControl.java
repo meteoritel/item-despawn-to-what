@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import java.util.function.Consumer;
+
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
@@ -261,10 +263,10 @@ final class ConditionTreeControl extends FormControl {
     }
 
     @Override
-    void addFocusTargets(List<UiFocusTarget> out) {
+    void addFocusTargets(Consumer<UiFocusTarget> out) {
         if (fallbackRaw == null && enabled) {
-            out.addAll(toolbar);
-            out.add(editor);
+            toolbar.forEach(out);
+            out.accept(editor);
         }
     }
 

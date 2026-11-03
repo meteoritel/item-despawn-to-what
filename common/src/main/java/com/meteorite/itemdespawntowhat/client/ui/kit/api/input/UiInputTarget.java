@@ -28,7 +28,11 @@ public interface UiInputTarget {
         return false;
     }
 
-    /** 指针拖动；匹配会话目标在指针离开矩形后仍会收到完整增量。 */
+    /**
+     * 指针拖动；位置与增量均使用 GUI 逻辑坐标，增量相对于上一次拖动事件。
+     * 容器换算局部坐标时须对位置与增量使用同一缩放；平移只影响位置。
+     * 匹配会话目标在指针离开矩形后仍会收到完整增量。
+     */
     default boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
         return false;
     }

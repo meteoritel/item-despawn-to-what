@@ -2,7 +2,7 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionTreeViewModel;
 import net.minecraft.client.gui.Font;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiModalStack;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiModalStack;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.ConditionEditContextFactory;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
@@ -19,7 +19,7 @@ import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.LeafPanel;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionTreeContract;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiModal;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
 import com.meteorite.itemdespawntowhat.core.model.ConditionNode;

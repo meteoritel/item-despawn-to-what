@@ -560,7 +560,7 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
      * @return 完整行文案；指针不在内容区或无命中行时为 null
      */
     public @Nullable Component tooltipAt(double mouseX, double mouseY) {
-        if (!scrollView.canHoverContent(mouseX, mouseY)) {
+        if (!scrollView.containsContent(mouseX, mouseY)) {
             return null;
         }
         int index = indexAt(mouseX, mouseY);

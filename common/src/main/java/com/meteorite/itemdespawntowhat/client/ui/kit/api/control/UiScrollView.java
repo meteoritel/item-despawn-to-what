@@ -66,6 +66,7 @@ public final class UiScrollView implements UiInteractionSession.Target {
     private int contentHeight;
     private int offset;
     private int step = 20;
+    private int scrollbarWidth = SCROLLBAR_WIDTH;
     private boolean scrollbarVisible;
     private UiInteractionSession session;
     /**
@@ -78,7 +79,10 @@ public final class UiScrollView implements UiInteractionSession.Target {
     // 视口尺寸变化立即重新钳制：内容不足一屏时偏移必须回到 0。
     // 负宽高按 0 钳制——kit 的几何入口统一钳制，UiRect 只在构造期拒绝负尺寸（那是矩形自身的不变式）。
     public void setViewport(int x, int y, int width, int height) {
-        viewport = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
+        int w = Math.max(0, width);
+        int h = Math.max(0, height);
+        if (viewport.x() == x && viewport.y() == y && viewport.width() == w && viewport.height() == h) return;
+        viewport = new UiRect(x, y, w, h);
         clampOffset();
     }
 
@@ -90,7 +94,12 @@ public final class UiScrollView implements UiInteractionSession.Target {
      * 返回当前内容可用宽度，按政策扣除实际可见或固定预留的滚动条占用。
      */
     public int contentWidth() {
-        return Math.max(0, viewport.width() - (policy.reserveScrollbar() || isScrollbarVisible() ? SCROLLBAR_WIDTH : 0));
+        return Math.max(0, viewport.width() - (policy.reserveScrollbar() || isScrollbarVisible() ? scrollbarWidth : 0));
+    }
+
+    /** 设置实际轨道宽度，文本视图可保留其较窄的轨道。 */
+    public void setScrollbarWidth(int width) {
+        scrollbarWidth = Math.max(1, width);
     }
 
     public void setContentHeight(int contentHeight) {
@@ -128,8 +137,13 @@ public final class UiScrollView implements UiInteractionSession.Target {
     public boolean scrollBy(double amount) {
         int direction = (int) Math.signum(amount);
         if (direction == 0) return false;
+        return scrollByPixels(direction * (double) step);
+    }
+
+    /** 按像素量滚动；正数朝内容顶部，保留连续滚轮的实际量。 */
+    public boolean scrollByPixels(double amount) {
         int previous = offset;
-        setOffset(direction < 0 ? offset + step : offset - step);
+        setOffset(offset - (int) Math.round(amount));
         return offset != previous;
     }
 
@@ -217,17 +231,17 @@ public final class UiScrollView implements UiInteractionSession.Target {
         return session != null && session.owns(this);
     }
 
-    // 所有内容命中（高亮、行 tooltip 等）共用此门禁；拖出轨道后仍保持独占。
-    public boolean canHoverContent(double x, double y) {
-        return !isDragging() && contains(x, y) && !hitScrollbar(x, y);
+    /** 内容区的纯几何命中；指针交互权限由 UiPointer 统一控制。 */
+    public boolean containsContent(double x, double y) {
+        return contains(x, y) && !hitScrollbar(x, y);
     }
 
     /**
-     * 命中可交互内容后返回内容纵坐标；视口外、滚动条及滚动条拖动期间为空。
+     * 命中内容区后返回内容纵坐标；视口外及滚动条区域为空。
      * 纯几何换算仍使用 {@link #toContentY(double)}，不受命中门控影响。
      */
     public OptionalDouble hitContentY(double screenX, double screenY) {
-        return canHoverContent(screenX, screenY)
+        return containsContent(screenX, screenY)
                 ? OptionalDouble.of(toContentY(screenY)) : OptionalDouble.empty();
     }
 
@@ -307,7 +321,7 @@ public final class UiScrollView implements UiInteractionSession.Target {
     // 滚动条始终贴着视口右边界；视口窄于滚动条时退化为整个视口宽。
     /** 当前轨道的屏幕矩形，供宿主使用自己的主题绘制。 */
     public UiRect scrollbarTrack() {
-        return UiScrollbarGeometry.track(viewport, SCROLLBAR_WIDTH);
+        return UiScrollbarGeometry.track(viewport, scrollbarWidth);
     }
 
     // 滑块高度按「视口/内容」比例缩放，并保底 MIN_THUMB_HEIGHT；没有可滚距离时占满轨道。

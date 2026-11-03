@@ -1,11 +1,14 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
+
+import java.util.function.Consumer;
+
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputScope;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTypePicker;
@@ -102,7 +105,7 @@ interface EditorPage extends UiInputTarget {
 
     void renderFooter(GuiGraphics graphics, Font font, UiPointer pointer, UiRect footer);
 
-    void addFocusTargets(UiFocusManager focus);
+    void addFocusTargets(Consumer<UiFocusTarget> focus);
 
     // ---- 输入派发 ----
 

@@ -32,7 +32,7 @@ import com.meteorite.itemdespawntowhat.client.ui.theme.UiMarkIcons;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCheckBox;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiDescriptionTooltip;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiListView;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiListView;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTypePicker;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
@@ -293,7 +293,7 @@ final class RuleEditorResultsSection {
 
         int effectCount = ResultStructure.effectCount(rule, candidateIndex);
         effectIndex = Math.clamp(effectIndex, 0, Math.max(0, effectCount - 1));
-        effectList = new UiListView<>(THEME, font, this::renderEffectRow);
+        effectList = new UiListView<>(THEME, this::renderEffectRow);
         effectList.setRowHeight(ACTION_ROW_HEIGHT);
         effectList.setSelectionMarkerVisible(false);
         effectList.setChipRows(true);

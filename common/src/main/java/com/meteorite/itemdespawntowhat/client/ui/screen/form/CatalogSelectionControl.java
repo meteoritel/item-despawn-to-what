@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import java.util.function.Consumer;
+
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import java.util.Objects;
@@ -321,8 +323,8 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
     }
 
     @Override
-    void addFocusTargets(List<UiFocusTarget> targets) {
-        targets.add(this);
+    void addFocusTargets(Consumer<UiFocusTarget> targets) {
+        targets.accept(this);
     }
 
     @Override

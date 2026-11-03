@@ -90,8 +90,9 @@ public final class UiRangeBar extends AbstractBarShell<UiRangeSlider> {
 
     private final Texts texts;
     private final UiValueTextBinding<Double, String> preciseBinding;
-    private final UiSliderPainter painter;
-    private final UiSliderStyle style;
+    private UiSliderPainter painter;
+    private UiSliderStyle style;
+    private long themeRevision = -1;
 
     private final @Nullable Listener listener;
 
@@ -113,9 +114,7 @@ public final class UiRangeBar extends AbstractBarShell<UiRangeSlider> {
                         initial == null ? UiRangeValue.EMPTY : initial));
         this.texts = texts;
         this.listener = listener;
-        this.painter = theme.sliderSkin(UiSliderRole.COMPACT).painter();
-        this.style = theme.sliderSkin(UiSliderRole.COMPACT).style();
-        this.core.setThumbWidth(style.thumbWidth());
+        refreshTheme();
         this.core.setListener(new UiValueInteraction.Listener<>() {
             @Override
             public void began(UiRangeValue startValue) {
@@ -170,6 +169,15 @@ public final class UiRangeBar extends AbstractBarShell<UiRangeSlider> {
     }
 
     // kit 核心：需要窗口/端点开关/分页步长等能力的宿主直接用
+    private void refreshTheme() {
+        if (themeRevision == theme.revision()) return;
+        var skin = theme.sliderSkin(UiSliderRole.COMPACT);
+        painter = skin.painter();
+        style = skin.style();
+        core.setThumbWidth(style.thumbWidth());
+        themeRevision = theme.revision();
+    }
+
     public UiRangeSlider core() {
         return this.core;
     }
@@ -191,6 +199,7 @@ public final class UiRangeBar extends AbstractBarShell<UiRangeSlider> {
 
     @Override
     public void setBounds(int x, int y, int width, int height) {
+        refreshTheme();
         int rowHeight = layoutRows(x, y, width, height);
         // 高度预算够时提示独占一行；不够时留空，提示改在标签行内绘制
         layoutHintRow(LABEL_HEIGHT + rowHeight);
@@ -203,6 +212,7 @@ public final class UiRangeBar extends AbstractBarShell<UiRangeSlider> {
     /** {@inheritDoc} */
     @Override
     public void render(GuiGraphics graphics, Font renderFont, UiPointer incomingPointer) {
+        refreshTheme();
         UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
         if (!visible) {
             return;

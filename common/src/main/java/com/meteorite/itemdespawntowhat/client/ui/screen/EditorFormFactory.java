@@ -3,7 +3,7 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiModalStack;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiModalStack;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import net.minecraft.client.gui.Font;
 

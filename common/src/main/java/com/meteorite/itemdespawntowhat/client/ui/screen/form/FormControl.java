@@ -202,7 +202,7 @@ abstract class FormControl implements UiInputTarget {
      */
     void appendInputText(List<String> out) {
         focusTargetBuffer.clear();
-        addFocusTargets(focusTargetBuffer);
+        addFocusTargets(focusTargetBuffer::add);
         for (UiFocusTarget target : focusTargetBuffer) {
             if (target instanceof UiTextValue input) out.add(input.value());
         }
@@ -210,7 +210,7 @@ abstract class FormControl implements UiInputTarget {
 
     void restoreInputText(List<String> text) {
         focusTargetBuffer.clear();
-        addFocusTargets(focusTargetBuffer);
+        addFocusTargets(focusTargetBuffer::add);
         int index = 0;
         for (UiFocusTarget target : focusTargetBuffer) {
             if (index >= text.size()) break;
@@ -288,7 +288,7 @@ abstract class FormControl implements UiInputTarget {
         return false;
     }
 
-    void addFocusTargets(List<UiFocusTarget> out) {
+    void addFocusTargets(Consumer<UiFocusTarget> out) {
     }
 
     void setEnabled(boolean enabled) {
@@ -476,7 +476,7 @@ abstract class FormControl implements UiInputTarget {
     @Override
     public @Nullable UiPointerHit hitTest(double x, double y) {
         List<UiFocusTarget> targets = new ArrayList<>();
-        addFocusTargets(targets);
+        addFocusTargets(targets::add);
         UiPointerHit hit = UiPointerHit.topmost(x, y, targets);
         return hit == null ? null : hit.within(this);
     }

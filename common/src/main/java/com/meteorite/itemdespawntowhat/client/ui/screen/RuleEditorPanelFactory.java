@@ -30,7 +30,7 @@ import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCatalogGrid;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCyclicTimeBar;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiModal;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiRangeBar;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;

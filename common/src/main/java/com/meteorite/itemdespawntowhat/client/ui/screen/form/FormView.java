@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiScrollView;
+
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
@@ -138,7 +140,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
     private int viewportY;
     private int viewportWidth;
     int viewportHeight;
-    int scrollOffset;
+    final UiScrollView scroll = new UiScrollView();
     private int contentHeight;
     boolean visible = true;
     boolean enabled = true;
@@ -257,7 +259,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
         if (!visible) {
             row.control.endInteractions(UiInteractionSession.EndReason.HIDDEN);
             List<UiFocusTarget> targets = new ArrayList<>();
-            row.control.addFocusTargets(targets);
+            row.control.addFocusTargets(targets::add);
             targets.forEach(target -> target.focusState().clear());
         }
         invalidateMeasure();
@@ -561,7 +563,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
      * 行几何是否有待重测：页面据此决定是否需要重新布局。
      */
     public boolean needsMeasure() {
-        return measureDirty;
+        return measureDirty || themeRevision != THEME.revision();
     }
 
     /**
@@ -580,7 +582,13 @@ public final class FormView implements UiWidget, UiLayoutSource {
     }
 
     // 按宽度测量行几何：几何输入与宽度都没变时复用缓存
+    private long themeRevision = -1;
+
     private int measureRows(int availableWidth) {
+        if (themeRevision != THEME.revision()) {
+            themeRevision = THEME.revision();
+            invalidateMeasure();
+        }
         int width = Math.max(0, availableWidth);
         if (!measureDirty && measuredWidth == width) {
             return measuredContentHeight;
@@ -604,6 +612,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
     public void shiftViewportY(int deltaY) {
         if (deltaY == 0) return;
         viewportY += deltaY;
+        updateScrollGeometry();
     }
 
     /**
@@ -613,7 +622,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
      */
     void syncBounds() {
         int originX = viewportX;
-        int originY = viewportY - scrollOffset;
+        int originY = viewportY - scroll.offset();
         if (!measureDirty && originX == syncedOriginX && originY == syncedOriginY) {
             return;
         }
@@ -640,11 +649,11 @@ public final class FormView implements UiWidget, UiLayoutSource {
     }
 
     int maxScroll() {
-        return FormRowLayout.maxScroll(contentHeight, viewportHeight);
+        return scroll.maxOffset();
     }
 
     private int rowScreenY(FormRow row) {
-        return FormRowLayout.rowScreenY(viewportY, row, scrollOffset);
+        return FormRowLayout.rowScreenY(viewportY, row, scroll.offset());
     }
 
     // 组装当前控件的对象形态（子列表用）
@@ -713,12 +722,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
                 return null;
             }
         }
-        if (row.contentY < scrollOffset) {
-            scrollOffset = Math.max(0, row.contentY - 2);
-        } else if (row.contentY + row.contentHeight > scrollOffset + viewportHeight) {
-            scrollOffset = Math.min(maxScroll(), row.contentY + row.contentHeight - viewportHeight + 2);
-        }
-        clampScroll();
+        scroll.ensureVisible(new UiRect(0, row.contentY - 2, viewportWidth, row.contentHeight + 4));
         this.highlightPath = row.path;
         this.highlightTicks = HIGHLIGHT_TICKS;
         syncBounds();
@@ -728,7 +732,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
         }
         if (nestedTarget != null && nestedTarget.canFocus()) return nestedTarget;
         List<UiFocusTarget> targets = new ArrayList<>();
-        row.control.addFocusTargets(targets);
+        row.control.addFocusTargets(targets::add);
         for (UiFocusTarget target : targets) {
             if (target.canFocus()) {
                 return target;
@@ -764,16 +768,16 @@ public final class FormView implements UiWidget, UiLayoutSource {
      */
     public List<UiFocusTarget> focusTargets() {
         List<UiFocusTarget> list = new ArrayList<>();
-        addFocusTargets(list);
+        addFocusTargets(list::add);
         return list;
     }
 
-    void addFocusTargets(List<UiFocusTarget> out) {
+    void addFocusTargets(Consumer<UiFocusTarget> out) {
         for (FormRow row : rows) {
             if (!row.visible) continue;
             row.control.addFocusTargets(out);
-            out.addAll(row.pickers);
-            out.addAll(row.actions);
+            row.pickers.forEach(out);
+            row.actions.forEach(out);
         }
     }
 
@@ -793,7 +797,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
             if (row.control instanceof UiLayoutSource source) { children.addAll(source.layoutNodes()); }
             else {
                 List<UiFocusTarget> targets = new ArrayList<>();
-                row.control.addFocusTargets(targets);
+                row.control.addFocusTargets(targets::add);
                 for (UiFocusTarget target : targets) {
                     if (target instanceof UiLayoutSource source) { children.addAll(source.layoutNodes()); }
                 }
@@ -898,13 +902,20 @@ public final class FormView implements UiWidget, UiLayoutSource {
         int used = measureRows(this.viewportWidth);
         this.viewportHeight = used;
         this.contentHeight = used;
-        this.scrollOffset = 0;
+        updateScrollGeometry();
+        scroll.setOffset(0);
         syncBounds();
         return used;
     }
 
     private void clampScroll() {
-        this.scrollOffset = Math.clamp(scrollOffset, 0, maxScroll());
+        updateScrollGeometry();
+    }
+
+    private void updateScrollGeometry() {
+        scroll.setViewport(viewportX, viewportY, viewportWidth, viewportHeight);
+        scroll.setContentHeight(contentHeight);
+        scroll.setScrollbarVisible(contentHeight > viewportHeight);
     }
 
     public int contentHeight() {
@@ -958,6 +969,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
 
     // 统一结束入口：把「未提交的预览」按原因回退或提交，交由各控件实现
     void endInteractions(UiInteractionSession.EndReason reason) {
+        scroll.endInteraction(reason);
         for (FormRow row : rows) {
             row.control.endInteractions(reason);
         }
@@ -1011,9 +1023,9 @@ public final class FormView implements UiWidget, UiLayoutSource {
         } finally {
             graphics.disableScissor();
         }
-        if (contentHeight > viewportHeight) {
-            FormRowRenderer.renderScrollbar(graphics, viewportX, viewportY, viewportWidth, viewportHeight,
-                    contentHeight, scrollOffset, maxScroll(), SCROLLBAR_WIDTH, THEME);
+        if (scroll.isScrollbarVisible()) {
+            THEME.drawScrollTrack(graphics, scroll.scrollbarTrack());
+            THEME.drawScrollThumb(graphics, scroll.scrollbarThumb());
         }
     }
 
@@ -1022,7 +1034,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
      */
     public @Nullable Component tooltipAt(double mouseX, double mouseY) {
         return FormRowRenderer.tooltipAt(mouseX, mouseY, font, rows, viewportX, viewportY, viewportWidth,
-                viewportHeight, scrollOffset);
+                viewportHeight, scroll.offset());
     }
 
     // ---- 输入分发薄封装：实现集中在 FormInputRouter ----
@@ -1032,18 +1044,6 @@ public final class FormView implements UiWidget, UiLayoutSource {
         boolean handled = inputRouter.mousePressed(context);
         if (handled) invalidateMeasure();
         return handled;
-    }
-
-    @Override
-    public boolean mouseReleased(UiInputContext context) {
-        boolean handled = inputRouter.mouseReleased(context);
-        if (handled) invalidateMeasure();
-        return handled;
-    }
-
-    @Override
-    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
-        return inputRouter.mouseDragged(context, dragX, dragY);
     }
 
     @Override
@@ -1072,6 +1072,8 @@ public final class FormView implements UiWidget, UiLayoutSource {
     public @Nullable UiPointerHit hitTest(double x, double y) {
         if (!visible || !enabled || !bounds().contains(x, y)) return null;
         syncBounds();
+        UiPointerHit scrollHit = scroll.hitTest(x, y);
+        if (scrollHit != null) return scrollHit.within(this);
         for (int index = rows.size() - 1; index >= 0; index--) {
             FormRow row = rows.get(index);
             if (!row.visible) continue;
