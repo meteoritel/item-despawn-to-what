@@ -2,17 +2,14 @@ package com.meteorite.itemdespawntowhat.client.ui.widget;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiNumberField;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.UiTextValue;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.UiTextAcceptance;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.UiTextEditSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutSource;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.UiTextSelection;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiHistoryShortcut;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiRenderLayers;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.UiTextHistory;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 
@@ -46,9 +43,7 @@ public final class UiTextInput implements UiNumberField.Editor, UiLayoutSource, 
     // 原版输入框
     private final TrackedEditBox editBox;
     private final UiFocusState focusState = new UiFocusState();
-    private final UiTextHistory textHistory = new UiTextHistory();
-    private final UiTextSelection selection;
-    private final UiTextAcceptance acceptance = new UiTextAcceptance(256);
+    private final UiTextEditSession editSession;
     private final Font font;
     // 控件矩形
     private UiRect bounds = new UiRect(0, 0, 0, 0);
@@ -76,12 +71,18 @@ public final class UiTextInput implements UiNumberField.Editor, UiLayoutSource, 
         this.editBox.setTextColorUneditable(theme.palette().textDisabled());
         // 长度由码点过滤器控制；程序回填不经过原版截断。
         this.editBox.setMaxLength(Integer.MAX_VALUE);
-        installFilter();
-        this.editBox.setCanLoseFocus(true);
-        this.editBox.setResponder(text -> onValueAccepted());
-        acceptance.reset(editBox.getValue());
         this.accessibleName = hint;
-        selection = new UiTextSelection(new UiTextSelection.Target() {
+        editSession = new UiTextEditSession(new UiTextEditSession.Model() {
+            @Override
+            public String value() {
+                return editBox.getValue();
+            }
+
+            @Override
+            public void write(String text) {
+                editBox.setValue(text);
+            }
+
             @Override
             public int cursor() {
                 return editBox.getCursorPosition();
@@ -102,7 +103,10 @@ public final class UiTextInput implements UiNumberField.Editor, UiLayoutSource, 
                 editBox.setHighlightPos(anchor);
                 editBox.setCursorPosition(cursor);
             }
-        });
+        }, 256);
+        installFilter();
+        this.editBox.setCanLoseFocus(true);
+        this.editBox.setResponder(text -> editSession.changed());
     }
 
     /**
@@ -138,26 +142,21 @@ public final class UiTextInput implements UiNumberField.Editor, UiLayoutSource, 
      */
     @Override
     public UiTextInput setMaxLength(int maxLength) {
-        acceptance.setMaximum(Math.max(1, maxLength));
+        editSession.acceptance().setMaximum(Math.max(1, maxLength));
         installFilter();
         return this;
     }
 
     // 设置输入过滤规则：与码点上限共同构成 EditBox 的过滤器
     public UiTextInput setFilter(Predicate<String> filter) {
-        acceptance.setFilter(filter);
+        editSession.acceptance().setFilter(filter);
         installFilter();
         return this;
     }
 
     // 安装过滤器：先判码点上限（超限整体拒绝并上报），再判业务规则
     private void installFilter() {
-        editBox.setFilter(acceptance::accepts);
-    }
-
-    // 文本被接受：更新回退基线并清除超限提示；超限兜底回退（正常已被过滤器拦住）
-    private void onValueAccepted() {
-        acceptance.changed(editBox.getValue(), editBox::setValue);
+        editBox.setFilter(editSession.acceptance()::accepts);
     }
 
     /**
@@ -165,7 +164,7 @@ public final class UiTextInput implements UiNumberField.Editor, UiLayoutSource, 
      */
     @Override
     public UiTextInput setOnOverflow(@Nullable Runnable onOverflow) {
-        acceptance.setOnOverflow(onOverflow);
+        editSession.acceptance().setOnOverflow(onOverflow);
         return this;
     }
 
@@ -174,7 +173,7 @@ public final class UiTextInput implements UiNumberField.Editor, UiLayoutSource, 
      */
     @Override
     public UiTextInput setOnValueChanged(@Nullable Runnable onValueChanged) {
-        acceptance.setOnChanged(() -> {
+        editSession.acceptance().setOnChanged(() -> {
             if (onInteractionEnd != null && isFocused() && focusState.scope() != null) {
                 focusState.scope().interaction().begin(this, UiInteractionSession.Source.TEXT, 0);
             }
@@ -228,12 +227,14 @@ public final class UiTextInput implements UiNumberField.Editor, UiLayoutSource, 
         if (onInteractionEnd != null) onInteractionEnd.accept(reason);
     }
 
+    /** 设置 Enter 的显式提交回调。 */
     @Override
     public UiTextInput setOnCommit(Consumer<String> onCommit) {
         this.onCommit = onCommit;
         return this;
     }
 
+    /** 设置 Esc 的取消回调。 */
     @Override
     public UiTextInput setOnCancel(Runnable onCancel) {
         this.onCancel = onCancel;
@@ -242,7 +243,7 @@ public final class UiTextInput implements UiNumberField.Editor, UiLayoutSource, 
 
     public UiTextInput setVisible(boolean visible) {
         if (!visible) endInteraction(UiInteractionSession.EndReason.HIDDEN);
-        selection.setVisible(visible);
+        editSession.setVisible(visible);
         this.visible = visible;
         editBox.setVisible(visible);
         return this;
@@ -337,21 +338,19 @@ public final class UiTextInput implements UiNumberField.Editor, UiLayoutSource, 
 
     @Override
     public boolean mousePressed(UiInputContext context) {
-        selection.setBounds(bounds);
-        selection.setEnabled(canFocus());
-        if (!selection.mousePressed(context)) return false;
+        if (!editSession.beginSelection(context, bounds, canFocus())) return false;
         context.scope().pointerHit(this);
         return true;
     }
 
     @Override
     public boolean mouseReleased(UiInputContext context) {
-        return selection.mouseReleased(context);
+        return editSession.mouseReleased(context);
     }
 
     @Override
     public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
-        return selection.mouseDragged(context, dragX, dragY);
+        return editSession.mouseDragged(context, dragX, dragY);
     }
 
     /**
@@ -359,14 +358,14 @@ public final class UiTextInput implements UiNumberField.Editor, UiLayoutSource, 
      */
     @Override
     public void endInteraction(UiInteractionSession.EndReason reason) {
-        selection.endInteraction(reason);
+        editSession.endInteraction(reason);
         if (focusState.scope() != null) focusState.scope().interaction().end(this, reason);
     }
 
 
     private void seekCursor(double mouseX, double mouseY) {
         editBox.onClick(mouseX, mouseY);
-        if (!selection.isSelecting()) return;
+        if (!editSession.isSelecting()) return;
         int cursor = editBox.getCursorPosition();
         // 越界拖动越过可见文本的端点，推动水平视口；按码点移动，避免拆开代理对。
         if (mouseX < editBox.getX() && cursor > 0) {
@@ -378,13 +377,13 @@ public final class UiTextInput implements UiNumberField.Editor, UiLayoutSource, 
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        selection.endInteraction(UiInteractionSession.EndReason.RELEASE);
+        editSession.endInteraction(UiInteractionSession.EndReason.RELEASE);
         if (!visible || !editBox.isFocused()) {
             return false;
         }
         UiHistoryShortcut shortcut = UiHistoryShortcut.fromKey(keyCode, modifiers);
         if (shortcut != null && editable) {
-            restore(shortcut == UiHistoryShortcut.UNDO ? textHistory.undo() : textHistory.redo());
+            editSession.applyHistory(shortcut);
             return true;
         }
         if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
@@ -400,22 +399,16 @@ public final class UiTextInput implements UiNumberField.Editor, UiLayoutSource, 
             }
             return false;
         }
-        UiTextHistory.Snapshot snapshot = snapshot();
-        boolean handled = editBox.keyPressed(keyCode, scanCode, modifiers);
-        textHistory.record(snapshot, snapshot());
-        return handled;
+        return editSession.edit(() -> editBox.keyPressed(keyCode, scanCode, modifiers));
     }
 
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
-        selection.endInteraction(UiInteractionSession.EndReason.RELEASE);
+        editSession.endInteraction(UiInteractionSession.EndReason.RELEASE);
         if (!visible) {
             return false;
         }
-        UiTextHistory.Snapshot snapshot = snapshot();
-        boolean handled = editBox.charTyped(codePoint, modifiers);
-        textHistory.record(snapshot, snapshot());
-        return handled;
+        return editSession.edit(() -> editBox.charTyped(codePoint, modifiers));
     }
 
     @Override
@@ -452,32 +445,8 @@ public final class UiTextInput implements UiNumberField.Editor, UiLayoutSource, 
         return accessibleName;
     }
 
-    // 程序回填不通知宿主，不产生局部历史；不同内容成为新的装载基线。
     private void backfill(String value) {
-        selection.endInteraction(UiInteractionSession.EndReason.UNMOUNTED);
-        boolean changed = !value.equals(editBox.getValue());
-        acceptance.silently(() -> editBox.setValue(value));
-        acceptance.reset(editBox.getValue());
-        if (changed) {
-            textHistory.clear();
-        }
-    }
-
-    private UiTextHistory.Snapshot snapshot() {
-        return new UiTextHistory.Snapshot(editBox.getValue(), editBox.getCursorPosition(), editBox.anchor());
-    }
-
-    private void restore(@Nullable UiTextHistory.Snapshot snapshot) {
-        if (snapshot == null) {
-            return;
-        }
-        acceptance.silently(() -> {
-            editBox.setValue(snapshot.text());
-            editBox.setCursorPosition(snapshot.cursor());
-            editBox.setHighlightPos(snapshot.anchor());
-        });
-        acceptance.reset(editBox.getValue());
-        acceptance.notifyChanged();
+        editSession.backfill(value);
     }
 
     // 原版未暴露选择锚点；记录公开设置入口，避免用重复文本猜测选择方向。

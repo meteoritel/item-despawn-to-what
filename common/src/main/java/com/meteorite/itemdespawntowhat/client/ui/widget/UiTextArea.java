@@ -1,15 +1,15 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiFlatText;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiScrollbarGeometry;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.UiTextValue;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.UiTextAcceptance;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.UiTextEditSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutSource;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.UiTextSelection;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiHistoryShortcut;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.UiTextHistory;
@@ -53,8 +53,7 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
     private final Font font;
     // 文本模型：宽度为 final，宽度变化时按当前值重建
     private AccessibleTextField textField;
-    private final UiTextHistory textHistory = new UiTextHistory();
-    private final UiTextSelection selection;
+    private final UiTextEditSession editSession;
     // 控件矩形
     private UiRect bounds;
     // 已同步到文本模型的换行宽度
@@ -76,8 +75,6 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
     private boolean editable = true;
     private boolean selectableWhenReadOnly;
     private final UiFocusState focusState = new UiFocusState();
-    // 程序化写入期间不触发变化回调与长度回退
-    private final UiTextAcceptance acceptance = new UiTextAcceptance(1024);
     // 获得焦点的时刻，用于光标闪烁
     private long focusedTime;
 
@@ -91,7 +88,24 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
         this.accessibleName = hint;
         this.textField = createField(MIN_WIDTH - PADDING_X * 2 - SCROLLBAR_WIDTH);
         this.bounds = new UiRect(0, 0, MIN_WIDTH, height());
-        selection = new UiTextSelection(new UiTextSelection.Target() {
+        editSession = new UiTextEditSession(new UiTextEditSession.Model() {
+            @Override
+            public String value() {
+                return textField.value();
+            }
+
+            @Override
+            public void write(String text) {
+                textField.setValue(text);
+            }
+
+            @Override
+            public void restoreRejected(String text) {
+                int cursor = textField.cursor();
+                textField.setValue(text);
+                textField.seekCursor(Whence.ABSOLUTE, Math.min(cursor, text.length()));
+            }
+
             @Override
             public int cursor() {
                 return textField.cursor();
@@ -116,7 +130,7 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
                 textField.seekCursor(Whence.ABSOLUTE, cursor);
                 textField.setSelecting(false);
             }
-        });
+        }, 1024);
     }
 
     // 建立文本模型并挂接回调
@@ -142,14 +156,7 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
      */
     @Override
     public UiTextArea setValue(String value) {
-        endInteraction(UiInteractionSession.EndReason.UNMOUNTED);
-        String next = value == null ? "" : value;
-        boolean changed = !next.equals(textField.value());
-        acceptance.silently(() -> textField.setValue(next));
-        acceptance.reset(textField.value());
-        if (changed) {
-            textHistory.clear();
-        }
+        editSession.backfill(value == null ? "" : value);
         scrollToCursor();
         return this;
     }
@@ -175,7 +182,7 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
      */
     @Override
     public UiTextArea setMaxLength(int maxLength) {
-        acceptance.setMaximum(maxLength);
+        editSession.acceptance().setMaximum(maxLength);
         return this;
     }
 
@@ -206,7 +213,7 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
      */
     @Override
     public UiTextArea setOnValueChanged(@Nullable Runnable onChanged) {
-        acceptance.setOnChanged(onChanged);
+        editSession.acceptance().setOnChanged(onChanged);
         return this;
     }
 
@@ -215,7 +222,7 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
      */
     @Override
     public UiTextArea setOnOverflow(@Nullable Runnable onOverflow) {
-        acceptance.setOnOverflow(onOverflow);
+        editSession.acceptance().setOnOverflow(onOverflow);
         return this;
     }
 
@@ -233,7 +240,7 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
     }
 
     public void setVisible(boolean visible) {
-        selection.setVisible(visible);
+        editSession.setVisible(visible);
         this.visible = visible;
     }
 
@@ -399,21 +406,19 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
 
     @Override
     public boolean mousePressed(UiInputContext context) {
-        selection.setBounds(bounds);
-        selection.setEnabled(canFocus());
-        if (!selection.mousePressed(context)) return false;
+        if (!editSession.beginSelection(context, bounds, canFocus())) return false;
         context.scope().pointerHit(this);
         return true;
     }
 
     @Override
     public boolean mouseReleased(UiInputContext context) {
-        return selection.mouseReleased(context);
+        return editSession.mouseReleased(context);
     }
 
     @Override
     public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
-        return selection.mouseDragged(context, dragX, dragY);
+        return editSession.mouseDragged(context, dragX, dragY);
     }
 
     /**
@@ -421,7 +426,7 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
      */
     @Override
     public void endInteraction(UiInteractionSession.EndReason reason) {
-        selection.endInteraction(reason);
+        editSession.endInteraction(reason);
     }
 
 
@@ -448,7 +453,8 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
         }
         UiHistoryShortcut shortcut = UiHistoryShortcut.fromKey(keyCode, modifiers);
         if (shortcut != null && editable) {
-            restore(shortcut == UiHistoryShortcut.UNDO ? textHistory.undo() : textHistory.redo());
+            editSession.applyHistory(shortcut);
+            scrollToCursor();
             return true;
         }
         if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
@@ -459,9 +465,7 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
             return false;
         }
         if (!editable && !isReadOnlyNavigation(keyCode, modifiers)) return false;
-        UiTextHistory.Snapshot before = snapshot();
-        boolean handled = textField.keyPressed(keyCode);
-        textHistory.record(before, snapshot());
+        boolean handled = editSession.edit(() -> textField.keyPressed(keyCode));
         if (handled) {
             scrollToCursor();
         }
@@ -477,10 +481,10 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
         if (!StringUtil.isAllowedChatCharacter(codePoint)) {
             return false;
         }
-        UiTextHistory.Snapshot before = snapshot();
-        textField.insertText(Character.toString(codePoint));
-        textHistory.record(before, snapshot());
-        return true;
+        return editSession.edit(() -> {
+            textField.insertText(Character.toString(codePoint));
+            return true;
+        });
     }
 
     @Override
@@ -529,33 +533,8 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
 
     // 文本变化：超限时整体回退，否则记录并上报
     private void onTextChanged(String text) {
-        acceptance.changed(text, previous -> {
-            int cursor = textField.cursor();
-            textField.setValue(previous);
-            textField.seekCursor(Whence.ABSOLUTE, Math.min(cursor, previous.length()));
-        });
+        editSession.changed();
         scrollToCursor();
-    }
-
-    private UiTextHistory.Snapshot snapshot() {
-        return new UiTextHistory.Snapshot(textField.value(), textField.cursor(), textField.anchor());
-    }
-
-    private void restore(@Nullable UiTextHistory.Snapshot snapshot) {
-        if (snapshot == null) {
-            return;
-        }
-        acceptance.silently(() -> {
-            textField.setValue(snapshot.text());
-            textField.setSelecting(false);
-            textField.seekCursor(Whence.ABSOLUTE, snapshot.anchor());
-            textField.setSelecting(true);
-            textField.seekCursor(Whence.ABSOLUTE, snapshot.cursor());
-            textField.setSelecting(false);
-        });
-        acceptance.reset(textField.value());
-        scrollToCursor();
-        acceptance.notifyChanged();
     }
 
     // 在子类中读取原版受保护的选择区间，准确保留选择方向。
@@ -569,9 +548,6 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
             return cursor() == selected.beginIndex() ? selected.endIndex() : selected.beginIndex();
         }
     }
-
-    // 上报一次「输入超出码点上限被拒绝」
-
 
     // 按点击位置定位光标
     private void seekCursor(double mouseX, double mouseY) {
@@ -597,18 +573,10 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
         if (width == textWidth) {
             return;
         }
-        UiTextHistory.Snapshot snapshot = snapshot();
-        AccessibleTextField next = createField(width);
+        UiTextHistory.Snapshot snapshot = editSession.snapshot();
         this.textWidth = width;
-        acceptance.silently(() -> {
-            next.setValue(snapshot.text());
-            next.setSelecting(false);
-            next.seekCursor(Whence.ABSOLUTE, snapshot.anchor());
-            next.setSelecting(true);
-            next.seekCursor(Whence.ABSOLUTE, snapshot.cursor());
-            next.setSelecting(false);
-        });
-        this.textField = next;
+        this.textField = createField(width);
+        editSession.restore(snapshot);
         scrollToCursor();
     }
 

@@ -6,7 +6,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSess
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 文本能力：回填保留完整原文且静默，用户编辑才通知；原版编辑与历史由适配器负责。
+ * 文本能力：回填保留完整原文且静默，用户编辑才通知；原版编辑由适配器负责，接纳、历史与选择由 UiTextEditSession 协调。
  * <p>每个控件持有自己的文本与历史，宿主在客户端线程调用；卸载时结束选择捕获。</p>
  * <pre>{@code
  * input.setMaxLength(128).setOnValueChanged(this::refresh);
