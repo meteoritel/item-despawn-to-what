@@ -9,6 +9,8 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiStyleSource;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiMinecraftTheme;
 import java.util.Objects;
 import java.util.function.Function;
 
@@ -54,8 +56,13 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInt
 
     private UiNumberPolicy policy;
     private UiSliderWindow window;
-    private UiSliderStyle style = UiSliderStyle.pixelDefaults();
-    private UiSliderPainter painter = PixelSliderPainter.INSTANCE;
+    private UiStyleSource theme = UiMinecraftTheme.INSTANCE;
+    private UiSliderRole role = UiSliderRole.COMPACT;
+    private long themeRevision = -1;
+    private UiSliderStyle style = UiMinecraftTheme.INSTANCE.sliderSkin(role).style();
+    private UiSliderPainter painter = UiMinecraftTheme.INSTANCE.sliderSkin(role).painter();
+    private boolean styleOverride;
+    private boolean painterOverride;
     private double value;
     private double pageStep;
     private boolean backfillInvalid;
@@ -102,12 +109,34 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInt
         return this;
     }
 
+    /** 绑定根主题与档位；显式 setStyle/setPainter 分别覆盖对应默认项。 */
+    public UiScalarSlider setTheme(UiStyleSource theme, UiSliderRole role) {
+        if (this.theme == theme && this.role == role) return this;
+        this.theme = Objects.requireNonNull(theme, "theme");
+        this.role = Objects.requireNonNull(role, "role");
+        styleOverride = false;
+        painterOverride = false;
+        themeRevision = -1;
+        refreshTheme();
+        return this;
+    }
+
+    private void refreshTheme() {
+        if (themeRevision == theme.revision()) return;
+        UiSliderSkin skin = theme.sliderSkin(role);
+        if (!styleOverride) style = skin.style();
+        if (!painterOverride) painter = skin.painter();
+        themeRevision = theme.revision();
+    }
+
     public UiSliderStyle style() {
+        refreshTheme();
         return style;
     }
 
     public UiScalarSlider setStyle(UiSliderStyle next) {
         this.style = Objects.requireNonNull(next, "style");
+        styleOverride = true;
         return this;
     }
 
@@ -117,6 +146,7 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInt
 
     public UiScalarSlider setPainter(UiSliderPainter next) {
         this.painter = Objects.requireNonNull(next, "painter");
+        painterOverride = true;
         return this;
     }
 
@@ -253,6 +283,7 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInt
     }
 
     public int trackLeft() {
+        refreshTheme();
         return bounds.x() + style.thumbWidth();
     }
 
@@ -281,6 +312,7 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInt
 
     // 绘制一帧；hovered 只在可见时更新
     public void render(GuiGraphics graphics, Font font, UiPointer incomingPointer) {
+        refreshTheme();
         UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
         if (!visible) {
             return;

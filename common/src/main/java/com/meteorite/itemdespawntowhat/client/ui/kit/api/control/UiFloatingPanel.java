@@ -11,6 +11,9 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSess
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiRenderLayers;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlStyle;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlRole;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiStyleSource;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiMinecraftTheme;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
 
 import net.minecraft.client.gui.Font;
@@ -68,15 +71,19 @@ public final class UiFloatingPanel implements UiInteractionSession.Target, UiFoc
      */
     private static final int COLLAPSE_INSET = 2;
     private static final int DEFAULT_SNAP_MARGIN = 8;
-    private static final int DEFAULT_TITLE_COLOR = 0xFFE6E6E6;
+
 
     private final Font font;
     private final Component title;
     private final int titleHeight;
     private final UiControl collapseButton = new UiControl();
 
-    private UiControlStyle style = UiControlStyle.DARK;
-    private int titleColor = DEFAULT_TITLE_COLOR;
+    private UiStyleSource theme = UiMinecraftTheme.INSTANCE;
+    private UiControlStyle style = theme.controlStyle(UiControlRole.SECONDARY);
+    private boolean styleOverride;
+    private long themeRevision = -1;
+    private int titleColor = UiMinecraftTheme.INSTANCE.surfaces().headerText();
+    private boolean titleColorOverride;
     private UiRect workArea = new UiRect(0, 0, 0, 0);
     private UiRect bounds = new UiRect(0, 0, 0, 0);
     @Nullable
@@ -97,7 +104,6 @@ public final class UiFloatingPanel implements UiInteractionSession.Target, UiFoc
         this.font = Objects.requireNonNull(font);
         this.title = Objects.requireNonNull(title).copy();
         this.titleHeight = font.lineHeight + TITLE_PADDING * 2;
-        collapseButton.setStyle(style);
         collapseButton.configure(font, Component.empty(), titleColor, collapseIcon(), List.of(),
                 () -> setCollapsed(!collapsed));
     }
@@ -107,11 +113,20 @@ public final class UiFloatingPanel implements UiInteractionSession.Target, UiFoc
         layoutContent();
     }
 
+    /** 绑定稳定主题来源，显式 setStyle 优先于主题默认项。 */
+    public void setTheme(UiStyleSource theme) {
+        this.theme = Objects.requireNonNull(theme, "theme");
+        themeRevision = -1;
+        styleOverride = false;
+        collapseButton.setTheme(theme, UiControlRole.SECONDARY);
+    }
+
     /**
-     * 结构色注入；默认暗色主题。
+     * 显式结构色覆盖，优先于根主题。
      */
     public void setStyle(UiControlStyle style) {
         this.style = Objects.requireNonNull(style);
+        styleOverride = true;
         collapseButton.setStyle(style);
     }
 
@@ -120,6 +135,7 @@ public final class UiFloatingPanel implements UiInteractionSession.Target, UiFoc
      */
     public void setTitleColor(int color) {
         this.titleColor = color;
+        titleColorOverride = true;
     }
 
     public void setDock(Dock dock) {
@@ -166,8 +182,14 @@ public final class UiFloatingPanel implements UiInteractionSession.Target, UiFoc
      * 在宿主选定的作用域内绘制背景、内容与标题前景。
      */
     public void render(GuiGraphics graphics, UiPointer incomingPointer) {
+        if (themeRevision != theme.revision()) {
+            if (!styleOverride) style = theme.controlStyle(UiControlRole.SECONDARY);
+            if (!titleColorOverride) titleColor = theme.surfaces().headerText();
+            themeRevision = theme.revision();
+        }
         UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
-        graphics.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), style.background());
+        if (styleOverride) graphics.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), style.background());
+        else theme.drawWindow(graphics, bounds);
         Content target = content;
         if (target != null && !collapsed && target.isVisible() && contentRect().height() > 0) {
             UiRenderLayers.draw(graphics, 0, () -> target.render(graphics, font, pointer));
@@ -177,7 +199,8 @@ public final class UiFloatingPanel implements UiInteractionSession.Target, UiFoc
 
     private void renderForeground(GuiGraphics graphics, UiPointer pointer) {
         UiRect bar = titleBar();
-        graphics.fill(bar.x(), bar.y(), bar.right(), bar.bottom(), style.hoverBackground());
+        if (styleOverride) graphics.fill(bar.x(), bar.y(), bar.right(), bar.bottom(), style.hoverBackground());
+        else theme.drawHeader(graphics, bar);
         outline(graphics, bounds, style.scrollbarThumb());
         String label = TextScroll.trimToWidth(font, title.getString(), Math.max(0, bar.width() - titleInset()));
         graphics.drawString(font, label, bar.x() + TITLE_INSET, bar.y() + TITLE_PADDING, titleColor, false);

@@ -12,6 +12,9 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlStyle;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlRole;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiStyleSource;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiMinecraftTheme;
 
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -52,7 +55,9 @@ public final class UiIconStrip implements UiInteractionSession.Target, UiFocusTa
     private final Font font;
     private final List<Item> cells = new ArrayList<>();
     private Orientation orientation;
-    private UiControlStyle style = UiControlStyle.DARK;
+    private UiStyleSource theme = UiMinecraftTheme.INSTANCE;
+    private UiControlStyle style = theme.controlStyle(UiControlRole.SECONDARY);
+    private boolean styleOverride;
     private UiRect bounds = new UiRect(0, 0, 0, 0);
     private int focusedIndex = -1;
     private int pressedIndex = -1;
@@ -88,11 +93,19 @@ public final class UiIconStrip implements UiInteractionSession.Target, UiFocusTa
         relayout();
     }
 
+    /** 绑定稳定主题来源，显式 setStyle 优先于主题默认项。 */
+    public void setTheme(UiStyleSource theme) {
+        this.theme = Objects.requireNonNull(theme, "theme");
+        styleOverride = false;
+        for (Item item : cells) item.control.setTheme(theme, UiControlRole.SECONDARY);
+    }
+
     /**
      * 皮肤注入：只影响格子结构色与焦点轮廓。
      */
     public void setStyle(UiControlStyle style) {
         this.style = Objects.requireNonNull(style);
+        styleOverride = true;
         for (Item item : cells) item.control.setStyle(style);
     }
 
@@ -393,7 +406,8 @@ public final class UiIconStrip implements UiInteractionSession.Target, UiFocusTa
             this.disabled = disabled;
             this.tooltipOrNull = tooltip == null ? null : tooltip.copy();
             this.action = action;
-            this.control.setStyle(strip.style);
+            this.control.setTheme(strip.theme, UiControlRole.SECONDARY);
+            if (strip.styleOverride) this.control.setStyle(strip.style);
             this.control.setFocusable(action != null);
         }
 

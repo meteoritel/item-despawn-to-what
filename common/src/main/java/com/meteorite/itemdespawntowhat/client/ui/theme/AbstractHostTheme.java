@@ -3,6 +3,12 @@ package com.meteorite.itemdespawntowhat.client.ui.theme;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import net.minecraft.client.gui.GuiGraphics;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlSkin;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlRole;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlPainter;
+import java.util.EnumMap;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiSurfaceStyle;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiThemeMetrics;
 
 /**
  * 宿主主题的公共壳：集中像素与扁平两套主题逐项相同的宿主级度量与共用外壳原语。
@@ -12,6 +18,32 @@ import net.minecraft.client.gui.GuiGraphics;
  * 实现类不再各抄一遍。新增宿主级度量时只需改 {@link UiTheme} 与 {@link UiHostTheme} 各一处。</p>
  */
 abstract class AbstractHostTheme implements UiHostTheme {
+    private final EnumMap<UiControlRole, UiControlSkin> skins = new EnumMap<>(UiControlRole.class);
+    @Override public UiControlSkin controlSkin(UiControlRole role) {
+        return skins.computeIfAbsent(role, key -> new UiControlSkin(controlStyle(key), UiControlPainter.FILL,
+                controlTextColor(key), palette().textDisabled()));
+    }
+    private UiSurfaceStyle surfaces;
+    private UiThemeMetrics metrics;
+
+    @Override
+    public UiSurfaceStyle surfaces() {
+        if (surfaces == null) {
+            UiHostPalette colors = palette();
+            surfaces = new UiSurfaceStyle(colors.textPrimary(), colors.textSecondary(), colors.textDisabled(), colors.textOnDark(),
+                    colors.slotInner(), colors.slotFill(), colors.panelFill(), colors.chromeBorder(), colors.controlFill(), colors.headerText(),
+                    colors.controlSelected(), colors.modalDim(), colors.panelFill(), colors.chromeBorder(), colors.chromeDivider(),
+                    colors.textPrimary(), colors.accent());
+        }
+        return surfaces;
+    }
+
+    @Override
+    public UiThemeMetrics metrics() {
+        if (metrics == null) metrics = new UiThemeMetrics(padding(), rowHeight(), textOffset(), headerHeight(), border(), selectMarkerWidth());
+        return metrics;
+    }
+
 
     @Override
     public int padding() {

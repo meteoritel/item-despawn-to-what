@@ -1,7 +1,10 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.control;
 
+import java.util.function.Consumer;
+
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
@@ -9,6 +12,9 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiFlatText;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlStyle;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiStyleSource;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiMinecraftTheme;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlRole;
 
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -24,7 +30,7 @@ import java.util.Set;
 
 /**
  * 控件组：按**显式层序**绘制控件、返回最上层命中目标与唯一 tooltip，并把可聚焦控件交给
- * {@link UiFocusManager}（见 {@link #collectFocusTargets(List)}），按压交给命中控件的作用域会话。
+ * {@link UiFocusManager}（见 {@link #addFocusTargets(Consumer)}），按压交给命中控件的作用域会话。
  *
  * <p>宿主稳定持有控件实例：内容或尺寸变化时调用 {@link #beginUpdate()} / {@link #obtain(Object)} /
  * {@link #endUpdate()}，同一个稳定 key 永远拿到同一个 {@link UiControl}；滚动、悬停等逐帧操作只改状态，
@@ -41,7 +47,8 @@ public final class UiControlGroup implements UiInputTarget {
     private final Map<Object, UiControl> byKey = new LinkedHashMap<>();
     private final List<UiControl> ordered = new ArrayList<>();
     private final Set<Object> seen = new HashSet<>();
-    private UiControlStyle style = UiControlStyle.PARCHMENT;
+    private @Nullable UiControlStyle style;
+    private UiStyleSource theme = UiMinecraftTheme.INSTANCE;
     /**
      * 是否处于 beginUpdate/endUpdate 之间；不在区间内时 endUpdate 不做裁剪，避免误清空。
      */
@@ -67,7 +74,8 @@ public final class UiControlGroup implements UiInputTarget {
         if (control == null) {
             control = new UiControl();
             control.setFocusable(true);
-            control.setStyle(style);
+            control.setTheme(theme, UiControlRole.SECONDARY);
+            if (style != null) control.setStyle(style);
             byKey.put(key, control);
             ordered.add(control);
         }
@@ -122,9 +130,9 @@ public final class UiControlGroup implements UiInputTarget {
      * 按绘制层序把可聚焦控件追加进焦点管理器：追加顺序即宿主期望的 Tab 顺序。
      * 宿主可以在两段控件之间插入原生目标（例如 {@code EditBox} 的适配器），从而得到跨组件的正确顺序。
      */
-    public void collectFocusTargets(List<UiFocusTarget> out) {
+    public void addFocusTargets(Consumer<UiFocusTarget> out) {
         for (UiControl control : ordered) {
-            if (control.isFocusable()) out.add(control);
+            if (control.isFocusable()) out.accept(control);
         }
     }
 
@@ -138,8 +146,15 @@ public final class UiControlGroup implements UiInputTarget {
         for (UiControl control : ordered) control.setStyle(style);
     }
 
+    /** 已有及后续控件共享根主题；显式 setStyle 覆盖结构画法。 */
+    public void setTheme(UiStyleSource theme) {
+        this.theme = Objects.requireNonNull(theme, "theme");
+        style = null;
+        for (UiControl control : ordered) control.setTheme(theme, UiControlRole.SECONDARY);
+    }
+
     public UiControlStyle style() {
-        return style;
+        return style == null ? theme.controlStyle(UiControlRole.SECONDARY) : style;
     }
 
     // ---------- 绘制 / 命中 ----------
@@ -181,7 +196,7 @@ public final class UiControlGroup implements UiInputTarget {
         if (!pointer.allowsTooltip() || pointer.hit() == null) return;
         UiTarget target = pointer.hit().tooltip();
         if (target != null && !target.tooltip().isEmpty()) {
-            UiFlatText.componentTooltip(graphics, font, target.tooltip(), graphics.guiWidth(), (int) pointer.x(), (int) pointer.y());
+            UiFlatText.componentTooltip(graphics, font, new UiRect(0, 0, graphics.guiWidth(), graphics.guiHeight()), target.tooltip(), graphics.guiWidth(), (int) pointer.x(), (int) pointer.y(), theme.surfaces());
         }
     }
 

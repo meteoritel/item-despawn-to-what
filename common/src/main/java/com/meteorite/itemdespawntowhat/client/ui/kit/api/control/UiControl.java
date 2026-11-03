@@ -5,13 +5,19 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiTransform;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIcon;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiStyleSource;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiMinecraftTheme;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlRole;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlSkin;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlPainter;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlStyle;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextMeasurer;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.locale.Language;
@@ -31,11 +37,12 @@ import java.util.Objects;
  *
  * <p>绘制只在文字或图标确实越出控件矩形时才设置裁剪，未越界时不提交绘制批次。</p>
  */
-public final class UiControl implements UiFocusTarget, UiInteractionSession.Target {
+public final class UiControl implements UiButtonWidget, UiInteractionSession.Target {
     private UiRect bounds = new UiRect(0, 0, 0, 0);
     private Component label = Component.empty();
     private FormattedCharSequence text = FormattedCharSequence.EMPTY;
     private int textWidth;
+    private TextMeasurer measurer;
     private int color;
     /**
      * 上次测量所用的语言与字体：两者变化后视觉顺序文本与宽度都会变，渲染时按令牌重算。
@@ -54,7 +61,13 @@ public final class UiControl implements UiFocusTarget, UiInteractionSession.Targ
      * 标签超宽时的滚动计时：只在悬停期间推进，离开即归零。
      */
     private int scrollTicks;
-    private UiControlStyle style = UiControlStyle.PARCHMENT;
+    private UiStyleSource theme = UiMinecraftTheme.INSTANCE;
+    private UiControlRole role = UiControlRole.SECONDARY;
+    private long themeRevision = -1;
+    private UiControlSkin skin = UiMinecraftTheme.INSTANCE.controlSkin(UiControlRole.SECONDARY);
+    private UiControlStyle style = skin.style();
+    private boolean styleOverride;
+    private boolean colorOverride;
     private boolean enabled = true;
     private boolean visible = true;
     private boolean selected;
@@ -81,8 +94,10 @@ public final class UiControl implements UiFocusTarget, UiInteractionSession.Targ
         this.measuredFont = font;
         this.measuredLanguage = Language.getInstance();
         this.text = this.label.getVisualOrderText();
-        this.textWidth = font.width(label);
+        this.measurer = TextMeasurer.of(font);
+        this.textWidth = measurer.width(label);
         this.color = color;
+        this.colorOverride = true;
         this.icon = icon;
         this.tooltip = List.copyOf(tooltip);
         this.action = action;
@@ -93,6 +108,56 @@ public final class UiControl implements UiFocusTarget, UiInteractionSession.Targ
             this.pressed = false;
         }
         rebuildTarget();
+    }
+
+    /** 显式覆盖文字色，保留控件动作、测量与交互状态。 */
+    public void setTextColor(int color) {
+        this.color = color;
+        colorOverride = true;
+    }
+
+    /** 使用主题文字色配置内容，保留皮肤与交互状态。 */
+    public void configure(Font font, Component label, @Nullable UiIcon icon, List<Component> tooltip, @Nullable UiAction action) {
+        configure(font, label, theme.controlTextColor(role), icon, tooltip, action);
+        colorOverride = false;
+    }
+
+    /** 绑定根主题；后续显式 setStyle 和带 color 的 configure 各自覆盖对应默认项。 */
+    public void setTheme(UiStyleSource theme, UiControlRole role) {
+        this.theme = Objects.requireNonNull(theme, "theme");
+        this.role = Objects.requireNonNull(role, "role");
+        themeRevision = -1;
+        styleOverride = false;
+        refreshTheme();
+    }
+
+    private void refreshTheme() {
+        if (themeRevision == theme.revision()) return;
+        skin = theme.controlSkin(role);
+        if (!styleOverride) style = skin.style();
+        themeRevision = theme.revision();
+    }
+
+    /** 当前标签，可用于旁白与结构化快照。 */
+    public Component label() { return label; }
+
+    /** 按同一字体量取标签与图标的期望宽度。 */
+    public int preferredWidth(Font font, int padding) {
+        refreshMetrics(font);
+        return textWidth + (icon == null ? 0 : icon.width() + (textWidth == 0 ? 0 : 3)) + padding * 2;
+    }
+
+    /** 配置时记录的字体同时用于模态按钮测量与绘制。 */
+    @Override
+    public int preferredWidth(int padding) {
+        return measuredFont == null ? padding * 2 : preferredWidth(measuredFont, padding);
+    }
+
+    /** 当前矩形与可读名称的只读快照。 */
+    @Override
+    public List<UiLayoutNode> layoutNodes() {
+        return List.of(new UiLayoutNode(UiLayoutNode.Kind.CONTROL, bounds, accessibleName(), textWidth,
+                bounds.width(), enabled, visible, List.of()));
     }
 
     // 负宽高按 0 钳制（与 UiDocument.setViewport / UiScrollView 同口径）；零宽高控件不可命中。
@@ -110,14 +175,16 @@ public final class UiControl implements UiFocusTarget, UiInteractionSession.Targ
 
     public void setStyle(UiControlStyle style) {
         this.style = Objects.requireNonNull(style);
+        styleOverride = true;
     }
 
     public UiControlStyle style() {
+        refreshTheme();
         return style;
     }
 
     // 禁用控件仍照常绘制（走禁用底色与淡化文字），但不命中、不激活、不进焦点序列。
-    public void setEnabled(boolean enabled) {
+    public UiControl setEnabled(boolean enabled) {
         this.enabled = enabled;
         if (!enabled) {
             endInteraction(UiInteractionSession.EndReason.DISABLED);
@@ -125,6 +192,7 @@ public final class UiControl implements UiFocusTarget, UiInteractionSession.Targ
 
             focusState.clear();
         }
+        return this;
     }
 
     public boolean isEnabled() {
@@ -274,9 +342,11 @@ public final class UiControl implements UiFocusTarget, UiInteractionSession.Targ
     public void render(GuiGraphics graphics, Font font, UiPointer incomingPointer) {
         UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
         if (!visible) return;
+        refreshTheme();
         refreshMetrics(font);
         boolean hovered = enabled && pointer.contains(bounds);
-        graphics.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), style.background(stateFor(hovered)));
+        (styleOverride ? UiControlPainter.FILL : skin.painter()).paint(graphics,
+                new UiControlPainter.Frame(bounds, style, stateFor(hovered), isFocusVisible()));
         int iconWidth = icon == null ? 0 : icon.width();
         int iconHeight = icon == null ? 0 : icon.height();
         int contentWidth = textWidth + (icon == null ? 0 : iconWidth + (textWidth == 0 ? 0 : 3));
@@ -305,7 +375,8 @@ public final class UiControl implements UiFocusTarget, UiInteractionSession.Targ
         measuredFont = font;
         measuredLanguage = language;
         this.text = this.label.getVisualOrderText();
-        this.textWidth = font.width(this.label);
+        this.measurer = TextMeasurer.of(font);
+        this.textWidth = measurer.width(this.label);
     }
 
     // 需要外层裁剪的条件：图标或文字实际占用的矩形越出控件边界。文本超宽时 TextScroll 自带带内裁剪
@@ -330,6 +401,7 @@ public final class UiControl implements UiFocusTarget, UiInteractionSession.Targ
 
     // 禁用态只降不透明度，保留调用方给定的语义色相，避免又多出一套硬编码文本色。
     private int textColor() {
+        if (!colorOverride) return enabled ? skin.textColor() : skin.disabledTextColor();
         return enabled ? color : (color & 0x00FFFFFF) | 0x88000000;
     }
 

@@ -6,6 +6,9 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderSkin;
 import net.minecraft.client.gui.GuiGraphics;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlSkin;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlPainter;
+import java.util.EnumMap;
 
 /**
  * 默认宿主主题：现行灰色像素外观，绘制与用色逐项转发到既有 {@link UiTheme} 与 {@link UiPalette}。
@@ -64,6 +67,16 @@ public final class UiPixelTheme extends AbstractHostTheme {
             case LABEL -> UiTheme.labelStyle();
             case SECONDARY -> UiTheme.secondaryStyle();
         };
+    }
+
+    private final EnumMap<UiControlRole, UiControlSkin> skins = new EnumMap<>(UiControlRole.class);
+
+    @Override
+    public UiControlSkin controlSkin(UiControlRole role) {
+        return skins.computeIfAbsent(role, key -> new UiControlSkin(controlStyle(key), (graphics, frame) -> {
+            UiControlPainter.FILL.paint(graphics, frame);
+            if (key != UiControlRole.LABEL) drawBevel(graphics, frame.bounds(), palette().controlBevelLight(), palette().controlBevelDark());
+        }, controlTextColor(key), palette().textDisabled()));
     }
 
     @Override

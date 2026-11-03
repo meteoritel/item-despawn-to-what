@@ -1,17 +1,16 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiButtonWidget;
+
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiAction;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiControl;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
@@ -33,11 +32,10 @@ import org.jetbrains.annotations.Nullable;
  * <p>委托 kit 的 {@link UiControl} 处理状态与焦点，按需绘制主题的像素立体边或胶囊底图，
  * 因此同时兼容键盘（Tab / Enter）与鼠标（按下、拖出取消）操作。
  */
-public final class UiButton implements UiWidget, UiFocusTarget, UiLayoutSource, UiInteractionSession.Target {
+public final class UiButton implements UiButtonWidget {
 
     // 被委托的 kit 控件
     private final UiControl control = new UiControl();
-    private UiInteractionSession session;
 
     /**
      * 焦点能力与激活动作独立声明。
@@ -51,14 +49,11 @@ public final class UiButton implements UiWidget, UiFocusTarget, UiLayoutSource, 
      * 取消尚未激活的按压。
      */
     public void cancelPress() {
-        if (session != null) session.end(this, UiInteractionSession.EndReason.CANCEL);
+        control.endInteraction(UiInteractionSession.EndReason.CANCEL);
         control.setPressed(false);
     }
 
-    @Override
-    public void interactionEnded(UiInteractionSession.EndReason reason) {
-        control.setPressed(false);
-    }
+
 
     // 变体
     private final UiButtonVariant variant;
@@ -88,6 +83,7 @@ public final class UiButton implements UiWidget, UiFocusTarget, UiLayoutSource, 
 
     public UiButton(UiHostTheme theme, Font font, Component label, UiButtonVariant variant, UiAction action) {
         this.theme = UiHostThemes.require(theme);
+        control.setTheme(this.theme, variant.role());
         control.setFocusable(true);
         this.font = font;
         this.label = label;
@@ -99,8 +95,7 @@ public final class UiButton implements UiWidget, UiFocusTarget, UiLayoutSource, 
 
     // 内容写入 kit 控件：文本、颜色、图标、提示与动作
     private void applyContent() {
-        control.configure(font, label, theme.controlTextColor(variant.role()), icon, tooltip, action);
-        control.setStyle(theme.controlStyle(variant.role()));
+        control.configure(font, label, icon, tooltip, action);
     }
 
     // 状态写入 kit 控件：只改启用与可见，不复制文本、不重建命中目标
@@ -310,7 +305,7 @@ public final class UiButton implements UiWidget, UiFocusTarget, UiLayoutSource, 
             return;
         }
         control.render(graphics, font, pointer);
-        theme.drawBevel(graphics, control.bounds(), theme.palette().controlBevelLight(), theme.palette().controlBevelDark());
+
     }
 
     private void renderChip(GuiGraphics graphics, Font font, UiPointer pointer) {
@@ -348,38 +343,10 @@ public final class UiButton implements UiWidget, UiFocusTarget, UiLayoutSource, 
     }
 
     @Override
-    public boolean mousePressed(UiInputContext context) {
-        double mouseX = context.pointerX();
-        double mouseY = context.pointerY();
-        int button = context.button();
-        if (!visible || button != 0 || !control.isHittable()) {
-            return false;
-        }
-        if (!control.bounds().contains(mouseX, mouseY)) {
-            return false;
-        }
-
-        session = context.scope().interaction();
-        session.begin(this, UiInteractionSession.Source.POINTER, button);
-        control.setPressed(true);
-        return true;
-    }
+    public boolean mousePressed(UiInputContext context) { return visible && control.mousePressed(context); }
 
     @Override
-    public boolean mouseReleased(UiInputContext context) {
-        double mouseX = context.pointerX();
-        double mouseY = context.pointerY();
-        int button = context.button();
-        if (button != 0 || !control.isPressed()) {
-            return false;
-        }
-        boolean inside = control.isHittable() && control.bounds().contains(mouseX, mouseY);
-        control.setPressed(false);
-        if (inside) {
-            control.activate();
-        }
-        return true;
-    }
+    public boolean mouseReleased(UiInputContext context) { return control.mouseReleased(context); }
 
     @Override
     public UiFocusState focusState() {

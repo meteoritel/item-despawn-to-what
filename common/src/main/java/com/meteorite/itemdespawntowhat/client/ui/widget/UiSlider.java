@@ -12,7 +12,6 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiNumberPolicy;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiScalarSlider;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderRole;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderSkin;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderWindow;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiValueInteraction;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
@@ -53,9 +52,7 @@ public final class UiSlider implements UiWidget, UiFocusTarget, UiInputTarget {
         this.max = sanitizeMax(this.min, max);
         this.step = sanitizeStep(step);
         this.core = new UiScalarSlider(buildPolicy(), new UiSliderWindow(this.min, this.max));
-        UiSliderSkin skin = UiHostThemes.require(theme).sliderSkin(UiSliderRole.COMPACT);
-        this.core.setStyle(skin.style());
-        this.core.setPainter(skin.painter());
+        this.core.setTheme(UiHostThemes.require(theme), UiSliderRole.COMPACT);
     }
 
     // kit 核心，供需要窗口/样式/提交回调等新能力的调用方直接使用

@@ -12,6 +12,9 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiNineSlice;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiRenderLayers;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlStyle;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiStyleSource;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiMinecraftTheme;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlRole;
 
 import java.util.Map;
 
@@ -35,7 +38,7 @@ import org.lwjgl.glfw.GLFW;
  * <p>本类刻意**不依赖** {@code OverlayLayer}：宿主用 {@code LightboxOverlay} 适配器把它接进
  * 模态层，从而保持 kit 与宿主层单向依赖（overlay → kit）。坐标一律为宿主 GUI 逻辑坐标。</p>
  *
- * <p>控制栏默认使用 {@link UiControlStyle#DARK}（灯箱遮罩下是暗底），文本默认色由该结构底色反推；
+ * <p>控制栏与文字默认跟随原版主题；
  * 宿主可用 {@link #setStyle(UiControlStyle)} / {@link #setTextColor(int)} 覆盖。</p>
  *
  * <p>焦点由 {@link UiFocusManager} 按视觉顺序登记（关闭 → 上一张/下一张 → 缩小/放大/适应窗口），
@@ -56,9 +59,9 @@ public final class UiLightbox implements UiInputTarget {
     private static final int DEFAULT_MASK = 0xC0101010;
 
     /**
-     * 默认结构样式：灯箱是暗底，控制栏按钮必须在暗底上可辨（暗底 + 近白字曾约 1.06:1）。
+     * 原版默认结构样式。
      */
-    private static final UiControlStyle DEFAULT_STYLE = UiControlStyle.DARK;
+    private static final UiControlStyle DEFAULT_STYLE = UiMinecraftTheme.INSTANCE.controlStyle(UiControlRole.SECONDARY);
     /**
      * 反推文本色的两个候选：实际取与结构底色对比度更高的一档。
      */
@@ -215,7 +218,12 @@ public final class UiLightbox implements UiInputTarget {
      */
     private int textColor = readableTextOn(DEFAULT_STYLE.background());
     private boolean textColorPinned;
+    private boolean stylePinned;
+    private int styleTextColor;
     private int maskColor = DEFAULT_MASK;
+    private boolean maskColorPinned;
+    private UiStyleSource theme = UiMinecraftTheme.INSTANCE;
+    private long themeRevision = -1;
     private boolean maskClickCloses;
     private boolean dirty = true;
     /**
@@ -246,9 +254,7 @@ public final class UiLightbox implements UiInputTarget {
         this.labels = Objects.requireNonNull(labels);
         this.content = Objects.requireNonNull(content);
         this.onClose = Objects.requireNonNull(onClose);
-        // 构造期显式注入暗底：UiControlGroup 的默认样式是浅底 PARCHMENT，灯箱不沿用该默认值。
-        // 调用方仍可用 setStyle 覆盖，覆盖后文本色未固定时会随之重算。
-        this.controls.setStyle(DEFAULT_STYLE);
+        this.controls.setTheme(theme);
         // 灯箱里 Enter 没有其它语义，因此与 Space 一起用于激活焦点控件。
         focus.setEnterActivates(true);
         focus.setSpaceActivates(true);
@@ -290,13 +296,22 @@ public final class UiLightbox implements UiInputTarget {
         this.dirty = true;
     }
 
+    /** 共享根主题；明确设置的文本色与遮罩色继续优先。 */
+    public void setTheme(UiStyleSource theme) {
+        this.theme = Objects.requireNonNull(theme, "theme");
+        controls.setTheme(theme);
+        themeRevision = -1;
+    }
+
     /**
-     * 控件结构色；默认 {@link UiControlStyle#DARK}（灯箱是暗底）。设置后对已有与后续控件一并生效；
+     * 显式控件结构色；设置后对已有与后续控件一并生效；
      * 文本色未被 {@link #setTextColor(int)} 固定时，会按新底色的相对亮度重新反推。
      */
     public void setStyle(UiControlStyle style) {
         UiControlStyle next = Objects.requireNonNull(style);
         this.controls.setStyle(next);
+        stylePinned = true;
+        styleTextColor = readableTextOn(next.background());
         if (!textColorPinned) applyTextColor(readableTextOn(next.background()));
     }
 
@@ -308,15 +323,16 @@ public final class UiLightbox implements UiInputTarget {
         applyTextColor(textColor);
     }
 
-    // 控件标签色只在配置时写入控件，因此改色后要标脏让下一帧重配一次（几何不变，只是同一 key 重配）。
+    // 标签改色不重配动作与内容。
     private void applyTextColor(int color) {
         if (this.textColor == color) return;
         this.textColor = color;
-        this.dirty = true;
+        controls.controls().forEach(control -> control.setTextColor(color));
     }
 
     public void setMaskColor(int maskColor) {
         this.maskColor = maskColor;
+        maskColorPinned = true;
     }
 
     public void setSurface(@Nullable UiNineSlice surface) {
@@ -378,6 +394,12 @@ public final class UiLightbox implements UiInputTarget {
 
     /** 在宿主选定的作用域内绘制遮罩、内容、前景与唯一提示。 */
     public void render(GuiGraphics graphics, Font font, UiPointer incomingPointer, float partialTick) {
+        if (themeRevision != theme.revision()) {
+            if (!textColorPinned) textColor = stylePinned ? styleTextColor : theme.surfaces().text();
+            if (!maskColorPinned) maskColor = theme.surfaces().modalDim();
+            controls.controls().forEach(control -> control.setTextColor(textColor));
+            themeRevision = theme.revision();
+        }
         this.font = font;
         layout(font);
         UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
@@ -601,7 +623,7 @@ public final class UiLightbox implements UiInputTarget {
     }
 
     // 文本默认色从结构底色反推：在近白/近黑两个候选里取 WCAG 对比度更高的一档，
-    // 这样默认暗底（DARK）与调用方自行换的浅底都能保持可读，而不是固定用近白色。
+    // 按当前背景亮度选择可读的文字色，适配深浅主题。
     private static int readableTextOn(int background) {
         double backgroundLuminance = relativeLuminance(background);
         double onDark = contrast(TEXT_ON_DARK, backgroundLuminance);

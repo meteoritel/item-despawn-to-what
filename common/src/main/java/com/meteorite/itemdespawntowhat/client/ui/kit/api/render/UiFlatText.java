@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.render;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiSurfaceStyle;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.client.gui.Font;
@@ -17,10 +18,6 @@ import net.minecraft.util.FormattedCharSequence;
 public final class UiFlatText {
     // 提示底板内边距（四周描边外的留白）
     private static final int TOOLTIP_PADDING = 3;
-    private static final int TOOLTIP_BACKGROUND = 0xF0100010;
-    private static final int TOOLTIP_BORDER_TOP = 0x505000FF;
-    private static final int TOOLTIP_BORDER_BOTTOM = 0x5028007F;
-    private static final int TOOLTIP_TEXT = 0xFFFFFFFF;
     // 首行之后额外让出的间距，与原版提示的行距一致
     private static final int TOOLTIP_FIRST_LINE_GAP = 2;
     private static final int TOOLTIP_MOUSE_OFFSET = 12;
@@ -85,11 +82,11 @@ public final class UiFlatText {
      * @param mouseY 指针屏幕 Y 坐标
      */
     public static void tooltip(GuiGraphics graphics, Font font, List<FormattedCharSequence> lines, int mouseX, int mouseY) {
-        tooltip(graphics, font, new UiRect(0, 0, graphics.guiWidth(), graphics.guiHeight()), lines, mouseX, mouseY);
+        tooltip(graphics, font, new UiRect(0, 0, graphics.guiWidth(), graphics.guiHeight()), lines, mouseX, mouseY, UiSurfaceStyle.MINECRAFT);
     }
 
     private static void tooltip(GuiGraphics graphics, Font font, UiRect host,
-                                List<FormattedCharSequence> lines, int mouseX, int mouseY) {
+                                List<FormattedCharSequence> lines, int mouseX, int mouseY, UiSurfaceStyle style) {
         if (lines.isEmpty() || UiTooltipPanel.contentWidth(host, Integer.MAX_VALUE,
                 TOOLTIP_PADDING + 1, TOOLTIP_SCREEN_MARGIN) == 0) return;
         int widest = 0;
@@ -100,10 +97,10 @@ public final class UiFlatText {
         UiTooltipPanel panel = UiTooltipPanel.layout(host,
                 widest, height, TOOLTIP_PADDING + 1, mouseX, mouseY, TOOLTIP_MOUSE_OFFSET,
                 TOOLTIP_SCREEN_MARGIN, UiTooltipPlacement.VerticalPreference.ABOVE);
-        panel.render(graphics, rect -> background(graphics, rect), content -> {
+        panel.render(graphics, rect -> background(graphics, rect, style), content -> {
             int lineY = content.y();
             for (int index = 0; index < lines.size(); index++) {
-                graphics.drawString(font, lines.get(index), content.x(), lineY, TOOLTIP_TEXT, false);
+                graphics.drawString(font, lines.get(index), content.x(), lineY, style.tooltipText(), false);
                 lineY += font.lineHeight + (index == 0 ? TOOLTIP_FIRST_LINE_GAP : 0);
             }
         });
@@ -121,6 +118,13 @@ public final class UiFlatText {
      */
     public static void tooltip(GuiGraphics graphics, Font font, Component text, int maxWidth, int mouseX, int mouseY) {
         componentTooltip(graphics, font, List.of(text), maxWidth, mouseX, mouseY);
+    }
+
+    /** 单个提示组件使用根主题语义色，折行与面板位置沿用同一算法。 */
+    public static void tooltip(GuiGraphics graphics, Font font, Component text, int maxWidth,
+                               int mouseX, int mouseY, UiSurfaceStyle style) {
+        componentTooltip(graphics, font, new UiRect(0, 0, graphics.guiWidth(), graphics.guiHeight()),
+                List.of(text), maxWidth, mouseX, mouseY, style);
     }
 
     /**
@@ -141,28 +145,34 @@ public final class UiFlatText {
     /** 在有限宿主内先预算正文宽度，再折行和放置面板。 */
     public static void componentTooltip(GuiGraphics graphics, Font font, UiRect host, List<Component> lines,
                                         int maxWidth, int mouseX, int mouseY) {
+        componentTooltip(graphics, font, host, lines, maxWidth, mouseX, mouseY, UiSurfaceStyle.MINECRAFT);
+    }
+
+    /** 使用根主题的提示底、边框和文字色；位置与折行仍由同一布局算法负责。 */
+    public static void componentTooltip(GuiGraphics graphics, Font font, UiRect host, List<Component> lines,
+                                        int maxWidth, int mouseX, int mouseY, UiSurfaceStyle style) {
         int width = UiTooltipPanel.contentWidth(host, maxWidth, TOOLTIP_PADDING + 1, TOOLTIP_SCREEN_MARGIN);
         if (width == 0) return;
         List<FormattedCharSequence> sequences = new ArrayList<>();
         for (Component line : lines) sequences.addAll(font.split(line, width));
-        tooltip(graphics, font, host, sequences, mouseX, mouseY);
+        tooltip(graphics, font, host, sequences, mouseX, mouseY, style);
     }
 
     // 底板与描边沿用原版提示观感：深色底、四周一圈暗边、内侧自上而下由紫蓝渐变到深紫
-    private static void background(GuiGraphics graphics, UiRect bounds) {
+    private static void background(GuiGraphics graphics, UiRect bounds, UiSurfaceStyle style) {
         int left = bounds.x() + 1;
         int top = bounds.y() + 1;
         int outerWidth = bounds.width() - 2;
         int outerHeight = bounds.height() - 2;
-        graphics.fill(left, top - 1, left + outerWidth, top, TOOLTIP_BACKGROUND);
-        graphics.fill(left, top + outerHeight, left + outerWidth, top + outerHeight + 1, TOOLTIP_BACKGROUND);
-        graphics.fill(left, top, left + outerWidth, top + outerHeight, TOOLTIP_BACKGROUND);
-        graphics.fill(left - 1, top, left, top + outerHeight, TOOLTIP_BACKGROUND);
-        graphics.fill(left + outerWidth, top, left + outerWidth + 1, top + outerHeight, TOOLTIP_BACKGROUND);
-        graphics.fillGradient(left, top + 1, left + 1, top + outerHeight - 1, TOOLTIP_BORDER_TOP, TOOLTIP_BORDER_BOTTOM);
+        graphics.fill(left, top - 1, left + outerWidth, top, style.tooltipFill());
+        graphics.fill(left, top + outerHeight, left + outerWidth, top + outerHeight + 1, style.tooltipFill());
+        graphics.fill(left, top, left + outerWidth, top + outerHeight, style.tooltipFill());
+        graphics.fill(left - 1, top, left, top + outerHeight, style.tooltipFill());
+        graphics.fill(left + outerWidth, top, left + outerWidth + 1, top + outerHeight, style.tooltipFill());
+        graphics.fillGradient(left, top + 1, left + 1, top + outerHeight - 1, style.tooltipBorderTop(), style.tooltipBorderBottom());
         graphics.fillGradient(left + outerWidth - 1, top + 1, left + outerWidth, top + outerHeight - 1,
-                TOOLTIP_BORDER_TOP, TOOLTIP_BORDER_BOTTOM);
-        graphics.fill(left, top, left + outerWidth, top + 1, TOOLTIP_BORDER_TOP);
-        graphics.fill(left, top + outerHeight - 1, left + outerWidth, top + outerHeight, TOOLTIP_BORDER_BOTTOM);
+                style.tooltipBorderTop(), style.tooltipBorderBottom());
+        graphics.fill(left, top, left + outerWidth, top + 1, style.tooltipBorderTop());
+        graphics.fill(left, top + outerHeight - 1, left + outerWidth, top + outerHeight, style.tooltipBorderBottom());
     }
 }

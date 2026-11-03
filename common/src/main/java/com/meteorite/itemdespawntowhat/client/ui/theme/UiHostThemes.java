@@ -31,6 +31,9 @@ public final class UiHostThemes {
         return FLAT;
     }
 
+    /** 直接复用 kit 原版控件风格的宿主 adapter。 */
+    public static UiHostTheme minecraftTheme() { return UiMinecraftHostTheme.INSTANCE; }
+
     // 校验注入的主题非空，供控件构造期使用
     public static UiHostTheme require(UiHostTheme theme) {
         return Objects.requireNonNull(theme, "theme");
