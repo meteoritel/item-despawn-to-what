@@ -1,5 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.debug;
 
+import com.meteorite.itemdespawntowhat.client.debug.kit.KitShowcaseScreen;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiMinecraftTheme;
+
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.net.RuleEditClientWorkspace;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
@@ -13,7 +16,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiNumberPolicy;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiRangeValue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiScalarSlider;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderExamples;
+import com.meteorite.itemdespawntowhat.client.debug.kit.UiSliderExamples;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiValueInteraction;
 import com.meteorite.itemdespawntowhat.client.ui.screen.RuleEditorScreen;
@@ -21,11 +24,11 @@ import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiListView;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiModalStack;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiListView;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiModal;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiModalStack;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiRangeBar;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiTextInput;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -85,6 +88,7 @@ public class DebugWorkbenchScreen extends Screen {
             super(back);
             Runnable home = () -> Minecraft.getInstance().setScreen(new Directory(back));
             tools = List.of(
+                    new Tool("kit_showcase", () -> true, () -> Minecraft.getInstance().setScreen(new KitShowcaseScreen(home, List.of(UiMinecraftTheme.INSTANCE, theme, UiHostThemes.flatTheme())))),
                     new Tool("gallery", () -> true, () -> Minecraft.getInstance().setScreen(new Gallery(home, false))),
                     new Tool("interactions", () -> true, () -> Minecraft.getInstance().setScreen(new Gallery(home, true))),
                     new Tool("previews", () -> Minecraft.getInstance().level != null, () -> Minecraft.getInstance().setScreen(new PreviewExamplesScreen(home))),
@@ -182,7 +186,7 @@ public class DebugWorkbenchScreen extends Screen {
             range = new UiRangeBar(theme, font, UiNumberPolicy.integer(0, 100, 1), UiRangeValue.of(20, 80),
                     new UiRangeBar.Texts(text("low"), text("high"), text("absent"), text("precise")), value -> {});
             widgets.add(range);
-            list = new UiListView<>(theme, font, (g, f, value, index, rect, selected, hovered, focused) ->
+            list = new UiListView<>(theme, (g, f, value, index, rect, selected, hovered, focused) ->
                     g.drawString(f, Component.translatable(UI + "list.item", value), rect.x(), rect.y() + 3, theme.palette().textPrimary(), false));
             list.setItems(List.of(1, 2, 3, 4, 5, 6, 7, 8)); widgets.add(list);
             scalar = UiSliderExamples.scalarSlider(text("scalar"), new UiRect(0, 0, 100, 18), new UiValueInteraction.Listener<>() {

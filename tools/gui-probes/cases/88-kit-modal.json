@@ -1,0 +1,109 @@
+{
+  "name": "kit-modal",
+  "description": "Shared Screen wiring, nested modal scopes and theme update of existing modal",
+  "start": {
+    "kind": "scene",
+    "scene": "kit_showcase"
+  },
+  "steps": [
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.showcase.modal"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "TEXT_INPUT",
+          "lang": "gui.itemdespawntowhat.debug.workbench.showcase.text"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "type",
+        "text": "u"
+      }
+    },
+    {
+      "action": {
+        "kind": "key",
+        "code": 295
+      }
+    },
+    {
+      "action": {
+        "kind": "type",
+        "text": "v"
+      }
+    },
+    {
+      "assert": {
+        "name": "模态换肤保留焦点与原文",
+        "kind": "text_present",
+        "selector": {
+          "kind": "TEXT_INPUT",
+          "text": "uv"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.showcase.nested"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "嵌套后顶层模态唯一",
+        "kind": "text_count",
+        "selector": {
+          "kind": "MODAL"
+        },
+        "expected": 1
+      }
+    },
+    {
+      "action": {
+        "kind": "key",
+        "code": 256
+      }
+    },
+    {
+      "assert": {
+        "name": "关闭顶层恢复存量模态",
+        "kind": "text_present",
+        "selector": {
+          "kind": "TEXT_INPUT",
+          "text": "uv"
+        }
+      }
+    },
+    {
+      "shot": "88-themed-modal.png"
+    },
+    {
+      "action": {
+        "kind": "key",
+        "code": 256
+      }
+    },
+    {
+      "assert": {
+        "name": "模态退出后返回页面",
+        "kind": "text_absent",
+        "selector": {
+          "kind": "MODAL"
+        }
+      }
+    }
+  ]
+}

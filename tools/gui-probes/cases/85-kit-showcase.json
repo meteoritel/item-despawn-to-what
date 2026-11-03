@@ -1,0 +1,104 @@
+{
+  "name": "kit-showcase",
+  "description": "Standalone kit navigation, local action and reset",
+  "start": {
+    "kind": "scene",
+    "scene": "kit_showcase"
+  },
+  "steps": [
+    {
+      "assert": {
+        "name": "showcase reached",
+        "kind": "text_present",
+        "selector": {
+          "kind": "FRAME",
+          "lang": "gui.itemdespawntowhat.debug.workbench.kit_showcase"
+        }
+      }
+    },
+    {
+      "capture": "before",
+      "query": {
+        "source": "text",
+        "selector": {
+          "kind": "ROW",
+          "within": {
+            "kind": "FRAME",
+            "lang": "gui.itemdespawntowhat.debug.workbench.values.label"
+          }
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.increment"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "action updates model",
+        "kind": "value_changed",
+        "capture": "before",
+        "query": {
+          "source": "text",
+          "selector": {
+            "kind": "ROW",
+            "within": {
+              "kind": "FRAME",
+              "lang": "gui.itemdespawntowhat.debug.workbench.values.label"
+            }
+          }
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.reset"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "reset restores model",
+        "kind": "value_equals",
+        "expected_capture": "before",
+        "query": {
+          "source": "text",
+          "selector": {
+            "kind": "ROW",
+            "within": {
+              "kind": "FRAME",
+              "lang": "gui.itemdespawntowhat.debug.workbench.values.label"
+            }
+          }
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.back"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "back reaches directory",
+        "kind": "text_present",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.kit_showcase"
+        }
+      }
+    }
+  ]
+}

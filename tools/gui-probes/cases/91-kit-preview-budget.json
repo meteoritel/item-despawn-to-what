@@ -1,0 +1,114 @@
+{
+  "name": "kit-preview-budget",
+  "description": "默认、小容量、过限预算及排队淘汰和资源世代",
+  "start": {
+    "kind": "scene",
+    "scene": "previews"
+  },
+  "window": {
+    "width": 1440,
+    "height": 1000,
+    "scale": 2
+  },
+  "steps": [
+    {
+      "action": {
+        "kind": "key",
+        "code": 66
+      }
+    },
+    {
+      "wait_for": {
+        "name": "所有小场景在预算内就绪",
+        "kind": "text_count",
+        "selector": {
+          "kind": "ROW",
+          "has_text": "READY"
+        },
+        "expected": 3
+      },
+      "timeout_ms": 15000
+    },
+    {
+      "shot": "91-small-budget.png"
+    },
+    {
+      "action": {
+        "kind": "key",
+        "code": 78
+      }
+    },
+    {
+      "wait_for": {
+        "name": "所有小场景在预算内就绪",
+        "kind": "text_count",
+        "selector": {
+          "kind": "ROW",
+          "has_text": "READY"
+        },
+        "expected": 3
+      },
+      "timeout_ms": 15000
+    },
+    {
+      "action": {
+        "kind": "key",
+        "code": 82
+      }
+    },
+    {
+      "wait_for": {
+        "name": "所有小场景在预算内就绪",
+        "kind": "text_count",
+        "selector": {
+          "kind": "ROW",
+          "has_text": "READY"
+        },
+        "expected": 3
+      },
+      "timeout_ms": 15000
+    },
+    {
+      "action": {
+        "kind": "key",
+        "code": 66
+      }
+    },
+    {
+      "wait_for": {
+        "name": "过限场景成为明确终态",
+        "kind": "text_count",
+        "selector": {
+          "kind": "ROW",
+          "has_text": "TOO_LARGE"
+        },
+        "expected": 3
+      },
+      "timeout_ms": 15000
+    },
+    {
+      "shot": "91-over-budget.png"
+    },
+    {
+      "action": {
+        "kind": "key",
+        "code": 66
+      }
+    },
+    {
+      "wait_for": {
+        "name": "所有小场景在预算内就绪",
+        "kind": "text_count",
+        "selector": {
+          "kind": "ROW",
+          "has_text": "READY"
+        },
+        "expected": 3
+      },
+      "timeout_ms": 15000
+    },
+    {
+      "shot": "91-default-budget.png"
+    }
+  ]
+}

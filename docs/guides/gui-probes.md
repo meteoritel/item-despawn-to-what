@@ -56,9 +56,10 @@ python tools/gui-probes/lib/run.py --run-dir .scratch/gui-check --only workbench
 
 | 工具 | 状态与职责 |
 |---|---|
+| Kit 展示空间 | Controls/Inputs/Surfaces/Theme/Modal；F6 换肤，Controls 的 G 改单实例点阵、R 重载资源 |
 | 组件展台 | 本地按钮、文本与数字输入、轮询、范围条、标量滑条、列表，同页查看与重置 |
 | 组合交互 | 复用真实组件装配，支持 Ctrl+M 打开模态，检查焦点、拖动取消、滚动与缩放 |
-| 图标预览 | 需要已加载世界；资源、多个尺寸、转台与预算，Space 切换、R 释放重读 |
+| 图标预览 | 需要已加载世界；Space 转台、B 轮换预算、N 换请求组、R 释放重读 |
 | 测试规则草稿 | 需要可编辑工作区；填充或删除测试草稿，由管理页应用后落盘 |
 
 场景独立持有本地模型和输入作用域，退出释放捕获与模态。工作台返回编辑器时按现存工作区新建屏幕；失效工作区通过正式编辑命令重新获取。
@@ -77,8 +78,8 @@ python tools/gui-probes/lib/run.py --run-dir .scratch/gui-check --only workbench
 | action | key | code*: integer, modifiers: integer |
 | action | resize | width*: integer, height*: integer, scale: integer |
 | action | scroll | selector*: selector, delta*: number |
-| action | drag | selector*: selector, from*: number, to*: number |
-| action | press | selector*: selector, at*: number |
+| action | drag | selector*: selector, from*: number, to*: number, axis: string |
+| action | press | selector*: selector, at*: number, axis: string |
 | action | release | 无附加字段 |
 | query | screen_title | 无附加字段 |
 | query | window | 无附加字段 |
@@ -97,13 +98,13 @@ python tools/gui-probes/lib/run.py --run-dir .scratch/gui-check --only workbench
 | assertion | value_equals | JSON 类型与值相等 |
 | assertion | value_changed | 与本例 capture 不同 |
 
-星号表示必需字段。start 公共字段为 world、timeout_seconds；scene 取值：gallery、interactions、previews。
+星号表示必需字段。start 公共字段为 world、timeout_seconds；scene 取值：gallery、interactions、previews、kit_showcase。
 selector 字段：kind、lang、text、lang_any、text_any、enabled、within、has_text；within 仅含 kind/lang/text。
 wait_for 的轮询期限由步骤级 timeout_ms 控制，默认 2500ms；断言对象内的同名兼容字段保留校验，不改变该期限。
 expected、expected_lang、expected_capture 是互斥期望来源；capture 引用必须在同例前序步骤中存在。
 <!-- gui-case-contract:end -->
 
-每例独立声明 `start`：`editor` 表示规则列表，`new_rule: true` 在列表通过真实命名弹窗创建新草稿；`workbench` 表示目录；`scene` 配合 `gallery`、`interactions` 或 `previews`。导航每次推进一次公开输入并等待渲染。下面的用例可保存为 `.scratch/gui-control-check/cases/gallery-control-check.json`，直接验证展台控件并生成断言记录，全程不采集截图。
+每例独立声明 `start`：`editor` 表示规则列表，`new_rule: true` 在列表通过真实命名弹窗创建新草稿；`workbench` 表示目录；`scene` 配合 `gallery`、`interactions`、`kit_showcase` 或 `previews`。导航每次推进一次公开输入并等待渲染。下面的用例可保存为 `.scratch/gui-control-check/cases/gallery-control-check.json`，直接验证展台控件并生成断言记录，全程不采集截图。
 
 ```json
 {
@@ -162,6 +163,13 @@ prelude 经 client adapter 按内容摘要和运行目录安装；握手校验�
 | 工作台入口、多组件与重置 | workbench-gallery |
 | 模态、拖动取消、缩放与重置 | workbench-interactions |
 | 图标工具导航与转台 | workbench-previews |
+| 独立 kit 导航、动作和重置 | kit-showcase |
+| 嵌套纵向滚动与拖条 | kit-input-scroll |
+| 原版/宿主换肤、继续输入、撤销和预览取消 | kit-theme-switch |
+| 通用嵌套模态与作用域恢复 | kit-modal |
+| 文档 Frame 命中、浮板与灯箱 | kit-surfaces |
+| 双点阵配置、资源重载与重新进入 | kit-render-resources |
+| 默认/小预算/过限与场景重建 | kit-preview-budget |
 
 新增界面的实际可见几何、字段和条目作用域通过 `UiLayoutSource` 导出，避免在用例中猜测坐标。
 

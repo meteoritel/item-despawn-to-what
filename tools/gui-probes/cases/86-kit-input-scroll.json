@@ -1,0 +1,107 @@
+{
+  "name": "kit-input-scroll",
+  "description": "Nested scrollbars use the same viewport geometry and vertical pointer capture",
+  "start": {
+    "kind": "scene",
+    "scene": "kit_showcase"
+  },
+  "window": {
+    "width": 960,
+    "height": 720,
+    "scale": 2
+  },
+  "steps": [
+    {
+      "capture": "inner_before",
+      "query": {
+        "source": "rect",
+        "selector": {
+          "kind": "FRAME",
+          "lang": "gui.itemdespawntowhat.debug.workbench.showcase.inner"
+        }
+      }
+    },
+    {
+      "capture": "offsets_before",
+      "query": {
+        "source": "text",
+        "selector": {
+          "kind": "ROW",
+          "within": {
+            "kind": "FRAME",
+            "lang": "gui.itemdespawntowhat.debug.workbench.showcase.outer"
+          }
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "drag",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.showcase.inner.scrollbar"
+        },
+        "axis": "y",
+        "from": 0.15,
+        "to": 0.8
+      }
+    },
+    {
+      "assert": {
+        "name": "inner drag updates its offset",
+        "kind": "value_changed",
+        "query": {
+          "source": "text",
+          "selector": {
+            "kind": "ROW",
+            "within": {
+              "kind": "FRAME",
+              "lang": "gui.itemdespawntowhat.debug.workbench.showcase.outer"
+            }
+          }
+        },
+        "capture": "offsets_before"
+      }
+    },
+    {
+      "assert": {
+        "name": "inner drag preserves outer geometry",
+        "kind": "value_equals",
+        "query": {
+          "source": "rect",
+          "selector": {
+            "kind": "FRAME",
+            "lang": "gui.itemdespawntowhat.debug.workbench.showcase.inner"
+          }
+        },
+        "expected_capture": "inner_before"
+      }
+    },
+    {
+      "action": {
+        "kind": "drag",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.showcase.outer.scrollbar"
+        },
+        "axis": "y",
+        "from": 0.1,
+        "to": 0.2
+      }
+    },
+    {
+      "assert": {
+        "name": "outer drag translates nested viewport",
+        "kind": "value_changed",
+        "query": {
+          "source": "rect",
+          "selector": {
+            "kind": "FRAME",
+            "lang": "gui.itemdespawntowhat.debug.workbench.showcase.inner"
+          }
+        },
+        "capture": "inner_before"
+      }
+    }
+  ]
+}

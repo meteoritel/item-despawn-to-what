@@ -1,0 +1,288 @@
+{
+  "name": "kit-surfaces",
+  "description": "文档 Frame 命中、导航、浮板拖动折叠与灯箱缩放",
+  "start": {
+    "kind": "scene",
+    "scene": "kit_showcase"
+  },
+  "window": {
+    "width": 1440,
+    "height": 1000,
+    "scale": 2
+  },
+  "steps": [
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.showcase.page.surfaces"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "只读文档实际排版",
+        "kind": "text_present",
+        "selector": {
+          "kind": "ROW",
+          "lang": "gui.itemdespawntowhat.debug.workbench.showcase.doc.root"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "Frame 内容实际排版",
+        "kind": "text_present",
+        "selector": {
+          "kind": "ROW",
+          "lang": "gui.itemdespawntowhat.debug.workbench.showcase.doc.child"
+        }
+      }
+    },
+    {
+      "capture": "state",
+      "query": {
+        "source": "text",
+        "selector": {
+          "kind": "ROW",
+          "within": {
+            "kind": "FRAME",
+            "lang": "gui.itemdespawntowhat.debug.workbench.showcase.surfaces.state.label"
+          }
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "ROW",
+          "lang": "gui.itemdespawntowhat.debug.workbench.showcase.doc.child"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "文档点击实际命中",
+        "kind": "value_changed",
+        "query": {
+          "source": "text",
+          "selector": {
+            "kind": "ROW",
+            "within": {
+              "kind": "FRAME",
+              "lang": "gui.itemdespawntowhat.debug.workbench.showcase.surfaces.state.label"
+            }
+          }
+        },
+        "capture": "state"
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.showcase.history.next"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "导航前进到新内容",
+        "kind": "text_present",
+        "selector": {
+          "kind": "ROW",
+          "has_text": "Document 1"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.showcase.history.back"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "有效快照恢复",
+        "kind": "text_present",
+        "selector": {
+          "kind": "ROW",
+          "has_text": "Document 0"
+        }
+      }
+    },
+    {
+      "capture": "panel",
+      "query": {
+        "source": "rect",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.showcase.panel"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "drag",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.showcase.panel"
+        },
+        "from": 0.2,
+        "to": 0.6
+      }
+    },
+    {
+      "assert": {
+        "name": "标题拖动改变面板位置",
+        "kind": "value_changed",
+        "query": {
+          "source": "rect",
+          "selector": {
+            "kind": "CONTROL",
+            "lang": "gui.itemdespawntowhat.debug.workbench.showcase.panel"
+          }
+        },
+        "capture": "panel"
+      }
+    },
+    {
+      "capture": "panelOpen",
+      "query": {
+        "source": "rect",
+        "selector": {
+          "kind": "FRAME",
+          "lang": "gui.itemdespawntowhat.debug.workbench.showcase.panel"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.showcase.panel.collapse"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "折叠改变面板几何",
+        "kind": "value_changed",
+        "query": {
+          "source": "rect",
+          "selector": {
+            "kind": "FRAME",
+            "lang": "gui.itemdespawntowhat.debug.workbench.showcase.panel"
+          }
+        },
+        "capture": "panelOpen"
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.showcase.panel.collapse"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.showcase.panel.dock"
+        }
+      }
+    },
+    {
+      "shot": "89-doc-panel.png"
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.showcase.image"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "图片进入独立作用域",
+        "kind": "text_present",
+        "selector": {
+          "kind": "MODAL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.showcase.image"
+        }
+      }
+    },
+    {
+      "capture": "zoom",
+      "query": {
+        "source": "text",
+        "selector": {
+          "kind": "ROW",
+          "within": {
+            "kind": "MODAL",
+            "lang": "gui.itemdespawntowhat.debug.workbench.showcase.image"
+          }
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "scroll",
+        "selector": {
+          "kind": "MODAL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.showcase.image"
+        },
+        "delta": -1
+      }
+    },
+    {
+      "assert": {
+        "name": "灯箱真实缩放",
+        "kind": "value_changed",
+        "query": {
+          "source": "text",
+          "selector": {
+            "kind": "ROW",
+            "within": {
+              "kind": "MODAL",
+              "lang": "gui.itemdespawntowhat.debug.workbench.showcase.image"
+            }
+          }
+        },
+        "capture": "zoom"
+      }
+    },
+    {
+      "shot": "89-image.png"
+    },
+    {
+      "action": {
+        "kind": "key",
+        "code": 256
+      }
+    },
+    {
+      "assert": {
+        "name": "关闭图片恢复文档",
+        "kind": "text_absent",
+        "selector": {
+          "kind": "MODAL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.showcase.image"
+        }
+      }
+    }
+  ]
+}

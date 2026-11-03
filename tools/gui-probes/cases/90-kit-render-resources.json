@@ -1,0 +1,145 @@
+{
+  "name": "kit-render-resources",
+  "description": "点阵实例独立配置、关屏释放重建和真实资源重载",
+  "start": {
+    "kind": "scene",
+    "scene": "kit_showcase"
+  },
+  "window": {
+    "width": 1440,
+    "height": 1000,
+    "scale": 2
+  },
+  "steps": [
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.showcase.page.controls"
+        }
+      }
+    },
+    {
+      "capture": "initial",
+      "query": {
+        "source": "text",
+        "selector": {
+          "kind": "ROW",
+          "within": {
+            "kind": "FRAME",
+            "lang": "gui.itemdespawntowhat.debug.workbench.showcase.resources"
+          }
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "key",
+        "code": 71
+      }
+    },
+    {
+      "assert": {
+        "name": "单实例配置改变",
+        "kind": "value_changed",
+        "query": {
+          "source": "text",
+          "selector": {
+            "kind": "ROW",
+            "within": {
+              "kind": "FRAME",
+              "lang": "gui.itemdespawntowhat.debug.workbench.showcase.resources"
+            }
+          }
+        },
+        "capture": "initial"
+      }
+    },
+    {
+      "shot": "90-grids.png"
+    },
+    {
+      "capture": "beforeReload",
+      "query": {
+        "source": "text",
+        "selector": {
+          "kind": "ROW",
+          "within": {
+            "kind": "FRAME",
+            "lang": "gui.itemdespawntowhat.debug.workbench.showcase.resources"
+          }
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "key",
+        "code": 82
+      }
+    },
+    {
+      "wait_for": {
+        "name": "资源重载后新世代已渲染",
+        "kind": "value_changed",
+        "query": {
+          "source": "text",
+          "selector": {
+            "kind": "ROW",
+            "within": {
+              "kind": "FRAME",
+              "lang": "gui.itemdespawntowhat.debug.workbench.showcase.resources"
+            }
+          }
+        },
+        "capture": "beforeReload"
+      },
+      "timeout_ms": 30000
+    },
+    {
+      "capture": "reloaded",
+      "query": {
+        "source": "text",
+        "selector": {
+          "kind": "ROW",
+          "within": {
+            "kind": "FRAME",
+            "lang": "gui.itemdespawntowhat.debug.workbench.showcase.resources"
+          }
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "key",
+        "code": 256
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.kit_showcase"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "退出后所有者重新创建",
+        "kind": "value_changed",
+        "query": {
+          "source": "text",
+          "selector": {
+            "kind": "ROW",
+            "within": {
+              "kind": "FRAME",
+              "lang": "gui.itemdespawntowhat.debug.workbench.showcase.resources"
+            }
+          }
+        },
+        "capture": "reloaded"
+      }
+    }
+  ]
+}

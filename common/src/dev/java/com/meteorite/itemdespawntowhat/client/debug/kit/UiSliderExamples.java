@@ -1,4 +1,16 @@
-package com.meteorite.itemdespawntowhat.client.ui.kit.api.number;
+package com.meteorite.itemdespawntowhat.client.debug.kit;
+
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiScalarSlider;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiNumberPolicy;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderWindow;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiValueInteraction;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderSkin;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiRangeSlider;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiRangeEnd;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiRangeValue;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiCyclicRange;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiCyclicRangeValue;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderStyle;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputRouter;

@@ -252,8 +252,8 @@ var __gp = (function () {
     key:function(a) { return key(a.code,0,a.modifiers || 0); },
     resize:function(a) { return resize(a.width,a.height,a.scale); },
     scroll:function(a) { var n=unique(a.selector);return wheel(n.x+n.width/2,n.y+n.height/2,a.delta); },
-    drag:function(a) { var n=unique(a.selector);return drag(n.x+n.width*a.from,n.y+n.height/2,n.x+n.width*a.to,n.y+n.height/2,4,0); },
-    press:function(a) { var n=unique(a.selector);var x=n.x+n.width*a.at;return {handled:Boolean(MC.screen.mouseClicked(x,n.y+n.height/2,0))}; },
+    drag:function(a) { var n=unique(a.selector);var v=a.axis==='y';return drag(n.x+n.width*(v?0.5:a.from),n.y+n.height*(v?a.from:0.5),n.x+n.width*(v?0.5:a.to),n.y+n.height*(v?a.to:0.5),4,0); },
+    press:function(a) { var n=unique(a.selector);var v=a.axis==='y';return {handled:Boolean(MC.screen.mouseClicked(n.x+n.width*(v?0.5:a.at),n.y+n.height*(v?a.at:0.5),0))}; },
     release:function(a) { return {handled:Boolean(MC.screen.mouseReleased(0,0,0))}; }
   };
   function action(value) {
@@ -267,11 +267,13 @@ var __gp = (function () {
     scene:reachScene
   };
   var SCENE_HANDLERS = {
+    kit_showcase:reachWorkbench,
     gallery:reachWorkbench,
     interactions:reachWorkbench,
     previews:reachWorkbench
   };
   function reachStep(target) {
+    if (MC.getOverlay() !== null) return {done:false,action:"wait-resource-overlay"};
     if (!Object.prototype.hasOwnProperty.call(START_HANDLERS, target.kind)) throw new Error('unknown start: '+JSON.stringify(target));
     return START_HANDLERS[target.kind](target);
   }
@@ -283,6 +285,7 @@ var __gp = (function () {
     var screen = screenName();
       if (target.scene === 'previews' && !inWorld()) return menuStep(target.world);
       if (screen === 'PreviewExamplesScreen' && target.scene === 'previews') return {done:true};
+      if (screen === 'KitShowcaseScreen' && target.scene === 'kit_showcase') return {done:true};
       if (screen === 'Gallery' && target.kind === 'scene' && candidates({lang:'gui.itemdespawntowhat.debug.workbench.'+target.scene,kind:'FRAME'}).length === 1) return {done:true};
       if (screen === 'Directory') {
         if (layoutCached().length === 0) return {done:false,action:'wait-directory-layout'};
@@ -297,7 +300,7 @@ var __gp = (function () {
     if (!menu.done) return menu;
     if (screen !== 'RuleEditorScreen') {
       if (String(Workspace.instance().session().state()) === 'ACTIVE') {
-        if (screen === 'Gallery' || screen === 'PreviewExamplesScreen') return {action:key(256)};
+        if (screen === 'Gallery' || screen === 'PreviewExamplesScreen' || screen === 'KitShowcaseScreen') return {action:key(256)};
         if (screen === 'Directory') return {action:clickTarget({lang:'gui.itemdespawntowhat.debug.workbench.drafts',kind:'CONTROL'})};
       }
       return editorStep();
@@ -322,6 +325,9 @@ var __gp = (function () {
   function menuStep(worldName) {
     var screen = screenName();
     if (inWorld()) return { done: true, screen: screen };
+    if (screen === 'KitShowcaseScreen' || screen === 'Gallery' || screen === 'Directory') {
+      return { done: false, action: 'leave-local-workbench', result: key(256) };
+    }
     if (screen === 'TitleScreen') {
       return { done: false, action: 'singleplayer', result: clickWidgetAny(['Singleplayer', '单人游戏']) };
     }

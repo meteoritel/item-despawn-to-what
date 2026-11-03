@@ -31,7 +31,7 @@ STARTS = {
     "workbench": {},
     "scene": {"scene": Field("string", True)},
 }
-SCENES = ("gallery", "interactions", "previews")
+SCENES = ("gallery", "interactions", "previews", "kit_showcase")
 ACTIONS = {
     "click": {"selector": SELECTOR},
     "type": {"text": S, "unique_text": B},
@@ -39,8 +39,8 @@ ACTIONS = {
     "key": {"code": Field("integer", True), "modifiers": Field("integer", minimum=0)},
     "resize": WINDOW,
     "scroll": {"selector": SELECTOR, "delta": Field("number", True)},
-    "drag": {"selector": SELECTOR, "from": Field("number", True), "to": Field("number", True)},
-    "press": {"selector": SELECTOR, "at": Field("number", True)},
+    "drag": {"selector": SELECTOR, "from": Field("number", True), "to": Field("number", True), "axis": S},
+    "press": {"selector": SELECTOR, "at": Field("number", True), "axis": S},
     "release": {},
 }
 QUERIES = {name: {} for name in ("screen_title", "window", "layout", "workspace")}
@@ -174,6 +174,8 @@ def validate_case(case, langs):
             allowed.add("settle")
             _variant(step[kind], "kind", ACTIONS, at + ".action", langs)
             action = step[kind]
+            if action["kind"] in ("drag", "press") and action.get("axis", "x") not in ("x", "y"):
+                _fail(at + ".action.axis", "axis must be x or y")
             if action["kind"] == "type" and "text" not in action and action.get("unique_text") is not True:
                 _fail(at + ".action.text", "type 需要 text 或 unique_text=true")
             if "settle" in step:

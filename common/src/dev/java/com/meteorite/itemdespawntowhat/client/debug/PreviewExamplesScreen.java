@@ -1,6 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.debug;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIcon;
+import com.meteorite.itemdespawntowhat.client.debug.kit.KitPreviewBudgetExample;
+import net.minecraft.locale.Language;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
@@ -34,6 +36,9 @@ final class PreviewExamplesScreen extends Screen implements UiLayoutSource {
     private final List<UiLayoutNode> nodes = new ArrayList<>();
     private int scroll;
     private boolean rotating = true;
+    private boolean budgetsVisible;
+    private final KitPreviewBudgetExample budgets = new KitPreviewBudgetExample(PreviewIcons::createScenes);
+    private Language resources;
 
     private record Example(String label, PreviewSubject subject, boolean turntable) { }
 
@@ -70,6 +75,7 @@ final class PreviewExamplesScreen extends Screen implements UiLayoutSource {
 
     /** 一帧只推进一次预算；同一行显示多个尺寸以核对缓存和固定适框。 */
     @Override public void render(@NotNull GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        if (resources != Language.getInstance()) { budgets.invalidateResources(); resources = Language.getInstance(); }
         nodes.clear();
         PreviewIcons.beginFrame();
         renderBackground(graphics, mouseX, mouseY, partialTick);
@@ -78,6 +84,12 @@ final class PreviewExamplesScreen extends Screen implements UiLayoutSource {
         long[] memory = PreviewIcons.memoryBytes();
         graphics.drawString(font, Component.translatable(UI + "budget", memory[0] / 1024, memory[1] / 1024), 8, 23, 0xCCCCCC, false);
         graphics.drawString(font, Component.translatable(UI + "controls"), 8, 37, 0xCCCCCC, false);
+        if (budgetsVisible) {
+            budgets.render(graphics, font, width, height);
+            nodes.addAll(budgets.layoutNodes());
+            PreviewIcons.endFrame();
+            return;
+        }
         graphics.enableScissor(0, 53, width, height);
         try {
             int total = structures.size() + examples.size();
@@ -124,13 +136,15 @@ final class PreviewExamplesScreen extends Screen implements UiLayoutSource {
 
     /** 空格切换全部转台；R 清理世代后重读资源。 */
     @Override public boolean keyPressed(int key, int scan, int modifiers) {
+        if (key == GLFW.GLFW_KEY_B) { budgetsVisible = true; budgets.nextBudget(); return true; }
+        if (key == GLFW.GLFW_KEY_N && budgetsVisible) { budgets.nextPage(); return true; }
         if (key == GLFW.GLFW_KEY_SPACE) { rotating = !rotating; PreviewIcons.setRotating(rotating); return true; }
-        if (key == GLFW.GLFW_KEY_R) { PreviewResources.release(); return true; }
+        if (key == GLFW.GLFW_KEY_R) { PreviewResources.release(); budgets.invalidateResources(); return true; }
         return super.keyPressed(key, scan, modifiers);
     }
 
     /** 关闭开发入口时恢复转台设置并短期保留近期就绪场景。 */
-    @Override public void removed() { PreviewIcons.setRotating(true); PreviewResources.screenClosed(); }
+    @Override public void removed() { budgets.close(); PreviewIcons.setRotating(true); PreviewResources.screenClosed(); }
     /** 图标验收使用持续推进的客户端界面时间。 */
     @Override public boolean isPauseScreen() { return false; }
 }

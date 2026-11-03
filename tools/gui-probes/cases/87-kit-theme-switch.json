@@ -1,0 +1,188 @@
+{
+  "name": "kit-theme-switch",
+  "description": "Theme publication preserves existing text, focus, history and scalar commit state",
+  "start": {
+    "kind": "scene",
+    "scene": "kit_showcase"
+  },
+  "window": {
+    "width": 1200,
+    "height": 840,
+    "scale": 2
+  },
+  "steps": [
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.showcase.page.inputs"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "TEXT_INPUT",
+          "lang": "gui.itemdespawntowhat.debug.workbench.showcase.text"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "type",
+        "text": "x"
+      }
+    },
+    {
+      "capture": "before",
+      "query": {
+        "source": "text",
+        "selector": {
+          "kind": "ROW",
+          "within": {
+            "kind": "FRAME",
+            "lang": "gui.itemdespawntowhat.debug.workbench.showcase.inputs.state"
+          }
+        }
+      }
+    },
+    {
+      "shot": "87-vanilla-inputs.png"
+    },
+    {
+      "action": {
+        "kind": "key",
+        "code": 295
+      }
+    },
+    {
+      "assert": {
+        "name": "换肤保留所有本地字段",
+        "kind": "value_equals",
+        "query": {
+          "source": "text",
+          "selector": {
+            "kind": "ROW",
+            "within": {
+              "kind": "FRAME",
+              "lang": "gui.itemdespawntowhat.debug.workbench.showcase.inputs.state"
+            }
+          }
+        },
+        "expected_capture": "before"
+      }
+    },
+    {
+      "action": {
+        "kind": "type",
+        "text": "y"
+      }
+    },
+    {
+      "assert": {
+        "name": "换肤后原焦点继续输入",
+        "kind": "text_present",
+        "selector": {
+          "kind": "TEXT_INPUT",
+          "text": "xy"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "key",
+        "code": 90,
+        "modifiers": 2
+      }
+    },
+    {
+      "assert": {
+        "name": "换肤保留局部撤销历史",
+        "kind": "text_present",
+        "selector": {
+          "kind": "TEXT_INPUT",
+          "text": "x"
+        }
+      }
+    },
+    {
+      "shot": "87-host-inputs.png"
+    },
+    {
+      "action": {
+        "kind": "key",
+        "code": 295
+      }
+    },
+    {
+      "assert": {
+        "name": "另一宿主画法仍保留原文",
+        "kind": "text_present",
+        "selector": {
+          "kind": "TEXT_INPUT",
+          "text": "x"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.showcase.page.controls"
+        }
+      }
+    },
+    {
+      "capture": "values",
+      "query": {
+        "source": "text",
+        "selector": {
+          "kind": "ROW",
+          "within": {
+            "lang": "gui.itemdespawntowhat.debug.workbench.values.label"
+          }
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "press",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.scalar"
+        },
+        "at": 0.8
+      }
+    },
+    {
+      "action": {
+        "kind": "key",
+        "code": 295
+      }
+    },
+    {
+      "action": {
+        "kind": "release"
+      }
+    },
+    {
+      "assert": {
+        "name": "换肤取消未提交的指针预览",
+        "kind": "value_equals",
+        "query": {
+          "source": "text",
+          "selector": {
+            "kind": "ROW",
+            "within": {
+              "lang": "gui.itemdespawntowhat.debug.workbench.values.label"
+            }
+          }
+        },
+        "expected_capture": "values"
+      }
+    }
+  ]
+}
