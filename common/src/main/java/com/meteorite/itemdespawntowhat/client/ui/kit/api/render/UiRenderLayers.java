@@ -1,17 +1,19 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.render;
 
 import net.minecraft.client.gui.GuiGraphics;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 
 /** 同一作用域内统一背景、模型和前景；每层弹窗完整覆盖上一层及其 tooltip。 */
 public final class UiRenderLayers {
-    /** 当前局部作用域的图标层。 */
-    public static final int ICON = 20;
+    private static final int LAYER_STEP = 20;
+    /** 文字、Sprite 与物品共享的当前局部内容层。 */
+    public static final int CONTENT = 0;
     /** 位于内容图标之上的控件前景。 */
-    public static final int FOREGROUND = 40;
+    public static final int FOREGROUND = LAYER_STEP * 2;
     /** 侧板位于普通控件前景之上。 */
-    public static final int SIDE_PANEL = FOREGROUND + ICON;
+    public static final int SIDE_PANEL = FOREGROUND + LAYER_STEP;
     /** 同一作用域内共用的提示层。 */
-    public static final int TOOLTIP = FOREGROUND * 2 + ICON;
+    public static final int TOOLTIP = FOREGROUND * 2 + LAYER_STEP;
     /** 相邻模态作用域的间距，容纳各自的局部提示层。 */
     public static final int MODAL_STEP = 600;
     /** 页面与首层模态之间的遮罩。 */
@@ -35,13 +37,20 @@ public final class UiRenderLayers {
         }
     }
 
+    /** 以覆盖根给出的深度绘制遮罩；透明度和淡入由该根计算。 */
+    public static void mask(GuiGraphics graphics, UiRect bounds, int depth, int color) {
+        if ((color >>> 24) == 0) return;
+        draw(graphics, (depth + 1) * MODAL_STEP,
+                () -> graphics.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), color));
+    }
+
     /** 从零开始的模态深度对应内容层；首层位于遮罩上方。 */
     public static int modalContent(int depth) {
         return (depth + 1) * MODAL_STEP + 1;
     }
 
-    /** 补偿原版 renderItem 的偏移，将物品放入当前作用域的图标层。 */
+    /** 补偿原版 renderItem 的偏移，将物品放入调用方的内容层。 */
     public static void item(GuiGraphics graphics, Runnable painter) {
-        draw(graphics, ICON - VANILLA_ITEM_OFFSET, painter);
+        draw(graphics, CONTENT - VANILLA_ITEM_OFFSET, painter);
     }
 }

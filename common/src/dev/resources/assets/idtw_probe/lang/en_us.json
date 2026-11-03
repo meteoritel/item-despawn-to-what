@@ -182,5 +182,12 @@
   "gui.itemdespawntowhat.debug.workbench.showcase.preview.capacity": "Original rejection: %s; current request: %s; %s",
   "gui.itemdespawntowhat.debug.workbench.showcase.preview.memory": "GPU=%s pending=%s limits=%s/%s bytes",
   "gui.itemdespawntowhat.debug.workbench.showcase.resources": "Grid resources (G: recolor, R: reload)",
-  "gui.itemdespawntowhat.debug.workbench.showcase.resources.values": "Variant=%s owners=%s epoch=%s"
+  "gui.itemdespawntowhat.debug.workbench.showcase.resources.values": "Variant=%s owners=%s epoch=%s",
+  "gui.itemdespawntowhat.debug.workbench.showcase.layers.actions": "Layer actions",
+  "gui.itemdespawntowhat.debug.workbench.showcase.layers.state": "Foreground: %s; overlap: %s; world preview: %s",
+  "gui.itemdespawntowhat.debug.workbench.showcase.layers.title": "Layer space",
+  "gui.itemdespawntowhat.debug.workbench.showcase.layers.foreground": "Toggle foreground",
+  "gui.itemdespawntowhat.debug.workbench.showcase.layers.overlap": "Toggle overlap",
+  "gui.itemdespawntowhat.debug.workbench.showcase.layers.tooltip": "The tooltip covers the complete mixed content.",
+  "gui.itemdespawntowhat.debug.workbench.showcase.layers.content": "Text + Sprite + Item"
 }

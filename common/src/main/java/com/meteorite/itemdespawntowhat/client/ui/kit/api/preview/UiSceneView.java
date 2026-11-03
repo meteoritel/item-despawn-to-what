@@ -32,7 +32,7 @@ public final class UiSceneView {
         try {
             var bounds = scene.bounds;
             float scale = bounds.scale(box, camera.pitch());
-            graphics.pose().translate(box.x() + box.width() / 2.0F, box.y() + box.height() / 2.0F, UiRenderLayers.ICON);
+            graphics.pose().translate(box.x() + box.width() / 2.0F, box.y() + box.height() / 2.0F, UiRenderLayers.CONTENT);
             graphics.pose().last().pose().scale(1, 1, style.depthScale());
             graphics.pose().scale(scale, -scale, scale);
             Quaternionf orientation = new Quaternionf().rotationX(camera.pitch()).rotateY(camera.yaw());

@@ -31,6 +31,9 @@ import org.jetbrains.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.function.Function;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.preview.PreviewBudget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.preview.PreviewScenes;
 
 /** 展示内容持有本地模型；宿主只提供原版字体及返回动作。 */
 final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
@@ -43,9 +46,10 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
     private final UiStyleSource theme;
     private final KitInputsExample inputs;
     private final UiModalStack modals;
-    private enum Page { CONTROLS, INPUTS, SURFACES }
+    private enum Page { CONTROLS, INPUTS, SURFACES, LAYERS }
     private Page page = Page.CONTROLS;
     private final KitSurfacesExample surfaces;
+    private final KitLayersExample layers;
     private final Runnable nextTheme;
     private final UiScalarSlider slider = new UiScalarSlider(UiNumberPolicy.of(0, 1, 0.05, 0.01), UiSliderWindow.of(0, 1));
     private UiRect bounds = new UiRect(0, 0, 0, 0);
@@ -58,10 +62,12 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
     private UiDotGrid secondGrid;
     private final KitScrollExample scrollExample;
 
-    KitShowcaseContent(Font font, UiStyleSource theme, Runnable back, Runnable nextTheme) {
+    KitShowcaseContent(Font font, UiStyleSource theme, Runnable back, Runnable nextTheme,
+                       @Nullable Function<PreviewBudget, PreviewScenes> previewFactory) {
         this.font = font;
         this.nextTheme = nextTheme;
         surfaces = new KitSurfacesExample(theme, font);
+        layers = new KitLayersExample(theme, font, previewFactory);
         this.theme = theme;
         scrollExample = new KitScrollExample(theme);
         controls.setTheme(theme);
@@ -73,6 +79,7 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
         nav("showcase.page.controls", () -> page = Page.CONTROLS);
         nav("showcase.page.inputs", () -> page = Page.INPUTS);
         nav("showcase.page.surfaces", () -> page = Page.SURFACES);
+        nav("showcase.layers.title", () -> page = Page.LAYERS);
         nav("showcase.theme", nextTheme);
         nav("showcase.modal", this::openModal);
         navigation.endUpdate();
@@ -139,6 +146,7 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
         navigation.addFocusTargets(sink);
         if (page == Page.INPUTS) inputs.addFocusTargets(sink);
         else if (page == Page.SURFACES) surfaces.addFocusTargets(sink);
+        else if (page == Page.LAYERS) layers.addFocusTargets(sink);
         else {
             controls.addFocusTargets(sink);
             sink.accept(slider);
@@ -153,6 +161,7 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
         for (int i = 0; i < navigation.size(); i++) navigation.controls().get(i).setBounds(12 + i * (navWidth + 2), 28, navWidth, 20);
         inputs.setBounds(12, 60, Math.max(0, width - 24), Math.max(0, height - 72));
         surfaces.setBounds(12, 60, Math.max(0, width - 24), Math.max(0, height - 72));
+        layers.setBounds(12, 60, Math.max(0, width - 24), Math.max(0, height - 72));
         modals.setBounds(0, 0, width, height);
         modals.refreshLayout();
         int buttonWidth = Math.clamp((bounds.width() - 8) / 2, 0, 140);
@@ -168,6 +177,7 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
         navigation.render(graphics, font, pointer);
         if (page == Page.INPUTS) inputs.render(graphics, font, pointer);
         else if (page == Page.SURFACES) surfaces.render(graphics, font, pointer);
+        else if (page == Page.LAYERS) layers.render(graphics, font, pointer);
         else renderControls(graphics, pointer);
         modals.tick();
         modals.render(graphics, font, pointer);
@@ -202,11 +212,13 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
     void invalidateResources() {
         resourceEpoch++;
         surfaces.invalidateResources();
+        layers.invalidateResources();
         if (firstGrid != null) firstGrid.invalidate();
         if (secondGrid != null) secondGrid.invalidate();
     }
 
     void releaseResources() {
+        layers.close();
         surfaces.close();
         modals.clear();
         if (firstGrid != null) firstGrid.close();
@@ -224,6 +236,7 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
         UiPointerHit hit = navigation.hitTest(x, y);
         if (hit == null && page == Page.INPUTS) hit = inputs.hitTest(x, y);
         if (hit == null && page == Page.SURFACES) hit = surfaces.hitTest(x, y);
+        if (hit == null && page == Page.LAYERS) hit = layers.hitTest(x, y);
         if (page != Page.CONTROLS) return hit == null ? null : hit.within(this);
         if (hit == null) hit = scrollExample.hitTest(x, y);
         if (hit == null) hit = slider.hitTest(x, y);
@@ -236,6 +249,7 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
         if (context.hits(navigation)) return navigation.mousePressed(context);
         if (page == Page.INPUTS) return inputs.mousePressed(context);
         if (page == Page.SURFACES) return surfaces.mousePressed(context);
+        if (page == Page.LAYERS) return layers.mousePressed(context);
         if (context.hits(scrollExample)) return scrollExample.mousePressed(context);
         if (context.hits(slider)) return slider.mousePressed(context);
         return context.hits(controls) && controls.mousePressed(context);
@@ -260,6 +274,7 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
         for (UiControl control : navigation.controls()) nodes.addAll(control.layoutNodes());
         if (page == Page.INPUTS) nodes.addAll(inputs.layoutNodes());
         else if (page == Page.SURFACES) nodes.addAll(surfaces.layoutNodes());
+        else if (page == Page.LAYERS) nodes.addAll(layers.layoutNodes());
         else {
         for (UiControl control : buttons) {
             nodes.add(node(UiLayoutNode.Kind.CONTROL, control.bounds(), control.accessibleName(), control.isEnabled(), List.of()));

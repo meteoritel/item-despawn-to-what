@@ -14,12 +14,17 @@ import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
+import java.util.function.Function;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.preview.PreviewBudget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.preview.PreviewScenes;
+import org.jetbrains.annotations.Nullable;
 
 /** 只依赖 kit 与原版类型的开发接入示例；导航回调由工作台提供。 */
 public final class KitShowcaseScreen extends UiScreen implements UiLayoutSource {
     private final Runnable returnTo;
     private final UiThemeContext<UiStyleSource> theme = UiThemeContext.minecraft();
     private final List<UiStyleSource> themes;
+    private final @Nullable Function<PreviewBudget, PreviewScenes> previewFactory;
     private int themeIndex;
     private KitShowcaseContent content;
     private UiInputScope scope;
@@ -31,8 +36,15 @@ public final class KitShowcaseScreen extends UiScreen implements UiLayoutSource 
 
     /** 替换主题由工作台注入，独立内容仅接触 kit 契约。 */
     public KitShowcaseScreen(Runnable returnTo, List<UiStyleSource> themes) {
+        this(returnTo, themes, null);
+    }
+
+    /** 已加载世界的宿主可注入 preview 工厂；场景所有者由展示内容关闭。 */
+    public KitShowcaseScreen(Runnable returnTo, List<UiStyleSource> themes,
+                             @Nullable Function<PreviewBudget, PreviewScenes> previewFactory) {
         super(Component.translatable(KitShowcaseContent.UI + "kit_showcase"));
         this.returnTo = returnTo;
+        this.previewFactory = previewFactory;
         this.themes = List.copyOf(themes);
         theme.setTheme(this.themes.getFirst());
     }
@@ -40,7 +52,7 @@ public final class KitShowcaseScreen extends UiScreen implements UiLayoutSource 
     @Override
     protected void init() {
         if (content == null) {
-            content = new KitShowcaseContent(font, theme, this::onClose, this::nextTheme);
+            content = new KitShowcaseContent(font, theme, this::onClose, this::nextTheme, previewFactory);
             scope = new UiInputScope(content);
             scope.setEscape(this::onClose);
         }

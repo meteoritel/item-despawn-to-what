@@ -1,0 +1,100 @@
+{
+  "name": "kit-layers",
+  "description": "图文、物品与可选世界预览共层，前景重叠和提示覆盖",
+  "start": {
+    "kind": "scene",
+    "scene": "kit_showcase"
+  },
+  "window": {
+    "width": 1440,
+    "height": 1000,
+    "scale": 2
+  },
+  "steps": [
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.showcase.layers.title"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "混合内容进入布局快照",
+        "kind": "text_present",
+        "selector": {
+          "kind": "ROW",
+          "lang": "gui.itemdespawntowhat.debug.workbench.showcase.layers.content"
+        }
+      }
+    },
+    {
+      "capture": "layers",
+      "query": {
+        "source": "text",
+        "selector": {
+          "kind": "ROW",
+          "lang": "gui.itemdespawntowhat.debug.workbench.showcase.layers.state"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.showcase.layers.overlap"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "重叠开关进入实际状态",
+        "kind": "value_changed",
+        "query": {
+          "source": "text",
+          "selector": {
+            "kind": "ROW",
+            "lang": "gui.itemdespawntowhat.debug.workbench.showcase.layers.state"
+          }
+        },
+        "capture": "layers"
+      }
+    },
+    {
+      "shot": "92-layers-overlap.png"
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.showcase.layers.foreground"
+        }
+      }
+    },
+    {
+      "shot": "92-layers-content.png"
+    },
+    {
+      "action": {
+        "kind": "resize",
+        "width": 1000,
+        "height": 700,
+        "scale": 2
+      }
+    },
+    {
+      "assert": {
+        "name": "缩放后内容仍在窗口内",
+        "kind": "geometry_inside",
+        "selector": {
+          "kind": "ROW",
+          "lang": "gui.itemdespawntowhat.debug.workbench.showcase.layers.content"
+        }
+      }
+    }
+  ]
+}
