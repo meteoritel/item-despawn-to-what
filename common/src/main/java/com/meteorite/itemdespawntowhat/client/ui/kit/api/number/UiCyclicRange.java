@@ -1,8 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.number;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 
 import java.util.List;
@@ -23,7 +21,7 @@ import org.lwjgl.glfw.GLFW;
  * 周期、刻度（吸附网格）与标记都由宿主注入：kit 不读取 {@code Level}、不假定现实世界时间，
  * 也不猜测任何一天/一月多长。</p>
  */
-public final class UiCyclicRange extends AbstractRangeCore implements UiFocusTarget, UiInputTarget, UiInteractionSession.Target {
+public final class UiCyclicRange extends AbstractRangeCore<UiCyclicRangeValue> {
 
     /**
      * 宿主注入的刻度；label 可为空表示只有刻度线。
@@ -37,46 +35,15 @@ public final class UiCyclicRange extends AbstractRangeCore implements UiFocusTar
     public record Marker(double tick, int color) {
     }
 
-    /**
-     * 周期区间交互生命周期监听：一次操作内按 {@code began} → {@code previewed} → {@code committed} / {@code cancelled} 的顺序回调，用于区分预览与最终提交。
-     */
-    @SuppressWarnings("unused")
-    public interface Listener {
-
-        // 一次操作开始
-        default void began(double from, double to) {
-        }
-
-        // 预览：值已变化但尚未提交
-        default void previewed(double startFrom, double startTo, double from, double to) {
-        }
-
-        // 提交：操作结束时值确实发生了变化
-        default void committed(double startFrom, double startTo, double from, double to) {
-        }
-
-        // 取消：值已回退到操作开始时的状态
-        default void cancelled(double startFrom, double startTo, double restoredFrom, double restoredTo) {
-        }
-    }
-
-    /**
-     * 空回调。
-     */
-    public static final Listener NONE = new Listener() {
-    };
-
     private double period;
     private double from;
     private double to;
     private double tickStep = 1.0D;
     private List<Tick> ticks = List.of();
     private List<Marker> markers = List.of();
-    private @Nullable Listener listener;
-    private double startFrom;
-    private double startTo;
 
     public UiCyclicRange(double period) {
+        super((first, second) -> first.from() == second.from() && first.to() == second.to());
         this.period = requirePeriod(period);
     }
 
@@ -189,13 +156,6 @@ public final class UiCyclicRange extends AbstractRangeCore implements UiFocusTar
         return this.selectedEnd == UiRangeEnd.LOW ? this.from : this.to;
     }
 
-    public @Nullable Listener listener() {
-        return this.listener;
-    }
-
-    public void setListener(@Nullable Listener listener) {
-        this.listener = listener;
-    }
 
     // 刻度在轨道上的比例；刻度已折返，因此总在 [0,1)
     public double fractionOf(double tick) {
@@ -265,7 +225,7 @@ public final class UiCyclicRange extends AbstractRangeCore implements UiFocusTar
         if (!this.enabled || isDragging()) {
             return false;
         }
-        if (this.operationActive) {
+        if (this.interaction.isActive()) {
             this.endInteraction(UiInteractionSession.EndReason.RELEASE);
         }
         return this.oneShotSelected(raw);
@@ -290,7 +250,7 @@ public final class UiCyclicRange extends AbstractRangeCore implements UiFocusTar
     private boolean adjustByKey(int keyCode, double direction) {
         this.capture = Objects.requireNonNull(focusState.scope(), "Focused input requires a mounted scope").interaction();
         this.capture.begin(this, UiInteractionSession.Source.KEY, keyCode);
-        if (!this.operationActive) {
+        if (!this.interaction.isActive()) {
             this.beginOperation();
         }
         this.previewSelected(this.selectedTick() + direction * this.tickStep);
@@ -301,7 +261,7 @@ public final class UiCyclicRange extends AbstractRangeCore implements UiFocusTar
         if (isDragging()) {
             return false;
         }
-        if (this.operationActive) {
+        if (this.interaction.isActive()) {
             this.endInteraction(UiInteractionSession.EndReason.RELEASE);
         }
         double next = this.snapTick(raw);
@@ -327,36 +287,19 @@ public final class UiCyclicRange extends AbstractRangeCore implements UiFocusTar
             }
             this.to = next;
         }
-        if (this.operationActive && this.listener != null) {
-            this.listener.previewed(this.startFrom, this.startTo, this.from, this.to);
-        }
+        this.interaction.preview(snapshotValue());
         return true;
     }
 
     @Override
-    protected void onOperationBegan() {
-        this.startFrom = this.from;
-        this.startTo = this.to;
-        if (this.listener != null) {
-            this.listener.began(this.startFrom, this.startTo);
-        }
+    protected UiCyclicRangeValue snapshotValue() {
+        return new UiCyclicRangeValue(from, to);
     }
 
     @Override
-    protected void onOperationFinished(UiInteractionSession.EndReason reason) {
-        double beganFrom = this.startFrom;
-        double beganTo = this.startTo;
-        double currentFrom = this.from;
-        double currentTo = this.to;
-        boolean changed = currentFrom != beganFrom || currentTo != beganTo;
-        if (reason.cancels()) {
-            this.from = beganFrom;
-            this.to = beganTo;
-        }
-        if (this.listener != null) {
-            if (reason.cancels()) this.listener.cancelled(beganFrom, beganTo, beganFrom, beganTo);
-            else if (changed) this.listener.committed(beganFrom, beganTo, currentFrom, currentTo);
-        }
+    protected void restoreValue(UiCyclicRangeValue restored) {
+        from = restored.from();
+        to = restored.to();
     }
 
     private static double requirePeriod(double period) {

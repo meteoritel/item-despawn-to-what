@@ -1,8 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiValueInteraction;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiNumberPolicy;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiNumbers;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiRangeEnd;
@@ -115,7 +115,7 @@ public final class UiRangeBar extends AbstractBarShell<UiRangeSlider> {
         this.painter = theme.sliderSkin(UiSliderRole.COMPACT).painter();
         this.style = theme.sliderSkin(UiSliderRole.COMPACT).style();
         this.core.setThumbWidth(style.thumbWidth());
-        this.core.setListener(new UiRangeSlider.Listener() {
+        this.core.setListener(new UiValueInteraction.Listener<>() {
             @Override
             public void began(UiRangeValue startValue) {
                 if (listener != null) listener.onBegan(startValue);
@@ -328,34 +328,5 @@ public final class UiRangeBar extends AbstractBarShell<UiRangeSlider> {
 
     // ---- kit 核心适配 ----
 
-    @Override
-    protected boolean coreDragging() {
-        return core.isDragging();
-    }
 
-    @Override
-    protected void coreSetBounds(int x, int y, int width, int height) {
-        core.setBounds(x, y, width, height);
-    }
-
-    @Override
-    protected void coreSetEnabled(boolean enabled) {
-        core.setEnabled(enabled);
-    }
-
-    @Override
-    protected void coreSetVisible(boolean visible) {
-        core.setVisible(visible);
-    }
-
-    @Override
-    protected void coreEndInteraction(UiInteractionSession.EndReason reason) {
-        core.endInteraction(reason);
-    }
-
-
-    @Override
-    protected UiRangeEnd coreSelectedEnd() {
-        return core.selectedEnd();
-    }
 }

@@ -7,6 +7,7 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.annotations.NotNull;
 
 /**
  * 数值控件与精确文本的双向绑定；统一预览、提交、取消和程序回填的重入保护。
@@ -22,7 +23,7 @@ import org.jetbrains.annotations.Nullable;
 public final class UiValueTextBinding<V, T> {
 
     private final Supplier<V> readValue;
-    private final Predicate<V> writeValue;
+    private final Predicate<@NotNull V> writeValue;
     private final Supplier<T> readText;
     private final Consumer<T> writeText;
     private final Function<T, @Nullable V> parse;
@@ -47,7 +48,7 @@ public final class UiValueTextBinding<V, T> {
      * @param format     把数值转换为显示文本
      * @param committed  一次用户提交的宿主通知
      */
-    public UiValueTextBinding(Supplier<V> readValue, Predicate<V> writeValue,
+    public UiValueTextBinding(Supplier<V> readValue, Predicate<@NotNull V> writeValue,
                               Supplier<T> readText, Consumer<T> writeText,
                               Function<T, @Nullable V> parse, Function<V, T> format,
                               Runnable committed) {
@@ -144,7 +145,7 @@ public final class UiValueTextBinding<V, T> {
     }
 
     /**
-     * 取消文本预览并恢复编辑前的数值与原始文本；没有预览时显示当前数值。
+     * 取消文本预览并恢复编辑前的数值与原始文本；没有预览时保留当前原文。
      */
     public void cancelText() {
         if (textPreviewing) {
@@ -153,8 +154,6 @@ public final class UiValueTextBinding<V, T> {
             acceptText();
             writeValue.test(restoredValue);
             setText(restoredText);
-        } else {
-            setText(format.apply(readValue.get()));
         }
     }
 

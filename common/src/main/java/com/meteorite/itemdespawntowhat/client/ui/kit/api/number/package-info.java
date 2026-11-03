@@ -8,8 +8,11 @@
  *   <li>{@code PixelSliderPainter}: host</li>
  *   <li>{@code UiCyclicRange}: host</li>
  *   <li>{@code UiLinkedValues}: host</li>
+ *   <li>{@code UiNumberField}: host</li>
  *   <li>{@code UiNumberPolicy}: host</li>
  *   <li>{@code UiNumbers}: host</li>
+ *   <li>{@code UiCyclicRangeValue}: host</li>
+ *   <li>{@code UiRangeControl}: host</li>
  *   <li>{@code UiRangeEnd}: host</li>
  *   <li>{@code UiRangeSlider}: host</li>
  *   <li>{@code UiRangeValue}: host</li>

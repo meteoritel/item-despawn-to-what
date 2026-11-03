@@ -2,12 +2,12 @@ package com.meteorite.itemdespawntowhat.client.ui.kit.api.number;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 
 import java.util.Objects;
 import java.util.function.Function;
+import java.util.function.BiPredicate;
 
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
@@ -18,14 +18,11 @@ import org.lwjgl.glfw.GLFW;
  * 输入生命周期、容器几何与可见性/焦点状态都在这里，数值模型与命中规则留给子类。
  *
  * <p>本类是包内实现细节，不属于 kit 公开面（公开面以 {@code package-info.java} 的登记为准）。
- * 共享方法声明在这里、由公开子类继承，因此 kit 的公开签名不变。</p>
+ * 外壳通过 UiRangeControl 使用公共能力，数值快照由具体核心提供。</p>
  *
- * <p>子类只提供五个钩子：{@link #hitEnd(double)} 与 {@link #cycleSelectedEnd()} 决定当前端，
- * {@link #canStartPress()} 决定能否开始一次指针交互，
- * {@link #onOperationBegan()} 与 {@link #onOperationFinished(UiInteractionSession.EndReason)}
- * 负责各自数值模型的起点快照与提交/回退。</p>
+ * <p>值快照由具体模型提供，操作状态统一由 UiValueInteraction 持有；外壳只依赖 UiRangeControl。</p>
  */
-abstract class AbstractRangeCore implements UiInteractionSession.Target, UiFocusTarget {
+abstract class AbstractRangeCore<V> implements UiRangeControl {
 
     /**
      * 两端在屏幕上重叠的像素容差；小于等于它视为重叠，按下时切换当前端。
@@ -44,9 +41,22 @@ abstract class AbstractRangeCore implements UiInteractionSession.Target, UiFocus
     protected final UiFocusState focusState = new UiFocusState();
     protected double dragAnchorPointer;
     protected double dragAnchorValue;
-    // 一次操作的起点
-    protected boolean operationActive;
-    // 合并 key-up 的行为：当前按住的键码
+    protected final UiValueInteraction<V> interaction;
+    protected @Nullable UiValueInteraction.Listener<V> listener;
+
+    protected AbstractRangeCore(BiPredicate<V, V> equivalent) {
+        interaction = new UiValueInteraction<>(Objects::nonNull, equivalent);
+    }
+
+    /** 当前值操作监听器。 */
+    public @Nullable UiValueInteraction.Listener<V> listener() {
+        return listener;
+    }
+
+    /** 设置后续值操作的监听器；已开始的操作保持自己的监听器快照。 */
+    public void setListener(@Nullable UiValueInteraction.Listener<V> listener) {
+        this.listener = listener;
+    }
 
     public UiRect bounds() {
         return this.bounds;
@@ -227,41 +237,32 @@ abstract class AbstractRangeCore implements UiInteractionSession.Target, UiFocus
      * 取消当前操作；没有进行中的操作或捕获时返回 false，表示调用方不消费该键。
      */
     protected final boolean cancelInteraction() {
-        if (!this.operationActive && !(capture != null && capture.owns(this))) {
+        if (!this.interaction.isActive() && !(capture != null && capture.owns(this))) {
             return false;
         }
         this.endInteraction(UiInteractionSession.EndReason.CANCEL);
         return true;
     }
 
-    // 操作生命周期：起点快照与提交/回退由子类按数值模型实现
     protected final void beginOperation() {
-        if (this.operationActive) {
-            return;
-        }
-        this.operationActive = true;
-        this.onOperationBegan();
+        interaction.begin(snapshotValue(), listener);
     }
 
     protected final void finishOperation(UiInteractionSession.EndReason reason) {
-
-
-        if (!this.operationActive) {
-            return;
+        if (!interaction.isActive()) return;
+        if (reason.cancels()) {
+            restoreValue(interaction.startValue());
+            interaction.cancel();
+        } else {
+            interaction.commit();
         }
-        this.operationActive = false;
-        this.onOperationFinished(reason);
     }
 
-    /**
-     * 操作开始时快照起点并通知监听器。
-     */
-    protected abstract void onOperationBegan();
+    /** 读取本模型的不可变值快照。 */
+    protected abstract V snapshotValue();
 
-    /**
-     * 操作结束时按 {@code reason} 决定提交还是回退到起点。
-     */
-    protected abstract void onOperationFinished(UiInteractionSession.EndReason reason);
+    /** 取消时在通知监听器前恢复实际模型。 */
+    protected abstract void restoreValue(V value);
 
     /**
      * 当前端命中的端点；无法区分（两端重叠或端点不构成区间）时返回 null，表示切换到另一端。

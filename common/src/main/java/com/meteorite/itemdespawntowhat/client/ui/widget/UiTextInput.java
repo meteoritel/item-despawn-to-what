@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiNumberField;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.UiTextValue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.UiTextAcceptance;
@@ -33,7 +34,7 @@ import org.lwjgl.glfw.GLFW;
  * 支持占位提示、长度限制、输入过滤、提交（Enter）与取消（Esc）。
  * <p>点击输入框可定位光标并拖动选择；焦点顺序由宿主的 {@code UiFocusManager} 统一维护。
  */
-public final class UiTextInput implements UiWidget, UiTextValue, UiLayoutSource, UiInteractionSession.Target {
+public final class UiTextInput implements UiNumberField.Editor, UiLayoutSource, UiInteractionSession.Target {
 
     // 左右内边距
     private static final int PADDING_X = TextInputSupport.PADDING_X;
@@ -216,6 +217,7 @@ public final class UiTextInput implements UiWidget, UiTextValue, UiLayoutSource,
     /**
      * 数值编辑绑定通过作用域会话统一接收完成或取消通知。
      */
+    @Override
     public UiTextInput setOnInteractionEnd(@Nullable Consumer<UiInteractionSession.EndReason> handler) {
         onInteractionEnd = handler;
         return this;
@@ -226,11 +228,13 @@ public final class UiTextInput implements UiWidget, UiTextValue, UiLayoutSource,
         if (onInteractionEnd != null) onInteractionEnd.accept(reason);
     }
 
+    @Override
     public UiTextInput setOnCommit(Consumer<String> onCommit) {
         this.onCommit = onCommit;
         return this;
     }
 
+    @Override
     public UiTextInput setOnCancel(Runnable onCancel) {
         this.onCancel = onCancel;
         return this;

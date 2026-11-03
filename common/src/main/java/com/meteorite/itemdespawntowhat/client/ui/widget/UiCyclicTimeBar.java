@@ -1,12 +1,12 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiCyclicRangeValue;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiValueInteraction;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
-
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiCyclicRange;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiNumbers;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiRangeEnd;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiValueTextBinding;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
@@ -67,7 +67,7 @@ public final class UiCyclicTimeBar extends AbstractBarShell<UiCyclicRange> {
     private final UiValueTextBinding<Double, String> preciseBinding;
     private final List<Preset> presets = new ArrayList<>();
 
-    private @Nullable Listener listener;
+    private final @Nullable Listener listener;
     private UiRect presetRow = new UiRect(0, 0, 0, 0);
 
     /**
@@ -84,14 +84,14 @@ public final class UiCyclicTimeBar extends AbstractBarShell<UiCyclicRange> {
         this.listener = listener;
         this.core.setTickStep(DRAG_STEP);
         this.core.setThumbWidth(3);
-        this.core.setListener(new UiCyclicRange.Listener() {
+        this.core.setListener(new UiValueInteraction.Listener<>() {
             @Override
-            public void committed(double startFrom, double startTo, double from, double to) {
-                fireCommitted(from, to);
+            public void committed(UiCyclicRangeValue startValue, UiCyclicRangeValue currentValue) {
+                fireCommitted(currentValue.from(), currentValue.to());
             }
 
             @Override
-            public void cancelled(double startFrom, double startTo, double restoredFrom, double restoredTo) {
+            public void cancelled(UiCyclicRangeValue startValue, UiCyclicRangeValue restoredValue) {
                 closePrecise();
             }
         });
@@ -358,34 +358,5 @@ public final class UiCyclicTimeBar extends AbstractBarShell<UiCyclicRange> {
 
     // ---- kit 核心适配 ----
 
-    @Override
-    protected boolean coreDragging() {
-        return core.isDragging();
-    }
 
-    @Override
-    protected void coreSetBounds(int x, int y, int width, int height) {
-        core.setBounds(x, y, width, height);
-    }
-
-    @Override
-    protected void coreSetEnabled(boolean enabled) {
-        core.setEnabled(enabled);
-    }
-
-    @Override
-    protected void coreSetVisible(boolean visible) {
-        core.setVisible(visible);
-    }
-
-    @Override
-    protected void coreEndInteraction(UiInteractionSession.EndReason reason) {
-        core.endInteraction(reason);
-    }
-
-
-    @Override
-    protected UiRangeEnd coreSelectedEnd() {
-        return core.selectedEnd();
-    }
 }

@@ -54,7 +54,7 @@ public final class UiSliderExamples {
      * @return 装配好的滑块
      */
     public static UiScalarSlider scalarSlider(Component label, UiRect bounds,
-                                              UiValueInteraction.Listener listener) {
+                                              UiValueInteraction.Listener<Double> listener) {
         UiNumberPolicy policy = UiNumberPolicy.of(0.0D, 1.0D, 0.05D, 0.01D).withFineDragFactor(0.25D);
         UiScalarSlider slider = new UiScalarSlider(policy, UiSliderWindow.of(0.0D, 1.0D));
         // 无主题宿主可直接用 kit 自带的像素外观（样式与画法成对）
@@ -82,7 +82,7 @@ public final class UiSliderExamples {
      * @param listener 区间结果回调
      * @return 装配好的区间滑块
      */
-    public static UiRangeSlider rangeSlider(Component label, UiRect bounds, UiRangeSlider.Listener listener) {
+    public static UiRangeSlider rangeSlider(Component label, UiRect bounds, UiValueInteraction.Listener<UiRangeValue> listener) {
         UiNumberPolicy policy = UiNumberPolicy.integer(0, 24000, 1000);
         UiRangeSlider slider = new UiRangeSlider(policy, UiSliderWindow.of(0.0D, 24000.0D),
                 UiRangeValue.of(0.0D, 24000.0D));
@@ -108,7 +108,7 @@ public final class UiSliderExamples {
      * @return 装配好的周期区间控件
      */
     public static UiCyclicRange cyclicRange(Component label, UiRect bounds, double period,
-                                            List<Double> hostTicks, UiCyclicRange.Listener listener) {
+                                            List<Double> hostTicks, UiValueInteraction.Listener<UiCyclicRangeValue> listener) {
         UiCyclicRange range = new UiCyclicRange(period);
         range.setThumbWidth(3);
         range.setTickStep(period / 24.0D);

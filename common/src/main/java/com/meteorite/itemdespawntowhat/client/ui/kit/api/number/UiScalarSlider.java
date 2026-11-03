@@ -48,7 +48,8 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInt
     private static final int VALUE_DECIMALS = 2;
 
     private UiInteractionSession capture;
-    private final UiValueInteraction interaction = new UiValueInteraction();
+    private final UiValueInteraction<Double> interaction = new UiValueInteraction<>(
+            Double::isFinite, (first, second) -> first.doubleValue() == second.doubleValue());
 
     private UiNumberPolicy policy;
     private UiSliderWindow window;
@@ -59,7 +60,7 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInt
     private boolean backfillInvalid;
     private Component label = Component.empty();
     private @Nullable Function<Double, Component> formatter;
-    private @Nullable UiValueInteraction.Listener interactionListener;
+    private @Nullable UiValueInteraction.Listener<Double> interactionListener;
     private UiRect bounds = new UiRect(0, 0, 0, 0);
     private boolean enabled = true;
     private boolean visible = true;
@@ -180,12 +181,13 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInt
         return this;
     }
 
-    public @Nullable UiValueInteraction.Listener interactionListener() {
+    /** 当前后续操作使用的标量快照监听器。 */
+    public @Nullable UiValueInteraction.Listener<Double> interactionListener() {
         return interactionListener;
     }
 
-    // 交互生命周期回调；数据回填不会触发
-    public UiScalarSlider setInteractionListener(@Nullable UiValueInteraction.Listener next) {
+    /** 设置标量快照监听器；程序回填保持静默。 */
+    public UiScalarSlider setInteractionListener(@Nullable UiValueInteraction.Listener<Double> next) {
         this.interactionListener = next;
         return this;
     }

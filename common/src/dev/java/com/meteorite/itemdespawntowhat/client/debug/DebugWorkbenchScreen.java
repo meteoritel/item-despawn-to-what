@@ -25,7 +25,7 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModalStack;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiRangeBar;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
@@ -176,8 +176,8 @@ public class DebugWorkbenchScreen extends Screen {
             list = new UiListView<>(theme, font, (g, f, value, index, rect, selected, hovered, focused) ->
                     g.drawString(f, Component.translatable(UI + "list.item", value), rect.x(), rect.y() + 3, theme.palette().textPrimary(), false));
             list.setItems(List.of(1, 2, 3, 4, 5, 6, 7, 8)); widgets.add(list);
-            scalar = UiSliderExamples.scalarSlider(text("scalar"), new UiRect(0, 0, 100, 18), new UiValueInteraction.Listener() {
-                @Override public void committed(double start, double value) { committed = value; }
+            scalar = UiSliderExamples.scalarSlider(text("scalar"), new UiRect(0, 0, 100, 18), new UiValueInteraction.Listener<>() {
+                @Override public void committed(Double start, Double value) { committed = value; }
             });
             var skin = theme.sliderSkin(UiSliderRole.COMPACT); scalar.setStyle(skin.style()); scalar.setPainter(skin.painter());
             fixed.add(button("reset", this::assemble)); fixed.add(button("modal", this::openModal)); fixed.add(button("back", this::onClose));

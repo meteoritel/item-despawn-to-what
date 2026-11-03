@@ -1,8 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.number;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 
 import java.util.Objects;
@@ -28,52 +26,14 @@ import org.lwjgl.glfw.GLFW;
  * <p>本类只关心逻辑与几何，不绘制：区间渲染（时间条与双端轨道）由宿主用 kit 的样式与
  * painter 完成。</p>
  */
-public final class UiRangeSlider extends AbstractRangeCore implements UiFocusTarget, UiInputTarget, UiInteractionSession.Target {
-
-    /**
-     * 区间交互生命周期监听：一次操作内按 {@code began} → {@code previewed} → {@code committed} / {@code cancelled} 的顺序回调，用于区分预览与最终提交。
-     */
-    @SuppressWarnings("unused")
-    public interface Listener {
-
-        // 一次操作开始（拖动按下、键盘首次调整或精确设置前）
-        default void began(UiRangeValue startValue) {
-        }
-
-        // 预览：值已变化但尚未提交
-        default void previewed(UiRangeValue startValue, UiRangeValue currentValue) {
-        }
-
-        // 提交：操作结束时值确实发生了变化
-        default void committed(UiRangeValue startValue, UiRangeValue currentValue) {
-        }
-
-        /**
-         * 操作已结清，无净变化时也通知绑定。
-         */
-        default void finished() {
-        }
-
-        // 取消：值已回退到操作开始时的状态
-        default void cancelled(UiRangeValue startValue, UiRangeValue restoredValue) {
-        }
-    }
-
-    /**
-     * 空回调。
-     */
-    public static final Listener NONE = new Listener() {
-    };
+public final class UiRangeSlider extends AbstractRangeCore<UiRangeValue> {
 
     private UiNumberPolicy policy;
     private UiSliderWindow window;
     private UiRangeValue value;
-    private @Nullable Listener listener;
     private boolean backfillInvalid;
     private double pageStep;
     private boolean dragFineAnchor;
-    // 一次操作的起点
-    private UiRangeValue operationStart = UiRangeValue.EMPTY;
 
     // 用完整数值域作窗口，两端初始为域的两端
     public UiRangeSlider(UiNumberPolicy policy) {
@@ -82,6 +42,7 @@ public final class UiRangeSlider extends AbstractRangeCore implements UiFocusTar
 
     // 指定窗口与初始值
     public UiRangeSlider(UiNumberPolicy policy, UiSliderWindow window, UiRangeValue value) {
+        super(Objects::equals);
         this.policy = Objects.requireNonNull(policy, "policy");
         this.window = Objects.requireNonNull(window, "window");
         this.value = Objects.requireNonNull(value, "value");
@@ -187,13 +148,6 @@ public final class UiRangeSlider extends AbstractRangeCore implements UiFocusTar
         return true;
     }
 
-    public @Nullable Listener listener() {
-        return this.listener;
-    }
-
-    public void setListener(@Nullable Listener listener) {
-        this.listener = listener;
-    }
 
     /**
      * 判断区间是否仍在预览，供宿主延后提交关联输入。
@@ -201,7 +155,7 @@ public final class UiRangeSlider extends AbstractRangeCore implements UiFocusTar
      * @return 鼠标或键盘操作尚未结束时为 true
      */
     public boolean isInteracting() {
-        return this.operationActive;
+        return this.interaction.isActive();
     }
 
     // 大步伐；<=0 或非有限表示不消费 PageUp/PageDown
@@ -286,7 +240,7 @@ public final class UiRangeSlider extends AbstractRangeCore implements UiFocusTar
         if (!this.enabled || !this.value.isPresent(this.selectedEnd) || isDragging()) {
             return false;
         }
-        if (this.operationActive) {
+        if (this.interaction.isActive()) {
             this.endInteraction(UiInteractionSession.EndReason.RELEASE);
         }
         double bounded = this.boundEnd(this.selectedEnd, this.policy.snap(raw, fine));
@@ -311,7 +265,7 @@ public final class UiRangeSlider extends AbstractRangeCore implements UiFocusTar
     public boolean setSelectedValueOrPresent(double raw, boolean fine) {
         if (!Double.isFinite(raw) || !enabled || isDragging()) return false;
         if (value.isPresent(selectedEnd)) return setSelectedValue(raw, fine);
-        if (operationActive) endInteraction(UiInteractionSession.EndReason.RELEASE);
+        if (interaction.isActive()) endInteraction(UiInteractionSession.EndReason.RELEASE);
         UiRangeValue candidate = value.withValue(selectedEnd, boundEnd(selectedEnd, policy.clamp(raw)));
         beginOperation();
         previewValue(candidate);
@@ -362,7 +316,7 @@ public final class UiRangeSlider extends AbstractRangeCore implements UiFocusTar
         }
         this.capture = Objects.requireNonNull(focusState.scope(), "Focused input requires a mounted scope").interaction();
         this.capture.begin(this, UiInteractionSession.Source.KEY, keyCode);
-        if (!this.operationActive) {
+        if (!this.interaction.isActive()) {
             this.beginOperation();
         }
         this.previewSelected(this.selectedValue() + direction * this.policy.step(fine), fine);
@@ -373,7 +327,7 @@ public final class UiRangeSlider extends AbstractRangeCore implements UiFocusTar
         if (!this.value.isPresent(this.selectedEnd) || isDragging()) {
             return false;
         }
-        if (this.operationActive) {
+        if (this.interaction.isActive()) {
             this.endInteraction(UiInteractionSession.EndReason.RELEASE);
         }
         double bounded = this.boundEnd(this.selectedEnd, this.policy.snap(raw, fine));
@@ -402,31 +356,18 @@ public final class UiRangeSlider extends AbstractRangeCore implements UiFocusTar
         }
         this.value = next;
         this.backfillInvalid = false;
-        if (this.operationActive && this.listener != null) {
-            this.listener.previewed(this.operationStart, next);
-        }
+        this.interaction.preview(next);
         return true;
     }
 
     @Override
-    protected void onOperationBegan() {
-        this.operationStart = this.value;
-        if (this.listener != null) {
-            this.listener.began(this.operationStart);
-        }
+    protected UiRangeValue snapshotValue() {
+        return value;
     }
 
     @Override
-    protected void onOperationFinished(UiInteractionSession.EndReason reason) {
-        UiRangeValue start = this.operationStart;
-        UiRangeValue current = this.value;
-        boolean changed = !current.equals(start);
-        if (reason.cancels()) this.value = start;
-        if (this.listener != null) {
-            if (reason.cancels()) this.listener.cancelled(start, start);
-            else if (changed) this.listener.committed(start, current);
-            this.listener.finished();
-        }
+    protected void restoreValue(UiRangeValue restored) {
+        value = restored;
     }
 
     // 值是否越出数值域（不吸附、不钳制）

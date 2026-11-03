@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
@@ -116,9 +117,9 @@ public final class UiSlider implements UiWidget, UiFocusTarget, UiInputTarget {
 
     // 旧的逐次回调语义：值每变化一次就回调一次（桥接到 kit 的 preview 回调）
     public UiSlider setOnChanged(@Nullable DoubleConsumer listener) {
-        this.core.setInteractionListener(listener == null ? null : new UiValueInteraction.Listener() {
+        this.core.setInteractionListener(listener == null ? null : new UiValueInteraction.Listener<>() {
             @Override
-            public void previewed(double startValue, double currentValue) {
+            public void previewed(Double startValue, Double currentValue) {
                 listener.accept(currentValue);
             }
         });
@@ -204,12 +205,6 @@ public final class UiSlider implements UiWidget, UiFocusTarget, UiInputTarget {
     @Override
     public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
         return this.core.keyReleased(keyCode, scanCode, modifiers);
-    }
-
-    // UiWidget 与 UiInputTarget 都带默认实现，这里显式覆盖以消除「不相关默认值」冲突
-    @Override
-    public boolean charTyped(char codePoint, int modifiers) {
-        return false;
     }
 
     @Override

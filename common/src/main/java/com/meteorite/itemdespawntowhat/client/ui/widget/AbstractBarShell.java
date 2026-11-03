@@ -1,9 +1,11 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiRangeControl;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiRangeEnd;
@@ -26,10 +28,9 @@ import org.lwjgl.glfw.GLFW;
  * 独立提示行、精确输入行、焦点与捕获生命周期，以及指针与键盘的统一分发。
  * <p>外壳只依赖两个 kit 核心（{@code UiCyclicRange}、{@code UiRangeSlider}）共同实现的输入契约
  * {@link UiInputTarget} 与 {@link UiInteractionSession.Target}；两者尚无共同类型接口，其余核心能力
- * （拖动查询、边界与可见性写入、结束交互、选中端）经 protected 适配钩子由子类提供，
- * 外壳因此既不需要按类型分支，也不需要两侧各写一套调用。</p>
+ * （拖动查询、边界与可见性写入、结束交互、选中端）直接使用 UiRangeControl 共同契约。</p>
  */
-abstract class AbstractBarShell<C extends UiInteractionSession.Target & UiFocusTarget>
+abstract class AbstractBarShell<C extends UiRangeControl>
         implements UiWidget, UiFocusTarget {
 
     // 标签行高度
@@ -82,7 +83,7 @@ abstract class AbstractBarShell<C extends UiInteractionSession.Target & UiFocusT
         });
         this.precise.setOnCancel(() -> {
             closePrecise();
-            coreEndInteraction(UiInteractionSession.EndReason.CANCEL);
+            core.endInteraction(UiInteractionSession.EndReason.CANCEL);
         });
     }
 
@@ -112,14 +113,14 @@ abstract class AbstractBarShell<C extends UiInteractionSession.Target & UiFocusT
     }
 
     protected final void layoutCoreBounds() {
-        coreSetBounds(trackRow.x(), trackRow.y(), trackRow.width(), trackRow.height());
+        core.setBounds(trackRow.x(), trackRow.y(), trackRow.width(), trackRow.height());
     }
 
     // ---- 可见性与禁用：状态与核心保持同步，关闭精确输入不留在半开状态 ----
 
     protected final void applyEnabled(boolean next) {
         this.enabled = next;
-        coreSetEnabled(next);
+        core.setEnabled(next);
         if (!next) {
             closePrecise();
         }
@@ -127,7 +128,7 @@ abstract class AbstractBarShell<C extends UiInteractionSession.Target & UiFocusT
 
     protected final void applyVisible(boolean next) {
         this.visible = next;
-        coreSetVisible(next);
+        core.setVisible(next);
         if (!next) {
             closePrecise();
         }
@@ -210,7 +211,7 @@ abstract class AbstractBarShell<C extends UiInteractionSession.Target & UiFocusT
 
     @Override
     public final boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
-        if (coreDragging()) {
+        if (core.isDragging()) {
             return core.mouseDragged(context, dragX, dragY);
         }
         return preciseActive && precise.mouseDragged(context, dragX, dragY);
@@ -218,7 +219,7 @@ abstract class AbstractBarShell<C extends UiInteractionSession.Target & UiFocusT
 
     @Override
     public final boolean mouseReleased(UiInputContext context) {
-        if (coreDragging()) {
+        if (core.isDragging()) {
             return core.mouseReleased(context);
         }
         return preciseActive && precise.mouseReleased(context);
@@ -271,7 +272,7 @@ abstract class AbstractBarShell<C extends UiInteractionSession.Target & UiFocusT
             return false;
         }
         if (preciseEditor != null) {
-            preciseEditor.accept(coreSelectedEnd());
+            preciseEditor.accept(core.selectedEnd());
             return true;
         }
         preciseActive = true;
@@ -320,7 +321,7 @@ abstract class AbstractBarShell<C extends UiInteractionSession.Target & UiFocusT
     // ---- 捕获与宿主生命周期：两侧顺序一致，统一结束精确输入 ----
 
     public final void endInteraction(UiInteractionSession.EndReason reason) {
-        coreEndInteraction(reason);
+        core.endInteraction(reason);
         precise.endInteraction(reason);
         closePrecise();
     }
@@ -339,21 +340,5 @@ abstract class AbstractBarShell<C extends UiInteractionSession.Target & UiFocusT
 
     // 精确输入的取值、回填与格式化规则随核心不同，由子类装配
     protected abstract UiValueTextBinding<Double, String> preciseBinding();
-
-    // ---- kit 核心适配钩子：两个核心暂无共同类型接口，外壳按能力取用 ----
-
-    protected abstract boolean coreDragging();
-
-    protected abstract void coreSetBounds(int x, int y, int width, int height);
-
-    protected abstract void coreSetEnabled(boolean enabled);
-
-    protected abstract void coreSetVisible(boolean visible);
-
-    protected abstract void coreEndInteraction(UiInteractionSession.EndReason reason);
-
-
-    protected abstract UiRangeEnd coreSelectedEnd();
-
 
 }
