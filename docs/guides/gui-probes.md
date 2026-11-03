@@ -56,9 +56,11 @@ python tools/gui-probes/lib/run.py --run-dir .scratch/gui-check --only workbench
 
 | 工具 | 状态与职责 |
 |---|---|
-| Kit 展示空间 | Controls/Inputs/Surfaces/Theme/Modal；F6 换肤，Controls 的 G 改单实例点阵、R 重载资源 |
+| Kit 展示空间 | Controls/Inputs/Surfaces/Layers/Theme/Modal；F6 换肤，Controls 的 G 改单实例点阵、R 重载资源 |
 | 组件展台 | 本地按钮、文本与数字输入、轮询、范围条、标量滑条、列表，同页查看与重置 |
 | 组合交互 | 复用真实组件装配，支持 Ctrl+M 打开模态，检查焦点、拖动取消、滚动与缩放 |
+| Kit Layers | 图文与普通贴图可直接展示；有世界时外层注入方块预览，前景/重叠开关与状态节点供定位 |
+| Kit 预算 | 需要已加载世界；B 轮换默认、小预算、几何过限、请求容量拒绝/恢复 |
 | 图标预览 | 需要已加载世界；Space 转台、B 轮换预算、N 换请求组、R 释放重读 |
 | 测试规则草稿 | 需要可编辑工作区；填充或删除测试草稿，由管理页应用后落盘 |
 
@@ -169,7 +171,8 @@ prelude 经 client adapter 按内容摘要和运行目录安装；握手校验�
 | 通用嵌套模态与作用域恢复 | kit-modal |
 | 文档 Frame 命中、浮板与灯箱 | kit-surfaces |
 | 双点阵配置、资源重载与重新进入 | kit-render-resources |
-| 默认/小预算/过限与场景重建 | kit-preview-budget |
+| 默认/小预算/几何过限、请求容量拒绝与恢复 | kit-preview-budget |
+| 混合图文/3D、前景与兄弟重叠、提示及 resize | kit-layers |
 
 新增界面的实际可见几何、字段和条目作用域通过 `UiLayoutSource` 导出，避免在用例中猜测坐标。
 

@@ -107,7 +107,7 @@ flowchart TD
 | `RuleEditorOpener` | 界面入口 | 提供 `bootstrap`/`shutdown`/`lastRequest` 静态入口，在客户端线程把编辑器切到前台或刷新 | `client/net` 的 hooks 与打开请求 |
 | `EditorShell` | 编辑器外壳 | 持有当前编辑目标、编辑会话选取、提示级别、可编辑判定与跨页命令，并持有三个编辑器页面；屏幕经它取活动页与状态 | 三个编辑器页面、`RuleEditorModel`、`UiModalStack`、`UiFocusManager` |
 | `EditorPage` | 编辑器页面契约 | 三个顶层页共用的派发面：头部度量与绘制、标题与状态标签、内容与页脚排版、鼠标键盘输入、按钮状态刷新，以及可选的覆盖层与悬停说明 | `RuleEditorScreen`、编辑器外壳 |
-| `EditorInputRouter` | 屏幕输入作用域 | 选择保存遮罩、顶层 modal、页覆盖层或活动页；独占作用域终止向底页派发，释放归原按下作用域；普通页排列历史、Esc 与 Tab 的优先级 | `EditorShell`、`EditorPage`、弹窗栈 |
+| `EditorInputRouter` | 屏幕输入作用域 | 选择保存遮罩、顶层 modal、页覆盖层或活动页；只返回选择结果；kit 应用切域、按原会话或按下快照派发释放，并安排历史、Esc 与 Tab | `EditorShell`、`EditorPage`、弹窗栈 |
 | `RuleEditorScreen` | 屏幕聚合根 | 继承 kit `UiScreen`，持有业务生命周期、窗口排版与绘制：活动页从哪里取、提示带与页脚带怎么排都由屏幕决定，输入经 `EditorInputRouter` 选择作用域后派发；工作区进入可编辑态才允许编辑，应用期间冻结，工作区释放时自行关屏 | 编辑器外壳、`EditorPage`、弹窗栈、提示条 |
 | `RuleEditorListPage` | 管理页 | 搜索、状态/来源轮询筛选、分类树、规则导出与配方预览，列表底排按钮状态同步；只持有管理页控件与视图状态 | 规则会话、目录图标、`RulePackExporter`、`RuleEditorListActions` |
 | `RulePackExporter` | 规则导出口 | 把列表可导出的已保存规则写成一个数据包 zip：跳过未保存草稿与有问题条目，清单格式取当前游戏的数据包版本，规则文件按 `data/<ns>/idtw/rules/<path>.json` 落位，id 强制写回 | 列表页导出弹窗、`RulePaths`、`RuleFields` |
@@ -183,13 +183,17 @@ flowchart LR
 
 保存、分区和目标切换、返回、刷新及关闭进入 `RuleEditorEditPage.finish(reason)`。完成编辑先保留当前修订输入，再取消未释放预览、提交合法值并通知模型，最后卸载或重建；非法文本保留在会话并参与阻塞校验。快照身份变化前只保留输入；重绑后旧修订控件重新装载并退出该次提交。放弃草稿先释放旧页面再清除记录，关闭与 removed 共用外壳的一次释放标记。保存与应用不关闭编辑页：回执到达后页面留在原处，用户退出、工作区释放或外部切屏才关屏。
 
-`EditorInputRouter` 只按保存遮罩 → 顶层 modal → 类型选择器 → 活动页选取稳定的 `UiInputScope`，通用派发交给 kit `UiInputRouter`。页面先布局页头、内容与页脚，再解析一次 `UiPointer` 供绘制共用；复合控件的 `hitTest` 返回实际叶子与包装/核心归属。输入与 hover 使用同一个活动作用域，POINTER 捕获只保留所属分支反馈并关闭 tooltip，KEY/TEXT 会话保留普通 hover。左键命中合格候选自动转焦，标签和滚动条等操作区保焦，真实空白清焦；事件消费独立处理。F1–F12 保持放行，Ctrl+F8 在屏幕层按保存与模态状态进入开发工作台。关屏先取消未完成会话，再冲刷已提交草稿。
+`EditorInputRouter` 只按保存遮罩 → 顶层 modal → 类型选择器 → 活动页选取稳定的 `UiInputScope`，通用派发交给 kit `UiInputRouter`。`UiScreen` 通过 `layoutUi` 准备页头、内容与页脚，`renderUi` 消费同一布局结果，再解析一次 `UiPointer` 供绘制共用；复合控件的 `hitTest` 返回实际叶子与包装/核心归属。输入与 hover 使用同一个活动作用域，POINTER 捕获只保留所属分支反馈并关闭 tooltip，KEY/TEXT 会话保留普通 hover。左键命中合格候选自动转焦，标签和滚动条等操作区保焦，真实空白清焦；事件消费独立处理。F1–F12 保持放行，Ctrl+F8 在屏幕层按保存与模态状态进入开发工作台。关屏先取消未完成会话，再冲刷已提交草稿。
 
-各页面、模态、选择器与保存遮罩独立拥有焦点和持续交互；作用域返回恢复合格的旧焦点。`EditorShell` 按滚动、名称播报、业务激活键政策组合焦点通知；编辑页用 `UiFocusFollow` 注入目标归属与内容坐标，模态用同一名称播报 adapter。展开组保留叶子归属与 Tab 锚点，内部编辑从组内位置续接。表单子树隐藏、禁用或卸载时结束本子树交互，数值取消恢复模型与文本快照。
+页面通过 `UiChildren` 持有实际成员，默认命中和焦点贡献从同一结构派生。普通文本与条件说明附在 `UiPointerHit`，屏幕和模态根统一呈现，表单逐层 `tooltipAt` 回查已退出。各页面、模态、选择器与保存遮罩独立拥有焦点和持续交互；作用域返回恢复合格的旧焦点。`EditorShell` 按滚动、名称播报、业务激活键政策组合焦点通知；编辑页用 `UiFocusFollow` 注入目标归属与内容坐标，模态用同一名称播报 adapter。展开组保留叶子归属与 Tab 锚点，内部编辑从组内位置续接。表单子树隐藏、禁用或卸载时结束本子树交互，数值取消恢复模型与文本快照。
 
-目录网格用 `UiScrollView` 唯一持有偏移、范围、轨道和拖动会话，行命中复用 `UiRowMetrics`。网格配置整行对齐、滚轮三行、按下居中、抓取外扩与固定轨道留宽；筛选、翻页、键盘和 resize 共用偏移入口。绘制、预热、tooltip 与布局快照读取同一行列几何。
+目录网格用 `UiScrollView` 唯一持有偏移、范围、轨道和拖动会话，行命中复用 `UiRowMetrics`。网格配置整行对齐、滚轮三行、按下居中、抓取外扩与固定轨道留宽；筛选、翻页、键盘和 resize 共用偏移入口。绘制、预热和布局快照读取同一行列几何；hover、选择与 tooltip 复用带行身份的命中快照。轨道统一经 `UiScrollView.renderScrollbar` 读取主题。
 
 `UiSegmentedControl` 只用于编辑分区的页签切换，导航位置与业务选中独立：整组占一个 Tab 位置，方向键、Home、End 移动组内位置，Enter/Space 激活后才切换分区。状态、来源、目录范围、组合模式和产物档位等循环取值入口是单个胶囊按钮（`UiButton#setCycleStyle`，标签右侧带前进箭头），点击即切到下一个取值，不参与焦点序列。鼠标与键盘共享唯一逻辑焦点，额外焦点轮廓仅键盘操作显示；文本光标与选区照常显示。
+
+保存遮罩使用 kit `UiOverlay` 的遮罩、保焦背景与阻断作用域；保存中 Esc/背景关闭由业务策略拒绝，取消仅向 workspace 发信号，终态由业务移除。通用模态的正常关闭统一经 `UiModal.requestClose`，宿主销毁可强制移除。
+
+resize 保留已有页面、文本控件与编辑会话，只重排几何；单行光标/anchor、多行换宽快照以及局部历史由 kit 的原版模型 adapter 保持。
 
 ### 只读条目的编辑页
 
@@ -238,7 +242,7 @@ flowchart LR
 
 ### 调试工作台
 
-`DebugWorkbenchScreen` 位于 common dev 的 client/debug，目录显式装配组件展台、组合交互、独立 kit 展示、图标预览和测试规则草稿。NeoForge probe 客户端事件装配 Ctrl+F8；main 的 `DebugWorkbenchHooks` 只持有打开动作。草稿工具保留在编辑器，预览和本地场景由各自 Screen 持有状态与资源。独立 kit 展示使用 UiScreen、UiInputScope 和 UiModalStack，内容只依赖 kit、原版类型与本地模型；外围目录注入宿主主题。展示包含文本/数值/列表、嵌套滚动、文档 Frame、浮板、灯箱、连线、导航和双点阵。F6 换肤，基础页 G 修改单个点阵配置、R 发起真实资源重载。世界预览复用图标预览入口。场景使用 UiInputScope、UiInputRouter 和 UiModalStack；模态切换取消持续交互，返回编辑器时重建屏幕并复用有效工作区。
+`DebugWorkbenchScreen` 位于 common dev 的 client/debug，目录显式装配组件展台、组合交互、独立 kit 展示、图标预览和测试规则草稿。NeoForge probe 客户端事件装配 Ctrl+F8；main 的 `DebugWorkbenchHooks` 只持有打开动作。草稿工具保留在编辑器，预览和本地场景由各自 Screen 持有状态与资源。独立 kit 展示使用 UiScreen、UiInputScope 和 UiModalStack，内容只依赖 kit、原版类型与本地模型；外围目录注入宿主主题。展示包含文本/数值/列表、嵌套滚动、文档 Frame、浮板、灯箱、连线、导航、双点阵和 Layers 空间页。Layers 混排 Sprite、Item 与文字，有世界时通过外层注入的工厂增加 3D 方块；本页支持前景/兄弟重叠开关、统一提示和布局节点。kit 预算展示以 B 轮换默认、小预算、几何过限、请求容量拒绝/恢复四种模式。F6 换肤，基础页 G 修改单个点阵配置、R 发起真实资源重载。图标预览继续提供独立入口。纯 kit 样例由 `common:compileUiKitSamples` 在排除产品 main 输出的 classpath 上编译，工作台只负责外层接入。场景使用 UiInputScope、UiInputRouter 和 UiModalStack；模态切换取消持续交互，返回编辑器时重建屏幕并复用有效工作区。
 
 `FormView.layoutNodes` 保留字段作用域；CardListControl 导出卡片及子控件，UiCatalogGrid 导出当前可见目录行，RuleNameInput 导出真实文本框。自动化定位使用实际层级和几何。工作台组件状态在同一页面可见、可滚动、可重置，详见 [GUI 探针](../guides/gui-probes.md)。
 
@@ -259,7 +263,7 @@ flowchart LR
 - **新增编辑分区或结果分区动作**：在 `RuleEditorEditSections.EditSection` 增加常量并实现对应分区；面板装配放 `RuleEditorPanelFactory`。页面共享的布局常量（页内留白、行高、表单与对话框的按钮高度）、`UI` 文案前缀与 2 个存在条件叶类型 id 收在 `RuleEditorPageSupport`，3 个页描述符 id 由 `BuiltinEditorDescriptors` 提供；`RuleEditorPageSupport` 不持有界面状态、不装配控件；同一层的业务助手按关注点分开：`PresenceLeaves` 管存在条件叶的构造、扫描与增删，`CatalystQuantities` 管催化剂数量表对账，`EditorQuantityBindings` 管共享数量与存在条件写回；规则结构与严格值读取由 `client/edit` 的 `ResultStructure`、`RuleValue` 提供。
 - **新增行尾动作**：`UiButton` 配 `FormField#addAction` 挂到某个字段行；动作按钮不进入表单字段，读写模型而非草稿 JSON，需要参与保存时在变更集组装处接线。
 - **新增主题**：实现 `UiHostTheme`（它本身就是 kit `UiStyleSource` 的宿主侧入口），在 `UiHostThemes` 暴露取用入口；控件经注入取色，新增皮肤只改主题实现。
-- **新增宿主控件**：实现 `UiWidget`，沿所属作用域的内容树派发输入；需要模态行为时放进 `UiModalStack`，焦点目标登记到该作用域的 `UiFocusManager`。
+- **新增宿主控件**：实现 `UiWidget`，沿所属作用域的内容树派发输入；需要模态行为时放进 `UiModalStack`，焦点由 `UiInputTarget.addFocusTargets` 贡献，作用域自动收集；普通容器使用 `UiChildren`，独立结构变更使焦点索引失效。
 - **新增调试能力**：测试规则的身份前缀、分类归属与规则体在 `DebugTestRules` 统一约定，调试页只负责批量填充与按前缀删除。
 
 ### 约束
