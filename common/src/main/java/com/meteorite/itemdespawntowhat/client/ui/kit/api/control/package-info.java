@@ -18,6 +18,7 @@
  *   <li>{@code UiScrollView}: host</li>
  *   <li>{@code UiScrollbarGeometry}: host</li>
  *   <li>{@code UiTarget}: host</li>
+ *   <li>{@code UiWidget}: host</li>
  * </ul>
  */
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.control;
