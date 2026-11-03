@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.function.BooleanSupplier;
 
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -35,7 +36,9 @@ import org.lwjgl.glfw.GLFW;
  * 弹窗本身只关心自身矩形内的绘制与命中。
  */
 public final class UiModal implements UiWidget {
-    private final UiInputScope inputScope = new UiInputScope(this);
+    private final UiOverlay overlay = new UiOverlay(this);
+    private final UiInputScope inputScope = overlay.inputScope();
+    private BooleanSupplier closeAllowed = () -> true;
 
     /**
      * 模态实例的稳定输入作用域。
@@ -121,7 +124,6 @@ public final class UiModal implements UiWidget {
     private UiModal(UiStyleSource theme, Font font) {
         this.theme = Objects.requireNonNull(theme, "theme");
         this.font = font;
-        inputScope.setFocusTargets(() -> inputScope.focus().updateTargets(registration -> addFocusTargets(registration::add)));
     }
 
     /**
@@ -168,6 +170,7 @@ public final class UiModal implements UiWidget {
      */
     public UiModal contentWidget(UiWidget widget, int height) {
         this.contentWidget = widget;
+        inputScope.invalidateFocus();
         this.contentRenderer = null;
         this.contentHeight = Math.max(0, height);
         return this;
@@ -185,6 +188,7 @@ public final class UiModal implements UiWidget {
 
     public UiModal addButton(UiButtonWidget button) {
         buttons.add(button);
+        inputScope.invalidateFocus();
         return this;
     }
 
@@ -207,8 +211,7 @@ public final class UiModal implements UiWidget {
      */
     public UiModal confirm(Component label, UiAction action) {
         UiButtonWidget button = newButton(label, UiControlRole.PRIMARY, () -> {
-            requestClose();
-            if (action != null) {
+            if (requestClose() && action != null) {
                 action.run();
             }
         });
@@ -520,6 +523,9 @@ public final class UiModal implements UiWidget {
                 button.render(graphics, font, pointer);
             }
         }
+        if (pointer.allowsTooltip() && pointer.hit() != null) {
+            pointer.hit().renderTooltip(graphics, font, theme.surfaces(), (int) pointer.x(), (int) pointer.y());
+        }
     }
 
     // ---- 输入 ----
@@ -538,12 +544,12 @@ public final class UiModal implements UiWidget {
         }
         for (int i = buttons.size() - 1; i >= 0; i--) {
             UiButtonWidget candidate = buttons.get(i);
-            if (candidate.isVisible() && candidate.mousePressed(context)) {
+            if (candidate.isVisible() && context.hits(candidate) && candidate.mousePressed(context)) {
                 return true;
             }
         }
         if (contentWidget != null) {
-            return contentWidget.mousePressed(context);
+            return context.hits(contentWidget) && contentWidget.mousePressed(context);
         }
         return true;
     }
@@ -553,15 +559,7 @@ public final class UiModal implements UiWidget {
         if (!visible) {
             return false;
         }
-        for (int i = buttons.size() - 1; i >= 0; i--) {
-            UiButtonWidget candidate = buttons.get(i);
-            if (candidate.isVisible()) {
-                candidate.mouseReleased(context);
-            }
-        }
-        if (contentWidget != null) {
-            contentWidget.mouseReleased(context);
-        }
+        if (contentWidget != null && context.hits(contentWidget)) contentWidget.mouseReleased(context);
         return true;
     }
 
@@ -626,8 +624,15 @@ public final class UiModal implements UiWidget {
     // 把自身可聚焦控件登记到焦点管理器
     /** 依视觉顺序贡献焦点目标；登记事务由作用域根统一提交。 */
     public void addFocusTargets(Consumer<UiFocusTarget> sink) {
-        if (contentWidget instanceof UiFocusTarget target && target.canFocus()) sink.accept(target);
-        for (UiButtonWidget button : buttons) if (button.canFocus()) sink.accept(button);
+        if (contentWidget != null) contentWidget.addFocusTargets(sink);
+        for (UiButtonWidget button : buttons) button.addFocusTargets(sink);
+    }
+
+    /** 内容与按钮的资格或结构变化传播到覆盖作用域。 */
+    @Override public long focusRevision() {
+        long revision = contentWidget == null ? 0 : contentWidget.focusRevision();
+        for (UiButtonWidget button : buttons) revision = 31 * revision + button.focusRevision();
+        return revision;
     }
 
     // ---- 关闭 ----
@@ -637,18 +642,26 @@ public final class UiModal implements UiWidget {
     }
 
     // 请求关闭自身
-    private void requestClose() {
-        if (closeHandler != null) {
-            closeHandler.accept(this);
-        }
+    /** 设置用户关闭政策；宿主销毁使用栈的强制移除。 */
+    public UiModal closeWhen(BooleanSupplier allowed) { closeAllowed = Objects.requireNonNull(allowed); return this; }
+
+    /** 用户关闭的唯一入口，拒绝时保持内容与焦点。 */
+    public boolean requestClose() {
+        if (closeHandler == null || !closeAllowed.getAsBoolean()) return false;
+        closeHandler.accept(this);
+        return true;
+    }
+
+    void renderOverlay(GuiGraphics graphics, UiRect screen, int depth, int mask, Runnable painter) {
+        overlay.render(graphics, screen, depth, mask, painter);
     }
     /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
     @Override
     public @Nullable UiPointerHit hitTest(double x, double y) {
-        if (!visible || !bounds.contains(x, y)) return null;
+        if (!visible) return null;
         UiPointerHit hit = UiPointerHit.topmost(x, y, buttons);
         if (hit == null && contentWidget != null && contentRect.contains(x, y)) hit = contentWidget.hitTest(x, y);
-        return hit == null ? null : hit.within(this);
+        return hit == null ? UiPointerHit.leaf(this, x, y).preservingFocus() : hit.within(this);
     }
 
 }

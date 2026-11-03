@@ -56,13 +56,14 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
     private double committed = INITIAL_VALUE;
     private UiDotGrid firstGrid;
     private UiDotGrid secondGrid;
-    private final KitScrollExample scrollExample = new KitScrollExample();
+    private final KitScrollExample scrollExample;
 
     KitShowcaseContent(Font font, UiStyleSource theme, Runnable back, Runnable nextTheme) {
         this.font = font;
         this.nextTheme = nextTheme;
         surfaces = new KitSurfacesExample(theme, font);
         this.theme = theme;
+        scrollExample = new KitScrollExample(theme);
         controls.setTheme(theme);
         navigation.setTheme(theme);
         slider.setTheme(theme, UiSliderRole.COMPACT);
@@ -96,7 +97,9 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
 
     private void openModal() {
         UiTextInput edit = new UiTextInput(theme, font, text("showcase.text"));
+        edit.setValue(text("showcase.text").getString());
         modals.push(UiModal.create(theme, font).title(text("showcase.modal")).contentWidget(edit, 40)
+                .closeWhen(() -> !edit.value().isBlank())
                 .addButton(modalButton("showcase.theme", this::themeAction))
                 .addButton(modalButton("showcase.nested", this::openModal)).cancel(text("back")));
     }
@@ -132,7 +135,7 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
         slider.setValue(INITIAL_VALUE);
     }
 
-    void addFocusTargets(Consumer<UiFocusTarget> sink) {
+    public void addFocusTargets(Consumer<UiFocusTarget> sink) {
         navigation.addFocusTargets(sink);
         if (page == Page.INPUTS) inputs.addFocusTargets(sink);
         else if (page == Page.SURFACES) surfaces.addFocusTargets(sink);
@@ -141,6 +144,8 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
             sink.accept(slider);
         }
     }
+
+    @Override public long focusRevision() { return page.ordinal() + navigation.focusRevision() + controls.focusRevision() + inputs.focusRevision(); }
 
     void layout(int width, int height) {
         bounds = new UiRect(8, 28, Math.max(0, width - 16), Math.max(0, height - 36));
@@ -228,10 +233,12 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
 
     @Override
     public boolean mousePressed(UiInputContext context) {
-        if (navigation.mousePressed(context)) return true;
+        if (context.hits(navigation)) return navigation.mousePressed(context);
         if (page == Page.INPUTS) return inputs.mousePressed(context);
         if (page == Page.SURFACES) return surfaces.mousePressed(context);
-        return scrollExample.mousePressed(context) || slider.mousePressed(context) || controls.mousePressed(context);
+        if (context.hits(scrollExample)) return scrollExample.mousePressed(context);
+        if (context.hits(slider)) return slider.mousePressed(context);
+        return context.hits(controls) && controls.mousePressed(context);
     }
 
     @Override

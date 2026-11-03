@@ -263,7 +263,7 @@ final class ConditionTreeControl extends FormControl {
     }
 
     @Override
-    void addFocusTargets(Consumer<UiFocusTarget> out) {
+    public void addFocusTargets(Consumer<UiFocusTarget> out) {
         if (fallbackRaw == null && enabled) {
             toolbar.forEach(out);
             out.accept(editor);
@@ -362,10 +362,6 @@ final class ConditionTreeControl extends FormControl {
         return contextFactory == null ? null : contextFactory.get();
     }
 
-    @Override
-    @Nullable Component tooltipAt(double x, double y) {
-        return fallbackRaw == null ? editor.tooltipAt(x, y) : null;
-    }
 
     @Override
     boolean isEditing() {

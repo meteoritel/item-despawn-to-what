@@ -15,7 +15,6 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.tree.UiTreeNavigation;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.tree.UiTreeRowMarker;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiScrollView;
@@ -474,14 +473,12 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
     @Override
     public void render(GuiGraphics graphics, Font renderFont, UiPointer incomingPointer) {
         UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
-        int mouseX = (int) pointer.x();
-        int mouseY = (int) pointer.y();
         if (!visible || bounds.width() <= 0 || bounds.height() <= 0) {
             return;
         }
         theme.drawInset(graphics, bounds);
         UiRect viewport = scrollView.viewport();
-        hoveredIndex = pointer.allowed() ? indexAt(mouseX, mouseY) : -1;
+        hoveredIndex = pointer.allowed() && pointer.hit() != null ? pointer.hit().rowIndex(this) : -1;
         if (rows.isEmpty()) {
             String empty = emptyText(renderFont, Math.max(0, viewport.width() - 8));
             graphics.drawString(renderFont, empty, viewport.x() + 4,
@@ -501,7 +498,7 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         if (isFocusVisible()) {
             theme.drawFocusOutline(graphics, bounds);
         }
-        scrollView.renderScrollbar(graphics, theme.controlStyle(UiControlRole.SECONDARY));
+        scrollView.renderScrollbar(graphics, theme);
     }
 
     // 几何不变时复用同一矩形，避免每帧分配
@@ -553,22 +550,6 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         UiTreeRowMarker.draw(graphics, x, centerY, expanded, theme.palette().textPrimary());
     }
 
-    /**
-     * 悬停行的完整文案，供宿主显示提示；窄树中被截断的文本可由此读取。
-     *
-     * 指针坐标使用 GUI 逻辑坐标。
-     * @return 完整行文案；指针不在内容区或无命中行时为 null
-     */
-    public @Nullable Component tooltipAt(double mouseX, double mouseY) {
-        if (!scrollView.containsContent(mouseX, mouseY)) {
-            return null;
-        }
-        int index = indexAt(mouseX, mouseY);
-        return index < 0 ? null : rowLabel(rows.get(index));
-    }
-
-    // 组节点用分组名（与「包成组」菜单共用 tree.node.*）与子项数，取反节点用与画布标题共用的运算符名
-    // （tree.operator.not），叶节点显示条件名与参数摘要，并附不完整 / 超限标记
     private Component rowLabel(Row row) {
         ConditionNode node = row.node();
         if (node == null) {
@@ -653,7 +634,7 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         if (scrollView.mousePressed(context)) {
             return true;
         }
-        int index = indexAt(mouseX, mouseY);
+        int index = context.hit() == null ? indexAt(mouseX, mouseY) : context.hit().rowIndex(this);
         if (index < 0) {
             // 空白处：进入画布并定位根节点
             openCanvas(ConditionTreeContract.ROOT_PATH);
@@ -747,7 +728,14 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
     public @Nullable UiPointerHit hitTest(double x, double y) {
         if (!isVisible() || !bounds().contains(x, y)) return null;
         UiPointerHit hit = scrollView.hitTest(x, y);
-        return hit != null ? hit.within(this) : UiPointerHit.leaf(this, x, y);
+        if (hit != null) return hit.within(this);
+        int index = indexAt(x, y);
+        UiPointerHit leaf = UiPointerHit.leaf(this, x, y);
+        if (index < 0) return leaf;
+        UiRect rowBounds = new UiRect(scrollView.viewport().x(), scrollView.toScreenY(index * rowHeight),
+                scrollView.contentWidth(), rowHeight);
+        return leaf.withRow(this, index, rows.get(index), rowBounds)
+                .withTextTooltip(List.of(rowLabel(rows.get(index))), bounds);
     }
 
     /** 当前输入可用状态。 */

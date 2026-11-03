@@ -116,7 +116,7 @@ final class ListControl extends FormControl {
     }
 
     @Override
-    void addFocusTargets(Consumer<UiFocusTarget> out) {
+    public void addFocusTargets(Consumer<UiFocusTarget> out) {
         out.accept(editor);
         out.accept(editor.input());
     }

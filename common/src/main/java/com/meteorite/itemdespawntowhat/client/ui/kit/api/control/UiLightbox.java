@@ -15,17 +15,19 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlStyle;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiStyleSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiMinecraftTheme;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlRole;
-
-import java.util.Map;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
 
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
-import org.jetbrains.annotations.Nullable;
 
+import java.util.Map;
 import java.util.List;
+import java.util.ArrayList;
+import java.util.function.Consumer;
 import java.util.Objects;
 
+import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
 /**
@@ -480,7 +482,7 @@ public final class UiLightbox implements UiInputTarget {
         int right = panelX + panelWidth;
         boolean withGallery = gallery != null && gallery.total() > 1;
         controls.beginUpdate();
-        focus.updateTargets(registration -> {
+        {
             UiControl close = place(font, "close", Component.literal("×"), labels.close(),
                     right - BUTTON, panelY - 2);
             UiControl previous = withGallery
@@ -495,14 +497,16 @@ public final class UiLightbox implements UiInputTarget {
             UiControl zoomOut = place(font, "zoom_out", Component.literal("−"), labels.zoomOut(),
                     surface == null ? right - BUTTON * 3 - BUTTON_GAP * 2 : right - 104, barY);
             // Tab 顺序 = 视觉顺序：关闭在右上角，其余按控制栏从左到右。
-            registration.add(close);
-            if (previous != null) registration.add(previous);
-            if (next != null) registration.add(next);
-            registration.add(zoomOut);
-            registration.add(zoomIn);
-            registration.add(fit);
+            focusOrder.clear();
+            focusOrder.add(close);
+            if (previous != null) focusOrder.add(previous);
+            if (next != null) focusOrder.add(next);
+            focusOrder.add(zoomOut);
+            focusOrder.add(zoomIn);
+            focusOrder.add(fit);
             controls.endUpdate();
-        });
+            inputScope.invalidateFocus();
+        }
         displayedZoom = Integer.MIN_VALUE;
         displayedIndex = Integer.MIN_VALUE;
         displayedTotal = Integer.MIN_VALUE;
@@ -568,13 +572,17 @@ public final class UiLightbox implements UiInputTarget {
         zoomTextWidth = font == null ? 0 : font.width(zoomText);
     }
 
+    private final List<UiFocusTarget> focusOrder = new ArrayList<>();
+    /** 灯箱控制栏使用明确的语义导航顺序。 */
+    @Override public void addFocusTargets(Consumer<UiFocusTarget> out) { focusOrder.forEach(out); }
+
     // ---------- 输入 ----------
 
     public boolean mousePressed(UiInputContext context) {
         double x = context.pointerX();
         double y = context.pointerY();
         layoutIfPossible();
-        if (controls.mousePressed(context)) return true;
+        if (context.hits(controls)) return controls.mousePressed(context);
         if (viewport.contains(x, y)) return content.mousePressed(context);
         if (maskClickCloses) onClose.run();
         return true;
@@ -618,9 +626,6 @@ public final class UiLightbox implements UiInputTarget {
         return false;
     }
 
-    public boolean charTyped(char codePoint, int modifiers) {
-        return false;
-    }
 
     // 文本默认色从结构底色反推：在近白/近黑两个候选里取 WCAG 对比度更高的一档，
     // 按当前背景亮度选择可读的文字色，适配深浅主题。
@@ -654,6 +659,7 @@ public final class UiLightbox implements UiInputTarget {
     private void layoutIfPossible() {
         if (font != null) layout(font);
     }
+
     /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
     @Override
     public @Nullable UiPointerHit hitTest(double x, double y) {
@@ -661,7 +667,7 @@ public final class UiLightbox implements UiInputTarget {
         if (hit == null && viewport.contains(x, y)) {
             hit = content.hitTest(x, y);
         }
-        return hit == null ? null : hit.within(this);
+        return hit == null ? UiPointerHit.leaf(this, x, y).preservingFocus() : hit.within(this);
     }
 
 }

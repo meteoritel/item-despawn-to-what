@@ -11,6 +11,9 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 
 import java.util.ArrayList;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiChildren;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
+import java.util.function.Consumer;
 import java.util.List;
 
 import net.minecraft.client.gui.Font;
@@ -52,7 +55,7 @@ final class RuleEditorScreenButtonBar implements UiLayoutSource, UiInputTarget {
     private final int buttonHeight;
     private final int gap;
     private final boolean fillRow;
-    private final List<UiButton> buttons = new ArrayList<>();
+    private final UiChildren<UiButton> buttons = new UiChildren<>();
 
     RuleEditorScreenButtonBar() {
         this(DEFAULT_BUTTON_H, DEFAULT_GAP, false);
@@ -179,28 +182,14 @@ final class RuleEditorScreenButtonBar implements UiLayoutSource, UiInputTarget {
         return nodes;
     }
 
-    public boolean mousePressed(UiInputContext context) {
-        for (UiButton candidate : buttons) {
-            if (candidate.isVisible() && candidate.mousePressed(context)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    public boolean mouseReleased(UiInputContext context) {
-        boolean consumed = false;
-        for (UiButton candidate : buttons) {
-            if (candidate.isVisible()) {
-                consumed |= candidate.mouseReleased(context);
-            }
-        }
-        return consumed;
-    }
+    @Override public void addFocusTargets(Consumer<UiFocusTarget> out) { buttons.addFocusTargets(out); }
+    @Override public long focusRevision() { return buttons.focusRevision(); }
+    public boolean mousePressed(UiInputContext context) { return buttons.mousePressed(context); }
     /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
     @Override
     public @Nullable UiPointerHit hitTest(double x, double y) {
-        return UiPointerHit.topmost(x, y, buttons);
+        UiPointerHit hit = buttons.hitTest(x, y);
+        return hit == null ? null : hit.within(this);
     }
 
 }

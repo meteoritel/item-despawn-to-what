@@ -17,7 +17,6 @@ import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
@@ -155,7 +154,7 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
         } finally {
             scroll.pop(graphics);
         }
-        scroll.renderScrollbar(graphics, THEME.controlStyle(UiControlRole.SECONDARY));
+        scroll.renderScrollbar(graphics, THEME);
     }
 
     @Override
@@ -323,7 +322,7 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
     }
 
     @Override
-    void addFocusTargets(Consumer<UiFocusTarget> targets) {
+    public void addFocusTargets(Consumer<UiFocusTarget> targets) {
         targets.accept(this);
     }
 

@@ -12,6 +12,7 @@
  *   <li>{@code UiTextEditSession}: library；用途：自定义原版文本 adapter 的编辑与历史会话；当前无直接生产引用；kit 内控件复用</li>
  *   <li>{@code UiTextHistory}: library；用途：自定义文本模型的有界局部历史与快照；当前无直接生产引用；kit 内控件复用</li>
  *   <li>{@code UiTextSelection}: library；用途：为自定义文本模型提供独立指针选择；UiTextEditSession 通过组合持有，公开方法不返回该实现实例；当前无直接生产引用</li>
+ *   <li>{@code UiSingleLineEditor}: library；用途：自定义单行文本 adapter 与数值组合共用提交、取消和交互结束契约；当前无直接生产引用</li>
  *   <li>{@code UiTextValue}: host</li>
  * </ul>
  */

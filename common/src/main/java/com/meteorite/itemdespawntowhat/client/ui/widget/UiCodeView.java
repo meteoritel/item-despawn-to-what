@@ -327,44 +327,42 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
         int innerWidth = innerWidth();
         int innerHeight = innerHeight();
         int gutter = gutterWidth();
-        int codeX = innerX + gutter;
         int rowHeight = font.lineHeight;
         ensureRows(Math.max(1, innerWidth - gutter));
-        graphics.enableScissor(innerX, innerY, innerX + innerWidth + SCROLLBAR_WIDTH, innerY + innerHeight);
+        if (gutter > 0) {
+            int lineX = innerX + gutter - GUTTER_GAP + 1;
+            graphics.fill(lineX, innerY, lineX + 1, innerY + innerHeight, theme.palette().codeGutterLine());
+        }
+        scroll.push(graphics, new UiRect(innerX, innerY, innerWidth + SCROLLBAR_WIDTH, innerHeight));
         try {
-            if (gutter > 0) {
-                int lineX = innerX + gutter - GUTTER_GAP + 1;
-                graphics.fill(lineX, innerY, lineX + 1, innerY + innerHeight, theme.palette().codeGutterLine());
-            }
             if (rows.isEmpty()) {
                 if (emptyHint != null) {
-                    graphics.drawString(renderFont, emptyHint, innerX, innerY, theme.palette().codeGutterText(), false);
+                    graphics.drawString(renderFont, emptyHint, 0, 0, theme.palette().codeGutterText(), false);
                 }
             } else {
-                renderRows(graphics, renderFont, innerX, codeX, innerY, innerWidth, rowHeight);
+                renderRows(graphics, font, gutter, innerWidth, rowHeight);
             }
         } finally {
-            graphics.disableScissor();
+            scroll.pop(graphics);
         }
-        renderScrollbar(graphics);
+        scroll.renderScrollbar(graphics, theme);
         if (isFocusVisible()) {
             theme.drawFocusOutline(graphics, bounds);
         }
     }
 
     // 只绘制可视区内的行
-    private void renderRows(GuiGraphics graphics, Font renderFont, int innerX, int codeX, int innerY,
-                            int innerWidth, int rowHeight) {
+    private void renderRows(GuiGraphics graphics, Font renderFont, int codeX, int innerWidth, int rowHeight) {
         int first = Math.max(0, scroll.offset() / rowHeight);
         int last = Math.min(rows.size(), first + innerHeight() / rowHeight + 2);
         int gutter = gutterWidth();
         for (int index = first; index < last; index++) {
             Row row = rows.get(index);
-            int y = innerY + index * rowHeight - scroll.offset();
+            int y = index * rowHeight;
             Section section = sections.get(row.section);
             switch (row.kind) {
                 case TITLE, DETAIL -> {
-                    graphics.fill(innerX, y, innerX + innerWidth, y + rowHeight, theme.palette().codeSectionFill());
+                    graphics.fill(0, y, innerWidth, y + rowHeight, theme.palette().codeSectionFill());
                     Component line = row.kind == RowKind.TITLE ? section.title() : section.detail();
                     if (line == null) {
                         continue;
@@ -387,13 +385,6 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
                 }
             }
         }
-    }
-
-    // 内容超出可视高度时在右侧绘制滚动条
-    private void renderScrollbar(GuiGraphics graphics) {
-        if (!scroll.isScrollbarVisible()) return;
-        theme.drawScrollTrack(graphics, scroll.scrollbarTrack());
-        theme.drawScrollThumb(graphics, scroll.scrollbarThumb());
     }
 
     // ---- 输入 ----

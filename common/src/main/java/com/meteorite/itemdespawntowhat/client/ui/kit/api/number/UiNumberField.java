@@ -7,7 +7,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.UiTextValue;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.UiSingleLineEditor;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import net.minecraft.client.gui.Font;
@@ -19,24 +19,12 @@ import org.jetbrains.annotations.Nullable;
  * 合法域、显示窗口与解析由调用方装配，字段空值和提交业务通过回调注入。
  */
 public final class UiNumberField implements UiWidget {
-    /** 单行编辑端口；原版编辑模型与主题由宿主实现。 */
-    public interface Editor extends UiWidget, UiTextValue {
-        /** 设置单行 Enter 提交通知。 */
-        Editor setOnCommit(Consumer<String> listener);
-
-        /** 设置 Esc 取消通知。 */
-        Editor setOnCancel(Runnable listener);
-
-        /** 设置文本会话结束通知。 */
-        Editor setOnInteractionEnd(@Nullable Consumer<UiInteractionSession.EndReason> listener);
-    }
-
     /** 轨道和编辑框之间的间距，以及极窄布局中轨道的最小宽度。 */
     public record Metrics(int gap, int minimumSliderWidth) {
     }
 
     private final UiScalarSlider slider;
-    private final Editor editor;
+    private final UiSingleLineEditor editor;
     private final UiValueTextBinding<Double, String> binding;
     private final Function<String, @Nullable Double> parse;
     private final Runnable beforeTextCommit;
@@ -50,7 +38,7 @@ public final class UiNumberField implements UiWidget {
      * 注入实际子控件及转换；emptyPreview 为空时空串保持解析失败，emptyCommitted 为空时无缺席提交通道。
      * beforeTextCommit 只记录显式提交意图，committed 负责一次成功数值操作的宿主通知。
      */
-    public UiNumberField(UiScalarSlider slider, Editor editor, Function<String, @Nullable Double> parse,
+    public UiNumberField(UiScalarSlider slider, UiSingleLineEditor editor, Function<String, @Nullable Double> parse,
                           Function<Double, String> format, Runnable committed, Runnable beforeTextCommit,
                           @Nullable Double emptyPreview, @Nullable Runnable emptyCommitted, Metrics metrics) {
         this.slider = slider;

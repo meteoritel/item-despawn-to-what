@@ -124,7 +124,6 @@ final class EditorShell {
             var scope = current.inputScope();
             scope.setHistory(editPage::restoreHistory);
             scope.setEscape(this::escape);
-            scope.setFocusTargets(() -> scope.focus().updateTargets(registration -> current.addFocusTargets(registration::add)));
             UiFocusManager manager = scope.focus();
             manager.setListener(UiFocusManager.Listener.compose(
                     (previous, next) -> editPage.ensureVisible(next),
@@ -353,9 +352,10 @@ final class EditorShell {
     }
 
     void rebuildFocus() {
+        activePage().inputScope().invalidateFocus();
         inputChanged.run();
+        activePage().inputScope().refreshFocus();
         UiFocusManager manager = focus();
-        manager.updateTargets(registration -> activePage().addFocusTargets(registration::add));
         if (manager.focused() == null) manager.focusFirst();
     }
 

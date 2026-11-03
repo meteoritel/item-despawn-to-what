@@ -6,7 +6,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiTransform;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlStyle;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiStyleSource;
 
 import java.util.OptionalDouble;
 
@@ -17,7 +17,7 @@ import net.minecraft.client.gui.GuiGraphics;
  *
  * <p>坐标口径：视口矩形使用宿主 GUI 逻辑坐标，与 {@link UiControl} 的矩形同坐标系。绘制内容前调用
  * {@link #push(GuiGraphics)} 进入内容坐标——原点在内容顶部左对齐（x 与视口左边界对齐）；绘制后调用
- * {@link #pop(GuiGraphics)} 返回宿主坐标，再由宿主调用 {@link #renderScrollbar(GuiGraphics, UiControlStyle)}。
+ * {@link #pop(GuiGraphics)} 返回宿主坐标，再由宿主调用 {@link #renderScrollbar(GuiGraphics, UiStyleSource)}。
  * 命中走同一套换算：{@link #toContentX(double)} / {@link #toContentY(double)} 把屏幕坐标换成内容坐标，
  * 交给 {@link UiControlGroup} 使用。</p>
  *
@@ -183,8 +183,13 @@ public final class UiScrollView implements UiInteractionSession.Target {
 
     // 进入内容坐标：先 flush 已有顶点，再按当前 pose 设置视口裁剪，最后平移。
     public void push(GuiGraphics graphics) {
+        push(graphics, viewport);
+    }
+
+    /** 使用独立裁剪范围进入内容坐标，偏移与坐标换算仍由同一视口持有。 */
+    public void push(GuiGraphics graphics, UiRect clip) {
         graphics.flush();
-        UiTransform.enableScissor(graphics, viewport);
+        UiTransform.enableScissor(graphics, clip);
         graphics.pose().pushPose();
         graphics.pose().translate(viewport.x(), viewport.y() - offset, 0.0F);
     }
@@ -302,14 +307,11 @@ public final class UiScrollView implements UiInteractionSession.Target {
     public void interactionEnded(UiInteractionSession.EndReason reason) {
     }
 
-    // 滚动条画在视口右侧；宿主在 pop() 之后调用，结构色取自传入样式。
-    public void renderScrollbar(GuiGraphics graphics, UiControlStyle style) {
+    /** 在宿主坐标绘制轨道与滑块，几何与主题 painter 均由共同入口管理。 */
+    public void renderScrollbar(GuiGraphics graphics, UiStyleSource theme) {
         if (!isScrollbarVisible()) return;
-        UiRect track = scrollbarTrack();
-        graphics.fill(track.x(), track.y(), track.right(), track.bottom(), style.scrollbarTrack());
-        int top = thumbTop();
-        graphics.fill(track.x(), top, track.right(), Math.min(track.bottom(), top + thumbHeight()),
-                style.scrollbarThumb());
+        theme.drawScrollTrack(graphics, scrollbarTrack());
+        theme.drawScrollThumb(graphics, scrollbarThumb());
     }
 
     // ---------- 内部几何 ----------

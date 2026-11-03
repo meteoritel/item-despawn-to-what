@@ -101,7 +101,7 @@ final class KitSurfacesExample implements UiWidget, UiLayoutSource {
                 new UiNode.Frame(new UiNode.FrameSpec(150, 42, theme.surfaces().panelBorder(), new UiTransform()),
                         List.of(new UiNode.Row(label("doc.child"), theme.textColor(true))))));
     }
-    void addFocusTargets(Consumer<UiFocusTarget> sink) { actions.addFocusTargets(sink); }
+    public void addFocusTargets(Consumer<UiFocusTarget> sink) { actions.addFocusTargets(sink); }
     @Nullable UiInputScope overlayScope() { return imageOpen ? lightbox.inputScope() : null; }
     private void closeImage() { imageOpen = false; lightbox.onClosed(); }
     void invalidateResources() { document.invalidateLayout(); unprofiled.invalidateLayout(); lightbox.invalidateResources(); }

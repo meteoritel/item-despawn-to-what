@@ -69,7 +69,7 @@ final class BoolControl extends FormControl {
     }
 
     @Override
-    void addFocusTargets(Consumer<UiFocusTarget> out) {
+    public void addFocusTargets(Consumer<UiFocusTarget> out) {
         out.accept(checkBox);
     }
 

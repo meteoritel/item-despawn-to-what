@@ -477,18 +477,6 @@ final class CardListControl extends FormControl implements UiLayoutSource {
 
     // 悬停提示给出完整注册名：显示名可能被同名资源混淆，完整 id 只在悬停时出现
     @Override
-    @Nullable Component tooltipAt(double x, double y) {
-        for (Entry entry : entries) {
-            if (entry.reference != null && !entry.reference.isBlank() && entry.choice.bounds().contains(x, y)) {
-                return Component.literal(entry.reference);
-            }
-        }
-        return null;
-    }
-
-    // ---- 输入转发 ----
-
-    @Override
     public boolean mousePressed(UiInputContext context) {
         if (addButton.mousePressed(context)) {
             return true;
@@ -564,7 +552,7 @@ final class CardListControl extends FormControl implements UiLayoutSource {
     }
 
     @Override
-    void addFocusTargets(Consumer<UiFocusTarget> out) {
+    public void addFocusTargets(Consumer<UiFocusTarget> out) {
         out.accept(addButton);
         for (Entry entry : entries) {
             out.accept(entry.choice);
@@ -683,7 +671,11 @@ final class CardListControl extends FormControl implements UiLayoutSource {
             Entry entry = entries.get(i);
             UiPointerHit hit = UiPointerHit.topmost(x, y, entry.values);
             if (hit == null) hit = UiPointerHit.first(x, y, entry.remove, entry.choice);
-            if (hit != null) return hit.within(this);
+            if (hit != null) {
+                if (hit.owns(entry.choice) && entry.reference != null && !entry.reference.isBlank())
+                    hit = hit.withTextTooltip(List.of(Component.literal(entry.reference)), entry.choice.bounds());
+                return hit.within(this);
+            }
         }
         UiPointerHit hit = addButton.hitTest(x, y);
         return hit == null ? null : hit.within(this);

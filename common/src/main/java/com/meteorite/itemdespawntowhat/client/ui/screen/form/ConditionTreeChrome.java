@@ -12,7 +12,6 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiTarget;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiConditionGraphEditor;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 
@@ -63,10 +62,7 @@ final class ConditionTreeChrome {
         }
 
         // 取当前指针下的格子提示；kit 只提供 hit，绘制由外壳负责
-        @Nullable Component tooltipAt(double x, double y) {
-            UiTarget target = strip.hit(x, y);
-            return target == null || target.tooltip().isEmpty() ? null : target.tooltip().getFirst();
-        }
+
 
         @Override
         public UiRect bounds() {
@@ -181,10 +177,6 @@ final class ConditionTreeChrome {
         }
         private final LeafPanel panel;
         private final FormView form;
-        // 当前帧鼠标下的字段提示（校验问题优先）：内联框契约没有 tooltip 通道，
-        // 由适配器在 GUI 屏幕坐标下缓存，外壳随后绘制
-        private @Nullable Component hoverTooltip;
-
         Inline(LeafPanel panel, FormView form) {
             this.panel = panel;
             this.form = form;
@@ -193,9 +185,7 @@ final class ConditionTreeChrome {
         /**
          * 当前帧鼠标所在字段的提示；指针不在表单上或本帧未渲染时为 null。
          */
-        @Nullable Component hoverTooltip() {
-            return hoverTooltip;
-        }
+
 
         @Override
         public int preferredHeight(int width) {
@@ -219,9 +209,6 @@ final class ConditionTreeChrome {
         @Override
         public void render(GuiGraphics graphics, Font font, UiPointer incomingPointer) {
             UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
-            int mouseX = (int) pointer.x();
-            int mouseY = (int) pointer.y();
-            hoverTooltip = pointer.allowsTooltip() ? form.tooltipAt(mouseX, mouseY) : null;
             panel.render(graphics, font, pointer);
         }
 

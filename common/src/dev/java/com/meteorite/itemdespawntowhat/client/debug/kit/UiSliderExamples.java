@@ -27,16 +27,11 @@ import net.minecraft.network.chat.Component;
  * <p>三个示例只演示 kit 自身的装配与事件顺序，不涉及任何业务字段、不读取存档、配置或世界时间：
  * 宿主把示例里的标签换成自己的本地化 key、把回调接到自己的状态上即可。</p>
  *
- * <p>宿主为内容创建稳定的 {@link UiInputScope}，将实际焦点目标登记到该作用域，
+ * <p>宿主为内容创建稳定的 {@link UiInputScope}，由作用域从内容树自动收集实际焦点目标，
  * 再通过 {@link UiInputRouter#select(UiInputScope)} 选择活动作用域。指针事件携带同一个作用域，
  * 拖动、释放与键盘事件全部交给路由器；路由器负责会话匹配、Tab 完成、Esc 取消和作用域切换收尾。</p>
  * <pre>{@code
  * UiInputScope scope = new UiInputScope(slider);
- * scope.setFocusTargets(() -> {
- *     scope.focus().updateTargets(registration -> {
- *     registration.add(slider);
- *     });
- * });
  * scope.refreshFocus();
  * UiInputRouter input = new UiInputRouter();
  * input.select(scope);
@@ -47,7 +42,7 @@ import net.minecraft.network.chat.Component;
  * input.keyReleased(GLFW.GLFW_KEY_LEFT, 0, modifiers);
  * input.close();
  * }</pre>
- * <p>控件隐藏、禁用由控件入口取消；内容重建时刷新焦点登记，并对卸载子树调用
+ * <p>控件隐藏、禁用由控件入口取消；内容结构变更时使焦点索引失效，并对卸载子树调用
  * {@code endInteraction(EndReason.UNMOUNTED)}。关屏调用 {@link UiInputRouter#close()}，
  * 作用域切换只调用 {@code select}，无需遍历控件模拟释放。</p>
  */

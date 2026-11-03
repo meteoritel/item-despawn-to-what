@@ -228,9 +228,6 @@ abstract class FormControl implements UiInputTarget {
     }
 
     // 复合控件可按当前命中条目提供提示，注册名只在悬停时显示。
-    @Nullable Component tooltipAt(double x, double y) {
-        return null;
-    }
 
     // 本地校验问题清单
     List<FormIssue> issues(String path) {
@@ -288,7 +285,7 @@ abstract class FormControl implements UiInputTarget {
         return false;
     }
 
-    void addFocusTargets(Consumer<UiFocusTarget> out) {
+    public void addFocusTargets(Consumer<UiFocusTarget> out) {
     }
 
     void setEnabled(boolean enabled) {

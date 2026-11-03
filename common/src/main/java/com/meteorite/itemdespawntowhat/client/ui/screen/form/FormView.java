@@ -191,6 +191,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
     public List<FormField> setDescriptor(TypeEditorDescriptor descriptor) {
         unmount();
         rows.clear();
+        focusRevision++;
         fields.clear();
         fieldHandles.clear();
         List<FormField> handles = new ArrayList<>();
@@ -256,6 +257,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
     void setRowVisible(FormRow row, boolean visible) {
         if (row.visible == visible) return;
         row.visible = visible;
+        focusRevision++;
         if (!visible) {
             row.control.endInteractions(UiInteractionSession.EndReason.HIDDEN);
             List<UiFocusTarget> targets = new ArrayList<>();
@@ -772,7 +774,12 @@ public final class FormView implements UiWidget, UiLayoutSource {
         return list;
     }
 
-    void addFocusTargets(Consumer<UiFocusTarget> out) {
+    private long focusRevision;
+
+    @Override public long focusRevision() { return focusRevision + UiWidget.super.focusRevision(); }
+
+    public void addFocusTargets(Consumer<UiFocusTarget> out) {
+        if (!visible) return;
         for (FormRow row : rows) {
             if (!row.visible) continue;
             row.control.addFocusTargets(out);
@@ -1024,20 +1031,9 @@ public final class FormView implements UiWidget, UiLayoutSource {
             graphics.disableScissor();
         }
         if (scroll.isScrollbarVisible()) {
-            THEME.drawScrollTrack(graphics, scroll.scrollbarTrack());
-            THEME.drawScrollThumb(graphics, scroll.scrollbarThumb());
+            scroll.renderScrollbar(graphics, THEME);
         }
     }
-
-    /**
-     * 鼠标位置下的提示：优先显示该字段的校验问题，其次显示字段提示
-     */
-    public @Nullable Component tooltipAt(double mouseX, double mouseY) {
-        return FormRowRenderer.tooltipAt(mouseX, mouseY, font, rows, viewportX, viewportY, viewportWidth,
-                viewportHeight, scroll.offset());
-    }
-
-    // ---- 输入分发薄封装：实现集中在 FormInputRouter ----
 
     @Override
     public boolean mousePressed(UiInputContext context) {
@@ -1080,15 +1076,23 @@ public final class FormView implements UiWidget, UiLayoutSource {
             UiPointerHit hit = UiPointerHit.topmost(x, y, row.actions);
             if (hit == null) hit = UiPointerHit.topmost(x, y, row.pickers);
             if (hit == null) hit = row.control.hitTest(x, y);
-            if (hit != null) return hit.within(this);
+            if (hit != null) return rowHit(row, index, hit);
             int screenY = rowScreenY(row);
             int labelHeight = row.narrow ? font.lineHeight : row.contentHeight;
             int labelWidth = row.field.isNote() || row.narrow ? row.controlWidth : row.labelWidth;
             if ((row.labelShown || row.field.isNote()) && x < viewportX + labelWidth
                     && y >= screenY && y < screenY + labelHeight)
-                return UiPointerHit.leaf(this, x, y).preservingFocus();
+                return rowHit(row, index, UiPointerHit.leaf(this, x, y).preservingFocus());
         }
         return null;
+    }
+
+    private UiPointerHit rowHit(FormRow row, int index, UiPointerHit hit) {
+        UiRect rect = new UiRect(viewportX, rowScreenY(row), row.controlRelX + row.controlWidth, row.contentHeight);
+        boolean childTooltip = hit.presentation() != null || hit.tooltip() != null && !hit.tooltip().tooltip().isEmpty();
+        Component tip = FormRowRenderer.tooltip(row, font, childTooltip);
+        if (tip != null) hit = hit.withPresentation(null).withTextTooltip(List.of(tip), rect);
+        return hit.withRow(this, index, row.path, rect).within(this);
     }
 
 }

@@ -15,7 +15,6 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiFlatText;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
@@ -181,7 +180,6 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
     private static final int SCROLLBAR_GRAB_MARGIN = 3;
     private static final int MIN_SCROLL_THUMB = 8;
     // 悬停提示的换行宽度：超过就折行，避免一条横穿整屏
-    private static final int TOOLTIP_MAX_WIDTH = 240;
     // 状态块之间的分隔符
     private static final String STATUS_SEPARATOR = "  ·  ";
     // 翻页按钮之间的间距
@@ -695,8 +693,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
     }
 
     // 每帧推进悬停行与名称滚动计时，指针换行立刻回到起点
-    private void indexAt(double mouseX, double mouseY) {
-        int index = cellIndexAt(mouseX, mouseY);
+    private void updateHoverIndex(int index) {
         if (index != hoveredIndex) {
             hoveredIndex = index;
             hoverScrollTicks = 0;
@@ -733,15 +730,12 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
     public void render(GuiGraphics graphics, Font renderFont, UiPointer incomingPointer) {
         syncView();
         UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
-        int mouseX = (int) pointer.x();
-        int mouseY = (int) pointer.y();
         prepareIcons();
-        if (pointer.allowed()) indexAt(mouseX, mouseY);
+        if (pointer.allowed()) updateHoverIndex(pointer.hit() == null ? -1 : pointer.hit().rowIndex(this));
         else { hoveredIndex = -1; hoverScrollTicks = 0; }
         drawToolbar(graphics, pointer);
         drawList(graphics);
         drawFooter(graphics, pointer);
-        renderTooltip(graphics, pointer);
     }
 
     private void prepareIcons() {
@@ -755,18 +749,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         }
     }
 
-    // 悬停提示按行交给原版：单个 Component 的 renderTooltip 重载不处理换行
-    private void renderTooltip(GuiGraphics graphics, UiPointer pointer) {
-        int mouseX = (int) pointer.x();
-        int mouseY = (int) pointer.y();
-        if (!pointer.allowsTooltip()) return;
-        List<Component> lines = tooltipLines(mouseX, mouseY);
-        if (lines.isEmpty()) {
-            return;
-        }
-        UiFlatText.componentTooltip(graphics, font, new UiRect(0, 0, graphics.guiWidth(), graphics.guiHeight()),
-                lines, TOOLTIP_MAX_WIDTH, mouseX, mouseY, theme.surfaces());
-    }
+
 
     private void drawToolbar(GuiGraphics graphics, UiPointer pointer) {
         search.render(graphics, font, pointer);
@@ -905,8 +888,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
 
     private void drawScrollbar(GuiGraphics graphics) {
         if (!scroll.isScrollbarVisible()) return;
-        theme.drawScrollTrack(graphics, scroll.scrollbarTrack());
-        theme.drawScrollThumb(graphics, scroll.scrollbarThumb());
+        scroll.renderScrollbar(graphics, theme);
     }
 
     private void drawFooter(GuiGraphics graphics, UiPointer pointer) {
@@ -1116,7 +1098,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
             listener.onPageChange(1);
             return true;
         }
-        int hit = cellIndexAt(mouseX, mouseY);
+        int hit = context.hit() == null ? cellIndexAt(mouseX, mouseY) : context.hit().rowIndex(this);
         if (hit >= 0) {
             searchActive = false;
             search.focusState().clear();
@@ -1282,7 +1264,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
     }
 
     // 悬停提示的每一行：条目只给显示名与注册名，宿主附加说明（标签成员、预览不可用）另起一行
-    private List<Component> tooltipLines(double mouseX, double mouseY) {
+    private List<Component> tooltipLines(int hit, double mouseX, double mouseY) {
         if (policy != null && policy.scoped() && scopeRect.contains(mouseX, mouseY)) {
             return List.of(scopeText(scope));
         }
@@ -1295,7 +1277,6 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         if (canClear() && clearRect.contains(mouseX, mouseY)) {
             return List.of(texts.clear());
         }
-        int hit = cellIndexAt(mouseX, mouseY);
         if (hit < 0) {
             return List.of();
         }
@@ -1323,6 +1304,14 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
             if (hit != null) return hit.within(this).preservingFocus();
         }
         UiPointerHit hit = UiPointerHit.leaf(this, x, y);
+        int index = cellIndexAt(x, y);
+        if (index >= 0) {
+            int columns = columns();
+            UiRect cell = new UiRect(cellsRect.x() + index % columns * columnWidth(),
+                    cellsRect.y() + (index / columns - firstVisibleRow()) * ROW_HEIGHT, columnWidth(), ROW_HEIGHT);
+            hit = hit.withRow(this, index, entries.get(index).id(), cell);
+        }
+        hit = hit.withTextTooltip(tooltipLines(index, x, y), bounds);
         return scopeRect.contains(x, y) ? hit.preservingFocus() : hit;
     }
 

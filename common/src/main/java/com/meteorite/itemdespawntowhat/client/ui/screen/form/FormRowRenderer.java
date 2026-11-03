@@ -78,51 +78,23 @@ final class FormRowRenderer {
         graphics.drawString(font, trimmed, viewportX, screenY + 1, theme.palette().textSecondary(), false);
     }
 
-    // 滚动条：轨道固定，滑块按内容比高
-    // 鼠标位置下的提示：说明行给完整说明，其它行优先显示校验问题，其次字段提示与完整标签
-    static @Nullable Component tooltipAt(double mouseX, double mouseY, Font font, List<FormRow> rows,
-                                         int viewportX, int viewportY, int viewportWidth, int viewportHeight,
-                                         int scrollOffset) {
-        boolean inside = mouseX >= viewportX && mouseX < viewportX + viewportWidth
-                && mouseY >= viewportY && mouseY < viewportY + viewportHeight;
-        if (!inside) {
-            return null;
+    // 已命中字段行的提示：说明行给完整说明，其它行优先显示校验问题，其次字段提示与完整标签
+    static @Nullable Component tooltip(FormRow row, Font font, boolean childTooltip) {
+        if (!row.tooltipEnabled) return null;
+        if (row.field.isNote()) {
+            Component note = ((NoteControl) row.control).note();
+            return font.width(note) > row.controlWidth ? note : null;
         }
-        for (FormRow row : rows) {
-            if (!row.visible || !row.tooltipEnabled) continue;
-            int screenY = viewportY + row.contentY - scrollOffset;
-            // 与 UiRect.contains 同口径的半开区间，直接用整数比较，避免逐行创建矩形对象
-            int rowRight = viewportX + row.controlWidth + row.controlRelX;
-            int rowBottom = screenY + row.contentHeight;
-            if (mouseX < viewportX || mouseX >= rowRight || mouseY < screenY || mouseY >= rowBottom) {
-                continue;
-            }
-            if (row.field.isNote()) {
-                // 说明行按整行宽绘制，被裁剪时给出完整说明；它不参与校验问题与字段提示
-                Component note = ((NoteControl) row.control).note();
-                return font.width(note) > row.controlWidth ? note : null;
-            }
-            Component inline = inlineMessage(row.control.issues(row.path));
-            if (inline != null) {
-                return inline;
-            }
-            Component itemTip = row.control.tooltipAt(mouseX, mouseY);
-            if (itemTip != null) return itemTip;
-            Component full = row.control.fullText();
-            if (full != null && font.width(full) > row.controlWidth - TEXT_SLACK) {
-                return full;
-            }
-            // 标签被裁剪时的通道：行内控件与窄布局同样适用，可用宽度按实际绘制宽度取
-            int labelRoom = row.narrow ? row.controlWidth : row.labelWidth;
-            if (row.labelShown && labelRoom > 0 && font.width(row.control.label()) > labelRoom) {
-                return row.control.label();
-            }
-            return row.hintTooltipEnabled ? row.control.hint() : null;
-        }
-        return null;
+        Component issue = inlineMessage(row.control.issues(row.path));
+        if (issue != null) return issue;
+        if (childTooltip) return null;
+        Component full = row.control.fullText();
+        if (full != null && font.width(full) > row.controlWidth - TEXT_SLACK) return full;
+        int labelRoom = row.narrow ? row.controlWidth : row.labelWidth;
+        if (row.labelShown && labelRoom > 0 && font.width(row.control.label()) > labelRoom) return row.control.label();
+        return row.hintTooltipEnabled ? row.control.hint() : null;
     }
 
-    // 行内可重复文案的问题文案：必填缺值已由红色警示与角标表达，不进入行内文案与悬停提示
     private static @Nullable Component inlineMessage(List<FormIssue> issues) {
         for (FormIssue issue : issues) {
             if (!issue.missingRequired()) return issue.message();

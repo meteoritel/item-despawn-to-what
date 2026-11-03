@@ -9,6 +9,7 @@ import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 import java.util.ArrayList;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiChildren;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Supplier;
@@ -23,7 +24,7 @@ final class EditorSectionContent {
     private static final int HEADER_TITLE_GAP = 4;
     private static final int HEADER_DIVIDER_GAP = 5;
     private final Font font;
-    final List<UiWidget> widgets = new ArrayList<>();
+    final UiChildren<UiWidget> widgets = new UiChildren<>();
     final List<FormView> forms = new ArrayList<>();
     final List<UiButton> buttons = new ArrayList<>();
     final List<UiButton> candidateButtons = new ArrayList<>();

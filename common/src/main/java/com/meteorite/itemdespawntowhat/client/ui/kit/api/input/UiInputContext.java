@@ -13,7 +13,23 @@ import org.lwjgl.glfw.GLFW;
  * 指针坐标为 GUI 逻辑坐标；{@link #button()} 为 GLFW 鼠标键编号，键盘或程序化调用可传 {@code -1}。</p>
  */
 public record UiInputContext(UiInputScope scope, double pointerX, double pointerY, int button,
-                             boolean shift, boolean ctrl, boolean alt) {
+                             boolean shift, boolean ctrl, boolean alt, UiPointerHit hit) {
+
+    /** 创建尚未解析命中的事件；路由入口负责解析一次。 */
+    public UiInputContext(UiInputScope scope, double pointerX, double pointerY, int button,
+                          boolean shift, boolean ctrl, boolean alt) {
+        this(scope, pointerX, pointerY, button, shift, ctrl, alt, null);
+    }
+
+    /** 保留事件参数，附上当前布局解析出的唯一命中。 */
+    public UiInputContext withHit(UiPointerHit hit) {
+        return new UiInputContext(scope, pointerX, pointerY, button, shift, ctrl, alt, hit);
+    }
+
+    /** 已有快照时按归属判断；直接调用控件时允许在入口解析。 */
+    public boolean hits(UiInputTarget target) {
+        return hit == null ? target.hitTest(pointerX, pointerY) != null : hit.owns(target);
+    }
 
     /**
      * 空上下文：键盘事件或程序化调用没有指针信息时使用。
@@ -49,7 +65,7 @@ public record UiInputContext(UiInputScope scope, double pointerX, double pointer
      * 保留按键与修饰键，替换指针坐标
      */
     public UiInputContext withPointer(double pointerX, double pointerY) {
-        return new UiInputContext(scope, pointerX, pointerY, button, shift, ctrl, alt);
+        return new UiInputContext(scope, pointerX, pointerY, button, shift, ctrl, alt, hit);
     }
 
     /**

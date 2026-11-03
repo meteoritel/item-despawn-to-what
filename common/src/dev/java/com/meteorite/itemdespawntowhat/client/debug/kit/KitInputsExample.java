@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.IntStream;
 import java.util.function.Consumer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiChildren;
 
 /** 文本、数值与泛型列表只依赖 kit、原版类型和本地值。 */
 final class KitInputsExample implements UiWidget, UiLayoutSource {
@@ -35,7 +36,7 @@ final class KitInputsExample implements UiWidget, UiLayoutSource {
     private final UiScalarSlider slider = new UiScalarSlider(UiNumberPolicy.of(0, 100, 1, 0.1));
     private final UiNumberField number;
     private final UiListView<Component> list;
-    private final List<UiWidget> widgets;
+    private final UiChildren<UiWidget> widgets = new UiChildren<>();
     private final UiLinearLayout columns = new UiLinearLayout(UiLinearLayout.Axis.HORIZONTAL, 12, 0);
     private UiRect bounds = new UiRect(0, 0, 0, 0);
     private int commits;
@@ -60,15 +61,13 @@ final class KitInputsExample implements UiWidget, UiLayoutSource {
         list.setItems(IntStream.range(0, 30).mapToObj(index ->
                 (Component) Component.translatable(KitShowcaseContent.UI + "list.item", index)).toList());
         list.setSelectedIndex(0);
-        widgets = List.of(text, area, number, list);
+        widgets.addAll(List.of(text, area, number, list));
         columns.setChildren(List.of(UiLinearLayout.Child.remain(), UiLinearLayout.Child.remain()));
     }
-    void addFocusTargets(Consumer<UiFocusTarget> sink) {
-        sink.accept(text);
-        sink.accept(area);
-        number.addFocusTargets(sink);
-        sink.accept(list);
+    public void addFocusTargets(Consumer<UiFocusTarget> sink) {
+        widgets.addFocusTargets(sink);
     }
+    @Override public long focusRevision() { return widgets.focusRevision(); }
     @Override public UiRect bounds() { return bounds; }
     @Override public void setBounds(int x, int y, int width, int height) {
         bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
@@ -84,27 +83,15 @@ final class KitInputsExample implements UiWidget, UiLayoutSource {
         for (UiWidget widget : widgets) widget.render(graphics, font, pointer);
     }
     @Override public @Nullable UiPointerHit hitTest(double x, double y) {
-        UiPointerHit hit = UiPointerHit.topmost(x, y, widgets);
+        UiPointerHit hit = widgets.hitTest(x, y);
         return hit == null ? null : hit.within(this);
     }
     @Override public boolean mousePressed(UiInputContext context) {
-        for (UiWidget widget : widgets.reversed()) if (widget.mousePressed(context)) return true;
-        return false;
+        return widgets.mousePressed(context);
     }
-    @Override public boolean mouseScrolled(UiInputContext context, double x, double y) {
-        return list.mouseScrolled(context, x, y) || area.mouseScrolled(context, x, y);
-    }
-    @Override public boolean keyPressed(int key, int scan, int mods) {
-        for (UiWidget widget : widgets) {
-            if (widget instanceof UiFocusTarget target && target.isFocused() && widget.keyPressed(key, scan, mods)) return true;
-        }
-        return number.keyPressed(key, scan, mods);
-    }
-    @Override public boolean charTyped(char value, int mods) {
-        if (text.isFocused()) return text.charTyped(value, mods);
-        if (area.isFocused()) return area.charTyped(value, mods);
-        return number.charTyped(value, mods);
-    }
+    @Override public boolean mouseScrolled(UiInputContext context, double x, double y) { return widgets.mouseScrolled(context, x, y); }
+    @Override public boolean keyPressed(int key, int scan, int mods) { return widgets.keyPressed(key, scan, mods); }
+    @Override public boolean charTyped(char value, int mods) { return widgets.charTyped(value, mods); }
     @Override public List<UiLayoutNode> layoutNodes() {
         List<UiLayoutNode> nodes = new ArrayList<>(text.layoutNodes());
         nodes.addAll(area.layoutNodes());

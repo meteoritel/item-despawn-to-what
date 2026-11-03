@@ -31,6 +31,9 @@ public interface UiWidget extends UiInputTarget {
         return isVisible() && isEnabled() && bounds().contains(x, y) ? UiPointerHit.leaf(this, x, y) : null;
     }
 
+    /** 可见性与资格变化参与父结构版本，几何变化不触发重建。 */
+    @Override default long focusRevision() { return (isVisible() ? 1 : 0) | (isEnabled() ? 2 : 0); }
+
     /** 默认可用；已有状态由实际控件提供，不另持有副本。 */
     default boolean isEnabled() {
         return true;

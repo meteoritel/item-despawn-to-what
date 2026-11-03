@@ -223,7 +223,7 @@ final class ClimateControl extends FormControl {
     }
 
     @Override
-    void addFocusTargets(Consumer<UiFocusTarget> out) {
+    public void addFocusTargets(Consumer<UiFocusTarget> out) {
         out.accept(matching);
         out.accept(range);
         out.accept(minInput);

@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.input;
 
 import org.jetbrains.annotations.Nullable;
+import java.util.function.Consumer;
 
 /**
  * kit 的统一输入契约：指针、滚轮、键盘与字符输入。
@@ -10,6 +11,25 @@ import org.jetbrains.annotations.Nullable;
  * {@link UiInputRouter} 直接交给作用域登记的目标。</p>
  */
 public interface UiInputTarget {
+
+    /** 贡献实际 Tab 根；复合内容按自己的成员结构展开，语义组仍由 focusTargets 解释。 */
+    default void addFocusTargets(Consumer<UiFocusTarget> out) {
+        if (this instanceof UiFocusTarget target) out.accept(target);
+    }
+
+    /** 本域未消费的事件是否仍阻断下层。 */
+    default boolean blocksInput() { return false; }
+
+    /** 结构变化版本；稳定叶子保持零，复合内容把实际子树版本合入。 */
+    default long focusRevision() { return 0; }
+
+    /** 判断子树是否拥有逻辑焦点，用于键盘与字符的同一路径派发。 */
+    default boolean hasFocus() {
+        if (this instanceof UiFocusTarget target) return target.isFocused();
+        boolean[] focused = {false};
+        addFocusTargets(target -> focused[0] |= target.isFocused());
+        return focused[0];
+    }
 
     /** 无副作用解析实际叶子；容器按逆绘制顺序与裁剪换算后查询子目标。 */
     default @Nullable UiPointerHit hitTest(double x, double y) {

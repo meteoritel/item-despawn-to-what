@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.input;
 
-import java.util.HashSet;
-import java.util.Set;
+import java.util.HashMap;
+import java.util.Map;
 
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
@@ -11,7 +11,7 @@ import org.lwjgl.glfw.GLFW;
  */
 public final class UiInputRouter {
     private @Nullable UiInputScope active;
-    private final Set<Integer> pressedButtons = new HashSet<>();
+    private final Map<Integer, UiPointerHit> pressedButtons = new HashMap<>();
     private long scopeVersion;
 
     /**
@@ -46,10 +46,10 @@ public final class UiInputRouter {
         scope.interaction().end(UiInteractionSession.EndReason.FOCUS_TRANSFER);
         if (scope != active || scopeVersion != version) return true;
         UiPointerHit hit = scope.content().hitTest(context.pointerX(), context.pointerY());
-        boolean consumed = scope.content().mousePressed(context);
+        boolean consumed = scope.content().mousePressed(context.withHit(hit == null ? UiPointerHit.EMPTY : hit));
         if (scope == active && scopeVersion == version) {
             if (context.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT) scope.finishPointer(hit);
-            if (consumed && scope == active && scopeVersion == version) pressedButtons.add(context.button());
+            if (consumed && scope == active && scopeVersion == version) pressedButtons.put(context.button(), hit == null ? UiPointerHit.EMPTY : hit);
         }
         return consumed;
     }
@@ -58,10 +58,11 @@ public final class UiInputRouter {
      * 拖出矩形后继续送达原会话目标。
      */
     public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
-        if (context.scope() != active) return false;
-        UiInteractionSession session = context.scope().interaction();
+        UiInputScope scope = active;
+        if (scope == null || context.scope() != scope) return false;
+        UiInteractionSession session = scope.interaction();
         UiInteractionSession.Target target = session.target(UiInteractionSession.Source.POINTER, context.button());
-        return target != null && target.mouseDragged(context, dragX, dragY);
+        return (target != null && target.mouseDragged(context, dragX, dragY)) || scope.content().blocksInput();
     }
 
     /**
@@ -69,14 +70,16 @@ public final class UiInputRouter {
      * 切域、关屏与重复释放均不复用旧按下。
      */
     public boolean mouseReleased(UiInputContext context) {
-        if (active == null || context.scope() != active) return false;
-        boolean paired = pressedButtons.remove(context.button());
+        UiInputScope scope = active;
+        if (scope == null || context.scope() != scope) return false;
+        UiPointerHit paired = pressedButtons.remove(context.button());
         UiInteractionSession session = context.scope().interaction();
         UiInteractionSession.Target target = session.target(UiInteractionSession.Source.POINTER, context.button());
-        if (target == null) return paired && context.scope().content().mouseReleased(context);
+        if (target == null) return (paired != null && context.scope().content().mouseReleased(context.withHit(paired)))
+                || scope.content().blocksInput();
         boolean consumed = target.mouseReleased(context);
         session.end(target, UiInteractionSession.EndReason.RELEASE);
-        return consumed;
+        return consumed || scope.content().blocksInput();
     }
 
     /**
@@ -84,7 +87,8 @@ public final class UiInputRouter {
      */
     public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
         if (context.scope() != active) return false;
-        return context.scope().content().mouseScrolled(context, scrollX, scrollY);
+        UiPointerHit hit = context.scope().content().hitTest(context.pointerX(), context.pointerY());
+        return context.scope().content().mouseScrolled(context.withHit(hit == null ? UiPointerHit.EMPTY : hit), scrollX, scrollY);
     }
 
     /**
@@ -97,7 +101,7 @@ public final class UiInputRouter {
         if (keyCode == GLFW.GLFW_KEY_TAB) {
             scope.interaction().end(UiInteractionSession.EndReason.FOCUS_TRANSFER);
             if (scope != active) return true;
-            return scope.focus().keyPressed(keyCode, scanCode, modifiers);
+            return scope.focus().keyPressed(keyCode, scanCode, modifiers) || scope.content().blocksInput();
         }
         if (keyCode == GLFW.GLFW_KEY_ESCAPE && scope.interaction().end(UiInteractionSession.EndReason.CANCEL))
             return true;
@@ -112,29 +116,31 @@ public final class UiInputRouter {
             scope.escape();
             return true;
         }
-        return scope.focus().keyPressed(keyCode, scanCode, modifiers);
+        return scope.focus().keyPressed(keyCode, scanCode, modifiers) || scope.content().blocksInput();
     }
 
     /**
      * 调整键释放匹配会话，其它释放用于内容修饰态处理。
      */
     public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
-        if (active == null) return false;
-        UiInteractionSession session = active.interaction();
+        UiInputScope scope = active;
+        if (scope == null) return false;
+        UiInteractionSession session = scope.interaction();
         UiInteractionSession.Target target = session.target(UiInteractionSession.Source.KEY, keyCode);
         if (target != null) {
             boolean consumed = target.keyReleased(keyCode, scanCode, modifiers);
             session.end(target, UiInteractionSession.EndReason.RELEASE);
-            return consumed;
+            return consumed || scope.content().blocksInput();
         }
-        return active.content().keyReleased(keyCode, scanCode, modifiers);
+        return scope.content().keyReleased(keyCode, scanCode, modifiers) || scope.content().blocksInput();
     }
 
     /**
-     * 字符只送达逻辑焦点；复合控件负责内部编辑模式。
+     * 字符沿内容树的逻辑焦点路径派发；复合控件负责内部编辑模式与业务提交。
      */
     public boolean charTyped(char codePoint, int modifiers) {
-        return active != null && active.content().charTyped(codePoint, modifiers);
+        UiInputScope scope = active;
+        return scope != null && (scope.content().charTyped(codePoint, modifiers) || scope.content().blocksInput());
     }
 
     /**

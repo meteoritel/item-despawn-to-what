@@ -343,18 +343,14 @@ final class RuleEditorEditPage implements EditorPage {
         footerBar.render(graphics, renderFont, pointer);
     }
 
-    public boolean renderDescriptionTooltip(GuiGraphics graphics, UiPointer pointer) {
-        return pages != null && pages.renderDescriptionTooltip(graphics, pointer);
-    }
+
 
 
     public @Nullable UiTypePicker overlay() {
         return activeTypePicker();
     }
 
-    public @Nullable Component tooltipAt(double mouseX, double mouseY) {
-        return pages == null ? null : pages.tooltipAt(mouseX, mouseY);
-    }
+
 
     @Nullable UiTypePicker activeTypePicker() {
         if (pages == null) return null;
@@ -450,6 +446,8 @@ final class RuleEditorEditPage implements EditorPage {
         }
     }
 
+    @Override public long focusRevision() { return (pages == null ? 0 : pages.focusRevision()) + footerBar.focusRevision(); }
+
     private void syncEditableState() {
         if (pages != null) {
             pages.syncEditableState();
@@ -482,10 +480,10 @@ final class RuleEditorEditPage implements EditorPage {
     // ---- 输入委托 ----
 
     public boolean mousePressed(UiInputContext context) {
-        if (tabControl != null && tabControl.mousePressed(context)) {
+        if (tabControl != null && context.hits(tabControl) && tabControl.mousePressed(context)) {
             return true;
         }
-        if (pages != null && pages.mousePressed(context)) {
+        if (pages != null && context.hits(pages) && pages.mousePressed(context)) {
             return true;
         }
         return footerBar.mousePressed(context);

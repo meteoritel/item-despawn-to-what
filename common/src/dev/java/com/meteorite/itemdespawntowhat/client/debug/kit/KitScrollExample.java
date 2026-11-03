@@ -6,7 +6,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlStyle;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiStyleSource;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -16,10 +16,12 @@ import java.util.List;
 
 /** 嵌套视口共享屏幕坐标，展示滚轮余量传播与纵向轨道捕获。 */
 final class KitScrollExample implements UiInputTarget {
+    private final UiStyleSource theme;
     private final UiScrollView outer = new UiScrollView();
     private final UiScrollView inner = new UiScrollView();
 
-    KitScrollExample() {
+    KitScrollExample(UiStyleSource theme) {
+        this.theme = theme;
         outer.setContentHeight(400);
         outer.setScrollbarVisible(true);
         inner.setContentHeight(240);
@@ -62,8 +64,8 @@ final class KitScrollExample implements UiInputTarget {
             } finally {
                 inner.pop(graphics);
             }
-            inner.renderScrollbar(graphics, UiControlStyle.DARK);
-            outer.renderScrollbar(graphics, UiControlStyle.DARK);
+            inner.renderScrollbar(graphics, theme);
+            outer.renderScrollbar(graphics, theme);
         } finally {
             graphics.disableScissor();
         }

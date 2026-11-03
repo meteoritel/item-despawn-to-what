@@ -819,13 +819,13 @@ final class RuleEditorListPage implements EditorPage {
         if (button == 0 && openTagDetails(mouseX, mouseY)) {
             return true;
         }
-        if (searchField != null && searchField.mousePressed(context)) {
+        if (searchField != null && context.hits(searchField) && searchField.mousePressed(context)) {
             return true;
         }
-        if (filterBar.mousePressed(context)) {
+        if (context.hits(filterBar) && filterBar.mousePressed(context)) {
             return true;
         }
-        if (ruleList != null && ruleList.mousePressed(context)) {
+        if (ruleList != null && context.hits(ruleList) && ruleList.mousePressed(context)) {
             return true;
         }
         return globalBar.mousePressed(context)
@@ -907,23 +907,18 @@ final class RuleEditorListPage implements EditorPage {
 
     // 规则条目整行都进入条件提示的悬停范围；配方标签框优先，只有没命中标签时才展开条件树。
     // 条件正文、状态与不可用提示按语义分行，各自保持主题配色。
-    public boolean renderDescriptionTooltip(GuiGraphics graphics, UiPointer pointer) {
-        int mouseX = (int) pointer.x();
-        int mouseY = (int) pointer.y();
-        if (ruleList == null || !pointer.contains(ruleList.bounds())) {
-            return false;
-        }
-        UiTreeNode<String> node = ruleList.nodeAt(mouseX, mouseY);
-        if (node == null || node.value().startsWith("@")) {
-            return false;
-        }
+    private UiPointerHit describeHit(UiPointerHit hit, double mouseX, double mouseY) {
+        if (ruleList == null || hit == null) return hit;
+        UiTreeNode<String> node = ruleList.nodeAtRow(hit.rowIndex(ruleList));
+        if (node == null || node.value().startsWith("@")) return hit;
         String id = node.value();
+        TagPreviewIcons.Tag selectedTag = tagAt(mouseX, mouseY);
+        return hit.withPresentation((graphics, ignoredFont, pointerX, pointerY) -> {
         // 悬停时才向展示快照索取配方预览与条件提示：未悬停的条目不生成提示
         RuleListDisplaySnapshot snapshot = display.snapshot(id);
-        TagPreviewIcons.Tag tag = tagAt(mouseX, mouseY);
         List<DescriptionLine> lines = new ArrayList<>();
-        if (tag != null) {
-            lines.add(DescriptionLine.text(tag.tooltip(), Tone.VALUE, 0));
+        if (selectedTag != null) {
+            lines.add(DescriptionLine.text(selectedTag.tooltip(), Tone.VALUE, 0));
         } else {
             lines.add(DescriptionLine.section(Component.translatable(UI + "recipe.condition_tree"), 0));
             lines.addAll(snapshot.conditionLines());
@@ -938,11 +933,11 @@ final class RuleEditorListPage implements EditorPage {
             }
         }
         UiDescriptionTooltip tooltip = new UiDescriptionTooltip(THEME, font);
-        if (tag == null) {
+        if (selectedTag == null) {
             tooltip.setMaxLines(TOOLTIP_MAX_LINES, Component.translatable(UI + "recipe.condition_tree_more"));
         }
-        tooltip.render(graphics, new UiRect(0, 0, shell.screenWidth(), shell.screenHeight()), lines, mouseX, mouseY);
-        return true;
+        tooltip.render(graphics, new UiRect(0, 0, shell.screenWidth(), shell.screenHeight()), lines, pointerX, pointerY);
+        });
     }
 
     // ---- 焦点与使能 ----
@@ -952,21 +947,18 @@ final class RuleEditorListPage implements EditorPage {
         if (searchField != null) {
             focus.accept(searchField);
         }
-        for (UiButton button : filterButtons) {
-            focus.accept(button);
-        }
-        if (ruleList != null) {
-            focus.accept(ruleList);
-        }
-        for (UiButton button : listButtons) {
-            focus.accept(button);
-        }
+        filterBar.addFocusTargets(focus);
+        if (ruleList != null) ruleList.addFocusTargets(focus);
+        listBar.addFocusTargets(focus);
+        globalBar.addFocusTargets(focus);
     }
+    @Override public long focusRevision() { return filterBar.focusRevision() + listBar.focusRevision() + globalBar.focusRevision(); }
 
     /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
     @Override
     public @Nullable UiPointerHit hitTest(double x, double y) {
-        return UiPointerHit.first(x, y, listBar, ruleList, filterBar, searchField, globalBar);
+        UiPointerHit hit = UiPointerHit.first(x, y, listBar, ruleList, filterBar, searchField, globalBar);
+        return describeHit(hit, x, y);
     }
 
 }

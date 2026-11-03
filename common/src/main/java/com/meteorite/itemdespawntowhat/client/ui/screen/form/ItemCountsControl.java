@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 import java.util.function.Consumer;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
@@ -454,7 +455,7 @@ final class ItemCountsControl extends FormControl {
     }
 
     @Override
-    void addFocusTargets(Consumer<UiFocusTarget> out) {
+    public void addFocusTargets(Consumer<UiFocusTarget> out) {
         entries.values().forEach(entry -> entry.control.addFocusTargets(out));
     }
 
@@ -483,27 +484,19 @@ final class ItemCountsControl extends FormControl {
         entries.values().forEach(entry -> entry.control.endInteractions(reason));
     }
 
-    @Override
-    @Nullable Component tooltipAt(double x, double y) {
-        // 配对下行不绘制图标，提示与悬停滚动都留给上行
-        if (pairRole == PairRole.LOWER) return null;
-        // 提示只在图标列弹出：名称列留给悬停滚动，避免提示框盖住正在滚动的名称
-        int nameRowHeight = pairRole == PairRole.UPPER ? HEADER_HEIGHT : lastRowHeight;
-        // 图标命中矩形以名称行为准，与绘制保持同一份几何
-        for (Entry entry : entries.values()) {
-            if (entry.iconHit(x, y, nameRowHeight)) {
-                return Component.translatable(QUANTITY_ROW_KEY, entry.name, label()).copy()
-                        .append("\n").append(entry.reference);
-            }
-        }
-        return null;
-    }
     /** 按实际子控件解析指针，保留组合层的归属。 */
     @Override
     public @Nullable UiPointerHit hitTest(double x, double y) {
         for (Entry entry : entries.values()) {
             UiPointerHit hit = entry.control.hitTest(x, y);
             if (hit != null) return hit.within(this);
+            int rowHeight = pairRole == PairRole.UPPER ? HEADER_HEIGHT : lastRowHeight;
+            if (pairRole != PairRole.LOWER && entry.iconHit(x, y, rowHeight)) {
+                Component text = Component.translatable(QUANTITY_ROW_KEY, entry.name, label()).copy()
+                        .append(Component.literal(String.valueOf((char) 10))).append(entry.reference);
+                return UiPointerHit.leaf(this, x, y).preservingFocus()
+                        .withTextTooltip(List.of(text), new UiRect(entry.iconX, entry.nameRowY, ICON_COLUMN, rowHeight));
+            }
         }
         return null;
     }

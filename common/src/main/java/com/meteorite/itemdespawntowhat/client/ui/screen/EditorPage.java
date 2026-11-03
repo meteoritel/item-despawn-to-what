@@ -17,7 +17,6 @@ import java.util.List;
 
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -115,15 +114,9 @@ interface EditorPage extends UiInputTarget {
 
     boolean mouseDragged(UiInputContext context, double dragX, double dragY);
 
-    default boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
-        return false;
-    }
 
     boolean keyPressed(int keyCode, int scanCode, int modifiers);
 
-    default boolean keyReleased(int keyCode, int scanCode, int modifiers) {
-        return false;
-    }
 
     boolean charTyped(char codePoint, int modifiers);
 
@@ -147,20 +140,6 @@ interface EditorPage extends UiInputTarget {
      * 内容区之上的覆盖层（类型选择器等）；屏幕负责渲染并计入输入门槛。
      */
     default @Nullable UiTypePicker overlay() {
-        return null;
-    }
-
-    /**
-     * 绘制本页自己的悬停说明；返回 true 表示已绘制。
-     */
-    default boolean renderDescriptionTooltip(GuiGraphics graphics, UiPointer pointer) {
-        return false;
-    }
-
-    /**
-     * 单行悬停文本；屏幕在页未自行绘制说明时使用。
-     */
-    default @Nullable Component tooltipAt(double mouseX, double mouseY) {
         return null;
     }
 

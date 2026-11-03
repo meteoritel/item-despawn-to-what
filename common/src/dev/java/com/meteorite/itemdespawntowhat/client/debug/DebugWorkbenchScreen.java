@@ -39,6 +39,7 @@ import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 import java.util.Objects;
 import java.util.function.BooleanSupplier;
 
@@ -98,6 +99,7 @@ public class DebugWorkbenchScreen extends Screen {
                         screen.showDebugDrafts();
                     }));
             scope = new UiInputScope(new UiInputTarget() {
+                @Override public void addFocusTargets(Consumer<UiFocusTarget> out) { buttons.forEach(out); }
                 @Override public UiPointerHit hitTest(double x, double y) {
                     return UiPointerHit.topmost(x, y, buttons);
                 }
@@ -107,7 +109,6 @@ public class DebugWorkbenchScreen extends Screen {
                 }
             });
             scope.setEscape(this::onClose);
-            scope.setFocusTargets(() -> scope.focus().updateTargets(registration -> buttons.forEach(registration::add)));
         }
         @Override protected void init() {
             if (buttons.isEmpty()) {
@@ -195,6 +196,11 @@ public class DebugWorkbenchScreen extends Screen {
             var skin = theme.sliderSkin(UiSliderRole.COMPACT); scalar.setStyle(skin.style()); scalar.setPainter(skin.painter());
             fixed.add(button("reset", this::assemble)); fixed.add(button("modal", this::openModal)); fixed.add(button("back", this::onClose));
             scope = new UiInputScope(new UiInputTarget() {
+                @Override public void addFocusTargets(Consumer<UiFocusTarget> out) {
+                    for (UiWidget widget : widgets) widget.addFocusTargets(out);
+                    scalar.addFocusTargets(out);
+                    fixed.forEach(out);
+                }
                 @Override public UiPointerHit hitTest(double x, double y) {
                     UiPointerHit hit = UiPointerHit.topmost(x, y, fixed);
                     if (hit != null || y < 30 || y >= height - 30) return hit;
@@ -218,10 +224,6 @@ public class DebugWorkbenchScreen extends Screen {
                 }
             });
             scope.setEscape(this::onClose);
-            scope.setFocusTargets(() -> scope.focus().updateTargets(registration -> {
-                for (UiWidget widget : widgets) { if (widget instanceof UiFocusTarget target) { registration.add(target); } }
-                registration.add(scalar); fixed.forEach(registration::add);
-            }));
             modals.setOnScopeChanged(this::synchronize); synchronize();
         }
         private void synchronize() {

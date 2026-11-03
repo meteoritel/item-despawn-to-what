@@ -340,8 +340,6 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
     public void render(GuiGraphics graphics, Font font, UiPointer incomingPointer) {
         refreshTheme();
         UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
-        int mouseX = (int) pointer.x();
-        int mouseY = (int) pointer.y();
         if (!visible) {
             return;
         }
@@ -353,7 +351,7 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
                     viewport.y() + Math.max(0, viewport.height() / 2 - 4), theme.surfaces().text());
             return;
         }
-        int hoveredIndex = pointer.allowed() ? itemIndexAt(mouseX, mouseY) : -1;
+        int hoveredIndex = pointer.allowed() && pointer.hit() != null ? pointer.hit().rowIndex(this) : -1;
         int rowWidth = scrollView.contentWidth();
         scrollView.push(graphics);
         for (int i = 0; i < items.size(); i++) {
@@ -380,7 +378,7 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
             UiRect focusBounds = chipRows ? visibleRowBounds(selectedIndex) : bounds;
             if (focusBounds != null) theme.drawFocusOutline(graphics, focusBounds);
         }
-        scrollView.renderScrollbar(graphics, theme.controlStyle(UiControlRole.SECONDARY));
+        scrollView.renderScrollbar(graphics, theme);
     }
 
     // ---- 输入 ----
@@ -396,7 +394,7 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
         if (scrollView.mousePressed(context)) {
             return true;
         }
-        int index = indexAt(mouseX, mouseY);
+        int index = context.hit() == null ? indexAt(mouseX, mouseY) : context.hit().rowIndex(this);
         if (index < 0) {
             return !chipRows;
         }
@@ -516,7 +514,10 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
     public @Nullable UiPointerHit hitTest(double x, double y) {
         if (!isVisible() || !bounds().contains(x, y)) return null;
         UiPointerHit hit = scrollView.hitTest(x, y);
-        return hit != null ? hit.within(this) : UiPointerHit.leaf(this, x, y);
+        if (hit != null) return hit.within(this);
+        int index = indexAt(x, y);
+        UiPointerHit leaf = UiPointerHit.leaf(this, x, y);
+        return index < 0 ? leaf : leaf.withRow(this, index, items.get(index), rowBounds(index));
     }
 
 }

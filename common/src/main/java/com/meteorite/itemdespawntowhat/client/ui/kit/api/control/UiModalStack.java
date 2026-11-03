@@ -6,7 +6,6 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiRenderLayers;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiStyleSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiMinecraftTheme;
 import java.util.Objects;
@@ -127,7 +126,7 @@ public final class UiModalStack implements UiWidget, UiLayoutSource {
 
     // 压入一个弹窗
     public UiModal push(UiModal modal) {
-        modal.setCloseHandler(this::close);
+        modal.setCloseHandler(this::remove);
         modal.inputScope().focus().setListener(focusListener);
         modals.add(modal);
         modal.inputScope().setHistory(this::requestHistory);
@@ -147,15 +146,14 @@ public final class UiModalStack implements UiWidget, UiLayoutSource {
         if (modals.isEmpty()) {
             return false;
         }
-        UiModal closing = modals.removeLast();
-        onScopeChanged.run();
-        closing.closed();
-        relayout();
-        refreshFocus();
-        return true;
+        return modals.getLast().requestClose();
     }
 
-    public void close(UiModal modal) {
+    /** 正常关闭遵守模态政策。 */
+    public void close(UiModal modal) { if (modals.contains(modal)) modal.requestClose(); }
+
+    /** 宿主终态或销毁时强制移除，不执行用户动作。 */
+    public void remove(UiModal modal) {
         if (modals.remove(modal)) {
             onScopeChanged.run();
             modal.closed();
@@ -204,7 +202,7 @@ public final class UiModalStack implements UiWidget, UiLayoutSource {
     private void refreshFocus() {
         UiModal modal = top();
         if (modal != null) {
-            modal.inputScope().focus().updateTargets(registration -> modal.addFocusTargets(registration::add));
+            modal.inputScope().refreshFocus();
             if (modal.inputScope().focus().focused() == null) modal.inputScope().focus().focusFirst();
         }
     }
@@ -226,15 +224,11 @@ public final class UiModalStack implements UiWidget, UiLayoutSource {
         }
         int baseAlpha = (theme.surfaces().modalDim() >>> 24) & 0xFF;
         int alpha = baseAlpha * (FADE_TICKS - fadeTicks) / FADE_TICKS;
-        if (alpha > 0) {
-            int dim = (alpha << 24) | (theme.surfaces().modalDim() & 0x00FFFFFF);
-            UiRenderLayers.draw(graphics, UiRenderLayers.MODAL_MASK,
-                    () -> graphics.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), dim));
-        }
+        int dim = (alpha << 24) | (theme.surfaces().modalDim() & 0x00FFFFFF);
         for (int i = 0; i < modals.size(); i++) {
             UiModal modal = modals.get(i);
             UiPointer modalPointer = modal.inputScope().pointer(mouseX, mouseY).resolve(modal);
-            UiRenderLayers.draw(graphics, UiRenderLayers.modalContent(i),
+            modal.renderOverlay(graphics, bounds, i, dim,
                     () -> modal.render(graphics, font, modalPointer));
         }
     }

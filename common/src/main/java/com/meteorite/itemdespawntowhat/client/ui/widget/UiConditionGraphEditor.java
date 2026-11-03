@@ -1083,19 +1083,8 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
         viewInitialized = true;
     }
 
-    // 悬停提示：标题行 + 条件详情行 + 结构标记行，由画布自绘面板呈现（原版 tooltip 不参与）
-    private @Nullable List<DescriptionLine> tooltipAt(double mouseX, double mouseY) {
-        if (!visible || isDragging() || picker.isOpen() || kindMenuOpen || !bounds.contains(mouseX, mouseY)) {
-            return null;
-        }
-        // 内联框自带提示，避免画布卡片提示压住表单
-        if (inlinePanel.contains(mouseX, mouseY)) {
-            return null;
-        }
-        ConditionNode node = graph.nodeAt(transform.toLocalX(mouseX), transform.toLocalY(mouseY));
-        if (node == null) {
-            return null;
-        }
+    // 悬停提示：标题、条件详情与结构标记附在命中结果上，由根统一呈现。
+    private List<DescriptionLine> nodeTooltip(ConditionNode node) {
         boolean issue = graph.hasIssue(node);
         List<DescriptionLine> lines = new ArrayList<>();
         lines.add(DescriptionLine.text(graph.titleLabel(node), issue ? Tone.DANGER : Tone.TITLE, 0));
@@ -1199,10 +1188,6 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
             updateKindMenuRect();
             if (pointer.allowed()) updateKindMenuHover(mouseX, mouseY);
             renderKindMenu(graphics, renderFont);
-        }
-        List<DescriptionLine> tip = pointer.allowsTooltip() ? tooltipAt(mouseX, mouseY) : null;
-        if (tip != null) {
-            tooltip.render(graphics, bounds, tip, mouseX, mouseY);
         }
     }
 
@@ -2196,6 +2181,11 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
             return UiPointerHit.leaf(this, x, y).preservingFocus();
         }
         UiPointerHit hit = inlinePanel.hitTest(x, y);
-        return hit == null ? UiPointerHit.leaf(this, x, y) : hit.within(this);
+        if (hit != null) return hit.within(this);
+        UiPointerHit leaf = UiPointerHit.leaf(this, x, y);
+        if (isDragging() || inlinePanel.contains(x, y)) return leaf;
+        ConditionNode node = graph.nodeAt(transform.toLocalX(x), transform.toLocalY(y));
+        return node == null ? leaf : leaf.withPresentation((graphics, ignoredFont, mx, my) ->
+                tooltip.render(graphics, bounds, nodeTooltip(node), mx, my));
     }
 }

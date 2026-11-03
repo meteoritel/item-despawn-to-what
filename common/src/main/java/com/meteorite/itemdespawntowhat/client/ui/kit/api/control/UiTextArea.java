@@ -313,30 +313,29 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
         }
         ensureTextWidth();
         syncBounds();
-        theme.drawInset(graphics, bounds);
-        graphics.fill(bounds.x() + 1, bounds.y() + 1, bounds.right() - 1, bounds.bottom() - 1, theme.surfaces().inputFill());
+        TextInputSupport.drawBackground(graphics, bounds, theme);
         int innerX = bounds.x() + PADDING_X;
         int innerY = bounds.y() + PADDING_Y;
         int innerWidth = innerWidth();
         int innerHeight = innerHeight();
-        graphics.enableScissor(innerX, innerY, innerX + innerWidth + SCROLLBAR_WIDTH, innerY + innerHeight);
+        scroll.push(graphics, new UiRect(innerX, innerY, innerWidth + SCROLLBAR_WIDTH, innerHeight));
         try {
             if (textField.value().isEmpty() && !isFocused() && hint != null) {
-                UiFlatText.drawWrapped(graphics, renderFont, hint, innerX, innerY, innerWidth, theme.surfaces().disabledText());
+                UiFlatText.drawWrapped(graphics, renderFont, hint, 0, 0, innerWidth, theme.surfaces().disabledText());
             } else {
-                renderLines(graphics, renderFont, innerX, innerY, innerHeight);
+                renderLines(graphics, font, innerHeight);
             }
         } finally {
-            graphics.disableScissor();
+            scroll.pop(graphics);
         }
-        renderScrollbar(graphics);
+        scroll.renderScrollbar(graphics, theme);
         if (isFocusVisible()) {
             theme.drawFocusOutline(graphics, bounds);
         }
     }
 
     // 逐行绘制文本、选中高亮与光标；行高必须与原版文本模型一致（9 像素）
-    private void renderLines(GuiGraphics graphics, Font renderFont, int innerX, int innerY, int innerHeight) {
+    private void renderLines(GuiGraphics graphics, Font renderFont, int innerHeight) {
         String text = textField.value();
         int cursor = textField.cursor();
         int[] selection = selectionRange();
@@ -344,11 +343,11 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
         int lineHeight = font.lineHeight;
         List<int[]> lines = displayLines();
         for (int index = 0; index < lines.size(); index++) {
-            int lineY = innerY + index * lineHeight - scroll.offset();
-            if (lineY + lineHeight < innerY) {
+            int lineY = index * lineHeight;
+            if (lineY + lineHeight < scroll.offset()) {
                 continue;
             }
-            if (lineY > innerY + innerHeight) {
+            if (lineY > scroll.offset() + innerHeight) {
                 break;
             }
             int begin = lines.get(index)[0];
@@ -357,14 +356,14 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
                 int from = Math.max(selection[0], begin);
                 int to = Math.min(selection[1], end);
                 if (from < to) {
-                    int highlightX = innerX + renderFont.width(text.substring(begin, from));
+                    int highlightX = renderFont.width(text.substring(begin, from));
                     int highlightWidth = renderFont.width(text.substring(from, to));
                     theme.drawSelection(graphics, new UiRect(highlightX, lineY - 1, Math.max(1, highlightWidth), lineHeight));
                 }
             }
-            graphics.drawString(renderFont, text.substring(begin, end), innerX, lineY, theme.surfaces().inputText(), false);
+            graphics.drawString(renderFont, text.substring(begin, end), 0, lineY, theme.surfaces().inputText(), false);
             if (blink && cursor >= begin && cursor <= end) {
-                int cursorX = innerX + renderFont.width(text.substring(begin, cursor));
+                int cursorX = renderFont.width(text.substring(begin, cursor));
                 graphics.fill(cursorX - 1, lineY - 1, cursorX + 1, lineY + lineHeight - 1, theme.surfaces().inputText());
             }
         }
@@ -397,13 +396,6 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
         displayedWidth = width;
         displayedLines = List.copyOf(lines);
         return displayedLines;
-    }
-
-    // 内容超出可视高度时在右侧绘制滚动条
-    private void renderScrollbar(GuiGraphics graphics) {
-        if (!scroll.isScrollbarVisible()) return;
-        theme.drawScrollTrack(graphics, scroll.scrollbarTrack());
-        theme.drawScrollThumb(graphics, scroll.scrollbarThumb());
     }
 
     @Override

@@ -17,16 +17,16 @@ final class EditorInputRouter {
     private final Supplier<RuleSaveOverlay> savingOverlay;
     private final UiInputRouter router;
 
-    EditorInputRouter(EditorShell shell, Supplier<RuleSaveOverlay> savingOverlay, UiInputRouter router) {
+    EditorInputRouter(EditorShell shell, Supplier<RuleSaveOverlay> savingOverlay, UiInputRouter router, Runnable synchronize) {
         this.router = router;
         this.shell = shell;
         this.savingOverlay = savingOverlay;
-        shell.modals().setOnScopeChanged(this::synchronize);
-        shell.setInputChanged(this::synchronize);
+        shell.modals().setOnScopeChanged(synchronize);
+        shell.setInputChanged(synchronize);
         shell.setCloseInput(router::close);
     }
 
-    void synchronize() {
+    UiInputScope activeScope() {
         UiInputScope next;
         if (shell.saving()) {
             RuleSaveOverlay current = savingOverlay.get();
@@ -39,23 +39,7 @@ final class EditorInputRouter {
                 next = current.inputScope();
             } else next = shell.activePage().inputScope();
         }
-        next.refreshFocus();
-        router.select(next);
-    }
-
-    boolean pageActive() {
-        synchronize();
-        return router.active() == shell.activePage().inputScope();
-    }
-
-    boolean finish(boolean consumed, UiInputScope scope) {
-        synchronize();
-        return consumed || scope != shell.activePage().inputScope();
-    }
-
-    UiInputScope activeScope() {
-        synchronize();
-        return router.active();
+        return next;
     }
 
     void cancelPointerPreview() {

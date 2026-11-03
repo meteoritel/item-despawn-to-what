@@ -4,12 +4,16 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import org.jetbrains.annotations.Nullable;
+import java.util.function.Consumer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.net.RuleEditClientWorkspace;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputScope;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiProgressBar;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiOverlay;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditMessages;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
@@ -41,7 +45,7 @@ final class RuleSaveOverlay implements UiInputTarget {
     private final UiHostTheme theme;
     private final RuleEditClientWorkspace workspace;
     private final UiProgressBar bar;
-    private final UiInputScope inputScope = new UiInputScope(this);
+    private final UiOverlay overlay = new UiOverlay(this);
     private final UiButton advancedButton;
     private final UiButton cancelButton;
     private RuleSaveProgress.Stage lastStage;
@@ -61,10 +65,12 @@ final class RuleSaveOverlay implements UiInputTarget {
         });
         cancelButton = new UiButton(theme, font, Component.translatable(UI + "cancel"), UiButtonVariant.SECONDARY,
                 this::requestCancel);
-        inputScope.focus().updateTargets(registration -> {
-            registration.add(advancedButton);
-            registration.add(cancelButton);
-        });
+    }
+
+    /** 保存操作的可用动作来自实际按钮。 */
+    @Override public void addFocusTargets(Consumer<UiFocusTarget> out) {
+        advancedButton.addFocusTargets(out);
+        cancelButton.addFocusTargets(out);
     }
 
     private void requestCancel() {
@@ -78,10 +84,9 @@ final class RuleSaveOverlay implements UiInputTarget {
     }
 
     void render(GuiGraphics graphics, int screenWidth, int screenHeight, UiPointer pointer, long milliseconds) {
-        RuleSaveProgress progress = workspace.saving().progress();
-        if (progress == null) {
-            progress = new RuleSaveProgress(RuleSaveProgress.Stage.PREPARING, 0, 0, "", false);
-        }
+        RuleSaveProgress current = workspace.saving().progress();
+        RuleSaveProgress progress = current == null
+                ? new RuleSaveProgress(RuleSaveProgress.Stage.PREPARING, 0, 0, "", false) : current;
         boolean cancelling = workspace.saving().cancelRequested() || progress.stage() == RuleSaveProgress.Stage.CANCELLING
                 || progress.stage() == RuleSaveProgress.Stage.ROLLING_BACK;
         cancelButton.setEnabled(progress.cancellable() && !cancelling);
@@ -89,7 +94,12 @@ final class RuleSaveOverlay implements UiInputTarget {
         int width = Math.clamp(screenWidth - MARGIN * 2, 1, PANEL_WIDTH);
         int height = Math.clamp(screenHeight - MARGIN * 2, 1, advanced ? EXPANDED_HEIGHT : COLLAPSED_HEIGHT);
         UiRect panel = new UiRect((screenWidth - width) / 2, (screenHeight - height) / 2, width, height);
-        graphics.fill(0, 0, screenWidth, screenHeight, theme.palette().modalDim());
+        overlay.render(graphics, new UiRect(0, 0, screenWidth, screenHeight), 0, theme.surfaces().modalDim(),
+                () -> renderContent(graphics, pointer, milliseconds, progress, cancelling, width, panel));
+    }
+
+    private void renderContent(GuiGraphics graphics, UiPointer pointer, long milliseconds, RuleSaveProgress progress,
+                               boolean cancelling, int width, UiRect panel) {
         theme.drawPanel(graphics, panel);
         graphics.enableScissor(panel.x(), panel.y(), panel.right(), panel.bottom());
         try {
@@ -116,7 +126,7 @@ final class RuleSaveOverlay implements UiInputTarget {
             advancedButton.render(graphics, font, pointer);
             y += RuleEditorPageSupport.DIALOG_BUTTON_H + ROW_GAP;
             if (advanced) {
-                drawLine(graphics, Component.translatable(UI + "step", Component.translatable(com.meteorite.itemdespawntowhat.core.network.transport.RuleEditMessages.progressKey(progress.stage()))),
+                drawLine(graphics, Component.translatable(UI + "step", Component.translatable(RuleEditMessages.progressKey(progress.stage()))),
                         left, y, innerWidth, false);
                 y += font.lineHeight + ROW_GAP;
                 Component content = Component.translatable(UI + "current", progress.current().isEmpty()
@@ -139,12 +149,12 @@ final class RuleSaveOverlay implements UiInputTarget {
     }
 
     UiInputScope inputScope() {
-        return inputScope;
+        return overlay.inputScope();
     }
 
     @Override
     public boolean mousePressed(UiInputContext context) {
-        if (!advancedButton.mousePressed(context)) cancelButton.mousePressed(context);
-        return true;
+        if (context.hits(advancedButton)) return advancedButton.mousePressed(context);
+        return context.hits(cancelButton) && cancelButton.mousePressed(context);
     }
 }

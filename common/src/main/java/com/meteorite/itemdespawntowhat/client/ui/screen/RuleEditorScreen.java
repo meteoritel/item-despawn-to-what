@@ -12,7 +12,6 @@ import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDescriptors;
 import com.meteorite.itemdespawntowhat.client.net.RuleEditClientWorkspace;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiRenderLayers;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiFlatText;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
@@ -64,6 +63,9 @@ public final class RuleEditorScreen extends UiScreen implements UiLayoutSource {
     private final EditorInputRouter input;
 
     private @Nullable RuleSaveOverlay saveOverlay;
+    private UiRect contentArea = new UiRect(0, 0, 0, 0);
+    private UiRect footerArea = new UiRect(0, 0, 0, 0);
+    private int noticeY;
     // 提示的折行判定与命中矩形每帧重算，属于渲染态，不进外壳
     private boolean noticeTruncated;
     private @Nullable UiRect noticeRect;
@@ -75,7 +77,7 @@ public final class RuleEditorScreen extends UiScreen implements UiLayoutSource {
         RuleEditorModel model = new RuleEditorModel(workspace);
         // 屏幕构造期 this.font 尚未注入，外壳与页面直接取客户端字体实例
         this.shell = new EditorShell(THEME, chromeTheme, workspace, model, new RuleListDisplayCache(model), Minecraft.getInstance().font);
-        this.input = new EditorInputRouter(shell, this::saveOverlay, inputRouter());
+        this.input = new EditorInputRouter(shell, this::saveOverlay, inputRouter(), this::refreshUiState);
     }
 
     /** 一次替换正文与画布主题；保留页面、控件和文本编辑状态。 */
@@ -84,7 +86,7 @@ public final class RuleEditorScreen extends UiScreen implements UiLayoutSource {
         THEME.setTheme(theme.content());
         chromeTheme.setTheme(theme.chrome());
         shell.modals().refreshLayout();
-        input.synchronize();
+        refreshUiState();
     }
 
     // 编辑器不做游戏内暂停
@@ -120,57 +122,55 @@ public final class RuleEditorScreen extends UiScreen implements UiLayoutSource {
         shell.rebuildFocus();
     }
 
+    @Override
+    protected void layoutUi() {
+        shell.setScreenSize(width, height);
+        shell.modals().setBounds(0, 0, width, height);
+        EditorPage page = shell.activePage();
+        int pad = page.pagePadding();
+        int available = Math.max(0, width - pad * 2);
+        int top = page.layoutHeader(pad, page.headerHeight() + PAD);
+        int footerHeight = page.footerHeight(available);
+        int footerY = height - pad - footerHeight;
+        noticeY = footerY - PAD - (shell.notice() == null ? 0 : NOTICE_H);
+        contentArea = new UiRect(pad, top, available, Math.max(0, noticeY - top - pad));
+        footerArea = new UiRect(pad, footerY, available, footerHeight);
+        page.layout(contentArea, footerArea);
+        UiTypePicker picker = page.overlay();
+        if (picker != null) picker.setBounds(contentArea.x(), contentArea.y(), contentArea.width(), contentArea.height());
+        if (shell.saving()) saveOverlay();
+        else saveOverlay = null;
+    }
+
     // ---- 渲染 ----
 
-    // 每帧重算布局并绘制
+    // 绘制消费根准备阶段已提交的几何
     @Override
-    public void render(@NotNull GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        prepareUiFrame();
+    protected void renderUi(@NotNull GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         PreviewIcons.beginFrame();
-        // 实时尺寸由外壳持有：页与外壳都按它排版
-        shell.setScreenSize(this.width, this.height);
         this.renderBackground(graphics, mouseX, mouseY, partialTick);
         EditorPage page = shell.activePage();
         UiTypePicker picker = page.overlay();
         boolean saving = shell.saving();
-        if (saving) {
-            saveOverlay();
-        } else {
-            saveOverlay = null;
-        }
-        input.pageActive();
         int w = this.width;
         int h = this.height;
-        shell.modals().setBounds(0, 0, w, h);
         THEME.drawWindow(graphics, new UiRect(0, 0, w, h));
         int headerHeight = page.headerHeight();
-        int pagePad = page.pagePadding();
         THEME.drawDivider(graphics, 0, headerHeight, w);
         drawHeaderText(graphics, page);
-        int availableWidth = Math.max(0, w - pagePad * 2);
-        // 头部附加内容（页签条）由页自己排布，返回内容区起点
-        int y = page.layoutHeader(pagePad, headerHeight + PAD);
-        int footerHeight = page.footerHeight(availableWidth);
-        int footerY = h - pagePad - footerHeight;
-        int noticeY = footerY - PAD - (shell.notice() == null ? 0 : NOTICE_H);
-        UiRect contentArea = new UiRect(pagePad, y, availableWidth, Math.max(0, noticeY - y - pagePad));
-        UiRect footerArea = new UiRect(pagePad, footerY, availableWidth, footerHeight);
-        page.layout(contentArea, footerArea);
         UiPointer pointer = page.inputScope().pointer(mouseX, mouseY).resolve(page);
         page.renderHeader(graphics, font, pointer);
         page.render(graphics, font, pointer, contentArea);
         drawNotice(graphics, noticeY, w);
         page.renderFooter(graphics, font, pointer, footerArea);
         if (saving) {
-            UiRenderLayers.draw(graphics, UiRenderLayers.MODAL_MASK,
-                    () -> saveOverlay().render(graphics, width, height, saveOverlay().inputScope().pointer(mouseX, mouseY), Util.getMillis()));
+            saveOverlay().render(graphics, width, height, saveOverlay().inputScope().pointer(mouseX, mouseY), Util.getMillis());
             graphics.flush();
             PreviewIcons.endFrame();
             return;
         }
         shell.modals().render(graphics, font, UiPointer.at(mouseX, mouseY));
         if (shell.modals().isEmpty() && picker != null) {
-            picker.setBounds(contentArea.x(), contentArea.y(), contentArea.width(), contentArea.height());
             picker.render(graphics, font, picker.inputScope().pointer(mouseX, mouseY));
         }
         if (shell.modals().isEmpty() && picker == null && pointer.allowsTooltip()) {
@@ -184,9 +184,8 @@ public final class RuleEditorScreen extends UiScreen implements UiLayoutSource {
                             List.of(DescriptionLine.text(Component.literal(detail),
                                     DescriptionLine.Tone.VALUE, 0)), mouseX, mouseY);
                 }
-            } else if (!page.renderDescriptionTooltip(graphics, pointer)) {
-                // 字段说明提示：没有弹窗且页未自行绘制说明时才显示，避免盖住上层内容
-                tip = page.tooltipAt(mouseX, mouseY);
+            } else if (pointer.hit() != null) {
+                pointer.hit().renderTooltip(graphics, font, THEME.surfaces(), mouseX, mouseY);
             }
             if (tip != null) {
                 renderTooltip(graphics, tip, mouseX, mouseY);
@@ -294,7 +293,6 @@ public final class RuleEditorScreen extends UiScreen implements UiLayoutSource {
     // ---- 焦点 / 事件 / 生命周期 ----
 
     @Override protected UiInputScope inputScope() { return input.activeScope(); }
-    @Override protected boolean inputFinished(boolean consumed, UiInputScope scope) { return input.finish(consumed, scope); }
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
@@ -328,7 +326,7 @@ public final class RuleEditorScreen extends UiScreen implements UiLayoutSource {
     public void tick() {
         shell.setScreenSize(this.width, this.height);
         shell.tick();
-        input.synchronize();
+        refreshUiState();
         // 外壳只登记关闭请求，真正摘屏在这里执行，避免外壳反向依赖屏幕与渲染类型
         if (shell.takeCloseRequest()) {
             onClose();

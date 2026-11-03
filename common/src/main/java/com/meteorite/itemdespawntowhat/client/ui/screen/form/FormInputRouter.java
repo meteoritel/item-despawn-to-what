@@ -36,20 +36,20 @@ final class FormInputRouter {
             return false;
         }
         view.syncBounds();
-        if (view.scroll.mousePressed(context)) return true;
+        if (context.hits(view.scroll) && view.scroll.mousePressed(context)) return true;
         for (FormRow row : view.rows) {
             if (!row.visible) continue;
             for (var pickerButton : row.pickers) {
-                if (pickerButton.mousePressed(context)) {
+                if (context.hits(pickerButton) && pickerButton.mousePressed(context)) {
                     return true;
                 }
             }
             for (UiButton action : row.actions) {
-                if (action.mousePressed(context)) {
+                if (context.hits(action) && action.mousePressed(context)) {
                     return true;
                 }
             }
-            if (row.control.mousePressed(context)) {
+            if (context.hits(row.control) && row.control.mousePressed(context)) {
                 return true;
             }
         }

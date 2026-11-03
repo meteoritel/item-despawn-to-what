@@ -2,10 +2,8 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiListView;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 import net.minecraft.client.gui.GuiGraphics;
 import org.jetbrains.annotations.Nullable;
 
@@ -56,7 +54,7 @@ final class RuleEditorPageInput implements UiInteractionSession.Target {
         if (!pages.pageScroll.contains(mouseX, mouseY)) {
             return false;
         }
-        if (pages.pageScroll.mousePressed(context)) {
+        if (context.hits(pages.pageScroll) && pages.pageScroll.mousePressed(context)) {
             return true;
         }
         // 行内删除先于列表选中与拖动排序，避免叉号触发双击激活或拖动。
@@ -64,19 +62,13 @@ final class RuleEditorPageInput implements UiInteractionSession.Target {
             pages.actions.flushRebuild();
             return true;
         }
-        boolean handled = false;
-        for (UiWidget widget : pages.content.widgets) {
-            if (widget.isVisible() && widget.mousePressed(context)) {
-                handled = true;
-                break;
-            }
-        }
+        boolean handled = pages.content.widgets.mousePressed(context);
         // 命中可能改变行可见性或控件高度；几何未变时这里只命中布局缓存
         if (pages.lastArea != null) {
             pages.ensureLayout(pages.lastArea);
         }
         if (button == 0 && !pages.actions.rebuildPending()) {
-            captureDrag(mouseX, mouseY);
+            captureDrag(context);
             if (dragKind != DragKind.NONE) {
                 interaction = context.scope().interaction();
                 interaction.begin(this, UiInteractionSession.Source.POINTER, button);
@@ -119,11 +111,7 @@ final class RuleEditorPageInput implements UiInteractionSession.Target {
         if (!pages.pageScroll.contains(mouseX, mouseY)) {
             return false;
         }
-        for (UiWidget widget : pages.content.widgets) {
-            if (widget.isVisible() && widget.mouseScrolled(context, scrollX, scrollY)) {
-                return true;
-            }
-        }
+        if (pages.content.widgets.mouseScrolled(context, scrollX, scrollY)) return true;
         boolean changed = pages.pageScroll.scrollBy(scrollY);
         if (changed && pages.lastArea != null) {
             // 页面滚动只平移已排好的控件，不重新测量
@@ -133,28 +121,15 @@ final class RuleEditorPageInput implements UiInteractionSession.Target {
     }
 
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        for (UiWidget widget : pages.content.widgets) {
-            if (widget instanceof UiFocusTarget target && !target.isFocused()) {
-                continue;
-            }
-            if (widget.isVisible() && widget.keyPressed(keyCode, scanCode, modifiers)) {
-                pages.actions.flushRebuild();
-                return true;
-            }
-        }
+        boolean consumed = pages.content.widgets.keyPressed(keyCode, scanCode, modifiers);
         pages.actions.flushRebuild();
-        return false;
+        return consumed;
     }
 
     public boolean charTyped(char codePoint, int modifiers) {
-        for (UiWidget widget : pages.content.widgets) {
-            if (widget.isVisible() && widget.charTyped(codePoint, modifiers)) {
-                pages.actions.flushRebuild();
-                return true;
-            }
-        }
+        boolean consumed = pages.content.widgets.charTyped(codePoint, modifiers);
         pages.actions.flushRebuild();
-        return false;
+        return consumed;
     }
 
     // 拖动预览：高亮目标行
@@ -170,24 +145,18 @@ final class RuleEditorPageInput implements UiInteractionSession.Target {
     }
 
     // 记录潜在拖动源（点击列表行后开始跟踪）
-    private void captureDrag(double mouseX, double mouseY) {
+    private void captureDrag(UiInputContext context) {
         dragKind = DragKind.NONE;
         dragFrom = -1;
         dragTo = -1;
         dragActive = false;
-        UiListView<?> list = null;
-        DragKind kind = DragKind.NONE;
-        if (pages.resultsSection.effectList != null && pages.resultsSection.effectList.isVisible()
-                && pages.resultsSection.effectList.bounds().contains(mouseX, mouseY)) {
-            list = pages.resultsSection.effectList;
-            kind = DragKind.EFFECT;
-        }
-        if (list == null || list.itemIndexAt(mouseX, mouseY) < 0) {
-            return;
-        }
-        dragKind = kind;
-        dragFrom = list.selectedIndex();
-        dragStartY = mouseY;
+        UiListView<?> list = pages.resultsSection.effectList;
+        if (list == null || context.hit() == null || !context.hits(list)) return;
+        int index = context.hit().rowIndex(list);
+        if (index < 0) return;
+        dragKind = DragKind.EFFECT;
+        dragFrom = index;
+        dragStartY = context.pointerY();
     }
 
     // 指针位置对应的行下标

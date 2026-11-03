@@ -49,6 +49,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import java.util.Map;
 import java.util.Set;
 
@@ -1225,19 +1226,7 @@ final class RuleEditorResultsSection {
     }
 
     // 悬停只补画面上读不到的信息：动作名、叉号、翻页箭头与产品分段都有文字或符号，不再重复解释。
-    @Nullable Component tooltipAt(double mouseX, double mouseY) {
-        if (typePicker.isOpen()) return null;
-        if (planPager != null && planPager.isLabelHovered(mouseX, mouseY))
-            return RuleNaming.candidateTitle(ResultStructure.candidateAt(shell.editingValue(), candidateIndex),
-                    candidateIndex + 1, nameSource);
-        if (combinationButton != null && combinationButton.bounds().contains(mouseX, mouseY))
-            return Component.translatable(RuleEditorPageSupport.UI + "results.combination_help");
-        if (deletePlanButton != null && deletePlanButton.bounds().contains(mouseX, mouseY))
-            return Component.translatable(RuleEditorPageSupport.UI + "results.remove_undo_hint");
-        if (effectNoteRect != null && hitsDocumentRect(effectNoteRect, mouseX, mouseY))
-            return readonlyEffectNote(shell.editingValue());
-        return null;
-    }
+
 
     // 页面自绘文字的矩形停在文档坐标（绘制时由滚动位姿统一平移），命中判定要把指针换算回文档坐标
     private boolean hitsDocumentRect(UiRect rect, double mouseX, double mouseY) {
@@ -1245,15 +1234,29 @@ final class RuleEditorResultsSection {
     }
 
     // 描述只挂在详情卡片的标题上：行内动作卡片已有名称与图标，悬停不再重复解释。
-    boolean renderDescriptionTooltip(GuiGraphics graphics, UiPointer pointer) {
-        int mouseX = (int) pointer.x();
-        int mouseY = (int) pointer.y();
-        if (typePicker.isOpen() || selectedAction == null || !selectedAction.isMapping()) return false;
-        if (detailHeaderRect == null || !hitsDocumentRect(detailHeaderRect, mouseX, mouseY)) return false;
-        new UiDescriptionTooltip(THEME, font).render(graphics,
-                new UiRect(0, 0, shell.screenWidth(), shell.screenHeight()),
-                ActionDescription.lines(selectedAction), mouseX, mouseY);
-        return true;
+    UiPointerHit describeHit(@Nullable UiPointerHit hit, double x, double y) {
+        if (typePicker.isOpen()) return hit;
+        Component text = null;
+        if (planPager != null && planPager.isLabelHovered(x, y))
+            text = RuleNaming.candidateTitle(ResultStructure.candidateAt(shell.editingValue(), candidateIndex), candidateIndex + 1, nameSource);
+        else if (hit != null && combinationButton != null && hit.owns(combinationButton))
+            text = Component.translatable(RuleEditorPageSupport.UI + "results.combination_help");
+        else if (hit != null && deletePlanButton != null && hit.owns(deletePlanButton))
+            text = Component.translatable(RuleEditorPageSupport.UI + "results.remove_undo_hint");
+        else if (hit == null && effectNoteRect != null && hitsDocumentRect(effectNoteRect, x, y))
+            text = readonlyEffectNote(shell.editingValue());
+        if (text != null) {
+            if (hit == null) hit = UiPointerHit.leaf(scroll, x, y).preservingFocus();
+            return hit.withTextTooltip(List.of(text), scroll.viewport());
+        }
+        if (hit == null && selectedAction != null && selectedAction.isMapping()
+                && detailHeaderRect != null && hitsDocumentRect(detailHeaderRect, x, y)) {
+            RuleValue action = selectedAction;
+            return UiPointerHit.leaf(scroll, x, y).preservingFocus().withPresentation((graphics, ignoredFont, mx, my) ->
+                    new UiDescriptionTooltip(THEME, font).render(graphics,
+                            new UiRect(0, 0, shell.screenWidth(), shell.screenHeight()), ActionDescription.lines(action), mx, my));
+        }
+        return hit;
     }
 
     // 固定文案与组合方式按钮最大宽度：语言切换后一次性刷新，绘制与布局都复用

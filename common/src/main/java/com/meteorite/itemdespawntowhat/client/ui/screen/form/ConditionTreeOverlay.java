@@ -96,8 +96,6 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
     // 动作标签列与说明文字之间的间距
     private static final int HELP_LABEL_GAP = 6;
     // 提示气泡宽度范围
-    private static final int TOOLTIP_MIN_WIDTH = 80;
-    private static final int TOOLTIP_MAX_WIDTH = 250;
     // 只读遮罩：压暗画布，标题与提示保持可读
     private static final int READONLY_SCRIM = 0xA0000000;
     private static final int READONLY_TITLE_COLOR = 0xFFFFFFFF;
@@ -731,8 +729,6 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
     @Override
     public void render(GuiGraphics graphics, Font renderFont, UiPointer incomingPointer) {
         UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
-        int mouseX = (int) pointer.x();
-        int mouseY = (int) pointer.y();
         if (parameters != null) {
             parameters.form().tick();
         }
@@ -764,11 +760,6 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
         renderStatus(graphics);
         if (helpOpen) {
             renderHelp(graphics);
-        }
-        Component tip = pointer.allowsTooltip() ? tooltipAt(mouseX, mouseY) : null;
-        if (tip != null) {
-            UiFlatText.tooltip(graphics, renderFont, tip,
-                    Math.clamp(bounds.width(), TOOLTIP_MIN_WIDTH, TOOLTIP_MAX_WIDTH), mouseX, mouseY, CHROME_THEME.surfaces());
         }
     }
 
@@ -1081,24 +1072,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
         return editor.issues().isEmpty() ? CHROME_THEME.palette().statusText() : CHROME_THEME.palette().statusTextWarning();
     }
 
-    private @Nullable Component tooltipAt(int mouseX, int mouseY) {
-        if (helpOpen) {
-            return null;
-        }
-        Component tip = null;
-        if (functionBar.bounds().contains(mouseX, mouseY)) {
-            tip = functionBar.tooltipAt(mouseX, mouseY);
-        } else if (sourceView && copyJsonRect.contains(mouseX, mouseY)) {
-            tip = Component.translatable(UI + "button.copy_json");
-        } else if (!sourceView && toolColumn.bounds().contains(mouseX, mouseY)) {
-            tip = toolColumn.tooltipAt(mouseX, mouseY);
-        }
-        // 参数框的字段提示由适配器在 GUI 屏幕坐标下缓存，类型列表打开时不显示旧表单提示。
-        if (tip == null && inlineEditor != null && !editor.hasPopup()) {
-            tip = inlineEditor.hoverTooltip();
-        }
-        return tip;
-    }
+
 
     // ---- 输入 ----
 
@@ -1258,6 +1232,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
 
     private void setFocusSlot(FocusSlot slot) {
         if (focusState.scope() == null) return;
+        focusState.scope().invalidateFocus();
         focusState.scope().refreshFocus();
         UiFocusTarget preferred = switch (slot) {
             case FUNCTION_BAR -> functionBar;
@@ -1286,8 +1261,9 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
     @Override
     public @Nullable UiPointerHit hitTest(double x, double y) {
         if (!bounds.contains(x, y)) return null;
-        if (helpOpen || sourceView && copyJsonRect.contains(x, y) || statusRect.contains(x, y))
-            return UiPointerHit.leaf(this, x, y).preservingFocus();
+        if (helpOpen || statusRect.contains(x, y)) return UiPointerHit.leaf(this, x, y).preservingFocus();
+        if (sourceView && copyJsonRect.contains(x, y)) return UiPointerHit.leaf(this, x, y).preservingFocus()
+                .withTextTooltip(List.of(Component.translatable(UI + "button.copy_json")), copyJsonRect);
         UiPointerHit hit = UiPointerHit.first(x, y, functionBar, sourceView ? source : toolColumn, sourceView ? null : editor);
         return hit == null ? null : hit.within(this);
     }

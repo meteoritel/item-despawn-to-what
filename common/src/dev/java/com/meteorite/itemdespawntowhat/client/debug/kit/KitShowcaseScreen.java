@@ -43,16 +43,15 @@ public final class KitShowcaseScreen extends UiScreen implements UiLayoutSource 
             content = new KitShowcaseContent(font, theme, this::onClose, this::nextTheme);
             scope = new UiInputScope(content);
             scope.setEscape(this::onClose);
-            scope.setFocusTargets(() -> scope.focus().updateTargets(registration -> content.addFocusTargets(registration::add)));
         }
         content.layout(width, height);
-        scope.refreshFocus();
-        inputRouter().select(scope);
+        refreshUiState();
     }
 
+    @Override protected void layoutUi() { content.layout(width, height); }
+
     @Override
-    public void render(@NotNull GuiGraphics graphics, int x, int y, float delta) {
-        prepareUiFrame();
+    protected void renderUi(@NotNull GuiGraphics graphics, int x, int y, float delta) {
         renderBackground(graphics, x, y, delta);
         content.render(graphics, scope.pointer(x, y).resolve(content));
     }

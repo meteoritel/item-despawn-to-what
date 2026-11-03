@@ -2,7 +2,7 @@ package com.meteorite.itemdespawntowhat.client.ui.kit.api.control;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiNumberField;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.UiSingleLineEditor;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.UiTextEditSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
@@ -34,7 +34,7 @@ import org.lwjgl.glfw.GLFW;
  * 支持占位提示、长度限制、输入过滤、提交（Enter）与取消（Esc）。
  * <p>点击输入框可定位光标并拖动选择；焦点顺序由宿主的 {@code UiFocusManager} 统一维护。
  */
-public final class UiTextInput implements UiNumberField.Editor, UiLayoutSource, UiInteractionSession.Target {
+public final class UiTextInput implements UiSingleLineEditor, UiLayoutSource, UiInteractionSession.Target {
 
     // 左右内边距
     private static final int PADDING_X = TextInputSupport.PADDING_X;
@@ -348,8 +348,7 @@ public final class UiTextInput implements UiNumberField.Editor, UiLayoutSource, 
         if (!visible) {
             return;
         }
-        theme.drawInset(graphics, bounds);
-        graphics.fill(bounds.x() + 1, bounds.y() + 1, bounds.right() - 1, bounds.bottom() - 1, theme.surfaces().inputFill());
+        TextInputSupport.drawBackground(graphics, bounds, theme);
         UiRenderLayers.draw(graphics, UiRenderLayers.FOREGROUND,
                 () -> editBox.renderWidget(graphics, mouseX, mouseY, 0.0F));
         if (isFocusVisible()) {
@@ -359,9 +358,7 @@ public final class UiTextInput implements UiNumberField.Editor, UiLayoutSource, 
 
     @Override
     public boolean mousePressed(UiInputContext context) {
-        if (!editSession.beginSelection(context, bounds, canFocus())) return false;
-
-        return true;
+        return editSession.beginSelection(context, bounds, canFocus());
     }
 
     @Override
@@ -496,7 +493,7 @@ public final class UiTextInput implements UiNumberField.Editor, UiLayoutSource, 
     /** 文本选择器与可见输入框共用指针归属。 */
     @Override
     public @Nullable UiPointerHit hitTest(double x, double y) {
-        UiPointerHit hit = UiNumberField.Editor.super.hitTest(x, y);
+        UiPointerHit hit = UiSingleLineEditor.super.hitTest(x, y);
         return hit == null ? null : editSession.includeSelectionOwner(hit);
     }
 }

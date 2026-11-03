@@ -10,7 +10,6 @@ import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.ResultStructure;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
@@ -313,7 +312,7 @@ final class RuleEditorEditSections implements UiInputTarget {
     }
 
     /**
-     * 已作用到控件上的滚动偏移：页面自绘文字的命中判定要把指针坐标换算回文档坐标。
+     * 按当前分区布局实际内容，返回未施加滚动偏移的文档高度。
      */
     private int layoutPage(UiRect area) {
         content.cards.clear();
@@ -382,7 +381,7 @@ final class RuleEditorEditSections implements UiInputTarget {
         } finally {
             graphics.disableScissor();
         }
-        pageScroll.renderScrollbar(graphics, THEME.controlStyle(UiControlRole.SECONDARY));
+        pageScroll.renderScrollbar(graphics, THEME);
     }
 
     // ---- 状态与提交 ----
@@ -497,16 +496,11 @@ final class RuleEditorEditSections implements UiInputTarget {
     /**
      * 聚焦目标（按视觉顺序）
      */
+    @Override public long focusRevision() { return content.widgets.focusRevision(); }
+
     public List<UiFocusTarget> focusTargets() {
         List<UiFocusTarget> targets = new ArrayList<>();
-        for (UiWidget widget : content.widgets) {
-            if (!widget.isVisible()) continue;
-            if (widget instanceof FormView form) {
-                targets.addAll(form.focusTargets());
-            } else if (widget instanceof UiFocusTarget target && target.canFocus()) {
-                targets.add(target);
-            }
-        }
+        content.widgets.addFocusTargets(targets::add);
         return targets;
     }
 
@@ -539,35 +533,6 @@ final class RuleEditorEditSections implements UiInputTarget {
             form.tick();
         }
         actions.flushRebuild();
-    }
-
-    /**
-     * 绘制当前结果动作的自绘说明，保持与页面滚动一致的命中范围。
-     *
-     * @param graphics 绘制上下文
-     * @param pointer 已解析的绘制指针与作用域门禁
-     * @return 是否已绘制说明面板
-     */
-    public boolean renderDescriptionTooltip(GuiGraphics graphics, UiPointer pointer) {
-        return page == EditSection.RESULTS && !pageScroll.isDragging() && pointer.contains(pageScroll.viewport())
-                && resultsSection.renderDescriptionTooltip(graphics, pointer);
-    }
-
-    public @Nullable Component tooltipAt(double mouseX, double mouseY) {
-        if (pageScroll.isDragging()) return null;
-        if (!pageScroll.contains(mouseX, mouseY)) {
-            return null;
-        }
-        for (FormView form : content.forms) {
-            if (!form.isVisible()) {
-                continue;
-            }
-            Component tooltip = form.tooltipAt(mouseX, mouseY);
-            if (tooltip != null) {
-                return tooltip;
-            }
-        }
-        return page == EditSection.RESULTS ? resultsSection.tooltipAt(mouseX, mouseY) : null;
     }
 
     /**
@@ -723,7 +688,8 @@ final class RuleEditorEditSections implements UiInputTarget {
     public @Nullable UiPointerHit hitTest(double x, double y) {
         if (!pageScroll.contains(x, y)) return null;
         UiPointerHit hit = pageScroll.hitTest(x, y);
-        if (hit == null) hit = UiPointerHit.topmost(x, y, content.widgets);
+        if (hit == null) hit = content.widgets.hitTest(x, y);
+        if (page == EditSection.RESULTS) hit = resultsSection.describeHit(hit, x, y);
         return hit == null ? null : hit.within(this).within(input);
     }
 

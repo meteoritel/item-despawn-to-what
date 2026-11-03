@@ -4,6 +4,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import org.jetbrains.annotations.Nullable;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiOverlay;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiRowMetrics;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputScope;
@@ -18,7 +19,6 @@ import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphSid
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphSidePanel.SIDE_PANEL_PADDING;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
@@ -98,7 +98,8 @@ public final class UiTypePicker implements UiWidget, UiLayoutSource {
         return open;
     }
 
-    private final UiInputScope inputScope = new UiInputScope(this);
+    private final UiOverlay overlay = new UiOverlay(this);
+    private final UiInputScope inputScope = overlay.inputScope();
 
     /**
      * 类型选择面板的稳定输入作用域。
@@ -112,7 +113,7 @@ public final class UiTypePicker implements UiWidget, UiLayoutSource {
     }
 
     void setBounds(UiRect bounds) {
-        this.bounds = bounds;
+        setBounds(bounds.x(), bounds.y(), bounds.width(), bounds.height());
     }
 
     void cancelCapture() {
@@ -151,10 +152,9 @@ public final class UiTypePicker implements UiWidget, UiLayoutSource {
         panel.tick();
         updateBounds();
         UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
-        if (pointer.allowed()) updateHover((int) pointer.x(), (int) pointer.y());
-        panel.render(graphics, bounds,
-                title,
-                () -> renderContents(graphics, renderFont));
+        if (pointer.allowed()) updateHover(pointer);
+        overlay.render(graphics, new UiRect(0, 0, graphics.guiWidth(), graphics.guiHeight()), 0, 0,
+                () -> panel.render(graphics, bounds, title, () -> renderContents(graphics, renderFont)));
     }
 
     /**
@@ -303,14 +303,16 @@ public final class UiTypePicker implements UiWidget, UiLayoutSource {
                 listRect.width(), PICKER_ROW_HEIGHT));
     }
 
-    private void updateHover(int mouseX, int mouseY) {
+    private void updateHover(UiPointer pointer) {
+        int mouseX = (int) pointer.x();
+        int mouseY = (int) pointer.y();
         // 静止指针不覆盖键盘选择；内容滚动也不改变当前高亮。
         boolean moved = !pointerKnown || mouseX != lastMouseX || mouseY != lastMouseY;
         pointerKnown = true;
         lastMouseX = mouseX;
         lastMouseY = mouseY;
         if (moved) {
-            int index = indexAt(mouseX, mouseY);
+            int index = pointer.hit() == null ? -1 : pointer.hit().rowIndex(this);
             if (index >= 0) cursor = index;
         }
     }
@@ -320,7 +322,15 @@ public final class UiTypePicker implements UiWidget, UiLayoutSource {
     public @Nullable UiPointerHit hitTest(double x, double y) {
         if (!open || !panelRect.contains(x, y)) return null;
         UiPointerHit hit = scroll.hitTest(x, y);
-        return hit == null ? UiPointerHit.leaf(this, x, y) : hit.within(this);
+        if (hit != null) return hit.within(this);
+        hit = UiPointerHit.leaf(this, x, y);
+        int index = indexAt(x, y);
+        if (index >= 0) {
+            UiRect row = new UiRect(listRect.x(), scroll.toScreenY(index * PICKER_ROW_HEIGHT),
+                    rowContentWidth(), PICKER_ROW_HEIGHT);
+            hit = hit.withRow(this, index, filteredOptions.get(index), row);
+        }
+        return hit;
     }
 
     private void renderContents(GuiGraphics graphics, Font renderFont) {
@@ -380,7 +390,7 @@ public final class UiTypePicker implements UiWidget, UiLayoutSource {
         } finally {
             scroll.pop(graphics);
         }
-        scroll.renderScrollbar(graphics, theme.controlStyle(UiControlRole.SECONDARY));
+        scroll.renderScrollbar(graphics, theme);
     }
 
     private void handleClick(UiInputContext context) {
@@ -388,7 +398,7 @@ public final class UiTypePicker implements UiWidget, UiLayoutSource {
         double mouseY = context.pointerY();
         if (bounds.contains(mouseX, mouseY)
                 && scroll.mousePressed(context)) return;
-        int index = indexAt(mouseX, mouseY);
+        int index = context.hit() == null ? indexAt(mouseX, mouseY) : context.hit().rowIndex(this);
         if (index >= 0) {
             cursor = index;
             confirm();

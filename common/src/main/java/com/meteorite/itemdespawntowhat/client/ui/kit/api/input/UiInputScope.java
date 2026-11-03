@@ -17,8 +17,8 @@ public final class UiInputScope {
     private @Nullable Consumer<UiHistoryShortcut> history;
     private Runnable escape = () -> {
     };
-    private Runnable refreshFocus = () -> {
-    };
+    private boolean focusDirty = true;
+    private long focusRevision = Long.MIN_VALUE;
     private boolean active;
 
     /**
@@ -78,16 +78,27 @@ public final class UiInputScope {
     /**
      * 内容重建后重新登记实际焦点目标，输入前按需调用。
      */
-    public void setFocusTargets(Runnable refreshFocus) {
-        this.refreshFocus = Objects.requireNonNull(refreshFocus);
+    public void invalidateFocus() {
+        focusDirty = true;
     }
 
     /**
      * 同步已完成布局的焦点目标，不改变仍有效的焦点。
      */
     public void refreshFocus() {
-        refreshFocus.run();
+        long revision = content.focusRevision();
+        if (focusDirty || focusRevision != revision) {
+            focusDirty = false;
+            try {
+                focus.updateTargets(registration -> content.addFocusTargets(registration::add));
+                focusRevision = revision;
+            } catch (RuntimeException failure) {
+                focusDirty = true;
+                throw failure;
+            }
+        }
         focus.requireUpdateComplete();
+        focus.focused();
     }
 
     @Nullable Consumer<UiHistoryShortcut> history() {

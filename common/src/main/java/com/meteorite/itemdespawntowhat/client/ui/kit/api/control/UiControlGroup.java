@@ -4,13 +4,11 @@ import java.util.function.Consumer;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiFlatText;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlStyle;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiStyleSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiMinecraftTheme;
@@ -20,7 +18,7 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.ArrayList;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiChildren;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -45,7 +43,7 @@ public final class UiControlGroup implements UiInputTarget {
      * 稳定 key → 控件；迭代顺序即创建顺序，也是绘制与命中的层序（后创建者在上层）。
      */
     private final Map<Object, UiControl> byKey = new LinkedHashMap<>();
-    private final List<UiControl> ordered = new ArrayList<>();
+    private final UiChildren<UiControl> ordered = new UiChildren<>();
     private final Set<Object> seen = new HashSet<>();
     private @Nullable UiControlStyle style;
     private UiStyleSource theme = UiMinecraftTheme.INSTANCE;
@@ -131,10 +129,11 @@ public final class UiControlGroup implements UiInputTarget {
      * 宿主可以在两段控件之间插入原生目标（例如 {@code EditBox} 的适配器），从而得到跨组件的正确顺序。
      */
     public void addFocusTargets(Consumer<UiFocusTarget> out) {
-        for (UiControl control : ordered) {
-            if (control.isFocusable()) out.accept(control);
-        }
+        ordered.addFocusTargets(out);
     }
+
+    /** 成员结构变化使作用域自动更新焦点索引。 */
+    @Override public long focusRevision() { return ordered.focusRevision(); }
 
     // ---------- 样式 ----------
 
@@ -194,10 +193,7 @@ public final class UiControlGroup implements UiInputTarget {
      */
     public void renderTooltip(GuiGraphics graphics, Font font, UiPointer pointer) {
         if (!pointer.allowsTooltip() || pointer.hit() == null) return;
-        UiTarget target = pointer.hit().tooltip();
-        if (target != null && !target.tooltip().isEmpty()) {
-            UiFlatText.componentTooltip(graphics, font, new UiRect(0, 0, graphics.guiWidth(), graphics.guiHeight()), target.tooltip(), graphics.guiWidth(), (int) pointer.x(), (int) pointer.y(), theme.surfaces());
-        }
+        pointer.hit().renderTooltip(graphics, font, theme.surfaces(), (int) pointer.x(), (int) pointer.y());
     }
 
     /**
@@ -205,13 +201,12 @@ public final class UiControlGroup implements UiInputTarget {
      */
     @Override
     public boolean mousePressed(UiInputContext context) {
-        UiControl control = controlAt(context.pointerX(), context.pointerY());
-        return control != null && control.mousePressed(context);
+        return ordered.mousePressed(context);
     }
     /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
     @Override
     public @Nullable UiPointerHit hitTest(double x, double y) {
-        UiPointerHit hit = UiPointerHit.topmost(x, y, ordered);
+        UiPointerHit hit = ordered.hitTest(x, y);
         return hit == null ? null : hit.within(this);
     }
 

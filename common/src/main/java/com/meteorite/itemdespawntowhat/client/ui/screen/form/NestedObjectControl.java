@@ -117,7 +117,7 @@ final class NestedObjectControl extends FormControl {
     }
 
     @Override
-    void addFocusTargets(Consumer<UiFocusTarget> out) {
+    public void addFocusTargets(Consumer<UiFocusTarget> out) {
         child.addFocusTargets(out);
     }
 

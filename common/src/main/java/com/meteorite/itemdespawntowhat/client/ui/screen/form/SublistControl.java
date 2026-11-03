@@ -193,7 +193,7 @@ final class SublistControl extends FormControl {
     }
 
     @Override
-    void addFocusTargets(Consumer<UiFocusTarget> out) {
+    public void addFocusTargets(Consumer<UiFocusTarget> out) {
         out.accept(addButton);
         for (FormView child : children) {
             child.addFocusTargets(out);
