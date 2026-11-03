@@ -2,6 +2,8 @@ package com.meteorite.itemdespawntowhat.client.ui.kit.api.render;
 
 import net.minecraft.client.gui.GuiGraphics;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.internal.render.UiModelSurface;
+import java.util.function.Consumer;
 
 /** 同一作用域内统一背景、模型和前景；每层弹窗完整覆盖上一层及其 tooltip。 */
 public final class UiRenderLayers {
@@ -49,8 +51,18 @@ public final class UiRenderLayers {
         return (depth + 1) * MODAL_STEP + 1;
     }
 
-    /** 补偿原版 renderItem 的偏移，将物品放入调用方的内容层。 */
-    public static void item(GuiGraphics graphics, Runnable painter) {
-        draw(graphics, CONTENT - VANILLA_ITEM_OFFSET, painter);
+    /** 模型先在独立深度工作区完成绘制，再以当前内容平面合成；回调使用传入的局部上下文。 */
+    public static void model(GuiGraphics graphics, UiRect bounds, Consumer<GuiGraphics> painter) {
+        UiModelSurface.draw(graphics, bounds, painter);
+    }
+
+    /** 在局部模型工作区补偿原版物品偏移；回调不得捕获外部绘制上下文。 */
+    public static void item(GuiGraphics graphics, UiRect bounds, Consumer<GuiGraphics> painter) {
+        model(graphics, bounds, local -> draw(local, CONTENT - VANILLA_ITEM_OFFSET, () -> painter.accept(local)));
+    }
+
+    /** 释放共享模型工作区；UiScreen 自动调用，直接接入原版 Screen 的宿主在卸载时调用。 */
+    public static void releaseModels() {
+        UiModelSurface.release();
     }
 }

@@ -20,7 +20,8 @@ ALLOWED_PREFIXES = ("java.", "javax.", "net.minecraft.", "org.jetbrains.", "org.
 ALLOWED_CLASSES = frozenset("com.mojang.blaze3d." + name for name in (
     "platform.Lighting", "vertex.PoseStack", "vertex.VertexConsumer", "systems.RenderSystem",
     "vertex.BufferBuilder", "vertex.ByteBufferBuilder", "vertex.DefaultVertexFormat", "vertex.MeshData",
-    "vertex.VertexBuffer", "vertex.VertexFormat", "vertex.VertexSorting"))
+    "vertex.VertexBuffer", "vertex.VertexFormat", "vertex.VertexSorting", "vertex.BufferUploader",
+    "pipeline.TextureTarget", "platform.GlStateManager"))
 ALLOWED_CLASS_KEYS = frozenset(name.casefold() for name in ALLOWED_CLASSES)
 FORBIDDEN_PREFIXES = ("net.fabricmc.", "net.neoforged.", "com.google.gson.")
 ROLE = re.compile(r"<li>\{@code ([A-Za-z_][A-Za-z0-9_]*)\}: (host|library|example)(?:；([^<]*))?</li>")

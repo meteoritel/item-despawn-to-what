@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.client.ui.kit.api.control;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputRouter;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputScope;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiRenderLayers;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.GuiGraphics;
 import org.jetbrains.annotations.NotNull;
@@ -31,6 +32,7 @@ public abstract class UiScreen extends Screen {
     @Override public final void render(@NotNull GuiGraphics graphics, int x, int y, float delta) {
         Language current = Language.getInstance();
         if (resources != current) {
+            UiRenderLayers.releaseModels();
             invalidateUiResources();
             resources = current;
         }
@@ -88,8 +90,11 @@ public abstract class UiScreen extends Screen {
     }
     @Override public void removed() {
         input.close();
-        releaseUiResources();
-        resources = null;
-        super.removed();
+        try { releaseUiResources(); }
+        finally {
+            UiRenderLayers.releaseModels();
+            resources = null;
+            super.removed();
+        }
     }
 }

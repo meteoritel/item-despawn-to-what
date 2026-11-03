@@ -189,5 +189,8 @@
   "gui.itemdespawntowhat.debug.workbench.showcase.layers.foreground": "Toggle foreground",
   "gui.itemdespawntowhat.debug.workbench.showcase.layers.overlap": "Toggle overlap",
   "gui.itemdespawntowhat.debug.workbench.showcase.layers.tooltip": "The tooltip covers the complete mixed content.",
-  "gui.itemdespawntowhat.debug.workbench.showcase.layers.content": "Text + Sprite + Item"
+  "gui.itemdespawntowhat.debug.workbench.showcase.layers.content": "3D, flat, translucent, glint and scene samples",
+  "gui.itemdespawntowhat.debug.workbench.showcase.layers.forward": "Sprite → Model → Text",
+  "gui.itemdespawntowhat.debug.workbench.showcase.layers.reverse": "Text → Model → Sprite",
+  "gui.itemdespawntowhat.debug.workbench.showcase.layers.sample": "Mix"
 }

@@ -23,6 +23,7 @@ import net.minecraft.world.level.block.Blocks;
 import java.util.function.Consumer;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
@@ -36,7 +37,8 @@ final class KitLayersExample implements UiWidget, UiLayoutSource, AutoCloseable 
     private final @Nullable Function<PreviewBudget, PreviewScenes> previewFactory;
     private PreviewScenes scenes;
     private final UiIcon sprite = new UiIcon.Sprite(ResourceLocation.withDefaultNamespace("textures/block/stone.png"), 0, 0, 16, 16, 16, 16);
-    private final UiIcon item = new UiIcon.Item(new ItemStack(Items.DIAMOND));
+    private final List<UiIcon> items = List.of(new UiIcon.Item(new ItemStack(Items.STONE)),
+            new UiIcon.Item(new ItemStack(Items.DIAMOND)), new UiIcon.Item(new ItemStack(Items.GLASS)), glintItem());
     private UiRect bounds = new UiRect(0, 0, 0, 0);
     private boolean foreground = true;
     private boolean overlap;
@@ -58,27 +60,41 @@ final class KitLayersExample implements UiWidget, UiLayoutSource, AutoCloseable 
     @Override public void render(GuiGraphics graphics, Font font, UiPointer pointer) {
         controls.render(graphics, font, pointer);
         int x = bounds.x(), y = bounds.y() + 32;
-        UiRenderLayers.draw(graphics, UiRenderLayers.CONTENT, () -> {
-            sprite.render(graphics, x, y);
-            item.render(graphics, x + (overlap ? 4 : 20), y);
-            graphics.drawString(font, text("content"), x + (overlap ? 8 : 40), y + 4, theme.textColor(true), false);
-        });
         if (previewFactory != null) {
             if (scenes == null) scenes = previewFactory.apply(PreviewBudget.DEFAULT);
             scenes.beginFrame();
-            try {
-                scenes.icon("mixed-stone", new PreviewSubject.Block(Blocks.STONE.defaultBlockState(), null), 32,
-                        new PreviewMotion(0, 10_000), UiSceneStyle.icon(), sprite)
-                        .render(graphics, x + (overlap ? 12 : 144), y);
-            } finally { scenes.endFrame(); }
         }
-        graphics.drawString(font, state(), x, y + 60, theme.textColor(true), false);
+        try {
+            UiIcon preview = scenes == null ? null : scenes.icon("mixed-stone",
+                    new PreviewSubject.Block(Blocks.STONE.defaultBlockState(), null), 32,
+                    new PreviewMotion(0, 10_000), UiSceneStyle.icon(), sprite);
+            for (int row = 0; row < 2; row++) {
+                int rowY = y + row * 48;
+                graphics.fill(x, rowY, bounds.right(), rowY + 44, theme.surfaces().panelFill());
+                graphics.drawString(font, text(row == 0 ? "forward" : "reverse"), x + 2, rowY + 2, theme.textColor(true), false);
+                int step = overlap ? 40 : 60;
+                for (int i = 0; i < items.size(); i++) renderMixed(graphics, font, items.get(i), x + i * step, rowY + 14, row == 1);
+                if (preview != null) renderMixed(graphics, font, preview, x + items.size() * step, rowY + 12, row == 1);
+            }
+        } finally { if (scenes != null) scenes.endFrame(); }
+        graphics.drawString(font, state(), x, y + 100, theme.textColor(true), false);
         if (foreground) UiRenderLayers.draw(graphics, UiRenderLayers.FOREGROUND, () -> {
-            UiRect panel = new UiRect(x + 8, y + 8, Math.clamp(bounds.width() - 8, 0, 180), 26);
+            UiRect panel = new UiRect(x + 8, y + 20, Math.clamp(bounds.width() - 8, 0, 180), 56);
             graphics.fill(panel.x(), panel.y(), panel.right(), panel.bottom(), theme.surfaces().panelFill());
             graphics.drawString(font, text("foreground"), panel.x() + 4, panel.y() + 6, theme.textColor(true), false);
         });
         controls.renderTooltip(graphics, font, pointer);
+    }
+    private void renderMixed(GuiGraphics graphics, Font font, UiIcon icon, int x, int y, boolean reverse) {
+        Runnable label = () -> graphics.drawString(font, text("sample"), x + (overlap ? 8 : 40), y + 4, theme.textColor(true), false);
+        if (reverse) label.run(); else sprite.render(graphics, x, y);
+        icon.render(graphics, x + (overlap ? 4 : 20), y);
+        if (reverse) sprite.render(graphics, x, y); else label.run();
+    }
+    private static UiIcon glintItem() {
+        ItemStack stack = new ItemStack(Items.STONE);
+        stack.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true);
+        return new UiIcon.Item(stack);
     }
     @Override public void addFocusTargets(Consumer<UiFocusTarget> out) { controls.addFocusTargets(out); }
     @Override public long focusRevision() { return controls.focusRevision(); }
@@ -93,12 +109,12 @@ final class KitLayersExample implements UiWidget, UiLayoutSource, AutoCloseable 
     @Override public List<UiLayoutNode> layoutNodes() {
         return List.of(new UiLayoutNode(UiLayoutNode.Kind.FRAME, bounds, text("title"), 0, 0, true, true,
                 List.of(new UiLayoutNode(UiLayoutNode.Kind.ROW, contentBounds(), text("content"), 0, 0, true, true, List.of()),
-                        new UiLayoutNode(UiLayoutNode.Kind.ROW, new UiRect(bounds.x(), bounds.y() + 92, bounds.width(), 12),
+                        new UiLayoutNode(UiLayoutNode.Kind.ROW, new UiRect(bounds.x(), bounds.y() + 132, bounds.width(), 12),
                                 state(), 0, 0, true, true, List.of()),
                         new UiLayoutNode(UiLayoutNode.Kind.FRAME, bounds, text("actions"), 0, 0, true, true,
                                 controls.controls().stream().flatMap(control -> control.layoutNodes().stream()).toList()))));
     }
-    private UiRect contentBounds() { return new UiRect(bounds.x(), bounds.y() + 32, bounds.width(), 48); }
+    private UiRect contentBounds() { return new UiRect(bounds.x(), bounds.y() + 32, bounds.width(), 96); }
     private Component state() { return Component.translatable(KitShowcaseContent.UI + "showcase.layers.state", foreground, overlap, previewFactory != null); }
     void invalidateResources() { close(); }
     /** 仅释放本展示创建的场景，线程池归注入工厂的宿主所有。 */

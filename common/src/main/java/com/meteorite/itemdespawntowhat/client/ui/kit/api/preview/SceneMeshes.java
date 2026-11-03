@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.preview;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
@@ -22,13 +23,13 @@ import java.util.Map;
 import java.util.concurrent.CancellationException;
 import java.util.function.Function;
 import net.minecraft.client.renderer.RenderType;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.block.ModelBlockRenderer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.RenderShape;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
+import org.lwjgl.opengl.GL30;
 
 /** 静态几何的编译、交接与 GPU 生命周期；分段只决定工作顺序，缓冲按 RenderType 合并。 */
 @SuppressWarnings("resource") // 构建缓冲由 Prepared 持有，跨线程交接后统一 close。
@@ -166,10 +167,10 @@ final class SceneMeshes {
             finally { VertexBuffer.unbind(); }
         }
 
-        void draw(Matrix4f matrix, UiSceneCamera camera) {
+        void draw(Matrix4f matrix, UiSceneCamera camera, int target) {
             type.setupRenderState();
             try {
-                Minecraft.getInstance().getMainRenderTarget().bindWrite(false);
+                GlStateManager._glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, target);
                 gpu.bind();
                 int key = Math.floorMod((int) Math.floor(Math.toDegrees(camera.yaw()) / 15), 24)
                         + 24 * Math.round((float) Math.toDegrees(camera.pitch()));
@@ -185,7 +186,11 @@ final class SceneMeshes {
                 var offset = shader.getUniform("ChunkOffset");
                 if (offset != null) offset.set(0F, 0F, 0F);
                 gpu.drawWithShader(matrix, RenderSystem.getProjectionMatrix(), shader);
-            } finally { VertexBuffer.unbind(); type.clearRenderState(); }
+            } finally {
+                VertexBuffer.unbind();
+                type.clearRenderState();
+                GlStateManager._glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, target);
+            }
         }
         @Override public void close() { gpu.close(); }
     }

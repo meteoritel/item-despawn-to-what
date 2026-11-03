@@ -80,7 +80,7 @@ flowchart LR
     EDIT --> KIT
 ```
 
-边界由脚本强制：`python tools/check-ui-kit-boundaries.py`，白名单为 `java.*`、`javax.*`、`net.minecraft.*`、`org.jetbrains.*`、`org.joml.*`、`org.lwjgl.*`，另按脚本的 `ALLOWED_CLASSES` 精确放行光照、顶点构建、GPU 缓冲与 RenderSystem 类型。preview 单向引用基础能力，基础能力的全部子包受同一规则约束。宿主只引用 api，api 的公开/protected 声明保持在导出面内，具体类可继承包内实现父类，公开类型与消费角色逐目录核验。退出码 0 通过、1 存在违规、2 配置错误。
+边界由脚本强制：`python tools/check-ui-kit-boundaries.py`，白名单为 `java.*`、`javax.*`、`net.minecraft.*`、`org.jetbrains.*`、`org.joml.*`、`org.lwjgl.*`，另按脚本的 `ALLOWED_CLASSES` 精确放行光照、顶点构建、GPU 缓冲、TextureTarget、GlStateManager 与 RenderSystem 类型。preview 单向引用基础能力，基础能力的全部子包受同一规则约束。宿主只引用 api，api 的公开/protected 声明保持在导出面内，具体类可继承包内实现父类，公开类型与消费角色逐目录核验。退出码 0 通过、1 存在违规、2 配置错误。
 
 ### 被谁依赖
 
@@ -136,7 +136,7 @@ flowchart LR
 | `UiNumberPolicy` / `UiSliderWindow` / `UiNumbers` | 数值契约值 | 合法域与粗细步长吸附、轨道显示窗口、数值文本显示与解析各由唯一实现承担 | 滑条、精确输入、宿主字段 |
 | `UiNumberField` | 数值字段组合 | 注入 `UiSingleLineEditor`，统一双向绑定、相对几何、输入与绘制；两个子控件分别参与 Tab，空文本缺席由宿主回调处理 | `UiScalarSlider`、`UiValueTextBinding`、宿主数值字段 |
 | `UiValueTextBinding` | 双向绑定 | 统一数值预览/提交/取消与程序回填的重入保护；解析暂不可用时保留原文并停在最近有效值，未开始文本预览的取消保持原文 | 数值控件、精确输入行 |
-| `UiRenderLayers` | 绘制层序 | 在相对 z 偏移内绘制并提交批次，模态层按深度展开 | 弹窗栈、屏幕、预览类原语 |
+| `UiRenderLayers` | 绘制层序 | 在相对 z 偏移内提交批次；模型以独立深度绘制并平面合成，模态层按深度展开 | 弹窗栈、屏幕、预览类原语 |
 | `UiTooltipPlacement` / `UiTooltipPanel` | 提示面板 | 折行前按宿主、上限、margin 与 padding 计算正文宽度，再翻转和钳制外框，统一 TOOLTIP 层与正文裁剪 | `UiFlatText`、宿主语义说明面板 |
 | `UiFlatText` | 文本绘制原语 | 无阴影的居中、折行文本与悬停提示面板；深色底板的悬停提示只去掉文字阴影，文字颜色由调用方给定 | 控件、列表与树的空状态文案、页面提示 |
 | `UiFloatingPanel` / `UiIconStrip` / `UiLightbox` | 复合原语 | 面板停靠与折叠、图标条按格子命中、灯箱的缩放与焦点登记 | 屏幕装配、`UiFocusManager` |
@@ -209,7 +209,9 @@ sequenceDiagram
 
 `PreviewBudget` 由构造注入，默认值见其 `DEFAULT`。单场景、GPU 总量、pending 预留、请求数和逐帧次数/纳秒预算贯穿 CPU 编译、完成交接和 GPU 淘汰。每帧实例准备与上传共用软时间预算，实际绘制优先，帧末剩余额度用于预取，预算等待保持 PREPARING。请求槽位满且当前没有可淘汰场景时返回终态 `CAPACITY_REJECTED`，reason 带请求标识和容量上限；几何或字节超限仍为 `TOO_LARGE`。拒绝句柄不进入准备队列，容量恢复后再次 `request` 可获得新句柄，已拒绝句柄保持终态。`UiIcon.prepare` 仅登记内容；宿主为准备态和不可用状态分别提供占位。过期请求退出准备队列，晚到结果释放前仍计入待上传预算。半透明保留 quad 中心与索引类型，按预览视角每 15° yaw 档更新索引；同内容同相位共享缓存。实体与方块实体在渲染线程加载载荷、测量真实输出；平台适配直接装配 Display 的冻结渲染快照。
 
-文本、Sprite、Item 和场景的外部基准统一为 `UiRenderLayers.CONTENT`；`item` 在 adapter 内补偿原版物品偏移。`UiSceneView` 在内容块内保留模型深度，退出时恢复外部状态；前景、tooltip 与上层覆盖面按整个内容块覆盖。`UiSceneView` 统一适框、相机、满亮、裁剪与绘制状态恢复。方块、方块实体与实体默认 10 秒一圈并共享相位，结构 20 秒一圈，物品与流体 yaw 45° 静态，默认 pitch 22°；时间与开关由宿主注入。宿主关屏可用 `retainRecent` 裁剪近期 READY 场景，并分别限制场景与 renderer 实例数量；关闭所有者取消旧任务并释放 CPU/GPU 资源，晚到结果在交接处释放；executor 归宿主，关闭场景所有者后可继续用于新场景。`UiModelBounds.measure` 仅为空几何返回空值，渲染异常和非有限顶点进入既有失败分类。架构取舍见 [ADR-0057](../adr/0057-preview-visible-preparation-and-retention.md)。
+文本、Sprite、Item 和场景的外部基准统一为 `UiRenderLayers.CONTENT`。`model` 与 `item` 在透明颜色和独立深度工作区绘制，再把颜色以调用方内容平面合成；回调只使用传入的局部 `GuiGraphics`，`item` 在该上下文内补偿原版物品偏移。模型内部深度不进入主 GUI 深度缓冲，同层混排按绘制顺序覆盖，前景、tooltip 与上层覆盖面按整个内容块覆盖。工作区按实际 GUI 像素取样并裁剪到布局框和父裁剪交集，每次绘制清空颜色与深度；渲染线程共享工作区，尺寸按需增长，不缓存单个图标颜色。`UiScreen` 在资源失效和卸载时释放工作区，直接使用原版 Screen 的宿主在卸载时调用 `releaseModels`。
+
+`UiSceneView` 统一适框、相机、满亮与绘制状态恢复；静态几何和实例 renderer 都输出到独立工作区。方块、方块实体与实体默认 10 秒一圈并共享相位，结构 20 秒一圈，物品与流体 yaw 45° 静态，默认 pitch 22°；时间与开关由宿主注入。宿主关屏可用 `retainRecent` 裁剪近期 READY 场景，并分别限制场景与 renderer 实例数量；关闭所有者取消旧任务并释放 CPU/GPU 资源，晚到结果在交接处释放；executor 归宿主，关闭场景所有者后可继续用于新场景。`UiModelBounds.measure` 仅为空几何返回空值，渲染异常和非有限顶点进入既有失败分类。架构取舍见 [ADR-0057](../adr/0057-preview-visible-preparation-and-retention.md)。
 
 ### 样式注入到渲染
 

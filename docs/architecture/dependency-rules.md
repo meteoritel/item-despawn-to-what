@@ -90,7 +90,7 @@ flowchart LR
 - host 对应 kit 外 common/Fabric/NeoForge main 的静态引用；library 与 example 保持零直接生产消费，library 逐项说明用途与当前无直接生产引用。dev/probe 和注释分别识别；公开声明闭包另外报告类型可达，实际返回链由调用点核对；
 - kit 外源码只引用 api；公开/protected 声明、父类型、record 组件及接口隐式公开成员按有限词法规则检查 internal 类型泄漏；公开签名类型须登记，具体类的包内实现父类保留 Java 可见性；
 - `api/preview` 允许引用基础能力；全部基础子包对 preview 的 import 与全限定反向引用报错；
-- import 白名单为 `java.*`、`javax.*`、`net.minecraft.*`、`org.jetbrains.*`、`org.joml.*`、`org.lwjgl.*`，另有 `com.mojang.blaze3d` 的顶点与光照类型；
+- import 白名单为 `java.*`、`javax.*`、`net.minecraft.*`、`org.jetbrains.*`、`org.joml.*`、`org.lwjgl.*`；`com.mojang.blaze3d` 的光照、顶点、GPU 缓冲、TextureTarget、GlStateManager 与 RenderSystem 类型按脚本精确放行；
 - 本模组其它包、`net.fabricmc.*`、`net.neoforged.*`、`com.google.gson.*` 判违规。
 
 纯样例根还核对本地模型、kit.api 公开入口与原版/许可依赖，产品类型和 kit.internal 均报违规。`common:compileUiKitSamples` 同时以 kit + 纯样例作为源码输入，classpath 排除产品 main 输出，Java 编译负责实际类型可见性。

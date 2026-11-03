@@ -242,7 +242,7 @@ resize 保留已有页面、文本控件与编辑会话，只重排几何；单�
 
 ### 调试工作台
 
-`DebugWorkbenchScreen` 位于 common dev 的 client/debug，目录显式装配组件展台、组合交互、独立 kit 展示、图标预览和测试规则草稿。NeoForge probe 客户端事件装配 Ctrl+F8；main 的 `DebugWorkbenchHooks` 只持有打开动作。草稿工具保留在编辑器，预览和本地场景由各自 Screen 持有状态与资源。独立 kit 展示使用 UiScreen、UiInputScope 和 UiModalStack，内容只依赖 kit、原版类型与本地模型；外围目录注入宿主主题。展示包含文本/数值/列表、嵌套滚动、文档 Frame、浮板、灯箱、连线、导航、双点阵和 Layers 空间页。Layers 混排 Sprite、Item 与文字，有世界时通过外层注入的工厂增加 3D 方块；本页支持前景/兄弟重叠开关、统一提示和布局节点。kit 预算展示以 B 轮换默认、小预算、几何过限、请求容量拒绝/恢复四种模式。F6 换肤，基础页 G 修改单个点阵配置、R 发起真实资源重载。图标预览继续提供独立入口。纯 kit 样例由 `common:compileUiKitSamples` 在排除产品 main 输出的 classpath 上编译，工作台只负责外层接入。场景使用 UiInputScope、UiInputRouter 和 UiModalStack；模态切换取消持续交互，返回编辑器时重建屏幕并复用有效工作区。
+`DebugWorkbenchScreen` 位于 common dev 的 client/debug，目录显式装配组件展台、组合交互、独立 kit 展示、图标预览和测试规则草稿。NeoForge probe 客户端事件装配 Ctrl+F8；main 的 `DebugWorkbenchHooks` 只持有打开动作。草稿工具保留在编辑器，预览和本地场景由各自 Screen 持有状态与资源。独立 kit 展示使用 UiScreen、UiInputScope 和 UiModalStack，内容只依赖 kit、原版类型与本地模型；外围目录注入宿主主题。展示包含文本/数值/列表、嵌套滚动、文档 Frame、浮板、灯箱、连线、导航、双点阵和 Layers 空间页。Layers 在显式背景上以相反顺序混排 Sprite、文字与立体、平面、透明、附魔物品，有世界时通过外层注入的工厂增加旋转方块场景；本页支持前景/兄弟重叠开关、统一提示和布局节点。kit 预算展示以 B 轮换默认、小预算、几何过限、请求容量拒绝/恢复四种模式。F6 换肤，基础页 G 修改单个点阵配置、R 发起真实资源重载。图标预览继续提供独立入口。纯 kit 样例由 `common:compileUiKitSamples` 在排除产品 main 输出的 classpath 上编译，工作台只负责外层接入。场景使用 UiInputScope、UiInputRouter 和 UiModalStack；模态切换取消持续交互，返回编辑器时重建屏幕并复用有效工作区。
 
 `FormView.layoutNodes` 保留字段作用域；CardListControl 导出卡片及子控件，UiCatalogGrid 导出当前可见目录行，RuleNameInput 导出真实文本框。自动化定位使用实际层级和几何。工作台组件状态在同一页面可见、可滚动、可重置，详见 [GUI 探针](../guides/gui-probes.md)。
 

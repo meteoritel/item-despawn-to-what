@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.debug;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIcon;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiRenderLayers;
 import com.meteorite.itemdespawntowhat.client.debug.kit.KitPreviewBudgetExample;
 import net.minecraft.locale.Language;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutSource;
@@ -144,7 +145,12 @@ final class PreviewExamplesScreen extends Screen implements UiLayoutSource {
     }
 
     /** 关闭开发入口时恢复转台设置并短期保留近期就绪场景。 */
-    @Override public void removed() { budgets.close(); PreviewIcons.setRotating(true); PreviewResources.screenClosed(); }
+    @Override public void removed() {
+        budgets.close();
+        PreviewIcons.setRotating(true);
+        PreviewResources.screenClosed();
+        UiRenderLayers.releaseModels();
+    }
     /** 图标验收使用持续推进的客户端界面时间。 */
     @Override public boolean isPauseScreen() { return false; }
 }

@@ -49,7 +49,7 @@ public sealed interface UiIcon permits UiIcon.Item, UiIcon.Sprite, UiIcon.Render
         @Override public int width() { return 16; }
         @Override public int height() { return 16; }
         @Override public void render(GuiGraphics graphics, int x, int y) {
-            UiRenderLayers.item(graphics, () -> graphics.renderItem(stack, x, y));
+            UiRenderLayers.item(graphics, new UiRect(x, y, width(), height()), local -> local.renderItem(stack, x, y));
         }
     }
 
