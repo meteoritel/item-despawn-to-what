@@ -20,7 +20,7 @@ python tools/gui-probes/lib/run.py --run-dir .scratch/gui-check --validate
 | `lib/prelude.js` | 作用域选择器、真实输入、目标导航、布局快照和截图 |
 | `lib/run.py` | 声明式动作与断言、用例状态、settle、采集和运行记录装配 |
 | `lib/record.py` | 用例及整体判定、证据身份、输出角色、记录持久化 |
-| `lib/sheet.py` | 从记录逐张读取 PNG，派生 contact sheet 与截图清单 |
+| `lib/sheet.py` | 从记录逐张读取 PNG，派生原始像素分页 contact sheet 与截图清单 |
 | `lib/report.py` | 消费记录与派生图，渲染自包含 HTML |
 | `lib/pixels.py` / `lib/bitmap_font.py` | 标准库 PNG 与拼图文字基元 |
 | `cases/` | 每例声明独立起点、动作、命名断言和证据 |

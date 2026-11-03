@@ -114,7 +114,8 @@ class RunRecord:
                 "duration_seconds": round(self._metrics["total_ms"] / 1000, 1),
                 "outputs": {key: str(self.directory / name) for key, name in FILES.items()},
                 "shots": {"count": len(self.screenshots()), "contact_sheet": self._derived.get("contact_sheet"),
-                          "list": self._derived.get("list_path")}})
+                           "contact_sheets": [page["path"] for page in self._derived.get("contact_sheets", [])],
+                           "list": self._derived.get("list_path")}})
 
     def snapshot(self):
         value = {"format": "idtw-gui-run-v1", "metadata": self._metadata, "environment": self._env,

@@ -17,7 +17,8 @@ from toolslib.repo import repo_root  # noqa: E402
 REPO_ROOT = repo_root()
 TOOLS_DIR = REPO_ROOT / "tools"
 PROTOCOL_MAJOR = 1
-REQUIRED_CAPABILITIES = frozenset(("environment", "sample", "read", "action", "reach", "language", "screenshot"))
+REQUIRED_CAPABILITIES = frozenset(("environment", "sample", "read", "action", "reach", "language",
+                                  "screenshot", "screenshot_status", "cancel_screenshot"))
 
 
 class ProbeError(RuntimeError):
@@ -71,6 +72,7 @@ class Client:
         if not reused:
             code = ("var __gpRunDir = " + json.dumps(self.run_dir) + ";\n"
                     + "var __gpSourceHash = " + json.dumps(self.source_hash) + ";\n"
+                    + "if (typeof __gp === 'object' && __gp && typeof __gp.dispose === 'function') __gp.dispose();\n"
                     + self._prelude + "\nJSON.stringify(__gp.describe());")
             hello = self._eval(code, timeout_ms=max(timeout_ms, 30000))
         return self._check_hello(hello), not reused

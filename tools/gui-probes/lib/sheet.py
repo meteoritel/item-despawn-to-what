@@ -1,13 +1,12 @@
 """把一次运行里的截图拼成 contact sheet，并写一份纯清单的截图索引。
 
-用途：GUI 探针只把截图当证据——拼一张带「序号 + 用例 + 截图名」标签的缩略图总览，
+用途：GUI 探针只把截图当证据——按原始像素分页拼接，保留「序号 + 用例 + 截图名」标签，
 另写 visual-summary.md 列出每张截图的序号、用例、尺寸与路径，供人和 Agent 直接读图确认界面。
 
 边界：只做拼图与清单，不比较两张图、不产出 diff、不维护基线；单张截图解码失败只跳过该格，
 解码错误记录在运行记录的 artifact_errors，其他格子继续生成。
 """
 
-import math
 import os
 import time
 from pathlib import Path
@@ -18,17 +17,12 @@ import pixels
 
 _MARGIN = 16
 _GAP = 14
-_COLUMNS = 3
+_SHOTS_PER_PAGE = 2
 _BORDER = 2
 _CELL_PADDING = 12
-_IMAGE_WIDTH = 440
-_IMAGE_HEIGHT = 248
 _FONT_SCALE = 2
 _LINE_HEIGHT = bitmap_font.GLYPH_HEIGHT * _FONT_SCALE + 6
 _LABEL_HEIGHT = 2 * _LINE_HEIGHT
-_INNER_WIDTH = _IMAGE_WIDTH
-_CELL_WIDTH = _INNER_WIDTH + 2 * (_BORDER + _CELL_PADDING)
-_CELL_HEIGHT = _LABEL_HEIGHT + _IMAGE_HEIGHT + 2 * (_BORDER + _CELL_PADDING)
 
 _SHEET_BACKGROUND = (27, 31, 39, 255)
 _CELL_BACKGROUND = (35, 40, 51, 255)
@@ -48,60 +42,74 @@ def _label_lines(shot):
     return "#%02d  %s" % (shot["index"], shot["case"]), shot["name"]
 
 
-def _draw_cell(canvas, sheet_width, sheet_height, x, y, shot):
-    """画一格：外边框 + 两行标签 + 等比缩放后的截图；截图解不开时画占位底色。"""
-    pixels.fill_rect(canvas, sheet_width, sheet_height, x, y, _CELL_WIDTH, _CELL_HEIGHT, _CELL_BORDER)
+def _draw_cell(canvas, sheet_width, sheet_height, x, y, shot, image_width, image_height):
+    """画一格原始像素截图；逐张解码，限制分页拼接的峰值内存。"""
+    cell_width = image_width + 2 * (_BORDER + _CELL_PADDING)
+    cell_height = _LABEL_HEIGHT + image_height + 2 * (_BORDER + _CELL_PADDING)
+    pixels.fill_rect(canvas, sheet_width, sheet_height, x, y, cell_width, cell_height, _CELL_BORDER)
     inner_x = x + _BORDER
     inner_y = y + _BORDER
     pixels.fill_rect(canvas, sheet_width, sheet_height, inner_x, inner_y,
-                     _CELL_WIDTH - 2 * _BORDER, _CELL_HEIGHT - 2 * _BORDER, _CELL_BACKGROUND)
+                     cell_width - 2 * _BORDER, cell_height - 2 * _BORDER, _CELL_BACKGROUND)
     text_x = inner_x + _CELL_PADDING
     first_line_y = inner_y + _CELL_PADDING
     title, detail = _label_lines(shot)
     bitmap_font.draw_text(canvas, sheet_width, sheet_height, text_x, first_line_y,
-                          bitmap_font.fit_text(title, _INNER_WIDTH, _FONT_SCALE),
+                          bitmap_font.fit_text(title, image_width, _FONT_SCALE),
                           _TEXT_PRIMARY, _FONT_SCALE)
     bitmap_font.draw_text(canvas, sheet_width, sheet_height, text_x,
                           first_line_y + _LINE_HEIGHT,
-                          bitmap_font.fit_text(detail, _INNER_WIDTH, _FONT_SCALE),
+                          bitmap_font.fit_text(detail, image_width, _FONT_SCALE),
                           _TEXT_DIM, _FONT_SCALE)
     image_x = inner_x + _CELL_PADDING
     image_y = inner_y + _CELL_PADDING + _LABEL_HEIGHT
     try:
         width, height, rgba = pixels.decode_png(Path(shot["path"]).read_bytes())
-        fit_width, fit_height, fitted = pixels.scale_to_fit(width, height, rgba,
-                                                           _IMAGE_WIDTH, _IMAGE_HEIGHT)
     except (ValueError, OSError) as failure:
         shot["render_error"] = str(failure)
         pixels.fill_rect(canvas, sheet_width, sheet_height, image_x, image_y,
-                         _IMAGE_WIDTH, _IMAGE_HEIGHT, _PLACEHOLDER)
+                         image_width, image_height, _PLACEHOLDER)
         bitmap_font.draw_text(canvas, sheet_width, sheet_height, image_x + 8, image_y + 8,
                               "decode failed", _TEXT_DIM, _FONT_SCALE)
         return
-    offset_x = image_x + (_IMAGE_WIDTH - fit_width) // 2
-    offset_y = image_y + (_IMAGE_HEIGHT - fit_height) // 2
-    pixels.blit(canvas, sheet_width, sheet_height, fitted, fit_width, fit_height,
+    offset_x = image_x + (image_width - width) // 2
+    offset_y = image_y + (image_height - height) // 2
+    pixels.blit(canvas, sheet_width, sheet_height, rgba, width, height,
                 offset_x, offset_y)
 
 
-def _write_contact_sheet(run_dir, shots):
-    """把全部截图拼成一张网格图，返回落盘路径；没有截图时返回 None。"""
-    if not shots:
-        return None
-    rows = math.ceil(len(shots) / _COLUMNS)
-    sheet_width = 2 * _MARGIN + _COLUMNS * _CELL_WIDTH + (_COLUMNS - 1) * _GAP
-    sheet_height = 2 * _MARGIN + rows * _CELL_HEIGHT + (rows - 1) * _GAP
-    canvas = pixels.new_canvas(sheet_width, sheet_height, _SHEET_BACKGROUND)
-    for position, shot in enumerate(shots):
-        column = position % _COLUMNS
-        row = position // _COLUMNS
-        x = _MARGIN + column * (_CELL_WIDTH + _GAP)
-        y = _MARGIN + row * (_CELL_HEIGHT + _GAP)
-        _draw_cell(canvas, sheet_width, sheet_height, x, y, shot)
-    path = os.path.join(run_dir, FILES["sheet"])
-    with open(path, "wb") as handle:
-        handle.write(pixels.encode_png(sheet_width, sheet_height, canvas))
-    return path
+def _write_contact_sheets(run_dir, shots):
+    """每页纵向排列原图；首页保留固定文件名，后续页使用数字后缀。"""
+    pages = []
+    for start in range(0, len(shots), _SHOTS_PER_PAGE):
+        group = shots[start:start + _SHOTS_PER_PAGE]
+        sizes = []
+        for shot in group:
+            try:
+                sizes.append(pixels.png_size(Path(shot["path"]).read_bytes()))
+            except (ValueError, OSError) as failure:
+                shot["render_error"] = str(failure)
+                sizes.append((max(440, int(shot.get("width") or 0)),
+                              max(248, int(shot.get("height") or 0))))
+        image_width = max(width for width, _ in sizes)
+        cell_heights = [_LABEL_HEIGHT + height + 2 * (_BORDER + _CELL_PADDING)
+                        for _, height in sizes]
+        sheet_width = 2 * _MARGIN + image_width + 2 * (_BORDER + _CELL_PADDING)
+        sheet_height = 2 * _MARGIN + sum(cell_heights) + (len(group) - 1) * _GAP
+        canvas = pixels.new_canvas(sheet_width, sheet_height, _SHEET_BACKGROUND)
+        y = _MARGIN
+        for shot, (_, height), cell_height in zip(group, sizes, cell_heights):
+            _draw_cell(canvas, sheet_width, sheet_height, _MARGIN, y, shot, image_width, height)
+            y += cell_height + _GAP
+        name = Path(FILES["sheet"])
+        if pages:
+            name = name.with_stem(name.stem + "-%03d" % (len(pages) + 1))
+        path = os.path.join(run_dir, name)
+        with open(path, "wb") as handle:
+            handle.write(pixels.encode_png(sheet_width, sheet_height, canvas))
+        pages.append({"path": path, "width": sheet_width, "height": sheet_height,
+                      "first": group[0]["index"], "last": group[-1]["index"]})
+    return pages
 
 
 def _read(path):
@@ -111,14 +119,15 @@ def _read(path):
         return handle.read()
 
 
-def _write_list(run_dir, shots, sheet_path):
+def _write_list(run_dir, shots, pages):
     """写截图清单：只有序号、用例、截图名、尺寸与路径，没有比对结论。"""
     lines = [
         "# 截图清单",
         "",
         "- 运行目录：`" + os.path.abspath(run_dir).replace("\\", "/") + "`",
         "- 截图张数：%d" % len(shots),
-        "- contact sheet：" + (os.path.basename(sheet_path) if sheet_path else "（无截图）"),
+        "- contact sheets（原始像素）：" + (", ".join(os.path.basename(page["path"]) for page in pages)
+                                         if pages else "（无截图）"),
         "",
         "| # | 用例 | 截图 | 图像尺寸@缩放 | 文件 |",
         "| --- | --- | --- | --- | --- |",
@@ -138,18 +147,21 @@ def _write_list(run_dir, shots, sheet_path):
 def build(snapshot):
     """拼 contact sheet 并写截图清单。
 
-    返回 {contact_sheet, list_path, shots, count, sheet_ms}；没有截图时 contact_sheet 为 None。
+    contact_sheets 列出全部原始像素分页；contact_sheet 与 png_bytes 指向首页。
     """
     started = time.perf_counter()
     run_dir = snapshot.directory
     shots = _collect(snapshot)
-    sheet_path = _write_contact_sheet(run_dir, shots)
+    pages = _write_contact_sheets(run_dir, shots)
+    sheet_path = pages[0]["path"] if pages else None
     errors = [{"role":"screenshot", "id":shot["id"], "error":shot["render_error"]}
               for shot in shots if "render_error" in shot]
-    list_path = _write_list(run_dir, shots, sheet_path)
+    list_path = _write_list(run_dir, shots, pages)
     return {
         "artifact_errors": errors,
         "contact_sheet": sheet_path,
+        "contact_sheets": pages,
+        "page_png_bytes": [_read(page["path"]) for page in pages],
         "png_bytes": _read(sheet_path),
         "list_path": list_path,
         "count": len(shots),

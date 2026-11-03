@@ -143,11 +143,11 @@ expected、expected_lang、expected_capture 是互斥期望来源；capture 引�
 
 ## 执行与证据
 
-prelude 经 client adapter 按内容摘要和运行目录安装；握手校验协议主版本及驱动必需能力。驱动统一调用 invoke，传输信封和显式 JSON 结果各解码一次，保留 JSON 原生类型。每次求值的布局快照只构建一次，动作只执行一次。动作后按屏幕、几何、文案、启用态、缩放和帧缓冲指纹 settle；超时写入 metrics。异步业务结果通过 `wait_for` 轮询断言。执行 `shot` 前等待渲染帧，每条截图步骤生成全尺寸与逻辑尺寸 PNG。
+prelude 经 client adapter 按内容摘要和运行目录安装；握手校验协议主版本及驱动必需能力。驱动统一调用 invoke，传输信封和显式 JSON 结果各解码一次，保留 JSON 原生类型。每次求值的布局快照只构建一次，动作只执行一次。动作后按屏幕、几何、文案、启用态、缩放和帧缓冲尺寸 settle；超时写入 metrics 并终止当前用例。异步业务结果通过 `wait_for` 轮询断言。执行 `shot` 时临时订阅 RenderFrameEvent.Post，等待资源遮罩关闭及连续两帧布局签名稳定后，从已完成渲染的帧缓冲采集全尺寸与逻辑尺寸 PNG。驱动在渲染线程外轮询结果；完成、超时、取消或 prelude 重装时释放监听。
 
-`RunRecord` 统一持有用例判定、原始断言、证据 id、用例和步骤关联、指标及输出文件角色。`sheet.build(snapshot)` 生成拼图与清单，`report.render_report(snapshot, shots)` 只渲染记录。记录先持久化原始证据，派生模块读取不可变快照并返回产物及错误，由记录统一接收。截图采集失败记用例错误；派生拼图或报告失败记 `artifact_errors`，保留原始截图数量和已完成用例。
+`RunRecord` 统一持有用例判定、原始断言、证据 id、用例和步骤关联、指标及输出文件角色。`sheet.build(snapshot)` 按原始像素生成分页拼图与清单，`report.render_report(snapshot, shots)` 按原始尺寸内嵌全部分页。记录先持久化原始证据，派生模块读取不可变快照并返回产物及错误，由记录统一接收。截图采集失败记用例错误；派生拼图或报告失败记 `artifact_errors`，保留原始截图数量和已完成用例。
 
-产物位于运行目录：`gui-run.json` 是完整运行记录，`gui-summary.json` 是汇总，`run-metadata.json` 是环境与指标，`gui-report.html` 展示用例与断言，有截图时内嵌 contact sheet；`gui-contact-sheet.png` 在有截图时生成，`visual-summary.md` 列出实际截图。单张 PNG 和布局 JSON 由相应步骤生成。GUI 外观按选取的截图复核，手感交用户实机确认。
+产物位于运行目录：`gui-run.json` 是完整运行记录，`gui-summary.json` 是汇总，`run-metadata.json` 是环境与指标，`gui-report.html` 展示用例与断言，有截图时内嵌全部 contact sheet 分页；每页纵向排列两张原始像素截图，首页为 `gui-contact-sheet.png`，后续页使用 `gui-contact-sheet-002.png` 等数字后缀，`visual-summary.md` 列出分页与实际截图。单张 PNG 和布局 JSON 由相应步骤生成。GUI 外观按选取的截图复核，手感交用户实机确认。
 
 共享 metrics 在 HTML 派生前固定：total_ms 表示采集与拼图累计耗时，phases.report_ms 保留兼容字段并为 0；终端、JSON、HTML 的同名共享指标一致。gui-run.json 与 run-metadata.json 的 finalization 单独记录 report_render_write_ms 和 wall_total_ms，后者计至报告写入完成；最终 JSON 保存不回填 HTML。外部格式仍为 idtw-gui-run-v1，warned 保留为 0，未知 verdict 明确报错。
 

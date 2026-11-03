@@ -4,14 +4,13 @@
 所有断言都在用例文件里声明，期望值来自语言文件或稳定的状态契约；驱动不替用例决定期望值。
 
 客户端原语在会话内只安装一次：之后每次求值只发表达式本身，往返从「每次重装整份 prelude」
-降到一段小脚本。动作之后不再固定 sleep，改为轮询布局指纹判断界面是否稳定；截图前只隔两帧，
-保证 takeScreenshot 拿到的是新帧缓冲。每条 eval 记录 RTT 与次数，运行结束汇总成 metrics
+降到一段小脚本。动作之后轮询布局指纹判断界面是否稳定；截图在连续稳定的渲染帧完成后采集，
+驱动只轮询任务结果。每条 eval 记录 RTT 与次数，运行结束汇总成 metrics
 写进 gui-summary.json，终端同时打印一行。
 """
 
 import argparse
 import json
-import math
 import os
 import sys
 import time
@@ -134,11 +133,24 @@ class Probe:
         """轮询间隔：半帧起步，限在 15-60ms，避免高频 eval 抢渲染线程。"""
         return clamp(self.frame_ms() / 2.0, 15.0, 60.0)
 
-    def wait_frame(self, frames=2):
-        """截图前隔开两帧：takeScreenshot 取的是上一帧已完成的帧缓冲。"""
-        delay_ms = max(math.ceil(frames * self.frame_ms()), 16)
-        time.sleep(delay_ms / 1000.0)
-        return delay_ms
+    def screenshot(self, name, timeout_ms):
+        """请求渲染完成后的截图；等待期间让出渲染线程，失败时取消监听。"""
+        deadline = time.monotonic() + timeout_ms / 1000.0
+        pending = True
+        try:
+            self.evaluate("screenshot", {"name": name, "timeout_ms": timeout_ms})
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise ProbeError("截图等待渲染完成超时: " + name)
+                time.sleep(min(self.poll_interval_ms() / 1000.0, remaining))
+                result = self.evaluate("screenshot_status")
+                if not result.get("pending"):
+                    pending = False
+                    return result
+        finally:
+            if pending:
+                self.evaluate("cancel_screenshot")
 
     def settle(self, before_key=None, timeout_ms=None):
         """轮询布局指纹直到稳定。
@@ -183,6 +195,7 @@ class Probe:
         self.settle_polls += polls
         if timed_out:
             self.settle_timeouts += 1
+            raise ProbeError("界面布局等待稳定超时: %dms" % timeout_ms)
         return {"waited_ms": waited_ms, "polls": polls, "timeout": timed_out,
                 "changed": seen_change}
 
@@ -317,8 +330,7 @@ def run_case(probe, case, langs, settle_timeout_ms):
                     time.sleep(0.05)
                 checks.append(outcome)
             elif "shot" in step:
-                probe.wait_frame()
-                value = probe.evaluate("screenshot", step["shot"])
+                value = probe.screenshot(step["shot"], settle_limit)
                 path = value["path"]
                 if not os.path.isfile(path) or os.path.getsize(path) == 0: raise ProbeError("截图未落盘: " + path)
                 artifact = dict(value, kind="screenshot", name=step["shot"], step=index)

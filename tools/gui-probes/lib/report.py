@@ -152,7 +152,7 @@ def _embedded_image(alt: str, png: object, width: object = None, height: object 
 
 
 def _shots_section(shots):
-    """截图区块：内嵌 contact sheet 总览 + 每张截图的清单；不做任何图像比对判定。"""
+    """截图区块按原始像素内嵌全部分页，并列出每张截图的证据路径。"""
     if not shots:
         return ""
     items = shots.get("shots") or []
@@ -160,11 +160,14 @@ def _shots_section(shots):
              '<div class="counts"><span>截图 <b>' + str(shots.get("count", len(items)))
              + "</b></span>" + "<span>拼图耗时 <b>" + _milliseconds(shots.get("sheet_ms"))
              + "</b></span></div>"]
-    if shots.get("contact_sheet"):
-        parts.append('<h3>contact sheet</h3><figure class="shot"><div class="shot-frame">'
-                     + _embedded_image("contact sheet", shots.get("png_bytes"))
-                     + "</div><figcaption><b>contact sheet</b><code>"
-                     + _escape(shots["contact_sheet"]) + "</code></figcaption></figure>")
+    pages = shots.get("contact_sheets") or []
+    page_images = shots.get("page_png_bytes") or []
+    for index, page in enumerate(pages):
+        label = "contact sheet %d · #%02d–#%02d" % (index + 1, page["first"], page["last"])
+        parts.append('<h3>' + label + '</h3><figure class="shot"><div class="shot-frame">'
+                     + _embedded_image(label, page_images[index], page["width"], page["height"])
+                     + "</div><figcaption><b>" + label + "</b><code>"
+                     + _escape(page["path"]) + "</code></figcaption></figure>")
     if items:
         rows = "".join(
             "<tr><td>" + str(shot.get("index", 0)) + "</td>"
@@ -317,7 +320,7 @@ def _jsonable_shots(shots: dict[str, Any] | None) -> dict[str, Any] | None:
     """数据块里的截图证据：去掉 contact sheet 字节，路径与尺寸保留。"""
     if not shots:
         return None
-    return {key: value for key, value in shots.items() if key != "png_bytes"}
+    return {key: value for key, value in shots.items() if key not in ("png_bytes", "page_png_bytes")}
 
 
 def _data_script(run_metadata: dict[str, Any], env: dict[str, Any],

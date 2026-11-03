@@ -14,6 +14,10 @@ var __gp = (function () {
   var NativeImage = Java.loadClass('com.mojang.blaze3d.platform.NativeImage');
   var Workspace = Java.loadClass('com.meteorite.itemdespawntowhat.client.net.RuleEditClientWorkspace');
   var Language = Java.loadClass('net.minecraft.locale.Language');
+  var EventBus = Java.loadClass('net.neoforged.neoforge.common.NeoForge').EVENT_BUS;
+  var RenderPost = Java.loadClass('net.neoforged.neoforge.client.event.RenderFrameEvent$Post');
+  var EventPriority = Java.loadClass('net.neoforged.bus.api.EventPriority');
+  var Consumer = Java.loadClass('java.util.function.Consumer');
 
   // 证据目录与本次安装绑定，换目录时由 adapter 重装。
   function join(name) {
@@ -56,8 +60,7 @@ var __gp = (function () {
       ? text.substring(0, text.length - 4) : text;
   }
 
-  // 截图：写全尺寸 PNG 与逻辑分辨率缩略图，一次求值返回元数据。
-  // takeScreenshot 取的是上一帧已完成的帧缓冲，调用方要在动作与截图之间隔开至少两帧。
+  // 只在 RenderFrameEvent.Post 调用，读取当前已完成渲染的帧缓冲。
   function shot(name) {
     var started = Date.now();
     var scale = windowInfo().scale;
@@ -85,6 +88,65 @@ var __gp = (function () {
       if (thumb !== null) thumb.close();
       img.close();
     }
+  }
+
+  // 截图任务只在等待期间订阅帧事件；完成、超时、取消或重装时释放。
+  var pendingShot = null;
+
+  function detachShot(task) {
+    if (task.listener !== null) {
+      EventBus.unregister(task.listener);
+      task.listener = null;
+    }
+  }
+
+  function cancelShot() {
+    if (pendingShot !== null) detachShot(pendingShot);
+    pendingShot = null;
+    return {cancelled:true};
+  }
+
+  function requestShot(payload) {
+    if (pendingShot !== null) throw new Error('Screenshot already pending');
+    var started = Date.now();
+    var task = {name:String(payload.name), started:started, deadline:started + payload.timeout_ms,
+      signature:null, stableFrames:0, listener:null, result:null, error:null};
+    task.listener = new Consumer({accept:function() {
+      try {
+        if (Date.now() >= task.deadline) {
+          task.error = 'Screenshot render wait timed out';
+          return;
+        }
+        begin();
+        if (MC.getOverlay() !== null) {
+          task.signature = null;
+          task.stableFrames = 0;
+          return;
+        }
+        var signature = JSON.stringify(sample().signature);
+        task.stableFrames = signature === task.signature ? task.stableFrames + 1 : 1;
+        task.signature = signature;
+        if (task.stableFrames < 2) return;
+        task.result = shot(task.name);
+        task.result.shot_ms = Date.now() - task.started;
+      } catch (error) {
+        task.error = String(error);
+      } finally {
+        if (task.result !== null || task.error !== null) detachShot(task);
+      }
+    }});
+    EventBus.addListener(EventPriority.LOWEST, RenderPost, task.listener);
+    pendingShot = task;
+    return {pending:true};
+  }
+
+  function shotStatus() {
+    if (pendingShot === null) throw new Error('No screenshot pending');
+    if (pendingShot.error !== null) throw new Error(pendingShot.error);
+    if (pendingShot.result === null) return {pending:true};
+    var result = pendingShot.result;
+    pendingShot = null;
+    return result;
   }
 
   function click(x, y, button) {
@@ -536,7 +598,7 @@ var __gp = (function () {
     }
   }
 
-  // 轻量运行时信息：eval 内耗时从 begin() 起算，fps 与帧缓冲尺寸供驱动算截图前的帧间隔。
+  // 轻量运行时信息：eval 内耗时从 begin() 起算，fps 用于调节状态轮询间隔。
   function runtime() {
     var w = windowInfo();
     return {
@@ -567,7 +629,9 @@ var __gp = (function () {
     action:function(payload) { var result = action(payload); return {r:result, k:sample()}; },
     reach:reachStep,
     language:lang,
-    screenshot:shot
+    screenshot:requestShot,
+    screenshot_status:shotStatus,
+    cancel_screenshot:cancelShot
   };
 
   function describe() {
@@ -589,5 +653,5 @@ var __gp = (function () {
     }
   }
 
-  return {describe:describe, invoke:invoke};
+  return {describe:describe, invoke:invoke, dispose:cancelShot};
 })();
