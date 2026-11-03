@@ -92,9 +92,11 @@ final class RuleEditorResultsSection {
     private boolean readonlyNoteCached;
     private @Nullable Component readonlyNoteValue;
 
-    // 详情卡头部缓存：空态、所选动作、语言与字体任一变化才重建
+    // 详情卡头部缓存：空态、会话版本、所选动作、语言与字体任一变化才重建。
+    // 所选动作是草稿的实时视图，字段写入不会替换句柄，只靠身份比较会留旧标题与图标。
     private boolean headerCached;
     private boolean headerEmpty;
+    private long headerRevision = -1;
     private @Nullable RuleValue headerAction;
     private @Nullable Object headerLanguage;
     private @Nullable EditorSectionContent.CardHeader headerValue;
@@ -1189,11 +1191,15 @@ final class RuleEditorResultsSection {
     private EditorSectionContent.CardHeader detailHeader() {
         boolean empty = emptyDetailRect != null;
         Object language = Language.getInstance();
-        if (headerCached && headerEmpty == empty && headerAction == selectedAction && headerLanguage == language) {
+        EditSession session = shell.editingSession();
+        long revision = session == null ? -1 : session.revision();
+        if (headerCached && headerEmpty == empty && headerRevision == revision
+                && headerAction == selectedAction && headerLanguage == language) {
             return headerValue;
         }
         headerCached = true;
         headerEmpty = empty;
+        headerRevision = revision;
         headerAction = selectedAction;
         headerLanguage = language;
         EditorSectionContent.CardHeader next = empty
