@@ -352,7 +352,12 @@ public class DebugWorkbenchScreen extends Screen {
                 if (scissored) { graphics.disableScissor(); }
             }
             for (UiButton button : fixed) { button.render(graphics, font, pointer); overlayNodes.addAll(button.layoutNodes()); }
-            modals.render(graphics, font, scope.pointer(mx, my)); overlayNodes.addAll(modals.layoutNodes()); synchronize();
+            modals.render(graphics, font, scope.pointer(mx, my)); overlayNodes.addAll(modals.layoutNodes());
+            // 提示画在所有内容之后：被裁的内容区不会切掉它，模态开启时由模态自己出提示
+            if (modals.isEmpty() && pointer.allowsTooltip() && pointer.hit() != null) {
+                pointer.hit().renderTooltip(graphics, font, theme.surfaces(), mx, my);
+            }
+            synchronize();
         }
         private void emitNodes(UiWidget widget) {
             if (widget instanceof UiLayoutSource source) {

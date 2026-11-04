@@ -7,10 +7,12 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiStyleSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiMinecraftTheme;
+import java.util.List;
 import java.util.Objects;
 import java.util.function.Function;
 
@@ -50,6 +52,12 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInt
      */
     private static final int VALUE_DECIMALS = 2;
 
+    /** 文字行与轨道之间的最小间距；放不下时退回旧的居中画法。 */
+    private static final int TRACK_GAP = 2;
+
+    /** 标签与数值之间保留的最小间距。 */
+    private static final int TEXT_GAP = 4;
+
     private UiInteractionSession capture;
     private final UiValueInteraction<Double> interaction = new UiValueInteraction<>(
             Double::isFinite, (first, second) -> first.doubleValue() == second.doubleValue());
@@ -78,6 +86,9 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInt
     private double dragAnchorPointer;
     private double dragAnchorValue;
     private boolean dragFineAnchor;
+    /** 上一帧标签是否被可用宽度截断；命中时据此附带完整标签提示。 */
+    private boolean labelTrimmed;
+    private UiRect labelBounds = new UiRect(0, 0, 0, 0);
 
     public UiScalarSlider(UiNumberPolicy policy) {
         this(policy, new UiSliderWindow(policy.min(), policy.max()));
@@ -319,19 +330,59 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInt
         }
         hovered = enabled && pointer.forTarget(this).contains(bounds);
         painter.paint(graphics, buildFrame(font));
-        int textY = bounds.y() + Math.max(0, (bounds.height() - font.lineHeight) / 2);
-        String labelText = TextScroll.trimToWidth(font, label.getString(), Math.max(0, bounds.width() / 2));
+        int textY = textRowY(font);
+        String valueText = trimmedValue(font);
+        int valueWidth = font.width(valueText);
+        // 数值优先完整可见：标签按剩余宽度截断，悬停时用提示补全
+        int labelMax = Math.max(0, bounds.width() - valueWidth - TEXT_GAP);
+        String labelText = TextScroll.trimToWidth(font, label.getString(), labelMax);
+        labelTrimmed = labelMax > 0 && font.width(label.getString()) > labelMax;
+        labelBounds = new UiRect(bounds.x(), textY, Math.min(font.width(labelText), labelMax), font.lineHeight);
         if (!labelText.isEmpty()) {
             graphics.drawString(font, labelText, bounds.x(), textY, style.resolveLabelText(enabled, error), false);
         }
-        String valueText = formatValue().getString();
-        int valueX = Math.max(bounds.x(), bounds.right() - font.width(valueText));
+        int valueX = Math.max(bounds.x(), bounds.right() - valueWidth);
         graphics.drawString(font, valueText, valueX, textY, style.resolveValueText(enabled, error), false);
+    }
+
+    // 标签被截断时把完整标签挂到命中上，由宿主现有的提示出口绘制
+    @Override
+    public @Nullable UiPointerHit hitTest(double x, double y) {
+        if (!canFocus() || !bounds.contains(x, y)) {
+            return null;
+        }
+        UiPointerHit hit = UiPointerHit.leaf(this, x, y);
+        return labelTrimmed && labelBounds.width() > 0
+                ? hit.withTextTooltip(List.of(label), labelBounds) : hit;
+    }
+
+    // 文字行与轨道分层：带标签且高度够时文字贴上沿、轨道贴下沿；
+    // 无标签的数值行保持原有居中画法，避免数值上移后与宿主行标签的基线错位。
+    private boolean splitTextRow(Font font) {
+        return !label.getString().isEmpty()
+                && bounds.height() - (font.lineHeight + style.trackHeight() + style.thumbOverhang() * 2) >= TRACK_GAP;
+    }
+
+    private int textRowY(Font font) {
+        return splitTextRow(font)
+                ? bounds.y()
+                : bounds.y() + Math.max(0, (bounds.height() - font.lineHeight) / 2);
+    }
+
+    private int trackTop(Font font) {
+        return splitTextRow(font)
+                ? bounds.bottom() - style.trackHeight() - style.thumbOverhang()
+                : bounds.y() + Math.max(0, (bounds.height() - style.trackHeight()) / 2);
+    }
+
+    // 数值文本按控件宽度收口，避免超长值压住标签或越出右边界
+    private String trimmedValue(Font font) {
+        return TextScroll.trimToWidth(font, formatValue().getString(), Math.max(0, bounds.width() - TEXT_GAP));
     }
 
     private UiSliderPainter.Frame buildFrame(Font font) {
         int trackHeight = style.trackHeight();
-        int trackY = bounds.y() + Math.max(0, (bounds.height() - trackHeight) / 2);
+        int trackY = trackTop(font);
         int left = trackLeft();
         int width = trackWidth();
         UiRect track = new UiRect(left, trackY, width, trackHeight);
@@ -344,9 +395,9 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInt
         thumbX = Math.clamp(thumbX, bounds.x(), maxThumbX);
         int overhang = style.thumbOverhang();
         UiRect thumb = new UiRect(thumbX, trackY - overhang, thumbWidth, trackHeight + overhang * 2);
-        String valueText = formatValue().getString();
+        String valueText = trimmedValue(font);
         int valueWidth = Math.min(font.width(valueText), bounds.width());
-        int textY = bounds.y() + Math.max(0, (bounds.height() - font.lineHeight) / 2);
+        int textY = textRowY(font);
         UiRect textSlot = new UiRect(Math.max(bounds.x(), bounds.right() - valueWidth), textY,
                 Math.max(0, valueWidth), font.lineHeight);
         boolean overflowBelow = value < window.min();

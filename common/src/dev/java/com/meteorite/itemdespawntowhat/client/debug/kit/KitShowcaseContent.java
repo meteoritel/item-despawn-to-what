@@ -227,6 +227,10 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
         modals.tick();
         modals.render(graphics, font, pointer);
         surfaces.renderOverlay(graphics, pointer);
+        // 提示画在页脚与弹层之后；弹层开启时由弹层自己出提示
+        if (page == Page.CONTROLS && modals.isEmpty() && pointer.allowsTooltip() && pointer.hit() != null) {
+            pointer.hit().renderTooltip(graphics, font, theme.surfaces(), (int) pointer.x(), (int) pointer.y());
+        }
     }
 
     private void renderControls(GuiGraphics graphics, UiPointer pointer) {
@@ -258,7 +262,6 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
         }
         graphics.drawString(font, text("showcase.scroll"), bounds.x(), scrollCaptionY, theme.surfaces().secondaryText(), false);
         scrollExample.render(graphics, font);
-        controls.renderTooltip(graphics, font, pointer);
     }
 
     boolean controlsVisible() { return page == Page.CONTROLS; }
