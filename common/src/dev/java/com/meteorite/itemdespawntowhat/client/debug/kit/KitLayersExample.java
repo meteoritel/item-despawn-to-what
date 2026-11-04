@@ -32,19 +32,29 @@ import org.jetbrains.annotations.Nullable;
 
 /** 同条信息的混合绘制与前景重叠空间，供控件调整和前端布局快照使用。 */
 final class KitLayersExample implements UiWidget, UiLayoutSource, AutoCloseable {
+    private static final int ROW_HEIGHT = 44;
+    private static final int ROW_GAP = 6;
+    private static final int ITEM_STEP = 84;
+    private static final int OVERLAP_STEP = 40;
     private final UiControlGroup controls = new UiControlGroup();
     private final UiStyleSource theme;
+    private final Font font;
     private final @Nullable Function<PreviewBudget, PreviewScenes> previewFactory;
     private PreviewScenes scenes;
     private final UiIcon sprite = new UiIcon.Sprite(ResourceLocation.withDefaultNamespace("textures/block/stone.png"), 0, 0, 16, 16, 16, 16);
     private final List<UiIcon> items = List.of(new UiIcon.Item(new ItemStack(Items.STONE)),
             new UiIcon.Item(new ItemStack(Items.DIAMOND)), new UiIcon.Item(new ItemStack(Items.GLASS)), glintItem());
     private UiRect bounds = new UiRect(0, 0, 0, 0);
+    private UiRect actionsRect = new UiRect(0, 0, 0, 0);
+    private UiRect contentRect = new UiRect(0, 0, 0, 0);
+    private UiRect stateRect = new UiRect(0, 0, 0, 0);
+    private int rowCount = 2;
     private boolean foreground = true;
     private boolean overlap;
 
     KitLayersExample(UiStyleSource theme, Font font, @Nullable Function<PreviewBudget, PreviewScenes> previewFactory) {
         this.theme = theme;
+        this.font = font;
         this.previewFactory = previewFactory;
         controls.setTheme(theme);
         controls.beginUpdate();
@@ -53,13 +63,30 @@ final class KitLayersExample implements UiWidget, UiLayoutSource, AutoCloseable 
         controls.endUpdate();
     }
     @Override public UiRect bounds() { return bounds; }
+
+    /** 动作行、两行混合绘制内容与状态行自上而下排列，内容行不再与状态行重叠。 */
     @Override public void setBounds(int x, int y, int width, int height) {
         bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
-        for (int i = 0; i < controls.size(); i++) controls.controls().get(i).setBounds(x + i * 112, y, 108, 20);
+        int capHeight = font.lineHeight + 2;
+        actionsRect = new UiRect(x, y, width, capHeight + WorkbenchLayout.CONTROL_HEIGHT);
+        int controlWidth = Math.max(60, Math.min(140, (width - WorkbenchLayout.GAP) / 2));
+        for (int i = 0; i < controls.size(); i++) {
+            controls.controls().get(i).setBounds(x + i * (controlWidth + WorkbenchLayout.GAP), y + capHeight, controlWidth, WorkbenchLayout.CONTROL_HEIGHT);
+        }
+        int contentTop = actionsRect.bottom() + WorkbenchLayout.GAP;
+        int stateTop = Math.max(contentTop, bounds.bottom() - font.lineHeight);
+        stateRect = new UiRect(x, stateTop, width, font.lineHeight);
+        int rowsBottom = Math.max(contentTop, stateTop - WorkbenchLayout.GROUP_GAP);
+        contentRect = new UiRect(x, contentTop, width, rowsBottom - contentTop);
+        // 用成对的正向/反向样例铺满内容区，行数随窗口高度变化，不在底部留空。
+        rowCount = Math.max(2, (contentRect.height() + ROW_GAP) / (ROW_HEIGHT + ROW_GAP));
     }
+
     @Override public void render(GuiGraphics graphics, Font font, UiPointer pointer) {
+        graphics.drawString(font, text("actions"), actionsRect.x(), actionsRect.y(), theme.surfaces().secondaryText(), false);
         controls.render(graphics, font, pointer);
-        int x = bounds.x(), y = bounds.y() + 32;
+        int x = bounds.x();
+        int y = contentRect.y();
         if (previewFactory != null) {
             if (scenes == null) scenes = previewFactory.apply(PreviewBudget.DEFAULT);
             scenes.beginFrame();
@@ -68,18 +95,22 @@ final class KitLayersExample implements UiWidget, UiLayoutSource, AutoCloseable 
             UiIcon preview = scenes == null ? null : scenes.icon("mixed-stone",
                     new PreviewSubject.Block(Blocks.STONE.defaultBlockState(), null), 32,
                     new PreviewMotion(0, 10_000), UiSceneStyle.icon(), sprite);
-            for (int row = 0; row < 2; row++) {
-                int rowY = y + row * 48;
-                graphics.fill(x, rowY, bounds.right(), rowY + 44, theme.surfaces().panelFill());
-                graphics.drawString(font, text(row == 0 ? "forward" : "reverse"), x + 2, rowY + 2, theme.textColor(true), false);
-                int step = overlap ? 40 : 60;
-                for (int i = 0; i < items.size(); i++) renderMixed(graphics, font, items.get(i), x + i * step, rowY + 14, row == 1);
-                if (preview != null) renderMixed(graphics, font, preview, x + items.size() * step, rowY + 12, row == 1);
+            for (int row = 0; row < rowCount; row++) {
+                boolean reverse = row % 2 == 1;
+                int rowY = y + row * (ROW_HEIGHT + ROW_GAP);
+                graphics.fill(x, rowY, bounds.right(), rowY + ROW_HEIGHT, theme.surfaces().panelFill());
+                if (row < 2) {
+                    graphics.drawString(font, text(reverse ? "reverse" : "forward"), x + 4, rowY + 4, theme.textColor(true), false);
+                }
+                int step = overlap ? OVERLAP_STEP : ITEM_STEP;
+                int itemY = rowY + 18;
+                for (int i = 0; i < items.size(); i++) renderMixed(graphics, font, items.get(i), x + i * step, itemY, reverse);
+                if (preview != null) renderMixed(graphics, font, preview, x + items.size() * step, itemY - 2, reverse);
             }
         } finally { if (scenes != null) scenes.endFrame(); }
-        graphics.drawString(font, state(), x, y + 100, theme.textColor(true), false);
+        graphics.drawString(font, state(), stateRect.x(), stateRect.y(), theme.textColor(true), false);
         if (foreground) UiRenderLayers.draw(graphics, UiRenderLayers.FOREGROUND, () -> {
-            UiRect panel = new UiRect(x + 8, y + 20, Math.clamp(bounds.width() - 8, 0, 180), 56);
+            UiRect panel = new UiRect(x + 8, y + 8, Math.clamp(bounds.width() - 16, 0, 180), 56);
             graphics.fill(panel.x(), panel.y(), panel.right(), panel.bottom(), theme.surfaces().panelFill());
             graphics.drawString(font, text("foreground"), panel.x() + 4, panel.y() + 6, theme.textColor(true), false);
         });
@@ -101,20 +132,17 @@ final class KitLayersExample implements UiWidget, UiLayoutSource, AutoCloseable 
     @Override public @Nullable UiPointerHit hitTest(double x, double y) {
         UiPointerHit hit = controls.hitTest(x, y);
         if (hit != null) return hit.within(this);
-        UiRect content = contentBounds();
-        return content.contains(x, y) ? UiPointerHit.leaf(this, x, y).preservingFocus()
-                .withTextTooltip(List.of(text("tooltip")), content) : null;
+        return contentRect.contains(x, y) ? UiPointerHit.leaf(this, x, y).preservingFocus()
+                .withTextTooltip(List.of(text("tooltip")), contentRect) : null;
     }
     @Override public boolean mousePressed(UiInputContext context) { return controls.mousePressed(context); }
     @Override public List<UiLayoutNode> layoutNodes() {
         return List.of(new UiLayoutNode(UiLayoutNode.Kind.FRAME, bounds, text("title"), 0, 0, true, true,
-                List.of(new UiLayoutNode(UiLayoutNode.Kind.ROW, contentBounds(), text("content"), 0, 0, true, true, List.of()),
-                        new UiLayoutNode(UiLayoutNode.Kind.ROW, new UiRect(bounds.x(), bounds.y() + 132, bounds.width(), 12),
-                                state(), 0, 0, true, true, List.of()),
-                        new UiLayoutNode(UiLayoutNode.Kind.FRAME, bounds, text("actions"), 0, 0, true, true,
+                List.of(new UiLayoutNode(UiLayoutNode.Kind.ROW, contentRect, text("content"), 0, 0, true, true, List.of()),
+                        new UiLayoutNode(UiLayoutNode.Kind.ROW, stateRect, state(), 0, 0, true, true, List.of()),
+                        new UiLayoutNode(UiLayoutNode.Kind.FRAME, actionsRect, text("actions"), 0, 0, true, true,
                                 controls.controls().stream().flatMap(control -> control.layoutNodes().stream()).toList()))));
     }
-    private UiRect contentBounds() { return new UiRect(bounds.x(), bounds.y() + 32, bounds.width(), 96); }
     private Component state() { return Component.translatable(KitShowcaseContent.UI + "showcase.layers.state", foreground, overlap, previewFactory != null); }
     void invalidateResources() { close(); }
     /** 仅释放本展示创建的场景，线程池归注入工厂的宿主所有。 */

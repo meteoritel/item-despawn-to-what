@@ -11,7 +11,6 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutSource;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLinearLayout;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiNumberField;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiNumberPolicy;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiNumbers;
@@ -30,6 +29,10 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiChildren;
 
 /** 文本、数值与泛型列表只依赖 kit、原版类型和本地值。 */
 final class KitInputsExample implements UiWidget, UiLayoutSource {
+    private static final int GUTTER = 12;
+    private static final int STATE_LINES = 2;
+    private final Font font;
+    private final UiStyleSource theme;
     private final UiTextInput text;
     private final UiTextArea area;
     private final UiTextInput precise;
@@ -37,12 +40,19 @@ final class KitInputsExample implements UiWidget, UiLayoutSource {
     private final UiNumberField number;
     private final UiListView<Component> list;
     private final UiChildren<UiWidget> widgets = new UiChildren<>();
-    private final UiLinearLayout columns = new UiLinearLayout(UiLinearLayout.Axis.HORIZONTAL, 12, 0);
+    private final List<Caption> captions = new ArrayList<>();
     private UiRect bounds = new UiRect(0, 0, 0, 0);
+    private UiRect stateBlock = new UiRect(0, 0, 0, 0);
+    private Component stateValue = Component.empty();
+    private List<String> stateLines = List.of();
     private int commits;
     private int overflows;
 
+    private record Caption(Component text, int x, int y) {}
+
     KitInputsExample(UiStyleSource theme, Font font) {
+        this.theme = theme;
+        this.font = font;
         text = new UiTextInput(theme, font, label("text")).setMaxLength(32).setAccessibleName(label("text"));
         area = new UiTextArea(theme, font, label("area"));
         area.setAccessibleName(label("area"));
@@ -62,25 +72,57 @@ final class KitInputsExample implements UiWidget, UiLayoutSource {
                 (Component) Component.translatable(KitShowcaseContent.UI + "list.item", index)).toList());
         list.setSelectedIndex(0);
         widgets.addAll(List.of(text, area, number, list));
-        columns.setChildren(List.of(UiLinearLayout.Child.remain(), UiLinearLayout.Child.remain()));
     }
     public void addFocusTargets(Consumer<UiFocusTarget> sink) {
         widgets.addFocusTargets(sink);
     }
     @Override public long focusRevision() { return widgets.focusRevision(); }
     @Override public UiRect bounds() { return bounds; }
+
+    /**
+     * 左右两列：左列单行输入、多行输入与数值，右列列表；底部一行展示输入状态。
+     *
+     * <p>多行输入吃掉左列剩余高度，列表对齐到同一底边，避免两列高度参差。</p>
+     */
     @Override public void setBounds(int x, int y, int width, int height) {
         bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
-        columns.setBounds(x, y, width, height);
-        UiRect left = columns.bounds(0);
-        UiRect right = columns.bounds(1);
-        text.setBounds(left.x(), y, left.width(), 20);
-        area.setBounds(left.x(), y + 28, left.width(), Math.clamp(height - 100, 36, 100));
-        number.setBounds(left.x(), area.bounds().bottom() + 12, left.width(), 24);
-        list.setBounds(right.x(), y, right.width(), Math.max(0, height - 24));
+        int capHeight = font.lineHeight + 2;
+        int stateHeight = font.lineHeight + 2 + STATE_LINES * (font.lineHeight + 2);
+        int columnsBottom = Math.max(y, y + height - stateHeight - WorkbenchLayout.GROUP_GAP);
+        int leftWidth = Math.max(80, (width - GUTTER) / 2);
+        int rightX = x + leftWidth + GUTTER;
+        int rightWidth = Math.max(0, width - leftWidth - GUTTER);
+        captions.clear();
+        captions.add(new Caption(label("text"), x, y));
+        text.setBounds(x, y + capHeight, leftWidth, 20);
+        int areaCaptionTop = text.bounds().bottom() + WorkbenchLayout.GAP;
+        captions.add(new Caption(label("area"), x, areaCaptionTop));
+        int areaTop = areaCaptionTop + capHeight;
+        int areaHeight = Math.max(36, columnsBottom - areaTop - capHeight - 24 - WorkbenchLayout.GAP);
+        area.setBounds(x, areaTop, leftWidth, areaHeight);
+        int numberCaptionTop = area.bounds().bottom() + WorkbenchLayout.GAP;
+        captions.add(new Caption(label("number"), x, numberCaptionTop));
+        number.setBounds(x, numberCaptionTop + capHeight, leftWidth, 24);
+        captions.add(new Caption(label("list"), rightX, y));
+        list.setBounds(rightX, y + capHeight, rightWidth, Math.max(0, columnsBottom - (y + capHeight)));
+        stateBlock = new UiRect(x, columnsBottom + WorkbenchLayout.GROUP_GAP, width, stateHeight);
+        stateValue = Component.translatable(KitShowcaseContent.UI + "showcase.inputs.values", text.value(), area.value(),
+                precise.value(), slider.value(), list.selectedIndex(), commits, overflows);
+        stateLines = WorkbenchLayout.wrapLines(font, stateValue.getString(), width, STATE_LINES);
     }
+
     @Override public void render(GuiGraphics graphics, Font font, UiPointer pointer) {
+        int captionColor = theme.surfaces().secondaryText();
+        for (Caption caption : captions) {
+            graphics.drawString(font, caption.text(), caption.x(), caption.y(), captionColor, false);
+        }
         for (UiWidget widget : widgets) widget.render(graphics, font, pointer);
+        graphics.drawString(font, label("inputs.state"), stateBlock.x(), stateBlock.y(), captionColor, false);
+        int lineY = stateBlock.y() + font.lineHeight + 2;
+        for (String line : stateLines) {
+            graphics.drawString(font, line, stateBlock.x(), lineY, theme.textColor(true), false);
+            lineY += font.lineHeight + 2;
+        }
     }
     @Override public @Nullable UiPointerHit hitTest(double x, double y) {
         UiPointerHit hit = widgets.hitTest(x, y);
@@ -97,11 +139,10 @@ final class KitInputsExample implements UiWidget, UiLayoutSource {
         nodes.addAll(area.layoutNodes());
         nodes.addAll(precise.layoutNodes());
         nodes.add(new UiLayoutNode(UiLayoutNode.Kind.CONTROL, list.bounds(), label("list"), 0, 0, true, true, List.of()));
-        UiRect row = new UiRect(bounds.x(), bounds.bottom() - 16, bounds.width(), 12);
-        Component values = Component.translatable(KitShowcaseContent.UI + "showcase.inputs.values", text.value(), area.value(),
-                precise.value(), slider.value(), list.selectedIndex(), commits, overflows);
-        nodes.add(new UiLayoutNode(UiLayoutNode.Kind.FRAME, row, label("inputs.state"), 0, 0, true, true, List.of(
-                new UiLayoutNode(UiLayoutNode.Kind.ROW, row, values, 0, 0, true, true, List.of()))));
+        UiRect row = new UiRect(stateBlock.x(), stateBlock.y() + font.lineHeight + 2, stateBlock.width(),
+                Math.max(0, stateBlock.height() - font.lineHeight - 2));
+        nodes.add(new UiLayoutNode(UiLayoutNode.Kind.FRAME, stateBlock, label("inputs.state"), 0, 0, true, true, List.of(
+                new UiLayoutNode(UiLayoutNode.Kind.ROW, row, stateValue, 0, 0, true, true, List.of()))));
         return nodes;
     }
     private static Component label(String key) { return Component.translatable(KitShowcaseContent.UI + "showcase." + key); }

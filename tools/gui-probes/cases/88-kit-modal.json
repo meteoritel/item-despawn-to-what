@@ -26,6 +26,11 @@
     },
     {
       "action": {
+        "kind": "clear"
+      }
+    },
+    {
+      "action": {
         "kind": "type",
         "text": "u"
       }
@@ -48,7 +53,7 @@
         "kind": "text_present",
         "selector": {
           "kind": "TEXT_INPUT",
-          "text": "uv"
+          "has_text": "uv"
         }
       }
     },
@@ -83,7 +88,7 @@
         "kind": "text_present",
         "selector": {
           "kind": "TEXT_INPUT",
-          "text": "uv"
+          "has_text": "uv"
         }
       }
     },

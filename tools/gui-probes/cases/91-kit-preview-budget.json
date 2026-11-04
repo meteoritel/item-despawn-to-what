@@ -101,8 +101,7 @@
         "kind": "text_present",
         "selector": {
           "kind": "ROW",
-          "lang": "gui.itemdespawntowhat.debug.workbench.showcase.preview.capacity",
-          "has_text": "READY"
+          "has_text": "current request: READY"
         }
       },
       "timeout_ms": 15000

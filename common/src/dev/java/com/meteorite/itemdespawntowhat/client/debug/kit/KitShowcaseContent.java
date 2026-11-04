@@ -39,10 +39,14 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.preview.PreviewScenes;
 final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
     static final String UI = "gui.itemdespawntowhat.debug.workbench.";
     private static final double INITIAL_VALUE = 0.37D;
+    private static final int NAV_GAP = 4;
+    private static final int NAV_TOP = WorkbenchLayout.CONTENT_TOP;
+    private static final int CONTENT_TOP = NAV_TOP + WorkbenchLayout.CONTROL_HEIGHT + WorkbenchLayout.GAP;
     private final Font font;
     private final UiControlGroup controls = new UiControlGroup();
     private final List<UiControl> buttons;
     private final UiControlGroup navigation = new UiControlGroup();
+    private final UiControlGroup footer = new UiControlGroup();
     private final UiStyleSource theme;
     private final KitInputsExample inputs;
     private final UiModalStack modals;
@@ -53,6 +57,8 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
     private final Runnable nextTheme;
     private final UiScalarSlider slider = new UiScalarSlider(UiNumberPolicy.of(0, 1, 0.05, 0.01), UiSliderWindow.of(0, 1));
     private UiRect bounds = new UiRect(0, 0, 0, 0);
+    private int width;
+    private int height;
     private int clicks;
     private boolean alternateGrid;
     private int resourceEpoch;
@@ -61,6 +67,11 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
     private UiDotGrid firstGrid;
     private UiDotGrid secondGrid;
     private final KitScrollExample scrollExample;
+    private UiRect valuesRow = new UiRect(0, 0, 0, 0);
+    private UiRect resourcesRow = new UiRect(0, 0, 0, 0);
+    private UiRect firstGridRect = new UiRect(0, 0, 0, 0);
+    private UiRect secondGridRect = new UiRect(0, 0, 0, 0);
+    private int scrollCaptionY;
 
     KitShowcaseContent(Font font, UiStyleSource theme, Runnable back, Runnable nextTheme,
                        @Nullable Function<PreviewBudget, PreviewScenes> previewFactory) {
@@ -72,6 +83,7 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
         scrollExample = new KitScrollExample(theme);
         controls.setTheme(theme);
         navigation.setTheme(theme);
+        footer.setTheme(theme);
         slider.setTheme(theme, UiSliderRole.COMPACT);
         inputs = new KitInputsExample(theme, font);
         modals = new UiModalStack(theme);
@@ -83,11 +95,13 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
         nav("showcase.theme", nextTheme);
         nav("showcase.modal", this::openModal);
         navigation.endUpdate();
+        footer.beginUpdate();
+        footer.obtain("back").configure(font, text("back"), null, List.of(), back::run);
+        footer.endUpdate();
         controls.beginUpdate();
         button("increment", () -> clicks++);
         button("disabled", () -> clicks++).setEnabled(false);
         button("reset", this::reset);
-        button("back", back);
         controls.endUpdate();
         buttons = controls.controls();
         slider.setLabel(text("scalar"));
@@ -144,6 +158,7 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
 
     public void addFocusTargets(Consumer<UiFocusTarget> sink) {
         navigation.addFocusTargets(sink);
+        footer.addFocusTargets(sink);
         if (page == Page.INPUTS) inputs.addFocusTargets(sink);
         else if (page == Page.SURFACES) surfaces.addFocusTargets(sink);
         else if (page == Page.LAYERS) layers.addFocusTargets(sink);
@@ -156,29 +171,59 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
     @Override public long focusRevision() { return page.ordinal() + navigation.focusRevision() + controls.focusRevision() + inputs.focusRevision(); }
 
     void layout(int width, int height) {
-        bounds = new UiRect(8, 28, Math.max(0, width - 16), Math.max(0, height - 36));
-        int navWidth = Math.max(0, (width - 30) / navigation.size());
-        for (int i = 0; i < navigation.size(); i++) navigation.controls().get(i).setBounds(12 + i * (navWidth + 2), 28, navWidth, 20);
-        inputs.setBounds(12, 60, Math.max(0, width - 24), Math.max(0, height - 72));
-        surfaces.setBounds(12, 60, Math.max(0, width - 24), Math.max(0, height - 72));
-        layers.setBounds(12, 60, Math.max(0, width - 24), Math.max(0, height - 72));
+        this.width = width;
+        this.height = height;
+        int contentWidth = WorkbenchLayout.contentWidth(width);
+        int navWidth = Math.max(24, (contentWidth - (navigation.size() - 1) * NAV_GAP) / navigation.size());
+        for (int i = 0; i < navigation.size(); i++) {
+            navigation.controls().get(i).setBounds(WorkbenchLayout.INSET + i * (navWidth + NAV_GAP), NAV_TOP, navWidth, WorkbenchLayout.CONTROL_HEIGHT);
+        }
+        WorkbenchLayout.placeFooterBack(footer.controls().getFirst(), height);
+        bounds = new UiRect(WorkbenchLayout.INSET, CONTENT_TOP, contentWidth,
+                Math.max(0, WorkbenchLayout.contentBottom(height) - CONTENT_TOP));
+        inputs.setBounds(bounds.x(), bounds.y(), bounds.width(), bounds.height());
+        surfaces.setBounds(bounds.x(), bounds.y(), bounds.width(), bounds.height());
+        layers.setBounds(bounds.x(), bounds.y(), bounds.width(), bounds.height());
         modals.setBounds(0, 0, width, height);
         modals.refreshLayout();
-        int buttonWidth = Math.clamp((bounds.width() - 8) / 2, 0, 140);
+        int actionWidth = Math.max(32, (bounds.width() - 2 * WorkbenchLayout.GAP) / 3);
         for (int i = 0; i < buttons.size(); i++) {
-            buttons.get(i).setBounds(12 + i % 2 * (buttonWidth + 8), 56 + i / 2 * 24, buttonWidth, 20);
+            buttons.get(i).setBounds(bounds.x() + i * (actionWidth + WorkbenchLayout.GAP), bounds.y(), actionWidth, WorkbenchLayout.CONTROL_HEIGHT);
         }
-        slider.setBounds(12, 108, Math.max(0, width - 24), 20);
-        scrollExample.layout(new UiRect(12, 212, Math.max(0, width - 24), Math.max(0, height - 224)));
+        int y = bounds.y() + WorkbenchLayout.CONTROL_HEIGHT + WorkbenchLayout.GAP;
+        slider.setBounds(bounds.x(), y, bounds.width(), WorkbenchLayout.CONTROL_HEIGHT);
+        y += WorkbenchLayout.CONTROL_HEIGHT + WorkbenchLayout.GAP;
+        valuesRow = new UiRect(bounds.x(), y, bounds.width(), font.lineHeight);
+        y += font.lineHeight + WorkbenchLayout.GROUP_GAP;
+        resourcesRow = new UiRect(bounds.x(), y, bounds.width(), font.lineHeight);
+        y += font.lineHeight + 4;
+        int remaining = Math.max(0, bounds.bottom() - y);
+        int captionHeight = font.lineHeight + 4;
+        // 点阵面板按剩余高度取四成，滚动示例吃掉其余空间，两块演示都不留空。
+        int gridHeight = Math.min(320, (int) (remaining * 0.4F));
+        int scrollHeight = Math.max(0, remaining - gridHeight - captionHeight - WorkbenchLayout.GAP);
+        if (scrollHeight < 48) {
+            // 高度不足时改为二等分，保证两块演示都留在内容区内。
+            gridHeight = Math.max(0, (remaining - captionHeight - WorkbenchLayout.GAP) / 2);
+            scrollHeight = Math.max(0, remaining - gridHeight - captionHeight - WorkbenchLayout.GAP);
+        }
+        int middle = bounds.x() + bounds.width() / 2;
+        firstGridRect = new UiRect(bounds.x(), y, Math.max(0, middle - 4 - bounds.x()), gridHeight);
+        secondGridRect = new UiRect(middle + 4, y, Math.max(0, bounds.right() - middle - 4), gridHeight);
+        scrollCaptionY = y + gridHeight + WorkbenchLayout.GAP;
+        scrollExample.layout(new UiRect(bounds.x(), scrollCaptionY + captionHeight, bounds.width(), scrollHeight));
     }
 
     void render(GuiGraphics graphics, UiPointer pointer) {
-        graphics.drawString(font, text("kit_showcase"), 10, 10, 0xFFFFFFFF, false);
+        WorkbenchLayout.drawPage(graphics, font, theme, width, height, text("kit_showcase"));
+        WorkbenchLayout.drawSubtitle(graphics, font, theme, width, text("kit_showcase.description"));
         navigation.render(graphics, font, pointer);
         if (page == Page.INPUTS) inputs.render(graphics, font, pointer);
         else if (page == Page.SURFACES) surfaces.render(graphics, font, pointer);
         else if (page == Page.LAYERS) layers.render(graphics, font, pointer);
         else renderControls(graphics, pointer);
+        WorkbenchLayout.drawFooterRule(graphics, theme, width, height);
+        footer.render(graphics, font, pointer);
         modals.tick();
         modals.render(graphics, font, pointer);
         surfaces.renderOverlay(graphics, pointer);
@@ -187,20 +232,31 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
     private void renderControls(GuiGraphics graphics, UiPointer pointer) {
         controls.render(graphics, font, pointer);
         slider.render(graphics, font, pointer);
-        graphics.drawString(font, values(), 12, 132, 0xFFFFFFFF, false);
+        graphics.drawString(font, values(), valuesRow.x(), valuesRow.y(), theme.surfaces().text(), false);
+        Component label = text("showcase.resources");
+        int labelColor = theme.surfaces().secondaryText();
+        graphics.drawString(font, label, resourcesRow.x(), resourcesRow.y(), labelColor, false);
+        Component resources = Component.translatable(UI + "showcase.resources.values", alternateGrid, gridOwners, resourceEpoch);
+        Component trimmed = WorkbenchLayout.ellipsize(font, resources, Math.max(0, resourcesRow.width() - font.width(label) - 12));
+        graphics.drawString(font, trimmed, resourcesRow.right() - font.width(trimmed), resourcesRow.y(), labelColor, false);
         if (firstGrid == null) { firstGrid = new UiDotGrid(); gridOwners++; }
         if (secondGrid == null) { secondGrid = new UiDotGrid(); gridOwners++; }
+        theme.drawInset(graphics, firstGridRect);
+        theme.drawInset(graphics, secondGridRect);
         graphics.flush();
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
         try {
-            int middle = bounds.x() + bounds.width() / 2;
-            firstGrid.draw(graphics, 1, 12, 156, middle - 4, 200, alternateGrid ? 10 : 8, alternateGrid ? 0xFF66CC99 : 0xFF6699CC);
-            secondGrid.draw(graphics, 1, middle + 4, 156, bounds.right() - 4, 200, 12, 0xFFCC9966);
+            int firstColor = alternateGrid ? theme.surfaces().text() : theme.surfaces().secondaryText();
+            firstGrid.draw(graphics, 1, firstGridRect.x(), firstGridRect.y(), firstGridRect.right(), firstGridRect.bottom(),
+                    alternateGrid ? 10 : 8, firstColor);
+            secondGrid.draw(graphics, 1, secondGridRect.x(), secondGridRect.y(), secondGridRect.right(), secondGridRect.bottom(),
+                    12, theme.surfaces().secondaryText());
         } finally {
             graphics.flush();
             RenderSystem.disableBlend();
         }
+        graphics.drawString(font, text("showcase.scroll"), bounds.x(), scrollCaptionY, theme.surfaces().secondaryText(), false);
         scrollExample.render(graphics, font);
         controls.renderTooltip(graphics, font, pointer);
     }
@@ -234,6 +290,7 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
     @Override
     public @Nullable UiPointerHit hitTest(double x, double y) {
         UiPointerHit hit = navigation.hitTest(x, y);
+        if (hit == null) hit = footer.hitTest(x, y);
         if (hit == null && page == Page.INPUTS) hit = inputs.hitTest(x, y);
         if (hit == null && page == Page.SURFACES) hit = surfaces.hitTest(x, y);
         if (hit == null && page == Page.LAYERS) hit = layers.hitTest(x, y);
@@ -247,6 +304,7 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
     @Override
     public boolean mousePressed(UiInputContext context) {
         if (context.hits(navigation)) return navigation.mousePressed(context);
+        if (context.hits(footer)) return footer.mousePressed(context);
         if (page == Page.INPUTS) return inputs.mousePressed(context);
         if (page == Page.SURFACES) return surfaces.mousePressed(context);
         if (page == Page.LAYERS) return layers.mousePressed(context);
@@ -271,25 +329,25 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
     @Override
     public List<UiLayoutNode> layoutNodes() {
         List<UiLayoutNode> nodes = new ArrayList<>();
-        for (UiControl control : navigation.controls()) nodes.addAll(control.layoutNodes());
         if (page == Page.INPUTS) nodes.addAll(inputs.layoutNodes());
         else if (page == Page.SURFACES) nodes.addAll(surfaces.layoutNodes());
         else if (page == Page.LAYERS) nodes.addAll(layers.layoutNodes());
         else {
-        for (UiControl control : buttons) {
-            nodes.add(node(UiLayoutNode.Kind.CONTROL, control.bounds(), control.accessibleName(), control.isEnabled(), List.of()));
+            for (UiControl control : buttons) {
+                nodes.add(node(UiLayoutNode.Kind.CONTROL, control.bounds(), control.accessibleName(), control.isEnabled(), List.of()));
+            }
+            nodes.add(node(UiLayoutNode.Kind.CONTROL, slider.bounds(), text("scalar"), true, List.of()));
+            nodes.addAll(scrollExample.nodes());
+            Component resources = Component.translatable(UI + "showcase.resources.values", alternateGrid, gridOwners, resourceEpoch);
+            nodes.add(node(UiLayoutNode.Kind.FRAME, resourcesRow, text("showcase.resources"), true,
+                    List.of(node(UiLayoutNode.Kind.ROW, resourcesRow, resources, true, List.of()))));
+            nodes.add(node(UiLayoutNode.Kind.FRAME, valuesRow, text("values.label"), true,
+                    List.of(node(UiLayoutNode.Kind.ROW, valuesRow, values(), true, List.of()))));
         }
-        nodes.add(node(UiLayoutNode.Kind.CONTROL, slider.bounds(), text("scalar"), true, List.of()));
-        nodes.addAll(scrollExample.nodes());
-        UiRect resourceRect = new UiRect(12, 144, bounds.width(), 10);
-        Component resources = Component.translatable(UI + "showcase.resources.values", alternateGrid, gridOwners, resourceEpoch);
-        nodes.add(node(UiLayoutNode.Kind.FRAME, resourceRect, text("showcase.resources"), true,
-                List.of(node(UiLayoutNode.Kind.ROW, resourceRect, resources, true, List.of()))));
-        UiRect valuesRect = new UiRect(12, 132, bounds.width(), font.lineHeight);
-        nodes.add(node(UiLayoutNode.Kind.FRAME, valuesRect, text("values.label"), true,
-                List.of(node(UiLayoutNode.Kind.ROW, valuesRect, values(), true, List.of()))));
-        }
+        // 页签与页脚在内容区之外，作为独立根节点导出，避免被内容 Frame 的裁剪范围丢弃。
         List<UiLayoutNode> result = new ArrayList<>();
+        for (UiControl control : navigation.controls()) result.addAll(control.layoutNodes());
+        for (UiControl control : footer.controls()) result.addAll(control.layoutNodes());
         result.add(node(UiLayoutNode.Kind.FRAME, bounds, text("kit_showcase"), true, nodes));
         result.addAll(modals.layoutNodes());
         return result;

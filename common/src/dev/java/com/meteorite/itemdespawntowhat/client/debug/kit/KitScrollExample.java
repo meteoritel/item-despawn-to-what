@@ -19,6 +19,7 @@ final class KitScrollExample implements UiInputTarget {
     private final UiStyleSource theme;
     private final UiScrollView outer = new UiScrollView();
     private final UiScrollView inner = new UiScrollView();
+    private int rows = 20;
 
     KitScrollExample(UiStyleSource theme) {
         this.theme = theme;
@@ -40,7 +41,14 @@ final class KitScrollExample implements UiInputTarget {
 
     private void synchronize() {
         UiRect box = outer.viewport();
-        inner.setViewport(box.x() + 12, outer.toScreenY(24), Math.max(0, box.width() - 32), 60);
+        // 外层内容随视口增高保持“至少一屏再加几行”，窗口变大时仍然可滚动。
+        rows = Math.max(20, Math.ceilDiv(box.height(), 20) + 6);
+        outer.setContentHeight(rows * 20);
+        // 内层做成右侧画中画：与外层文字分开摆放，两块内容都完整可读。
+        int height = Math.clamp(box.height() / 3, 48, 140);
+        int width = Math.min(320, Math.max(120, box.width() / 3));
+        int inset = Math.min(width, Math.max(0, box.width() - 8));
+        inner.setViewport(box.right() - inset - 2, outer.toScreenY(40), inset, height);
     }
 
     void render(GuiGraphics graphics, Font font) {
@@ -48,18 +56,19 @@ final class KitScrollExample implements UiInputTarget {
         UiRect box = outer.viewport();
         graphics.enableScissor(box.x(), box.y(), box.right(), box.bottom());
         try {
-            graphics.fill(box.x(), box.y(), box.right(), box.bottom(), 0xCC181818);
-            for (int i = 0; i < 20; i++) {
+            theme.drawInset(graphics, box);
+            for (int i = 0; i < rows; i++) {
                 graphics.drawString(font, Component.translatable(KitShowcaseContent.UI + "list.item", i),
-                        box.x() + 2, outer.toScreenY(i * 20), 0xFFFFFFFF, false);
+                        box.x() + 4, outer.toScreenY(i * 20), theme.surfaces().inputText(), false);
             }
             UiRect nested = inner.viewport();
-            graphics.fill(nested.x(), nested.y(), nested.right(), nested.bottom(), 0xFF303030);
+            theme.drawInset(graphics, nested);
+            graphics.renderOutline(nested.x() - 1, nested.y() - 1, nested.width() + 2, nested.height() + 2, theme.surfaces().panelBorder());
             inner.push(graphics);
             try {
                 for (int i = 0; i < 20; i++) {
                     graphics.drawString(font, Component.translatable(KitShowcaseContent.UI + "list.item", i),
-                            2, i * 12, 0xFF99CCFF, false);
+                            2, i * 12, theme.surfaces().inputText(), false);
                 }
             } finally {
                 inner.pop(graphics);

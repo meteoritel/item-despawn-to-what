@@ -272,6 +272,7 @@ def document():
     lines += [f"| assertion | {name} | {assertion.description} |" for name, assertion in ASSERTIONS.items()]
     lines += ["", "星号表示必需字段。start 公共字段为 world、timeout_seconds；scene 取值：" + "、".join(SCENES) + "。",
               "selector 字段：" + "、".join(SELECTOR_FIELDS) + "；within 仅含 kind/lang/text。",
+              "lang/text/lang_any/text_any 要求整段文本相等；has_text 在节点自身与后代文本中做子串匹配，适合带参数的本地化文本。",
               "wait_for 的轮询期限由步骤级 timeout_ms 控制，默认 2500ms；断言对象内的同名兼容字段保留校验，不改变该期限。",
               "expected、expected_lang、expected_capture 是互斥期望来源；capture 引用必须在同例前序步骤中存在。"]
     return "\n".join(lines) + "\n"

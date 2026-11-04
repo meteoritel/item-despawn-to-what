@@ -1,21 +1,33 @@
 package com.meteorite.itemdespawntowhat.client.debug;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIcon;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiRenderLayers;
 import com.meteorite.itemdespawntowhat.client.debug.kit.KitPreviewBudgetExample;
-import net.minecraft.locale.Language;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutSource;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
+import com.meteorite.itemdespawntowhat.client.debug.kit.WorkbenchLayout;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputRouter;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputScope;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.preview.PreviewMotion;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.preview.PreviewSubject;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIcon;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiRenderLayers;
 import com.meteorite.itemdespawntowhat.client.ui.shared.PreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.shared.PreviewResources;
 import com.meteorite.itemdespawntowhat.client.ui.shared.StructurePreviewResources;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.locale.Language;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
@@ -30,15 +42,22 @@ import org.lwjgl.glfw.GLFW;
 /** 开发环境图标验收入口，资源枚举与所有示例共同消费正式预览门面。 */
 final class PreviewExamplesScreen extends Screen implements UiLayoutSource {
     private static final String UI = "gui.itemdespawntowhat.edit.preview.examples.";
-    private static final int ROW_HEIGHT = 100;
+    private static final int ROW_HEIGHT = 96;
+    private static final int ICON_GAP = 12;
+    private static final int ICON_SIZES = 3;
+    private final UiHostTheme theme = UiHostThemes.defaultTheme();
+    private final UiInputRouter input = new UiInputRouter();
     private final List<Example> examples = new ArrayList<>();
     private final List<ResourceLocation> structures;
     private final Runnable back;
     private final List<UiLayoutNode> nodes = new ArrayList<>();
     private int scroll;
+    private int scrollMax;
     private boolean rotating = true;
     private boolean budgetsVisible;
-    private final KitPreviewBudgetExample budgets = new KitPreviewBudgetExample(PreviewIcons::createScenes);
+    private UiButton backButton;
+    private UiInputScope scope;
+    private final KitPreviewBudgetExample budgets = new KitPreviewBudgetExample(theme, PreviewIcons::createScenes);
     private Language resources;
 
     private record Example(String label, PreviewSubject subject, boolean turntable) { }
@@ -74,53 +93,103 @@ final class PreviewExamplesScreen extends Screen implements UiLayoutSource {
         tag.put("front_text", text); return tag;
     }
 
+    /** 页脚返回按钮与整页共用一个输入域，Esc 仍走原版关闭。 */
+    @Override protected void init() {
+        if (backButton == null) {
+            backButton = new UiButton(theme, font, Component.translatable(UI + "back"), UiButtonVariant.SECONDARY, this::onClose);
+            scope = new UiInputScope(new UiInputTarget() {
+                @Override public void addFocusTargets(Consumer<UiFocusTarget> out) { out.accept(backButton); }
+                @Override public UiPointerHit hitTest(double x, double y) { return UiPointerHit.topmost(x, y, List.of(backButton)); }
+                @Override public boolean mousePressed(UiInputContext context) { return backButton.mousePressed(context); }
+            });
+            scope.setEscape(this::onClose);
+        }
+        WorkbenchLayout.placeFooterBack(backButton, height);
+        scope.refreshFocus();
+        input.select(scope);
+    }
+
     /** 一帧只推进一次预算；同一行显示多个尺寸以核对缓存和固定适框。 */
     @Override public void render(@NotNull GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         if (resources != Language.getInstance()) { budgets.invalidateResources(); resources = Language.getInstance(); }
         nodes.clear();
         PreviewIcons.beginFrame();
         renderBackground(graphics, mouseX, mouseY, partialTick);
-        graphics.fill(0, 0, width, height, 0xEE171B23);
-        graphics.drawString(font, title, 8, 8, 0xFFFFFF, false);
+        WorkbenchLayout.drawPage(graphics, font, theme, width, height, title);
         long[] memory = PreviewIcons.memoryBytes();
-        graphics.drawString(font, Component.translatable(UI + "budget", memory[0] / 1024, memory[1] / 1024), 8, 23, 0xCCCCCC, false);
-        graphics.drawString(font, Component.translatable(UI + "controls"), 8, 37, 0xCCCCCC, false);
+        Component budget = Component.translatable(UI + "budget", memory[0] / 1024, memory[1] / 1024);
+        graphics.drawString(font, budget, width - WorkbenchLayout.INSET - font.width(budget), WorkbenchLayout.TITLE_Y,
+                theme.surfaces().secondaryText(), false);
+        WorkbenchLayout.drawSubtitle(graphics, font, theme, width, Component.translatable(UI + "controls"));
+        WorkbenchLayout.drawFooterRule(graphics, theme, width, height);
+        var pointer = scope.pointer(mouseX, mouseY).resolve(scope.content());
+        backButton.render(graphics, font, pointer);
+        nodes.addAll(backButton.layoutNodes());
         if (budgetsVisible) {
             budgets.render(graphics, font, width, height);
             nodes.addAll(budgets.layoutNodes());
             PreviewIcons.endFrame();
             return;
         }
-        graphics.enableScissor(0, 53, width, height);
+        int top = WorkbenchLayout.CONTENT_TOP;
+        int bottom = WorkbenchLayout.contentBottom(height);
+        scrollMax = Math.max(0, (structures.size() + examples.size()) * ROW_HEIGHT - Math.max(0, bottom - top));
+        scroll = Math.clamp(scroll, 0, scrollMax);
+        int contentWidth = WorkbenchLayout.contentWidth(width);
+        int large = width - WorkbenchLayout.INSET - 80;
+        int medium = large - ICON_GAP - 48;
+        int small = medium - ICON_GAP - 16;
+        int labelWidth = Math.max(40, small - ICON_GAP - WorkbenchLayout.INSET);
+        graphics.enableScissor(WorkbenchLayout.INSET, top, width - WorkbenchLayout.INSET, bottom);
         try {
             int total = structures.size() + examples.size();
             for (int row = 0; row < total; row++) {
-                int y = 56 + row * ROW_HEIGHT - scroll;
-                if (y + ROW_HEIGHT < 53 || y >= height) continue;
+                int rowTop = top + row * ROW_HEIGHT - scroll;
+                if (rowTop + ROW_HEIGHT <= top || rowTop >= bottom) continue;
                 String label = row < structures.size() ? structures.get(row).toString() : examples.get(row - structures.size()).label();
-                nodes.add(new UiLayoutNode(UiLayoutNode.Kind.ROW, new UiRect(8, Math.max(53, y), width - 16, Math.min(ROW_HEIGHT, height - Math.max(53, y))),
-                        Component.literal(label), font.width(label), width - 16, true, true, List.of()));
+                // 左侧文字块与右侧图标一起垂直居中：结构行带状态行，整体上移半行。
+                int textTop = rowTop + (ROW_HEIGHT - font.lineHeight) / 2 - (row < structures.size() ? 7 : 0);
+                graphics.drawString(font, WorkbenchLayout.ellipsize(font, Component.literal(label), labelWidth),
+                        WorkbenchLayout.INSET, textTop, theme.surfaces().text(), false);
                 if (row < structures.size()) {
                     ResourceLocation id = structures.get(row);
-                    graphics.drawString(font, font.plainSubstrByWidth(id.toString(), Math.max(0, width - 210)), 8, y, 0xFFFFFF, false);
-                    graphics.drawString(font, PreviewIcons.status(PreviewIcons.structureState(id)), 8, y + 13, 0xCCCCCC, false);
+                    graphics.drawString(font, PreviewIcons.status(PreviewIcons.structureState(id)),
+                            WorkbenchLayout.INSET, textTop + 14, theme.surfaces().secondaryText(), false);
                     String reason = PreviewIcons.structureReason(id);
-                    if (reason != null) graphics.drawString(font, font.plainSubstrByWidth(reason, Math.max(0, width - 220)), 8, y + 27, 0xFF8888, false);
-                    PreviewIcons.structure(id, 16).render(graphics, width - 190, y + 36);
-                    PreviewIcons.structure(id, 48).render(graphics, width - 162, y + 25);
-                    PreviewIcons.structure(id, 80).render(graphics, width - 90, y + 10);
+                    if (reason != null) {
+                        graphics.drawString(font, WorkbenchLayout.ellipsize(font, Component.literal(reason), labelWidth),
+                                WorkbenchLayout.INSET, textTop + 27, theme.palette().danger(), false);
+                    }
+                    drawSlot(graphics, small, rowTop, 16);
+                    drawSlot(graphics, medium, rowTop, 48);
+                    drawSlot(graphics, large, rowTop, 80);
+                    PreviewIcons.structure(id, 16).render(graphics, small, rowTop + (ROW_HEIGHT - 16) / 2);
+                    PreviewIcons.structure(id, 48).render(graphics, medium, rowTop + (ROW_HEIGHT - 48) / 2);
+                    PreviewIcons.structure(id, 80).render(graphics, large, rowTop + (ROW_HEIGHT - 80) / 2);
                 } else {
                     Example example = examples.get(row - structures.size());
-                    graphics.drawString(font, font.plainSubstrByWidth(example.label(), Math.max(0, width - 210)), 8, y, 0xFFFFFF, false);
                     PreviewMotion motion = new PreviewMotion(example.turntable() ? 0 : 45, rotating && example.turntable() ? 10_000 : 0);
-                    for (int size : new int[]{16, 48, 80}) {
-                        UiIcon icon = PreviewIcons.icon(example.label(), example.subject(), size, motion);
-                        int x = size == 16 ? width - 190 : size == 48 ? width - 162 : width - 90;
-                        icon.render(graphics, x, y + 10);
+                    int[] sizes = {16, 48, 80};
+                    int[] columns = {small, medium, large};
+                    for (int i = 0; i < ICON_SIZES; i++) {
+                        int size = sizes[i];
+                        int x = columns[i];
+                        int y = rowTop + (ROW_HEIGHT - size) / 2;
+                        drawSlot(graphics, x, rowTop, size);
+                        PreviewIcons.icon(example.label(), example.subject(), size, motion).render(graphics, x, y);
                     }
                 }
+                theme.drawDivider(graphics, WorkbenchLayout.INSET, rowTop + ROW_HEIGHT - 1, contentWidth);
+                int visibleTop = Math.max(top, rowTop);
+                UiRect rect = new UiRect(WorkbenchLayout.INSET, visibleTop, contentWidth, Math.min(ROW_HEIGHT, bottom - visibleTop));
+                nodes.add(new UiLayoutNode(UiLayoutNode.Kind.ROW, rect, Component.literal(label), font.width(label), contentWidth, true, true, List.of()));
             }
         } finally { graphics.disableScissor(); graphics.flush(); PreviewIcons.endFrame(); }
+    }
+
+    /** 图标预先在浅色槽位里排好，深色贴图不会直接压在窗口底色上。 */
+    private void drawSlot(GuiGraphics graphics, int x, int rowTop, int size) {
+        theme.drawInset(graphics, new UiRect(x, rowTop + (ROW_HEIGHT - size) / 2, size, size));
     }
 
     /** 返回目录时重建工作台场景。 */
@@ -130,8 +199,8 @@ final class PreviewExamplesScreen extends Screen implements UiLayoutSource {
 
     /** 鼠标滚轮浏览当前资源目录。 */
     @Override public boolean mouseScrolled(double mouseX, double mouseY, double horizontal, double vertical) {
-        int maximum = Math.max(0, (structures.size() + examples.size()) * ROW_HEIGHT - Math.max(0, height - 56));
-        scroll = Math.clamp(scroll - (int) (vertical * 30), 0, maximum);
+        if (budgetsVisible) { return false; }
+        scroll = Math.clamp(scroll - (int) (vertical * 30), 0, scrollMax);
         return true;
     }
 
@@ -144,8 +213,16 @@ final class PreviewExamplesScreen extends Screen implements UiLayoutSource {
         return super.keyPressed(key, scan, modifiers);
     }
 
+    @Override public boolean mouseClicked(double x, double y, int button) {
+        return input.mousePressed(UiInputContext.of(scope, x, y, button, hasShiftDown(), hasControlDown(), hasAltDown()));
+    }
+    @Override public boolean mouseReleased(double x, double y, int button) {
+        return input.mouseReleased(UiInputContext.of(scope, x, y, button, hasShiftDown(), hasControlDown(), hasAltDown()));
+    }
+
     /** 关闭开发入口时恢复转台设置并短期保留近期就绪场景。 */
     @Override public void removed() {
+        input.close();
         budgets.close();
         PreviewIcons.setRotating(true);
         PreviewResources.screenClosed();

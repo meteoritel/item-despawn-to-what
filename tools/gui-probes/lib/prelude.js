@@ -248,7 +248,7 @@ var __gp = (function () {
           (label === undefined || n.text === label) && (!labels || labels.indexOf(n.text) >= 0) &&
           (selector.enabled === undefined || n.enabled === selector.enabled) &&
           (!selector.within || ancestors.some(function(a) { return matchScope(a, selector.within); })) &&
-          (!selector.has_text || flat([n]).some(function(c) { return c.text === selector.has_text; })) &&
+          (!selector.has_text || flat([n]).some(function(c) { return c.text.indexOf(selector.has_text) >= 0; })) &&
           r.right > r.x && r.bottom > r.y;
         if (matches) {
           var value = {kind:n.kind, text:n.text, x:r.x, y:r.y, width:r.right-r.x, height:r.bottom-r.y,

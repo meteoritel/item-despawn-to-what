@@ -33,6 +33,9 @@ import java.util.function.Consumer;
 
 /** 文档、浮板与图片灯箱的本地装配；所有输入和诊断取自实际内容实例。 */
 final class KitSurfacesExample implements UiWidget, UiLayoutSource {
+    private static final int GUTTER = 12;
+    private static final int STATE_LINES = 2;
+    private static final int ACTION_COLUMNS = 4;
     private final Font font;
     private final UiStyleSource theme;
     private final UiDocument document;
@@ -43,6 +46,11 @@ final class KitSurfacesExample implements UiWidget, UiLayoutSource {
     private final UiImageView image;
     private final UiLightbox lightbox;
     private UiRect bounds = new UiRect(0, 0, 0, 0);
+    private UiRect captionRect = new UiRect(0, 0, 0, 0);
+    private UiRect documentCard = new UiRect(0, 0, 0, 0);
+    private UiRect stateBlock = new UiRect(0, 0, 0, 0);
+    private Component stateValue = Component.empty();
+    private List<String> stateLines = List.of();
     private boolean imageOpen;
     private boolean panelVisible = true;
     private int page;
@@ -107,23 +115,52 @@ final class KitSurfacesExample implements UiWidget, UiLayoutSource {
     void invalidateResources() { document.invalidateLayout(); unprofiled.invalidateLayout(); lightbox.invalidateResources(); }
     void close() { closeImage(); }
     @Override public UiRect bounds() { return bounds; }
+
+    /**
+     * 动作行占满宽度，文档与浮板按左右两半并排，状态行固定在底部。
+     *
+     * <p>浮板的工作区与文档视口同高，初始位置只在本内容首次获得尺寸时确定，之后由用户拖动。</p>
+     */
     @Override public void setBounds(int x, int y, int width, int height) {
         boolean initial = bounds.width() == 0;
         bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
-        int cell = Math.max(1, width / 4);
-        for (int i = 0; i < actions.size(); i++) actions.controls().get(i).setBounds(x + i % 4 * cell, y + i / 4 * 22, cell - 2, 20);
-        document.setViewport(x, y + 52, Math.max(1, width / 2 - 8), Math.max(1, height - 90));
-        panel.setWorkArea(new UiRect(x + width / 2, y + 52, Math.max(0, width / 2), Math.max(0, height - 90)));
-        if (initial) panel.setBounds(x + width / 2 + 8, y + 64, Math.max(1, width / 2 - 20), 75);
+        int capHeight = font.lineHeight + 2;
+        int stateHeight = font.lineHeight + 2 + STATE_LINES * (font.lineHeight + 2);
+        int stateTop = Math.max(y, y + height - stateHeight);
+        captionRect = new UiRect(x, y, width, font.lineHeight);
+        int actionCell = Math.max(1, (width - (ACTION_COLUMNS - 1) * 4) / ACTION_COLUMNS);
+        for (int i = 0; i < actions.size(); i++) {
+            actions.controls().get(i).setBounds(x + i % ACTION_COLUMNS * (actionCell + 4), y + capHeight + i / ACTION_COLUMNS * 24, actionCell, 20);
+        }
+        int contentTop = y + capHeight + 2 * 24;
+        int contentBottom = stateTop - WorkbenchLayout.GROUP_GAP;
+        int contentHeight = Math.max(1, contentBottom - contentTop);
+        int docWidth = Math.max(60, (width - GUTTER) / 2);
+        documentCard = new UiRect(x, contentTop, docWidth, contentHeight);
+        document.setViewport(x + 6, contentTop + 6, Math.max(0, docWidth - 12), Math.max(0, contentHeight - 12));
+        panel.setWorkArea(new UiRect(x + docWidth + GUTTER, contentTop, Math.max(0, width - docWidth - GUTTER), contentHeight));
+        if (initial) panel.setBounds(x + docWidth + GUTTER + 8, contentTop + 12, Math.max(1, docWidth - 20), 75);
         lightbox.setBounds(x + width + 12, y + height + 12);
+        stateBlock = new UiRect(x, stateTop, width, stateHeight);
+        stateValue = state();
+        stateLines = WorkbenchLayout.wrapLines(font, stateValue.getString(), width, STATE_LINES);
     }
+
     @Override public void render(GuiGraphics graphics, Font font, UiPointer pointer) {
         if (themeRevision != theme.revision()) { rebuildDocument(); themeRevision = theme.revision(); }
+        graphics.drawString(font, label("surfaces.actions"), captionRect.x(), captionRect.y(), theme.surfaces().secondaryText(), false);
         actions.render(graphics, font, pointer);
+        theme.drawInset(graphics, documentCard);
         document.render(graphics, font, pointer);
-        UiOrthoLink.drawDown(graphics, bounds.x() + 16, bounds.y() + 160, bounds.x() + 120, bounds.y() + 184, 2, theme.surfaces().panelBorder());
+        UiRect doc = document.viewport();
+        UiOrthoLink.drawDown(graphics, doc.x() + 16, doc.bottom() - 40, doc.x() + 120, doc.bottom() - 16, 2, theme.surfaces().panelBorder());
         if (panelVisible) panel.render(graphics, pointer);
-        graphics.drawString(font, state(), bounds.x(), bounds.bottom() - 12, theme.textColor(true), false);
+        graphics.drawString(font, label("surfaces.state.label"), stateBlock.x(), stateBlock.y(), theme.surfaces().secondaryText(), false);
+        int lineY = stateBlock.y() + font.lineHeight + 2;
+        for (String line : stateLines) {
+            graphics.drawString(font, line, stateBlock.x(), lineY, theme.textColor(true), false);
+            lineY += font.lineHeight + 2;
+        }
     }
     void renderOverlay(GuiGraphics graphics, UiPointer pointer) { if (imageOpen) lightbox.render(graphics, font, pointer, 0); }
     private Component state() {
@@ -150,8 +187,8 @@ final class KitSurfacesExample implements UiWidget, UiLayoutSource {
         if (panelVisible) nodes.add(node(UiLayoutNode.Kind.FRAME, panel.bounds(), label("panel"),
                 List.of(node(UiLayoutNode.Kind.CONTROL, new UiRect(panel.bounds().x(), panel.bounds().y(),
                         panel.bounds().width() - 20, font.lineHeight + 4), label("panel"), List.of()))));
-        UiRect stateRect = new UiRect(bounds.x(), bounds.bottom() - 12, bounds.width(), 12);
-        nodes.add(node(UiLayoutNode.Kind.FRAME, stateRect, label("surfaces.state.label"), List.of(node(UiLayoutNode.Kind.ROW, stateRect, state(), List.of()))));
+        nodes.add(node(UiLayoutNode.Kind.FRAME, stateBlock, label("surfaces.state.label"), List.of(
+                node(UiLayoutNode.Kind.ROW, stateBlock, stateValue, List.of()))));
         if (imageOpen) nodes.add(node(UiLayoutNode.Kind.MODAL, lightbox.viewport(), label("image"),
                 List.of(node(UiLayoutNode.Kind.ROW, lightbox.viewport(), Component.translatable(KitShowcaseContent.UI + "showcase.image.zoom", image.zoomPercent()), List.of()))));
         return nodes;
