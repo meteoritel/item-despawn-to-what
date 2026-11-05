@@ -202,10 +202,10 @@ final class ConditionTreeControl extends FormControl {
                     Component.translatable(TypeLabels.UI_PREFIX + "json.read_only").getString(),
                     Math.max(8, editor.bounds().width() - 4));
             graphics.drawString(font, text, editor.bounds().x() + 2, editor.bounds().y() + 2,
-                    THEME.palette().textSecondary(), false);
+                    THEME.palette().surfaces().secondaryText(), false);
             String json = JsonSummary.compact(fallbackRaw, Math.max(4, editor.bounds().width() - 6));
             graphics.drawString(font, json, editor.bounds().x() + 3, editor.bounds().y() + 14,
-                    THEME.palette().textPrimary(), false);
+                    THEME.palette().surfaces().text(), false);
             return;
         }
         for (UiButton button : toolbar) {

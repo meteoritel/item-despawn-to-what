@@ -39,7 +39,7 @@ final class BoolControl extends FormControl {
 
     @Override
     int height() {
-        return DEFAULT_HEIGHT;
+        return defaultHeight();
     }
 
     @Override

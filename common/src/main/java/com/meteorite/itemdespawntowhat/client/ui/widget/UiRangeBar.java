@@ -238,7 +238,7 @@ public final class UiRangeBar extends AbstractBarShell<UiRangeSlider> {
         if (label != null) {
             String text = TextScroll.trimToWidth(font, label.getString(),
                     Math.max(1, bounds.width() - valueWidth));
-            graphics.drawString(font, text, bounds.x(), bounds.y(), theme.palette().textSecondary(), false);
+            graphics.drawString(font, text, bounds.x(), bounds.y(), theme.palette().surfaces().secondaryText(), false);
             labelEnd = bounds.x() + font.width(text);
         }
         String valueText = TextScroll.trimToWidth(font, shown.getString(),
@@ -248,7 +248,7 @@ public final class UiRangeBar extends AbstractBarShell<UiRangeSlider> {
             drawInlineHint(graphics, labelEnd, valueX, hintText(value));
         }
         graphics.drawString(font, valueText, valueX, bounds.y(),
-                enabled ? theme.palette().textPrimary() : theme.palette().textDisabled(), false);
+                enabled ? theme.palette().surfaces().text() : theme.palette().surfaces().disabledText(), false);
     }
 
     // 聚焦时的按键提示：两端齐全提示精确输入，缺端时提示回车补端
@@ -297,7 +297,7 @@ public final class UiRangeBar extends AbstractBarShell<UiRangeSlider> {
 
     private void drawEndHint(GuiGraphics graphics, int x, Component hint) {
         String text = TextScroll.trimToWidth(font, hint.getString(), Math.max(1, bounds.width() / 2));
-        graphics.drawString(font, text, x, trackRow.bottom() - 9, theme.palette().textDisabled(), false);
+        graphics.drawString(font, text, x, trackRow.bottom() - 9, theme.palette().surfaces().disabledText(), false);
     }
 
     private Component formatValue(double value) {

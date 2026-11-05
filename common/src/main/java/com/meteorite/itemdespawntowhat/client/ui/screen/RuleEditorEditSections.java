@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostSurface;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusFollow;
@@ -107,6 +108,7 @@ final class RuleEditorEditSections implements UiInputTarget {
     @Nullable UiRect lastArea;
     // 页面布局缓存：只有页、宽度、行结构与控件高度等真实几何输入变化时才重排，渲染帧与纯滚动帧都不测量
     private boolean layoutDirty = true;
+    private long themeRevision = -1;
     // 已作用到控件上的滚动偏移：偏移变化时只平移已排好的控件
     private int appliedOffset;
     // 控件在文档坐标（未滚动）下的矩形：滚动帧据此重算屏幕坐标，复合控件不会因子控件同列平移两次
@@ -233,6 +235,10 @@ final class RuleEditorEditSections implements UiInputTarget {
      * @param area 内容视口（屏幕坐标）
      */
     public void ensureLayout(UiRect area) {
+        if (themeRevision != THEME.revision()) {
+            themeRevision = THEME.revision();
+            layoutDirty = true;
+        }
         if (area == null || area.height() <= 0) {
             lastArea = area;
             return;
@@ -263,7 +269,7 @@ final class RuleEditorEditSections implements UiInputTarget {
     public void layout(UiRect area) {
         lastArea = area;
         pageScroll.setViewport(area.x(), area.y(), area.width(), area.height());
-        pageScroll.setStep(24);
+        pageScroll.setStep(THEME.rowHeight() * 2);
         // 先按文档坐标（滚动偏移 0）排布，排完后统一平移到当前滚动位置
         appliedOffset = 0;
         int used = layoutPage(area) - area.y();
@@ -353,7 +359,7 @@ final class RuleEditorEditSections implements UiInputTarget {
         graphics.enableScissor(lastArea.x(), lastArea.y(), lastArea.right(), lastArea.bottom());
         try {
             for (EditorSectionContent.PageCard card : content.cards) {
-                THEME.drawCard(graphics, card.bounds());
+                THEME.drawSurface(graphics, card.bounds(), UiHostSurface.CARD);
                 EditorSectionContent.CardHeader header = card.header();
                 if (header != null) {
                     EditorSectionContent.drawCardHeader(THEME, graphics, font, card.headerRect(), header.icon(), header.title());

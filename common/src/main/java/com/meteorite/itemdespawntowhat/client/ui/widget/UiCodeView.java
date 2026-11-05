@@ -132,11 +132,11 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
 
     private void refreshTheme() {
         if (themeRevision == theme.revision()) return;
-        kindColors[UiJsonText.PUNCTUATION] = theme.palette().codePunctuation();
-        kindColors[UiJsonText.KEY] = theme.palette().codeKey();
-        kindColors[UiJsonText.STRING] = theme.palette().codeString();
-        kindColors[UiJsonText.NUMBER] = theme.palette().codeNumber();
-        kindColors[UiJsonText.LITERAL] = theme.palette().codeLiteral();
+        kindColors[UiJsonText.PUNCTUATION] = theme.palette().code().codePunctuation();
+        kindColors[UiJsonText.KEY] = theme.palette().code().codeKey();
+        kindColors[UiJsonText.STRING] = theme.palette().code().codeString();
+        kindColors[UiJsonText.NUMBER] = theme.palette().code().codeNumber();
+        kindColors[UiJsonText.LITERAL] = theme.palette().code().codeLiteral();
         themeRevision = theme.revision();
     }
 
@@ -321,7 +321,7 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
         }
         theme.drawInset(graphics, bounds);
         graphics.fill(bounds.x() + 1, bounds.y() + 1, bounds.right() - 1, bounds.bottom() - 1,
-                theme.palette().slotInner());
+                theme.palette().surfaces().inputFill());
         int innerX = bounds.x() + PADDING_X;
         int innerY = bounds.y() + PADDING_Y;
         int innerWidth = innerWidth();
@@ -331,13 +331,13 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
         ensureRows(Math.max(1, innerWidth - gutter));
         if (gutter > 0) {
             int lineX = innerX + gutter - GUTTER_GAP + 1;
-            graphics.fill(lineX, innerY, lineX + 1, innerY + innerHeight, theme.palette().codeGutterLine());
+            graphics.fill(lineX, innerY, lineX + 1, innerY + innerHeight, theme.palette().code().codeGutterLine());
         }
         scroll.push(graphics, new UiRect(innerX, innerY, innerWidth + SCROLLBAR_WIDTH, innerHeight));
         try {
             if (rows.isEmpty()) {
                 if (emptyHint != null) {
-                    graphics.drawString(renderFont, emptyHint, 0, 0, theme.palette().codeGutterText(), false);
+                    graphics.drawString(renderFont, emptyHint, 0, 0, theme.palette().code().codeGutterText(), false);
                 }
             } else {
                 renderRows(graphics, font, gutter, innerWidth, rowHeight);
@@ -362,13 +362,13 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
             Section section = sections.get(row.section);
             switch (row.kind) {
                 case TITLE, DETAIL -> {
-                    graphics.fill(0, y, innerWidth, y + rowHeight, theme.palette().codeSectionFill());
+                    graphics.fill(0, y, innerWidth, y + rowHeight, theme.palette().code().codeSectionFill());
                     Component line = row.kind == RowKind.TITLE ? section.title() : section.detail();
                     if (line == null) {
                         continue;
                     }
                     int color = row.kind == RowKind.TITLE
-                            ? theme.palette().codeSectionText() : theme.palette().codePathText();
+                            ? theme.palette().code().codeSectionText() : theme.palette().code().codePathText();
                     String text = line.getString();
                     graphics.drawString(renderFont, text.substring(row.begin, row.end), codeX, y, color, false);
                 }
@@ -376,7 +376,7 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
                     if (gutter > 0 && row.lineNumber > 0) {
                         String label = String.valueOf(row.lineNumber);
                         graphics.drawString(renderFont, label, codeX - GUTTER_GAP - font.width(label), y,
-                                theme.palette().codeGutterText(), false);
+                                theme.palette().code().codeGutterText(), false);
                     }
                     UiJsonText.paint(graphics, renderFont, section.body(), kinds.get(row.section), kindColors,
                             codeX, y, row.begin, row.end);

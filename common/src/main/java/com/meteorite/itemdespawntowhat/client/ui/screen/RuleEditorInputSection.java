@@ -418,16 +418,16 @@ final class RuleEditorInputSection {
     }
 
     void renderInput(GuiGraphics graphics) {
-        content.drawText(graphics, costModeRect, Component.translatable(RuleEditorPageSupport.UI + "cost.source_title"), THEME.palette().textSecondary());
+        content.drawText(graphics, costModeRect, Component.translatable(RuleEditorPageSupport.UI + "cost.source_title"), THEME.palette().surfaces().secondaryText());
         if (costNote != null) {
-            content.drawText(graphics, costNoteRect, costNote, THEME.palette().textDisabled());
+            content.drawText(graphics, costNoteRect, costNote, THEME.palette().surfaces().disabledText());
         }
         if (catalystNote != null) {
-            content.drawText(graphics, catalystNoteRect, catalystNote, THEME.palette().textDisabled());
+            content.drawText(graphics, catalystNoteRect, catalystNote, THEME.palette().surfaces().disabledText());
         }
         // 存在条件标题行：类型 + 同类型编号 + 作用域，多个同类叶也能逐项辨识
         for (PresenceRow row : presenceRows) {
-            content.drawText(graphics, row.headerRect, PresenceLeaves.presenceHeader(row.leaf), THEME.palette().textSecondary());
+            content.drawText(graphics, row.headerRect, PresenceLeaves.presenceHeader(row.leaf), THEME.palette().surfaces().secondaryText());
         }
     }
     void applyEnabled(boolean editable) {

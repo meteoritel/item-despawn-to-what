@@ -1011,7 +1011,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
                 if (row.control instanceof RawJsonControl raw) {
                     String summary = TextScroll.trimToWidth(renderFont, raw.summary(row.controlWidth), row.controlWidth);
                     graphics.drawString(renderFont, summary, viewportX + row.controlRelX, screenY + row.controlRelY,
-                            THEME.palette().textPrimary(), false);
+                            THEME.palette().surfaces().text(), false);
                     continue;
                 }
                 row.control.render(graphics, renderFont, pointer);
@@ -1019,7 +1019,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
                     int left = viewportX + row.controlRelX;
                     int top = screenY + row.controlRelY;
                     graphics.fill(left, top + row.control.layoutHeight() - 1,
-                            left + row.controlWidth, top + row.control.layoutHeight(), THEME.palette().danger());
+                            left + row.controlWidth, top + row.control.layoutHeight(), THEME.palette().controls().danger());
                 }
                 for (var pickerButton : row.pickers) pickerButton.render(graphics, renderFont, pointer);
                 for (UiButton action : row.actions) action.render(graphics, renderFont, pointer);

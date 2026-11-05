@@ -11,6 +11,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiAction;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCodeView;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiListEditor;
@@ -70,6 +71,7 @@ final class EditorShell {
     private final RuleEditorModel model;
     private final RuleListDisplayCache display;
     private final Font font;
+    private final UiButton themeButton;
     private final UiModalStack modals;
 
     private final RuleEditorListPage listPage;
@@ -106,7 +108,7 @@ final class EditorShell {
         closeInput = handler;
     }
 
-    EditorShell(UiHostTheme theme, UiHostTheme chromeTheme, RuleEditClientWorkspace workspace, RuleEditorModel model, RuleListDisplayCache display, Font font) {
+    EditorShell(UiHostTheme theme, UiHostTheme chromeTheme, RuleEditClientWorkspace workspace, RuleEditorModel model, RuleListDisplayCache display, Font font, Component themeLabel, UiAction changeTheme) {
         this.THEME = UiHostThemes.require(theme);
         this.chromeTheme = UiHostThemes.require(chromeTheme);
         this.modals = new UiModalStack(THEME);
@@ -115,6 +117,7 @@ final class EditorShell {
         this.model = model;
         this.display = display;
         this.font = font;
+        this.themeButton = new UiButton(THEME, font, themeLabel, UiButtonVariant.SECONDARY, changeTheme);
         this.listPage = new RuleEditorListPage(this, model, display, font, modals);
         this.editPage = new RuleEditorEditPage(this, model, workspace, font, modals);
         this.debugPage = new RuleEditorDebugPage(this, model, font, modals);
@@ -133,6 +136,8 @@ final class EditorShell {
         }
         model.refresh();
     }
+
+    UiButton themeButton() { return themeButton; }
 
     UiHostTheme theme() {
         return THEME;

@@ -39,7 +39,7 @@ abstract class FormControl implements UiInputTarget {
     final UiHostTheme THEME;
 
     // 行默认高度（与主题行高一致）
-    final int DEFAULT_HEIGHT;
+    final int defaultHeight() { return THEME.rowHeight(); }
 
     // 卡片表单的单行控件高度：FormView 的卡片密度与条件树工具条都按这个值对齐
     static final int CARD_CONTROL_HEIGHT = 20;
@@ -72,7 +72,6 @@ abstract class FormControl implements UiInputTarget {
 
     FormControl(UiHostTheme theme, EditorField field) {
         this.THEME = UiHostThemes.require(theme);
-        this.DEFAULT_HEIGHT = THEME.rowHeight();
         this.field = field;
     }
 

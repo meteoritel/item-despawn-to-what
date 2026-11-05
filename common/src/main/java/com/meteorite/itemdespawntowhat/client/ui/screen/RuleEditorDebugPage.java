@@ -13,7 +13,6 @@ import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiModal;
@@ -50,7 +49,7 @@ final class RuleEditorDebugPage implements EditorPage {
     // ---- 页面度量与标题状态：屏幕按这些声明统一排版，页不自己算窗口几何 ----
 
     public int headerHeight() {
-        return UiTheme.HEADER_HEIGHT;
+        return THEME.headerHeight();
     }
 
     public int pagePadding() {
@@ -227,16 +226,16 @@ final class RuleEditorDebugPage implements EditorPage {
     // 调试页布局：数量摘要、数量输入与只写草稿的说明
     public void render(GuiGraphics graphics, Font renderFont, UiPointer pointer, UiRect area) {
         int y = area.y();
-        graphics.drawString(renderFont, summary(), area.x(), y, THEME.palette().textPrimary(), false);
+        graphics.drawString(renderFont, summary(), area.x(), y, THEME.palette().surfaces().text(), false);
         y += renderFont.lineHeight + RuleEditorPageSupport.PAD;
         Component label = Component.translatable(UI + "count_label");
         graphics.drawString(renderFont, label, area.x(),
-                y + (INPUT_H - renderFont.lineHeight) / 2, THEME.palette().textSecondary(), false);
+                y + (INPUT_H - renderFont.lineHeight) / 2, THEME.palette().surfaces().secondaryText(), false);
         if (countField != null) {
             countField.render(graphics, renderFont, pointer);
         }
         y += INPUT_H + RuleEditorPageSupport.PAD;
-        int hintColor = THEME.palette().textSecondary();
+        int hintColor = THEME.palette().surfaces().secondaryText();
         y = drawHint(graphics, renderFont, area, y, hintColor, Component.translatable(UI + "hint.draft"));
         drawHint(graphics, renderFont, area, y, hintColor, Component.translatable(UI + "hint.prefix", DebugTestRules.QUALIFIED_ID_PREFIX));
     }
@@ -257,6 +256,7 @@ final class RuleEditorDebugPage implements EditorPage {
 
 
     public boolean mousePressed(UiInputContext context) {
+        if (context.hits(shell.themeButton())) return shell.themeButton().mousePressed(context);
         if (countField != null && countField.mousePressed(context)) {
             return true;
         }
@@ -298,6 +298,7 @@ final class RuleEditorDebugPage implements EditorPage {
 
     /** 依视觉顺序贡献焦点目标；登记事务由作用域根统一提交。 */
     public void addFocusTargets(Consumer<UiFocusTarget> focus) {
+        focus.accept(shell.themeButton());
         if (countField != null) {
             focus.accept(countField);
         }
@@ -308,7 +309,7 @@ final class RuleEditorDebugPage implements EditorPage {
     /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
     @Override
     public @Nullable UiPointerHit hitTest(double x, double y) {
-        return UiPointerHit.first(x, y, bottomBar, countField);
+        return UiPointerHit.first(x, y, shell.themeButton(), bottomBar, countField);
     }
 
 }

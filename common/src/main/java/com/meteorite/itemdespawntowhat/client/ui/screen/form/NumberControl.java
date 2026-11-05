@@ -294,9 +294,9 @@ final class NumberControl extends FormControl {
     @Override
     int height() {
         if (signedLabels == null) {
-            return DEFAULT_HEIGHT;
+            return defaultHeight();
         }
-        int bodyHeight = usesCardSpacing() ? CARD_CONTROL_HEIGHT : DEFAULT_HEIGHT;
+        int bodyHeight = usesCardSpacing() ? CARD_CONTROL_HEIGHT : defaultHeight();
         return bodyHeight + font.lineHeight + ENDPOINT_LABEL_GAP;
     }
 
@@ -306,7 +306,7 @@ final class NumberControl extends FormControl {
         int rowHeight = layoutHeight();
         // 端点文案占轨道上方一行，轨道本体沿用所在密度的行高
         int labelRowHeight = signedLabels == null ? 0
-                : Math.clamp(font.lineHeight + ENDPOINT_LABEL_GAP, 0, Math.max(0, rowHeight - DEFAULT_HEIGHT));
+                : Math.clamp(font.lineHeight + ENDPOINT_LABEL_GAP, 0, Math.max(0, rowHeight - defaultHeight()));
         int bodyHeight = rowHeight - labelRowHeight;
         int bodyY = y + labelRowHeight;
         // 加高行改用宽松档滑块外观：样式与画法成对取自注入主题，避免两套来源混用
@@ -335,11 +335,11 @@ final class NumberControl extends FormControl {
                     upperWidth, font.lineHeight);
         }
         // 预设按钮保持默认高度，在轨道行里垂直居中，保证仍可点击
-        int buttonY = bodyY + Math.max(0, (bodyHeight - DEFAULT_HEIGHT) / 2);
+        int buttonY = bodyY + Math.max(0, (bodyHeight - defaultHeight()) / 2);
         int cursor = sliderX + available + GAP;
         for (UiButton button : presetButtons) {
             int buttonWidth = buttonWidth(button);
-            button.setBounds(cursor, buttonY, buttonWidth, DEFAULT_HEIGHT);
+            button.setBounds(cursor, buttonY, buttonWidth, defaultHeight());
             cursor += buttonWidth + GAP;
         }
     }
@@ -381,7 +381,7 @@ final class NumberControl extends FormControl {
         UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
         graphics.drawString(renderFont, unitLabel(), unitBounds.x(),
                 unitBounds.y() + Math.max(0, (unitBounds.height() - renderFont.lineHeight) / 2),
-                THEME.palette().textSecondary(), false);
+                THEME.palette().surfaces().secondaryText(), false);
         if (signedLabels != null) {
             drawEndpoint(graphics, renderFont, lowerLabel(), lowerLabelBounds);
             drawEndpoint(graphics, renderFont, upperLabel(), upperLabelBounds);
@@ -391,8 +391,8 @@ final class NumberControl extends FormControl {
             UiRect bounds = slider.bounds();
             int zeroX = slider.trackLeft() + (int) Math.round(
                     -windowMin / (windowMax - windowMin) * slider.trackWidth());
-            graphics.fill(zeroX, bounds.y(), zeroX + 1, bounds.y() + 2, THEME.palette().textSecondary());
-            graphics.fill(zeroX, bounds.bottom() - 2, zeroX + 1, bounds.bottom(), THEME.palette().textSecondary());
+            graphics.fill(zeroX, bounds.y(), zeroX + 1, bounds.y() + 2, THEME.palette().surfaces().secondaryText());
+            graphics.fill(zeroX, bounds.bottom() - 2, zeroX + 1, bounds.bottom(), THEME.palette().surfaces().secondaryText());
         }
         for (UiButton button : presetButtons) {
             button.render(graphics, renderFont, pointer);
@@ -410,7 +410,7 @@ final class NumberControl extends FormControl {
     private void drawEndpoint(GuiGraphics graphics, Font renderFont, Component text, UiRect bounds) {
         graphics.drawString(renderFont, text, bounds.x(),
                 bounds.y() + Math.max(0, (bounds.height() - renderFont.lineHeight) / 2),
-                THEME.palette().textSecondary(), false);
+                THEME.palette().surfaces().secondaryText(), false);
     }
 
     @Override

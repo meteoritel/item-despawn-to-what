@@ -1,145 +1,55 @@
 package com.meteorite.itemdespawntowhat.client.ui.theme;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIcon;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlStyle;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderRole;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderSkin;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiStyleSource;
 import net.minecraft.client.gui.GuiGraphics;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlSkin;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlPainter;
 
 /**
- * 宿主主题：控件与屏幕消费的全部视觉规格都经本接口注入，控件不再静态读取主题类。
- *
- * <p>本接口是 kit 的 {@link UiStyleSource} 在宿主侧的宿主入口：kit 只约定控件样式与滑块外观的类型，
- * 视觉规范（调色板、度量、结构绘制原语）全部由宿主实现。屏幕在装配控件时从 {@link UiHostThemes}
- * 取主题并传入控件，因此换主题或测试替换主题都不依赖全局静态状态。</p>
- *
- * <p>度量与绘制原语保持与既有像素主题逐一相同：像素皮肤是默认实现，画布页的扁平外壳仍由
- * {@code UiFlatSkin} 在调用方显式注入，本接口不改变既有画面。</p>
+ * 宿主主题的完整视觉入口：扩展 kit 的通用 skin 与度量，补充业务配色、语义表面和图标角色。
+ * <p>主题 Adapter 提供不可变定义；屏幕通过稳定 Context 发布正文与画布组合，
+ * 消费者只读取所属来源，无需管理资源图集或刷新次序。</p>
  */
 public interface UiHostTheme extends UiStyleSource {
 
-    // ---- 图标图集行号 ----
-    // 与 UiFlatSkin 的图集行序一致；图标图集是宿主共用资源，两种皮肤同源
-
-    int ICON_UNDO = UiFlatSkin.ICON_UNDO;
-    int ICON_REDO = UiFlatSkin.ICON_REDO;
-    int ICON_VIEW_TREE = UiFlatSkin.ICON_VIEW_TREE;
-    int ICON_VIEW_JSON = UiFlatSkin.ICON_VIEW_JSON;
-    int ICON_HELP = UiFlatSkin.ICON_HELP;
-    int ICON_ADD_CONDITION = UiFlatSkin.ICON_ADD_CONDITION;
-    int ICON_NEW_BRANCH = UiFlatSkin.ICON_NEW_BRANCH;
-    int ICON_INVERT = UiFlatSkin.ICON_INVERT;
-    int ICON_REMOVE = UiFlatSkin.ICON_REMOVE;
-    int ICON_MOVE_UP = UiFlatSkin.ICON_MOVE_UP;
-    int ICON_MOVE_DOWN = UiFlatSkin.ICON_MOVE_DOWN;
-    int ICON_WRAP_ALL = UiFlatSkin.ICON_WRAP_ALL;
-
-    // 控件可见的调色板
+    /** 按职责组合的不可变业务视觉值。 */
     UiHostPalette palette();
 
-    // ---- 度量 ----
+    /** 按用途解析状态色与画法，调用方不依赖贴图布局。 */
+    UiControlSkin surfaceSkin(UiHostSurface role);
 
-    // 面板内边距
-    int padding();
+    /** 绘制常态语义表面。 */
+    default void drawSurface(GuiGraphics graphics, UiRect rect, UiHostSurface role) {
+        drawSurface(graphics, rect, role, UiControlStyle.State.NORMAL);
+    }
 
-    // 标准行高
-    int rowHeight();
+    /** 使用完整 skin 绘制表面状态。 */
+    default void drawSurface(GuiGraphics graphics, UiRect rect, UiHostSurface role, UiControlStyle.State state) {
+        UiControlSkin skin = surfaceSkin(role);
+        skin.painter().paint(graphics, new UiControlPainter.Frame(rect, skin.style(), state, false));
+    }
 
-    // 文本相对行顶部的偏移
-    int textOffset();
-
-    // 分区标题栏高度
-    int headerHeight();
-
-    // 边框宽度
-    int border();
-
-    // 列表选中行标记宽度
-    int selectMarkerWidth();
-
-    // ---- 文本色 ----
-
-    // 按启用状态返回标准文本色
-    int textColor(boolean enabled);
-
-    // 次要说明文本色
-    int secondaryTextColor();
-
-    // 控件语义角色对应的文本色
-    int controlTextColor(UiControlRole role);
-
-    // ---- 控件样式 ----
-
-    // 控件结构样式
-    @Override
-    UiControlStyle controlStyle(UiControlRole role);
-
-    // 滑块外观
-    @Override
-    UiSliderSkin sliderSkin(UiSliderRole role);
-
-    // 功能栏与工具列格子样式（与浮动调板同属宿主外壳）
-    UiControlStyle stripStyle();
+    @Override default void drawWindow(GuiGraphics graphics, UiRect rect) { drawSurface(graphics, rect, UiHostSurface.WINDOW); }
+    @Override default void drawInset(GuiGraphics graphics, UiRect rect) { drawSurface(graphics, rect, UiHostSurface.INSET); }
+    @Override default void drawHeader(GuiGraphics graphics, UiRect rect) { drawSurface(graphics, rect, UiHostSurface.HEADER); }
+    @Override default void drawChip(GuiGraphics graphics, UiRect rect, boolean selected, boolean hovered) {
+        drawSurface(graphics, rect, UiHostSurface.CHIP, selected ? UiControlStyle.State.SELECTED
+                : hovered ? UiControlStyle.State.HOVER : UiControlStyle.State.NORMAL);
+    }
 
     // ---- 结构绘制 ----
 
-    // 带高光与阴影的窗口面板
-    void drawWindow(GuiGraphics graphics, UiRect rect);
-
-    // 内凹区域（输入框、列表底、槽位）
-    void drawInset(GuiGraphics graphics, UiRect rect);
-
-    // 分区标题栏
-    void drawHeader(GuiGraphics graphics, UiRect rect);
-
-    // 水平分隔线
-    void drawDivider(GuiGraphics graphics, int x, int y, int width);
-
-    // 外凸立体边：上/左高光、下/右阴影
+    /** 仅绘制几何立体边；颜色由所属主题提供。 */
     void drawBevel(GuiGraphics graphics, UiRect rect, int light, int dark);
 
-    // 键盘焦点轮廓
-    void drawFocusOutline(GuiGraphics graphics, UiRect rect);
+    // ---- 宿主业务视觉 ----
 
-    // 选中背景
-    void drawSelection(GuiGraphics graphics, UiRect rect);
+    /** 按业务用途解析图标；禁用状态与底色配套，调用方不接触图集行号。 */
+    UiIcon icon(UiHostIcon role, boolean disabled);
 
-    // 列表/树选中行左侧的三角标记
-    void drawSelectMarker(GuiGraphics graphics, UiRect rect);
-
-    // 水平进度/滚动轨道
-    void drawScrollTrack(GuiGraphics graphics, UiRect rect);
-
-    /**
-     * 绘制滚动条滑块（垂直或水平方向通用）。
-     *
-     * @param rect 滑块矩形；宽高不大于 0 时由实现直接忽略
-     */
-    void drawScrollThumb(GuiGraphics graphics, UiRect rect);
-
-    // 分段按钮底色
-    void drawSegment(GuiGraphics graphics, UiRect rect, boolean enabled, boolean selected, boolean hovered);
-
-    // 圆角卡片（像素皮肤为九宫格贴图，扁平皮肤为同色描边面）
-    void drawCard(GuiGraphics graphics, UiRect rect);
-
-    // 分区面板
-    void drawPanel(GuiGraphics graphics, UiRect rect);
-
-    // 可选中小底（选中 / 悬停 / 常态）
-    void drawChip(GuiGraphics graphics, UiRect rect, boolean selected, boolean hovered);
-
-    // ---- 宿主外壳（画布页使用扁平实现；其它页面不装配外壳） ----
-
-    // 取图标图集中的一个图标；disabled 为真时取禁用字形
-    UiIcon icon(int row, boolean disabled);
-
-    // 帮助浮层底板
-    void drawHelp(GuiGraphics graphics, UiRect rect);
-
-    // 纯色底 + 1 像素描边（宿主外壳通用原语）
+    /** 显式颜色的平面几何原语，供业务高亮使用。 */
     void drawSurface(GuiGraphics graphics, UiRect rect, int fill, int border);
 }

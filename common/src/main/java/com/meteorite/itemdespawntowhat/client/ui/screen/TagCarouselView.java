@@ -50,10 +50,10 @@ public final class TagCarouselView implements UiWidget, UiFocusTarget {
         this.THEME = UiHostThemes.require(theme);
         this.tag = tag;
         list = new UiListView<>(THEME, (g, f, member, index, row, selected, hovered, focused) -> {
-            member.icon().render(g, row.x() + 2, row.y() + 2);
+            member.icon().render(g, row.x() + 2, row.y() + 2, THEME);
             UiRenderLayers.draw(g, UiRenderLayers.FOREGROUND, () -> g.drawString(f,
                     TextScroll.trimToWidth(f, member.name().getString(), row.width() - ROW_LABEL_X - 2),
-                    row.x() + ROW_LABEL_X, row.y() + 6, THEME.palette().textPrimary(), false));
+                    row.x() + ROW_LABEL_X, row.y() + 6, THEME.palette().surfaces().text(), false));
         });
         list.setItems(tag.members());
         list.setRowHeight(22);
@@ -91,7 +91,7 @@ public final class TagCarouselView implements UiWidget, UiFocusTarget {
             Component name = tag.members().get(index).name();
             UiRenderLayers.draw(graphics, UiRenderLayers.FOREGROUND, () -> UiFlatText.drawCentered(graphics, font,
                     TextScroll.trimToWidth(font, name.getString(), bounds.width() - 8),
-                    bounds.x() + bounds.width() / 2, bounds.y() + 60, THEME.palette().textPrimary()));
+                    bounds.x() + bounds.width() / 2, bounds.y() + 60, THEME.palette().surfaces().text()));
         }
         list.render(graphics, font, pointer);
     }

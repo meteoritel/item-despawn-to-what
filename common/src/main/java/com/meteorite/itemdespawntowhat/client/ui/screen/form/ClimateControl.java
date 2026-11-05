@@ -145,7 +145,7 @@ final class ClimateControl extends FormControl {
 
     @Override
     int height() {
-        return TOGGLE_HEIGHT + RANGE_HEIGHT + DEFAULT_HEIGHT + GAP * 2;
+        return TOGGLE_HEIGHT + RANGE_HEIGHT + defaultHeight() + GAP * 2;
     }
 
     @Override
@@ -154,8 +154,8 @@ final class ClimateControl extends FormControl {
         matching.setBounds(x, y, width, TOGGLE_HEIGHT);
         range.setBounds(x, y + TOGGLE_HEIGHT + GAP, width, RANGE_HEIGHT);
         int inputY = y + TOGGLE_HEIGHT + RANGE_HEIGHT + GAP * 2;
-        minInput.setBounds(x, inputY, half, DEFAULT_HEIGHT);
-        maxInput.setBounds(x + half + 4, inputY, Math.max(16, width - half - 4), DEFAULT_HEIGHT);
+        minInput.setBounds(x, inputY, half, defaultHeight());
+        maxInput.setBounds(x + half + 4, inputY, Math.max(16, width - half - 4), defaultHeight());
     }
 
     @Override

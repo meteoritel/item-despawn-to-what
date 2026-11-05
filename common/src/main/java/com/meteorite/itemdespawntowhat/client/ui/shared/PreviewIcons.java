@@ -1,6 +1,9 @@
 package com.meteorite.itemdespawntowhat.client.ui.shared;
 
 import com.meteorite.itemdespawntowhat.Constants;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiStyleSource;
+import net.minecraft.client.gui.GuiGraphics;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiPreviewCache;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.preview.PreviewMotion;
@@ -113,11 +116,25 @@ public final class PreviewIcons {
         return ICONS.getOrLoad(key, ignored -> {
             UiIcon fallback = CatalogPreviewIcons.unavailableMarker(size, size);
             UiIcon preparing = CatalogPreviewIcons.preparingMarker(size, size);
-            return new UiIcon.Rendered(size, size, (graphics, box) -> {
-                PreviewMotion effective = rotating ? motion : new PreviewMotion(motion.startYawDegrees(), 0);
-                scenes().icon(id, subject, size, effective, UiSceneStyle.icon(), preparing, fallback)
-                        .render(graphics, box.x(), box.y());
-            }, () -> scenes().prefetch(id, subject));
+            PreviewMotion fixed = new PreviewMotion(motion.startYawDegrees(), 0);
+            UiIcon.ThemePainter painter = new UiIcon.ThemePainter() {
+                private PreviewScenes owner;
+                private UiIcon delegate;
+                private boolean wasRotating;
+
+                @Override
+                public void render(GuiGraphics graphics, UiRect box, UiStyleSource theme) {
+                    PreviewScenes current = scenes();
+                    if (owner != current || wasRotating != rotating) {
+                        owner = current;
+                        wasRotating = rotating;
+                        delegate = current.icon(id, subject, size, rotating ? motion : fixed,
+                                UiSceneStyle.icon(), preparing, fallback);
+                    }
+                    delegate.render(graphics, box.x(), box.y(), theme);
+                }
+            };
+            return new UiIcon.Themed(size, size, painter, () -> scenes().prefetch(id, subject));
         });
     }
 
@@ -135,7 +152,8 @@ public final class PreviewIcons {
     public static UiIcon block(String id) {
         ResourceLocation key = ResourceLocation.tryParse(id);
         var block = key == null ? null : BuiltInRegistries.BLOCK.getOptional(key).orElse(null);
-        return block == null ? CatalogPreviewIcons.unavailableMarker(18, 18) : block(block.defaultBlockState(), null);
+        return block == null ? CatalogPreviewIcons.unavailableMarker(18, 18)
+                : block(block.defaultBlockState(), null);
     }
 
     /** 默认流体态经过真实液体 tessellator。 */
@@ -174,12 +192,12 @@ public final class PreviewIcons {
     public static UiIcon structure(ResourceLocation id, int size) {
         UiIcon preparing = CatalogPreviewIcons.preparingMarker(size, size);
         UiIcon fallback = CatalogPreviewIcons.unavailableMarker(size, size);
-        return new UiIcon.Rendered(size, size, (graphics, box) -> {
+        return new UiIcon.Themed(size, size, (graphics, box, theme) -> {
             scenes();
             var resource = StructurePreviewResources.get(id, WORKERS);
-            if (resource.subject() != null) icon(id.toString(), resource.subject(), size, STRUCTURE).render(graphics, box.x(), box.y());
-            else if (resource.state() == PreviewState.PREPARING) preparing.render(graphics, box.x(), box.y());
-            else if (resource.state().unavailable()) fallback.render(graphics, box.x(), box.y());
+            if (resource.subject() != null) icon(id.toString(), resource.subject(), size, STRUCTURE).render(graphics, box.x(), box.y(), theme);
+            else if (resource.state() == PreviewState.PREPARING) preparing.render(graphics, box.x(), box.y(), theme);
+            else if (resource.state().unavailable()) fallback.render(graphics, box.x(), box.y(), theme);
         }, () -> {
             PreviewScenes owner = scenes();
             var resource = StructurePreviewResources.get(id, WORKERS);

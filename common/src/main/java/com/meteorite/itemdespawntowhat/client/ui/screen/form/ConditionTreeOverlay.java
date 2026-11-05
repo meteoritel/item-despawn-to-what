@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostSurface;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
@@ -23,7 +24,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.tree.UiTreeCodec;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.tree.UiTreePath;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiFlatSkin;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostIcon;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.shared.RuleDisplayLabels;
@@ -97,9 +98,6 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
     private static final int HELP_LABEL_GAP = 6;
     // 提示气泡宽度范围
     // 只读遮罩：压暗画布，标题与提示保持可读
-    private static final int READONLY_SCRIM = 0xA0000000;
-    private static final int READONLY_TITLE_COLOR = 0xFFFFFFFF;
-    private static final int READONLY_HINT_COLOR = 0xFFB8B8B8;
 
     /**
      * 叶参数表单与承载面板；title 为宿主提供的条件名，内联框当前不绘制标题。
@@ -248,26 +246,26 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
         });
 
         functionBar = new ConditionTreeChrome.Strip(CHROME_THEME, font, UiIconStrip.Orientation.HORIZONTAL);
-        undoItem = functionBar.add(CHROME_THEME.icon(UiHostTheme.ICON_UNDO, false), CHROME_THEME.icon(UiHostTheme.ICON_UNDO, true),
+        undoItem = functionBar.add(CHROME_THEME.icon(UiHostIcon.UNDO, false), CHROME_THEME.icon(UiHostIcon.UNDO, true),
                 Component.translatable(EDIT_UI + "button.undo_shortcut"), this::undo);
-        redoItem = functionBar.add(CHROME_THEME.icon(UiHostTheme.ICON_REDO, false), CHROME_THEME.icon(UiHostTheme.ICON_REDO, true),
+        redoItem = functionBar.add(CHROME_THEME.icon(UiHostIcon.REDO, false), CHROME_THEME.icon(UiHostIcon.REDO, true),
                 Component.translatable(EDIT_UI + "button.redo_shortcut"), this::redo);
         // JSON 轮询：同一个入口按当前视图切换字形与提示，切回条件树时换成条件树图标
-        jsonItem = functionBar.add(CHROME_THEME.icon(UiHostTheme.ICON_VIEW_JSON, false), CHROME_THEME.icon(UiHostTheme.ICON_VIEW_JSON, true),
+        jsonItem = functionBar.add(CHROME_THEME.icon(UiHostIcon.VIEW_JSON, false), CHROME_THEME.icon(UiHostIcon.VIEW_JSON, true),
                 Component.translatable(UI + "button.source"), this::toggleSource);
-        helpItem = functionBar.add(CHROME_THEME.icon(UiHostTheme.ICON_HELP, false), CHROME_THEME.icon(UiHostTheme.ICON_HELP, true),
+        helpItem = functionBar.add(CHROME_THEME.icon(UiHostIcon.HELP, false), CHROME_THEME.icon(UiHostIcon.HELP, true),
                 Component.translatable(UI + "tool.help"), this::toggleHelp);
         functionItems = List.of(undoItem, redoItem, jsonItem, helpItem);
 
         toolColumn = new ConditionTreeChrome.Strip(CHROME_THEME, font, UiIconStrip.Orientation.VERTICAL);
         // 7 格：新建分支与包组的 ∧ / ∨ 由点击工具格后贴着它弹出的选择菜单决定，工具列不再各占两格
-        addConditionItem = addTool(UiHostTheme.ICON_ADD_CONDITION, UI + "button.add", false, editor::beginAddCondition);
-        branchItem = addTool(UiHostTheme.ICON_NEW_BRANCH, UI + "button.new_branch", false, this::beginBranchMenu);
-        addTool(UiHostTheme.ICON_INVERT, UI + "button.not", true, editor::invertSelection);
-        removeItem = addTool(UiHostTheme.ICON_REMOVE, UI + "button.remove", true, this::beginRemoveMenu);
-        moveUpItem = addTool(UiHostTheme.ICON_MOVE_UP, UI + "button.up", false, () -> editor.moveSelection(-1));
-        moveDownItem = addTool(UiHostTheme.ICON_MOVE_DOWN, UI + "button.down", false, () -> editor.moveSelection(1));
-        wrapItem = addTool(UiHostTheme.ICON_WRAP_ALL, UI + "button.wrap", true, editor::beginWrapWithKind);
+        addConditionItem = addTool(UiHostIcon.ADD_CONDITION, UI + "button.add", false, editor::beginAddCondition);
+        branchItem = addTool(UiHostIcon.NEW_BRANCH, UI + "button.new_branch", false, this::beginBranchMenu);
+        addTool(UiHostIcon.INVERT, UI + "button.not", true, editor::invertSelection);
+        removeItem = addTool(UiHostIcon.REMOVE, UI + "button.remove", true, this::beginRemoveMenu);
+        moveUpItem = addTool(UiHostIcon.MOVE_UP, UI + "button.up", false, () -> editor.moveSelection(-1));
+        moveDownItem = addTool(UiHostIcon.MOVE_DOWN, UI + "button.down", false, () -> editor.moveSelection(1));
+        wrapItem = addTool(UiHostIcon.WRAP_ALL, UI + "button.wrap", true, editor::beginWrapWithKind);
 
         reloadExpression();
     }
@@ -295,8 +293,8 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
     }
 
     // 加一个工具格：需要选中节点的进 selectionTools，由布局按选择变化统一使能
-    private UiIconStrip.Item addTool(int iconRow, String tooltipKey, boolean needsSelection, Runnable action) {
-        UiIconStrip.Item item = toolColumn.add(CHROME_THEME.icon(iconRow, false), CHROME_THEME.icon(iconRow, true),
+    private UiIconStrip.Item addTool(UiHostIcon iconRole, String tooltipKey, boolean needsSelection, Runnable action) {
+        UiIconStrip.Item item = toolColumn.add(CHROME_THEME.icon(iconRole, false), CHROME_THEME.icon(iconRole, true),
                 Component.translatable(tooltipKey), action::run);
         toolItems.add(item);
         if (needsSelection) selectionTools.add(item);
@@ -653,8 +651,8 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
         editor.setVisible(!sourceView);
         source.setVisible(sourceView);
 
-        int jsonRow = sourceView ? UiHostTheme.ICON_VIEW_TREE : UiHostTheme.ICON_VIEW_JSON;
-        jsonItem.setIcon(CHROME_THEME.icon(jsonRow, false), CHROME_THEME.icon(jsonRow, true));
+        UiHostIcon jsonRole = sourceView ? UiHostIcon.VIEW_TREE : UiHostIcon.VIEW_JSON;
+        jsonItem.setIcon(CHROME_THEME.icon(jsonRole, false), CHROME_THEME.icon(jsonRole, true));
         undoItem.setEnabled(session.canUndo());
         redoItem.setEnabled(session.canRedo());
         helpItem.setSelected(helpOpen);
@@ -768,30 +766,30 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
         if (canvasRect.width() <= 0 || canvasRect.height() <= 0) {
             return;
         }
-        graphics.fill(canvasRect.x(), canvasRect.y(), canvasRect.right(), canvasRect.bottom(), READONLY_SCRIM);
+        graphics.fill(canvasRect.x(), canvasRect.y(), canvasRect.right(), canvasRect.bottom(), CHROME_THEME.surfaces().modalDim());
         int centerX = canvasRect.x() + canvasRect.width() / 2;
         int centerY = canvasRect.y() + canvasRect.height() / 2;
         UiFlatText.drawCentered(graphics, font, Component.translatable(UI + "readonly"),
-                centerX, centerY - font.lineHeight, READONLY_TITLE_COLOR);
+                centerX, centerY - font.lineHeight, CHROME_THEME.palette().controls().textOnDark());
         UiFlatText.drawCentered(graphics, font, Component.translatable(UI + "readonly.hint"),
-                centerX, centerY + 2, READONLY_HINT_COLOR);
+                centerX, centerY + 2, CHROME_THEME.palette().controls().textOnDark());
     }
 
     // 外壳底板：整幅先铺画布底色，再给功能栏、工具列与状态栏铺与模态承载面同色的底板。
     // 外壳不再各自画一圈独立边框，功能栏底板收窄后，右侧空白直接露出画布底色。
     private void drawShell(GuiGraphics graphics) {
         var palette = CHROME_THEME.palette();
-        graphics.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), palette.canvasFill());
+        graphics.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), palette.canvas().canvasFill());
         int plateWidth = functionBarPlateWidth();
         if (plateWidth > 0) {
-            graphics.fill(bounds.x(), bounds.y(), bounds.x() + plateWidth, functionBar.bounds().bottom(), palette.panelFill());
+            graphics.fill(bounds.x(), bounds.y(), bounds.x() + plateWidth, functionBar.bounds().bottom(), palette.surfaces().panelFill());
         }
         if (toolColumn.bounds().width() > 0 && toolColumn.bounds().height() > 0) {
             graphics.fill(toolColumn.bounds().x(), toolColumn.bounds().y(), toolColumn.bounds().right(),
-                    toolColumn.bounds().bottom(), palette.panelFill());
+                    toolColumn.bounds().bottom(), palette.surfaces().panelFill());
         }
         if (statusRect.height() > 0) {
-            graphics.fill(statusRect.x(), statusRect.y(), statusRect.right(), statusRect.bottom(), palette.panelFill());
+            graphics.fill(statusRect.x(), statusRect.y(), statusRect.right(), statusRect.bottom(), palette.surfaces().panelFill());
         }
     }
 
@@ -801,8 +799,8 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
     // 之后，以免工具列的格子盖住外框左列，代价是工具列首格的顶行与顶部分隔线共行。
     // 收窄的只是底板绘制范围，格子命中仍按格子矩形判定。
     private void drawShellLines(GuiGraphics graphics) {
-        int color = CHROME_THEME.palette().canvasBorder();
-        UiFlatSkin.drawOutline(graphics, bounds, color);
+        int color = CHROME_THEME.palette().canvas().canvasBorder();
+        graphics.renderOutline(bounds.x(), bounds.y(), bounds.width(), bounds.height(), color);
         int plateWidth = functionBarPlateWidth();
         if (plateWidth > 0) {
             graphics.fill(bounds.x() + plateWidth - SHELL_LINE, bounds.y(), bounds.x() + plateWidth,
@@ -824,7 +822,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
      * 不参与命中判定。
      */
     private void drawGroupDividers(GuiGraphics graphics) {
-        int color = CHROME_THEME.palette().chromeDivider();
+        int color = CHROME_THEME.palette().controls().chromeDivider();
         drawVerticalDividers(graphics, functionItems, new int[]{2, 3}, color);
         drawHorizontalDividers(graphics, toolItems, new int[]{2, 6}, color);
     }
@@ -871,11 +869,11 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
         if (copyJsonRect.width() <= 0 || copyJsonRect.height() <= 0) {
             return;
         }
-        CHROME_THEME.drawSurface(graphics, copyJsonRect, CHROME_THEME.palette().panelControlFill(), CHROME_THEME.palette().chromeBorder());
+        CHROME_THEME.drawSurface(graphics, copyJsonRect, CHROME_THEME.palette().controls().panelControlFill(), CHROME_THEME.palette().surfaces().panelBorder());
         Component label = Component.translatable(UI + "button.copy_json");
         graphics.drawString(font, TextScroll.trimToWidth(font, label.getString(), Math.max(0, copyJsonRect.width() - 4)),
                 copyJsonRect.x() + 3, copyJsonRect.y() + (copyJsonRect.height() - font.lineHeight) / 2,
-                CHROME_THEME.palette().panelText(), false);
+                CHROME_THEME.palette().status().panelText(), false);
     }
 
     private void renderStatus(GuiGraphics graphics) {
@@ -892,9 +890,9 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
         // 状态正文与右侧缩放比例之间加一道组线，两段信息不再连成一片
         int dividerX = statusRect.right() - rightWidth - STATUS_TEXT_PAD * 2;
         graphics.fill(dividerX, statusRect.y() + 3, dividerX + SHELL_LINE, statusRect.bottom() - 3,
-                CHROME_THEME.palette().chromeDivider());
+                CHROME_THEME.palette().controls().chromeDivider());
         graphics.drawString(font, right.getString(), statusRect.right() - rightWidth - STATUS_TEXT_PAD, textY,
-                CHROME_THEME.palette().statusTextMuted(), false);
+                CHROME_THEME.palette().status().statusTextMuted(), false);
     }
 
     /**
@@ -927,20 +925,20 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
         int height = HELP_PADDING * 2 + lineCount * lineStep - HELP_LINE_GAP;
         int x = canvasRect.x() + Math.max(0, (canvasRect.width() - width) / 2);
         int y = canvasRect.y() + Math.max(0, (canvasRect.height() - height) / 2);
-        CHROME_THEME.drawHelp(graphics, new UiRect(x, y, width, height));
+        CHROME_THEME.drawSurface(graphics, new UiRect(x, y, width, height), UiHostSurface.HELP);
         int textY = y + HELP_PADDING;
         graphics.drawString(font, Component.translatable(UI + "help.title").getString(), x + HELP_PADDING, textY,
-                CHROME_THEME.palette().helpText(), false);
+                CHROME_THEME.palette().status().helpText(), false);
         textY += lineStep;
         for (int index = 0; index < entries.size(); index++) {
             List<String> lines = bodies.get(index);
             for (int row = 0; row < lines.size(); row++) {
                 if (row == 0) {
                     graphics.drawString(font, entries.get(index).label().getString(), x + HELP_PADDING, textY,
-                            CHROME_THEME.palette().helpText(), false);
+                            CHROME_THEME.palette().status().helpText(), false);
                 }
                 graphics.drawString(font, lines.get(row), x + HELP_PADDING + labelWidth + HELP_LABEL_GAP, textY,
-                        CHROME_THEME.palette().helpTextMuted(), false);
+                        CHROME_THEME.palette().status().helpTextMuted(), false);
                 textY += lineStep;
             }
         }
@@ -1067,9 +1065,9 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
 
     private int statusColor() {
         if (decodeError != null || editor.operationError() != null || !editor.isValid()) {
-            return CHROME_THEME.palette().statusTextDanger();
+            return CHROME_THEME.palette().status().statusTextDanger();
         }
-        return editor.issues().isEmpty() ? CHROME_THEME.palette().statusText() : CHROME_THEME.palette().statusTextWarning();
+        return editor.issues().isEmpty() ? CHROME_THEME.palette().status().statusText() : CHROME_THEME.palette().status().statusTextWarning();
     }
 
 

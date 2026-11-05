@@ -229,7 +229,7 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
         surfaces.renderOverlay(graphics, pointer);
         // 提示画在页脚与弹层之后；弹层开启时由弹层自己出提示
         if (page == Page.CONTROLS && modals.isEmpty() && pointer.allowsTooltip() && pointer.hit() != null) {
-            pointer.hit().renderTooltip(graphics, font, theme.surfaces(), (int) pointer.x(), (int) pointer.y());
+            pointer.hit().renderTooltip(graphics, font, theme.tooltipSkin(), (int) pointer.x(), (int) pointer.y());
         }
     }
 

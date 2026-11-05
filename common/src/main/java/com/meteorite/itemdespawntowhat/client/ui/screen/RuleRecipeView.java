@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.Constants;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 
@@ -50,7 +51,6 @@ public final class RuleRecipeView {
     private static final int ICON_SIZE = 18;
     private static final int OBJECT_CONTENT_HEIGHT = 20;
     static final int CONTENT_HEIGHT = RuleTriggerView.HEIGHT;
-    private static final int CONSUMED_COLOR = 0xFFFFA500;
     // 省略号口径与 TextScroll 一致：三颗 ASCII 句点
     private static final String ELLIPSIS = "...";
     private static final UiIcon UNKNOWN = new UiIcon.Item(new ItemStack(Items.BARRIER));
@@ -173,11 +173,11 @@ public final class RuleRecipeView {
 
     // 变更清单等低频重绘路径没有快照级文本缓存，保留按需测量；这些行始终按启用态绘制
     static void renderRow(GuiGraphics graphics, Font font, UiRect row, String title, Component state,
-                          int color, int stateColor, @Nullable RuleRecipeView recipe, boolean hovered) {
+                          int color, int stateColor, @Nullable RuleRecipeView recipe, boolean hovered, UiHostTheme theme) {
         int stateWidth = font.width(state);
         renderTitle(graphics, font, row, TextScroll.trimToWidth(font, title,
                 Math.max(0, row.width() - stateWidth - 6)), stateWidth, state, !state.getString().isBlank(), color, stateColor);
-        renderRecipe(graphics, font, row, recipe, color, hovered, true);
+        renderRecipe(graphics, font, row, recipe, color, hovered, true, theme);
     }
 
     /**
@@ -192,11 +192,11 @@ public final class RuleRecipeView {
      * @param hovered    是否悬停在该行
      */
     static void renderRow(GuiGraphics graphics, Font font, UiRect row, RuleListDisplaySnapshot snapshot,
-                          int color, int stateColor, boolean hovered) {
+                          int color, int stateColor, boolean hovered, UiHostTheme theme) {
         int stateWidth = snapshot.stateWidth(font);
         renderTitle(graphics, font, row, snapshot.clippedTitle(font, Math.max(0, row.width() - stateWidth - 6)),
                 stateWidth, snapshot.state(), snapshot.stateVisible(), color, stateColor);
-        renderRecipe(graphics, font, row, snapshot.preview(), color, hovered, snapshot.active());
+        renderRecipe(graphics, font, row, snapshot.preview(), color, hovered, snapshot.active(), theme);
     }
 
     // 状态靠右、标题吃掉剩余宽度，两段文本共用同一基线
@@ -210,10 +210,10 @@ public final class RuleRecipeView {
 
     // 配方区固定在标题行下方并左右各留 2px；绘制与命中共用这组几何，避免口径漂移
     private static void renderRecipe(GuiGraphics graphics, Font font, UiRect row, @Nullable RuleRecipeView recipe,
-                                     int color, boolean hovered, boolean active) {
+                                     int color, boolean hovered, boolean active, UiHostTheme theme) {
         if (recipe == null) return;
         recipe.renderContent(graphics, font, row.x() + 2, row.y() + font.lineHeight + 3,
-                Math.max(0, row.width() - 4), CONTENT_HEIGHT, color, hovered, active);
+                Math.max(0, row.width() - 4), CONTENT_HEIGHT, color, hovered, active, theme);
     }
 
     // 每种对象各占一行；流体不计件数，消耗符号与催化剂共用。
@@ -231,13 +231,13 @@ public final class RuleRecipeView {
     }
 
     /** 首选图标+名称，窄行改图标关系；超长时悬停横向滚动，离开恢复原序起点。 */
-    public void render(GuiGraphics graphics, Font font, UiRect row, int color, boolean hovered) {
-        renderContent(graphics, font, row.x(), row.y(), row.width(), row.height(), color, hovered, true);
+    public void render(GuiGraphics graphics, Font font, UiRect row, int color, boolean hovered, UiHostTheme theme) {
+        renderContent(graphics, font, row.x(), row.y(), row.width(), row.height(), color, hovered, true, theme);
     }
 
     // 配方内容绘制：坐标全程用整数与局部偏移，静止帧不再构造行矩形或逐项矩形
     private void renderContent(GuiGraphics graphics, Font font, int areaX, int areaY, int areaWidth, int areaHeight,
-                               int color, boolean hovered, boolean active) {
+                               int color, boolean hovered, boolean active, UiHostTheme theme) {
         int[] withNames = widths(font, true);
         boolean names = sumWidths(withNames) <= areaWidth;
         int[] partWidths = names ? withNames : widths(font, false);
@@ -262,17 +262,17 @@ public final class RuleRecipeView {
                 if (cursor >= end) break;
                 if (cursor + size <= 0) { cursor += size; continue; }
                 if (part.transition()) triggerView.render(graphics, font,
-                        transitionBounds(cursor, size, areaHeight), part.separator(), color, active);
+                        transitionBounds(cursor, size, areaHeight), part.separator(), color, active, theme);
                 else if (part.object() == null) graphics.drawString(font, part.separator(), cursor, contentY + 5, color, false);
                 else {
                     ObjectPart value = part.object();
                     if (value.tag != null) {
-                        graphics.fill(cursor, 0, cursor + size - 2, areaHeight, 0x224F7299);
-                        graphics.fill(cursor, areaHeight - 1, cursor + size - 2, areaHeight, 0xFF6688AA);
+                        graphics.fill(cursor, 0, cursor + size - 2, areaHeight, theme.palette().controls().accent() & 0x00FFFFFF | 0x22000000);
+                        graphics.fill(cursor, areaHeight - 1, cursor + size - 2, areaHeight, theme.palette().controls().accent());
                     }
-                    RulePreviewIcons.render(graphics, value.icon, cursor, contentY + 1, active);
+                    RulePreviewIcons.render(graphics, value.icon, cursor, contentY + 1, active, theme);
                     if (!value.consumedQuantities.isEmpty() || value.fluidConsumed || value.originFilled)
-                        consumedStar(graphics, cursor + ICON_SIZE - 7, contentY, active ? CONSUMED_COLOR : color);
+                        consumedStar(graphics, cursor + ICON_SIZE - 7, contentY, active ? theme.palette().status().warning() : color);
                     if (!value.quantities.isEmpty()) badge(graphics, font, value,
                             cursor + ICON_SIZE, contentY + 12, active ? 0xFFFFFFFF : color);
                     if (names) graphics.drawString(font, value.name, cursor + ICON_SIZE + 3, contentY + 5, color, false);

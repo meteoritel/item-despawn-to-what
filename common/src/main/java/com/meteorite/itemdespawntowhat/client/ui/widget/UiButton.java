@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostSurface;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlStyle;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiButtonWidget;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
@@ -312,7 +314,7 @@ public final class UiButton implements UiButtonWidget {
         UiRect rect = bounds();
         boolean hovered = control.isHittable() && pointer.contains(rect);
         if (control.isEnabled()) theme.drawChip(graphics, rect, isPressed(), hovered);
-        else theme.drawSegment(graphics, rect, false, false, false);
+        else theme.drawSurface(graphics, rect, UiHostSurface.SEGMENT, UiControlStyle.State.DISABLED);
         int iconWidth = icon == null ? 0 : icon.width() + ICON_GAP;
         int arrowWidth = arrowReserve();
         int available = Math.max(0, rect.width() - CHIP_PADDING * 2);
@@ -321,11 +323,11 @@ public final class UiButton implements UiButtonWidget {
         // 胶囊按钮在窄布局中仍须把图标与文字裁剪到自身范围。
         graphics.enableScissor(rect.x(), rect.y(), rect.right(), rect.bottom());
         try {
-            if (icon != null) icon.render(graphics, x, rect.y() + (rect.height() - icon.height()) / 2);
+            if (icon != null) icon.render(graphics, x, rect.y() + (rect.height() - icon.height()) / 2, theme);
             hoverTicks = hovered ? hoverTicks + 1 : 0;
             // 胶囊使用浅色底，不能沿用主按钮深色底对应的白字。
-            int color = !control.isEnabled() ? theme.palette().textDisabled()
-                    : variant == UiButtonVariant.DANGER ? theme.palette().danger() : theme.palette().textPrimary();
+            int color = !control.isEnabled() ? theme.palette().surfaces().disabledText()
+                    : variant == UiButtonVariant.DANGER ? theme.palette().controls().danger() : theme.palette().surfaces().text();
             TextScroll.draw(graphics, font, label.getString(), x + iconWidth,
                     rect.y() + (rect.height() - font.lineHeight) / 2,
                     Math.max(0, contentWidth - iconWidth - arrowWidth), color, hovered, hoverTicks, false);
@@ -333,7 +335,7 @@ public final class UiButton implements UiButtonWidget {
                 UiMarkIcons.Mark arrow = UiMarkIcons.Mark.NEXT;
                 int arrowX = x + contentWidth - arrow.width();
                 int arrowY = rect.y() + Math.max(0, (rect.height() - arrow.height()) / 2);
-                UiMarkIcons.icon(arrow, control.isEnabled() ? theme.palette().textSecondary() : theme.palette().textDisabled())
+                UiMarkIcons.icon(arrow, control.isEnabled() ? theme.palette().surfaces().secondaryText() : theme.palette().surfaces().disabledText())
                         .render(graphics, arrowX, arrowY);
             }
         } finally {

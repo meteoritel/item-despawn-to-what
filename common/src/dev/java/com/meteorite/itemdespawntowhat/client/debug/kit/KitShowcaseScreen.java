@@ -7,7 +7,6 @@ import net.minecraft.client.gui.GuiGraphics;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiStyleSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiThemeContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiMinecraftTheme;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 import org.lwjgl.glfw.GLFW;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiScreen;
 import net.minecraft.network.chat.Component;
@@ -26,6 +25,7 @@ public final class KitShowcaseScreen extends UiScreen implements UiLayoutSource 
     private final List<UiStyleSource> themes;
     private final @Nullable Function<PreviewBudget, PreviewScenes> previewFactory;
     private int themeIndex;
+    private @Nullable UiStyleSource pendingTheme;
     private KitShowcaseContent content;
     private UiInputScope scope;
 
@@ -73,15 +73,17 @@ public final class KitShowcaseScreen extends UiScreen implements UiLayoutSource 
         return content == null ? List.of() : content.layoutNodes();
     }
 
-    private void nextTheme() { setTheme(themes.get(themeIndex = (themeIndex + 1) % themes.size())); }
+    private void nextTheme() { requestTheme(themes.get(themeIndex = (themeIndex + 1) % themes.size())); }
 
-    /** 一次换肤保留存量控件；布局前取消指针预览。 */
-    public void setTheme(UiStyleSource next) {
+    /** 请求完整主题；根在手势正常完成后统一发布。 */
+    public void requestTheme(UiStyleSource next) { pendingTheme = next == theme.current() ? null : next; }
+
+    @Override protected void prepareUi() {
+        if (pendingTheme == null) return;
         UiInputScope active = inputRouter().active();
-        if (active != null && active.interaction().pointerTarget() != null)
-            active.interaction().end(UiInteractionSession.EndReason.CANCEL);
-        theme.setTheme(next);
-        if (content != null) content.layout(width, height);
+        if (active != null && active.interaction().pointerTarget() != null) return;
+        theme.setTheme(pendingTheme);
+        pendingTheme = null;
     }
 
     @Override public boolean keyPressed(int key, int scan, int mods) {
@@ -93,7 +95,7 @@ public final class KitShowcaseScreen extends UiScreen implements UiLayoutSource 
 
     @Override protected UiInputScope inputScope() { return content.activeScope(scope); }
     @Override protected void invalidateUiResources() { content.invalidateResources(); }
-    @Override protected void releaseUiResources() { content.releaseResources(); }
+    @Override protected void releaseUiResources() { pendingTheme = null; content.releaseResources(); }
     @Override public void onClose() { returnTo.run(); }
     @Override public boolean isPauseScreen() { return false; }
 }

@@ -6,9 +6,9 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderSkin;
 import net.minecraft.client.gui.GuiGraphics;
+import java.util.EnumMap;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlSkin;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlPainter;
-import java.util.EnumMap;
 
 /**
  * 默认宿主主题：现行灰色像素外观，绘制与用色逐项转发到既有 {@link UiTheme} 与 {@link UiPalette}。
@@ -34,9 +34,6 @@ public final class UiPixelTheme extends AbstractHostTheme {
     }
 
     // 功能栏与工具列格子：常态与控件同底，悬停/按下/选中给出像素反馈
-    private static final UiControlStyle STRIP_STYLE = new UiControlStyle(
-            UiPalette.CONTROL_FILL, UiPalette.CONTROL_HOVER, UiPalette.CONTROL_PRESSED, UiPalette.CONTROL_SELECTED,
-            UiPalette.CONTROL_DISABLED, UiPalette.FOCUS_OUTLINE, UiPalette.SLOT_FILL, UiPalette.CONTROL_BEVEL_DARK);
 
     @Override
     public int textColor(boolean enabled) {
@@ -52,9 +49,9 @@ public final class UiPixelTheme extends AbstractHostTheme {
     public int controlTextColor(UiControlRole role) {
         // 主要/危险底色较深用反白文字，禁用用禁用文本色，其余用正文色
         return switch (role) {
-            case PRIMARY, DANGER -> palette().textOnDark();
-            case DISABLED -> palette().textDisabled();
-            case SECONDARY, LABEL -> palette().textPrimary();
+            case PRIMARY, DANGER -> palette().controls().textOnDark();
+            case DISABLED -> palette().surfaces().disabledText();
+            case SECONDARY, LABEL -> palette().surfaces().text();
         };
     }
 
@@ -75,37 +72,19 @@ public final class UiPixelTheme extends AbstractHostTheme {
     public UiControlSkin controlSkin(UiControlRole role) {
         return skins.computeIfAbsent(role, key -> new UiControlSkin(controlStyle(key), (graphics, frame) -> {
             UiControlPainter.FILL.paint(graphics, frame);
-            if (key != UiControlRole.LABEL) drawBevel(graphics, frame.bounds(), palette().controlBevelLight(), palette().controlBevelDark());
-        }, controlTextColor(key), palette().textDisabled()));
+            if (key != UiControlRole.LABEL) drawBevel(graphics, frame.bounds(), palette().controls().controlBevelLight(), palette().controls().controlBevelDark());
+        }, controlTextColor(key), palette().surfaces().disabledText()));
     }
+
+    private static final UiSliderSkin COMPACT_SKIN = new UiSliderSkin(UiTheme.sliderStyle(), UiTheme.cardSliderPainter());
+    private static final UiSliderSkin ROOMY_SKIN = new UiSliderSkin(UiTheme.cardSliderStyle(), UiTheme.cardSliderPainter());
 
     @Override
     public UiSliderSkin sliderSkin(UiSliderRole role) {
         return switch (role) {
-            case COMPACT -> new UiSliderSkin(UiTheme.sliderStyle(), UiTheme.cardSliderPainter());
-            case ROOMY -> new UiSliderSkin(UiTheme.cardSliderStyle(), UiTheme.cardSliderPainter());
+            case COMPACT -> COMPACT_SKIN;
+            case ROOMY -> ROOMY_SKIN;
         };
-    }
-
-    // 功能栏与工具列格子：像素页不使用，配色取控件底色与面板描边
-    @Override
-    public UiControlStyle stripStyle() {
-        return STRIP_STYLE;
-    }
-
-    @Override
-    public void drawWindow(GuiGraphics graphics, UiRect rect) {
-        UiTheme.drawWindow(graphics, rect);
-    }
-
-    @Override
-    public void drawInset(GuiGraphics graphics, UiRect rect) {
-        UiTheme.drawInset(graphics, rect);
-    }
-
-    @Override
-    public void drawHeader(GuiGraphics graphics, UiRect rect) {
-        UiTheme.drawHeader(graphics, rect);
     }
 
     @Override
@@ -143,23 +122,6 @@ public final class UiPixelTheme extends AbstractHostTheme {
         UiTheme.drawScrollThumb(graphics, rect);
     }
 
-    @Override
-    public void drawSegment(GuiGraphics graphics, UiRect rect, boolean enabled, boolean selected, boolean hovered) {
-        UiTheme.drawSegment(graphics, rect, enabled, selected, hovered);
-    }
-
-    @Override
-    public void drawCard(GuiGraphics graphics, UiRect rect) {
-        UiTheme.drawCard(graphics, rect);
-    }
-
-    @Override
-    public void drawPanel(GuiGraphics graphics, UiRect rect) {
-        UiTheme.drawPanel(graphics, rect);
-    }
-
-    @Override
-    public void drawChip(GuiGraphics graphics, UiRect rect, boolean selected, boolean hovered) {
-        UiTheme.drawChip(graphics, rect, selected, hovered);
-    }
+    private final EnumMap<UiHostSurface, UiControlSkin> surfaceSkins = UiHostSurfaceSkins.create(palette, true, false);
+    @Override public UiControlSkin surfaceSkin(UiHostSurface role) { return surfaceSkins.get(role); }
 }

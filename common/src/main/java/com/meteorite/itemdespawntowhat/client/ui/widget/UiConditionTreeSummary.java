@@ -61,7 +61,6 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
     // 扫描线层数、最大宽度与半高，与 UiTreeView 的像素三角同形同尺寸
     // 对齐上一层标记区中心，使同一分支的引导线连成一条竖线
     private static final int GUIDE_INSET = 6;
-    private static final int DEFAULT_ROW_HEIGHT = 12;
 
     // 展平后的可见行；node 为空表示空组合的占位行
     private record Row(@Nullable ConditionNode node, String path, UiTreePath treePath, int depth, int parentIndex,
@@ -100,7 +99,9 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
     private int hoveredIndex = -1;
     // 选中行每帧要画两次（底色与标记），几何不变时复用同一矩形
     private UiRect selectedRowRect = new UiRect(0, 0, 0, 0);
-    private int rowHeight = DEFAULT_ROW_HEIGHT;
+    private int rowHeight;
+    private boolean rowHeightPinned;
+    private long themeRevision = -1;
     private List<ConditionTreeContract.TypeOption> typeOptions = List.of();
     private Component emptyMessage = Component.translatable(TypeLabels.UI_PREFIX + "tree.add_placeholder");
     // 宿主注入；为空时叶行只显示条件名
@@ -120,6 +121,7 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
      */
     public UiConditionTreeSummary(UiHostTheme theme, @SuppressWarnings("unused") Font font) {
         this.theme = UiHostThemes.require(theme);
+        rowHeight = theme.rowHeight();
     }
 
     /**
@@ -226,6 +228,7 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
      * @param newRowHeight 新行高，单位为像素
      */
     public UiConditionTreeSummary setRowHeight(int newRowHeight) {
+        rowHeightPinned = true;
         int next = Math.max(9, newRowHeight);
         // 行高没变时行几何不变，无需重建可见行
         if (next == rowHeight) {
@@ -333,6 +336,11 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
 
     @Override
     public void setBounds(int x, int y, int width, int height) {
+        if (themeRevision != theme.revision()) {
+            themeRevision = theme.revision();
+            if (!rowHeightPinned) rowHeight = theme.rowHeight();
+            rebuild();
+        }
         int nextWidth = Math.max(0, width);
         int nextHeight = Math.max(0, height);
         // 几何是「视图」而不是内容：不变时仅保留现有可见行，不整树展平；
@@ -482,7 +490,7 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         if (rows.isEmpty()) {
             String empty = emptyText(renderFont, Math.max(0, viewport.width() - 8));
             graphics.drawString(renderFont, empty, viewport.x() + 4,
-                    viewport.y() + Math.max(0, viewport.height() / 2 - 4), theme.palette().textSecondary(), false);
+                    viewport.y() + Math.max(0, viewport.height() / 2 - 4), theme.palette().surfaces().secondaryText(), false);
         } else {
             int rowWidth = scrollView.contentWidth();
             scrollView.push(graphics);
@@ -516,20 +524,20 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
             theme.drawSelection(graphics, selection);
             theme.drawSelectMarker(graphics, selection);
         } else if (index == hoveredIndex) {
-            graphics.fill(0, rowY, rowWidth, rowY + rowHeight, theme.palette().controlHover());
+            graphics.fill(0, rowY, rowWidth, rowY + rowHeight, theme.palette().controls().controlHover());
         }
         int markerX = theme.selectMarkerWidth() + UiTreeRowMarker.left(row.depth(), INDENT_WIDTH);
         // 层级引导：上一层标记列上的 1 像素竖线，贯穿本行；用更浅的正文色与标记拉开层次
         if (row.depth() > 0) {
             int guideX = markerX - GUIDE_INSET;
-            graphics.fill(guideX, rowY, guideX + 1, rowY + rowHeight, theme.palette().textDisabled());
+            graphics.fill(guideX, rowY, guideX + 1, rowY + rowHeight, theme.palette().surfaces().disabledText());
         }
         if (hasChildren(row.node())) {
             drawMark(graphics, markerX + MARKER_INSET, rowY + rowHeight / 2, !view.collapsed().contains(row.treePath()));
         }
         int textX = markerX + MARKER_WIDTH;
         int color = flaggedPaths.contains(row.path())
-                ? theme.palette().danger() : theme.palette().textPrimary();
+                ? theme.palette().controls().danger() : theme.palette().surfaces().text();
         String label = rowLabelText(row, renderFont, rowWidth, textX);
         graphics.drawString(renderFont, label, textX, rowY + theme.textOffset(), color, false);
     }
@@ -547,7 +555,7 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
      * @param expanded 已展开时画向下三角，收起时画向右三角
      */
     private void drawMark(GuiGraphics graphics, int x, int centerY, boolean expanded) {
-        UiTreeRowMarker.draw(graphics, x, centerY, expanded, theme.palette().textPrimary());
+        UiTreeRowMarker.draw(graphics, x, centerY, expanded, theme.palette().surfaces().text());
     }
 
     private Component rowLabel(Row row) {

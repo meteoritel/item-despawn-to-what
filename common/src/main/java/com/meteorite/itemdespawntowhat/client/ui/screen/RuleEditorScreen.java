@@ -1,10 +1,11 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostSurface;
 import com.meteorite.itemdespawntowhat.client.ui.shared.PreviewResources;
 import com.meteorite.itemdespawntowhat.client.ui.shared.PreviewIcons;
 import org.lwjgl.glfw.GLFW;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiConditionTreeSummary;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiThemeSelection;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemeContext;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemeSet;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
@@ -19,9 +20,10 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostPalette;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiThemeScheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiDescriptionTooltip;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTypePicker;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
@@ -34,6 +36,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputScope;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 import net.minecraft.client.Minecraft;
+import net.minecraft.util.FormattedCharSequence;
 
 /**
  * 规则编辑器主屏。
@@ -47,9 +50,11 @@ import net.minecraft.client.Minecraft;
  */
 public final class RuleEditorScreen extends UiScreen implements UiLayoutSource {
 
-    // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
-    private final UiHostThemeContext THEME = new UiHostThemeContext(UiHostThemes.defaultTheme());
-    private final UiHostThemeContext chromeTheme = new UiHostThemeContext(UiHostThemes.flatTheme());
+    private UiThemeScheme themeScheme = UiThemeSelection.current();
+    private @Nullable UiThemeScheme pendingTheme;
+    private final UiHostThemeSet initialThemes = themeScheme.themes();
+    private final UiHostThemeContext THEME = new UiHostThemeContext(initialThemes.content());
+    private final UiHostThemeContext chromeTheme = new UiHostThemeContext(initialThemes.chrome());
 
     // 布局常量（页自身的内边距由页声明）
     private static final int PAD = 4;
@@ -66,6 +71,8 @@ public final class RuleEditorScreen extends UiScreen implements UiLayoutSource {
     private UiRect contentArea = new UiRect(0, 0, 0, 0);
     private UiRect footerArea = new UiRect(0, 0, 0, 0);
     private int noticeY;
+    private UiRect stateArea = new UiRect(0, 0, 0, 0);
+    private List<FormattedCharSequence> stateLines = List.of();
     // 提示的折行判定与命中矩形每帧重算，属于渲染态，不进外壳
     private boolean noticeTruncated;
     private @Nullable UiRect noticeRect;
@@ -76,17 +83,34 @@ public final class RuleEditorScreen extends UiScreen implements UiLayoutSource {
         BuiltinEditorDescriptors.bootstrap();
         RuleEditorModel model = new RuleEditorModel(workspace);
         // 屏幕构造期 this.font 尚未注入，外壳与页面直接取客户端字体实例
-        this.shell = new EditorShell(THEME, chromeTheme, workspace, model, new RuleListDisplayCache(model), Minecraft.getInstance().font);
+        this.shell = new EditorShell(THEME, chromeTheme, workspace, model, new RuleListDisplayCache(model), Minecraft.getInstance().font, themeLabel(),
+                () -> requestTheme(themeScheme.next()));
         this.input = new EditorInputRouter(shell, this::saveOverlay, inputRouter(), this::refreshUiState);
     }
 
-    /** 一次替换正文与画布主题；保留页面、控件和文本编辑状态。 */
-    public void setTheme(UiHostThemeSet theme) {
-        input.cancelPointerPreview();
-        THEME.setTheme(theme.content());
-        chromeTheme.setTheme(theme.chrome());
+    private Component themeLabel() {
+        return Component.translatable(UI + "theme.button", Component.translatable(UI + "theme." + themeScheme.id()));
+    }
+
+    /** 记录完整方案选择；根在手势正常释放后的准备点发布。 */
+    public void requestTheme(UiThemeScheme scheme) {
+        if (scheme == themeScheme && pendingTheme == null) return;
+        UiThemeSelection.select(scheme);
+        pendingTheme = scheme == themeScheme ? null : scheme;
+    }
+
+    @Override
+    protected void prepareUi() {
+        if (pendingTheme == null) return;
+        UiInputScope active = inputRouter().active();
+        if (active != null && active.interaction().pointerTarget() != null) return;
+        UiHostThemeSet next = pendingTheme.themes();
+        themeScheme = pendingTheme;
+        pendingTheme = null;
+        shell.themeButton().setLabel(themeLabel());
+        THEME.setTheme(next.content());
+        chromeTheme.setTheme(next.chrome());
         shell.modals().refreshLayout();
-        refreshUiState();
     }
 
     // 编辑器不做游戏内暂停
@@ -129,7 +153,16 @@ public final class RuleEditorScreen extends UiScreen implements UiLayoutSource {
         EditorPage page = shell.activePage();
         int pad = page.pagePadding();
         int available = Math.max(0, width - pad * 2);
-        int top = page.layoutHeader(pad, page.headerHeight() + PAD);
+        UiButton themeButton = shell.themeButton();
+        int toolsY = page.headerHeight() + PAD;
+        int buttonWidth = Math.min(available, themeButton.preferredWidth(6));
+        int stateWidth = Math.clamp(available - buttonWidth - PAD, 0, font.width(page.stateLabel()) + PAD * 2);
+        stateLines = font.split(Component.literal(page.stateLabel()), Math.max(1, stateWidth - PAD * 2));
+        int buttonHeight = Math.max(RuleEditorPageSupport.DIALOG_BUTTON_H, THEME.rowHeight());
+        int toolsHeight = Math.max(buttonHeight, stateLines.size() * font.lineHeight + PAD * 2);
+        themeButton.setBounds(width - pad - buttonWidth, toolsY + (toolsHeight - buttonHeight) / 2, buttonWidth, buttonHeight);
+        stateArea = new UiRect(pad, toolsY, stateWidth, toolsHeight);
+        int top = page.layoutHeader(pad, toolsY + toolsHeight + PAD);
         int footerHeight = page.footerHeight(available);
         int footerY = height - pad - footerHeight;
         noticeY = footerY - PAD - (shell.notice() == null ? 0 : NOTICE_H);
@@ -138,7 +171,7 @@ public final class RuleEditorScreen extends UiScreen implements UiLayoutSource {
         page.layout(contentArea, footerArea);
         UiTypePicker picker = page.overlay();
         if (picker != null) picker.setBounds(contentArea.x(), contentArea.y(), contentArea.width(), contentArea.height());
-        if (shell.saving()) saveOverlay();
+        if (shell.saving()) saveOverlay().layout(width, height);
         else saveOverlay = null;
     }
 
@@ -159,6 +192,7 @@ public final class RuleEditorScreen extends UiScreen implements UiLayoutSource {
         THEME.drawDivider(graphics, 0, headerHeight, w);
         drawHeaderText(graphics, page);
         UiPointer pointer = page.inputScope().pointer(mouseX, mouseY).resolve(page);
+        shell.themeButton().render(graphics, font, pointer);
         page.renderHeader(graphics, font, pointer);
         page.render(graphics, font, pointer, contentArea);
         drawNotice(graphics, noticeY, w);
@@ -185,7 +219,7 @@ public final class RuleEditorScreen extends UiScreen implements UiLayoutSource {
                                     DescriptionLine.Tone.VALUE, 0)), mouseX, mouseY);
                 }
             } else if (pointer.hit() != null) {
-                pointer.hit().renderTooltip(graphics, font, THEME.surfaces(), mouseX, mouseY);
+                pointer.hit().renderTooltip(graphics, font, THEME.tooltipSkin(), mouseX, mouseY);
             }
             if (tip != null) {
                 renderTooltip(graphics, tip, mouseX, mouseY);
@@ -197,7 +231,7 @@ public final class RuleEditorScreen extends UiScreen implements UiLayoutSource {
 
     // Component 的单行 tooltip 重载不处理换行；按窗口宽度折行后交给无阴影提示面板定位。
     private void renderTooltip(GuiGraphics graphics, Component tip, int mouseX, int mouseY) {
-        UiFlatText.tooltip(graphics, font, tip, Math.clamp(width - 16, 1, 240), mouseX, mouseY, THEME.surfaces());
+        UiFlatText.tooltip(graphics, font, tip, Math.clamp(width - 16, 1, 240), mouseX, mouseY, THEME.tooltipSkin());
     }
 
     /**
@@ -210,6 +244,7 @@ public final class RuleEditorScreen extends UiScreen implements UiLayoutSource {
     @Override
     public List<UiLayoutNode> layoutNodes() {
         List<UiLayoutNode> nodes = new ArrayList<>(shell.activePage().layoutNodes());
+        nodes.addAll(shell.themeButton().layoutNodes());
         nodes.addAll(shell.modals().layoutNodes());
         return nodes;
     }
@@ -221,32 +256,32 @@ public final class RuleEditorScreen extends UiScreen implements UiLayoutSource {
         if (title == null) {
             title = this.getTitle().getString();
         }
-        String state = page.stateLabel();
         int padding = page.pagePadding();
         int headerHeight = page.headerHeight();
         // 头部带比默认高度更高时（编辑页）标题垂直居中，其余页贴顶
-        int textY = headerHeight > UiTheme.HEADER_HEIGHT ? (headerHeight - font.lineHeight) / 2 : 3;
-        // 只读标签带一句完整说明，需要更宽的底色才不显得局促
-        int stateWidth = font.width(state) + (page.statePanelHighlighted() ? 20 : 12);
+        int textY = headerHeight > THEME.headerHeight() ? (headerHeight - font.lineHeight) / 2 : 3;
         String fullTitle = title;
-        title = TextScroll.trimToWidth(font, title, Math.max(0, this.width - padding * 2 - stateWidth - PAD));
+        title = TextScroll.trimToWidth(font, title, Math.max(0, this.width - padding * 2));
         if (!title.equals(fullTitle)) {
             truncatedTitleRect = new UiRect(padding, textY, font.width(title), font.lineHeight);
         }
-        graphics.drawString(font, title, padding, textY, THEME.palette().headerText(), false);
-        int stateColor = THEME.palette().headerText();
+        graphics.drawString(font, title, padding, textY, THEME.palette().surfaces().headerText(), false);
+        int stateColor = THEME.palette().surfaces().text();
+        UiRect stateRect = stateArea;
         if (page.statePanel()) {
-            UiRect stateRect = new UiRect(this.width - padding - stateWidth, 4, stateWidth, headerHeight - 8);
             if (page.statePanelHighlighted()) {
                 // 只读来源用警告色填充状态标签：与底部警告提示同色，替代额外的常驻说明文字
-                THEME.drawSurface(graphics, stateRect, THEME.palette().warning(), THEME.palette().controlBevelDark());
-                stateColor = THEME.palette().textPrimary();
+                THEME.drawSurface(graphics, stateRect, THEME.palette().status().warning(), THEME.palette().controls().controlBevelDark());
+                stateColor = THEME.palette().status().filledText();
             } else {
-                THEME.drawPanel(graphics, stateRect);
+                THEME.drawSurface(graphics, stateRect, UiHostSurface.PANEL);
             }
         }
-        graphics.drawString(font, state, this.width - padding - font.width(state) - (page.statePanel() ? 6 : 0),
-                textY, stateColor, false);
+        int stateY = stateRect.y() + (stateRect.height() - stateLines.size() * font.lineHeight) / 2;
+        for (FormattedCharSequence line : stateLines) {
+            graphics.drawString(font, line, stateRect.x() + PAD, stateY, stateColor, false);
+            stateY += font.lineHeight;
+        }
     }
 
     // 底部状态提示：INFO 为纯文本，WARNING / DANGER 为实心色块（颜色与形状双线索）
@@ -262,18 +297,18 @@ public final class RuleEditorScreen extends UiScreen implements UiLayoutSource {
         noticeTruncated = !text.equals(full);
         UiHostPalette palette = THEME.palette();
         if (shell.noticeLevel() == EditorShell.NoticeLevel.INFO) {
-            graphics.drawString(font, text, PAD, y + 1, palette.textSecondary(), false);
+            graphics.drawString(font, text, PAD, y + 1, palette.surfaces().secondaryText(), false);
             noticeRect = new UiRect(PAD, y, font.width(text), NOTICE_H);
             return;
         }
         int fill = switch (shell.noticeLevel()) {
-            case DANGER -> palette.danger();
-            case SUCCESS -> palette.success();
-            default -> palette.warning();
+            case DANGER -> palette.controls().danger();
+            case SUCCESS -> palette.status().success();
+            default -> palette.status().warning();
         };
         UiRect chip = new UiRect(PAD, y, Math.min(maxWidth, font.width(text) + NOTICE_CHIP_PAD * 2), NOTICE_H);
-        THEME.drawSurface(graphics, chip, fill, palette.controlBevelDark());
-        graphics.drawString(font, text, chip.x() + NOTICE_CHIP_PAD, y + 1, palette.textPrimary(), false);
+        THEME.drawSurface(graphics, chip, fill, palette.controls().controlBevelDark());
+        graphics.drawString(font, text, chip.x() + NOTICE_CHIP_PAD, y + 1, palette.status().filledText(), false);
         noticeRect = chip;
     }
 
@@ -305,6 +340,7 @@ public final class RuleEditorScreen extends UiScreen implements UiLayoutSource {
     // 外部切屏或断线也会调用 removed：这条路径不走 onClose，未应用的修改必须在这里写盘。
     @Override
     protected void releaseUiResources() {
+        pendingTheme = null;
         shell.flushDrafts();
         PreviewResources.screenClosed();
     }

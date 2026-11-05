@@ -198,7 +198,7 @@ public final class UiCyclicTimeBar extends AbstractBarShell<UiCyclicRange> {
         String left = label == null ? "" : label.getString();
         String trimmed = TextScroll.trimToWidth(font, left, Math.max(1, bounds.width() / 2));
         graphics.drawString(font, trimmed, bounds.x(), bounds.y(),
-                enabled ? theme.palette().textSecondary() : theme.palette().textDisabled(), false);
+                enabled ? theme.palette().surfaces().secondaryText() : theme.palette().surfaces().disabledText(), false);
         String range = tickText(core.from()) + " -> " + tickText(core.to());
         String state = core.isSinglePoint() ? texts.singlePoint().getString()
                 : (core.crossesPeriod() ? texts.wrapHint().getString() : "");
@@ -209,7 +209,7 @@ public final class UiCyclicTimeBar extends AbstractBarShell<UiCyclicRange> {
             drawInlineHint(graphics, bounds.x() + font.width(trimmed), rightX, texts.preciseHint());
         }
         graphics.drawString(font, right, rightX, bounds.y(),
-                enabled ? theme.palette().textPrimary() : theme.palette().textDisabled(), false);
+                enabled ? theme.palette().surfaces().text() : theme.palette().surfaces().disabledText(), false);
     }
 
     private void drawTrack(GuiGraphics graphics) {
@@ -220,10 +220,10 @@ public final class UiCyclicTimeBar extends AbstractBarShell<UiCyclicRange> {
         int left = core.trackLeft();
         int right = core.trackRight();
         graphics.fill(left, trackY, right, trackY + TRACK_COLOR_HEIGHT,
-                enabled ? theme.palette().scrollTrack() : theme.palette().controlDisabled());
+                enabled ? theme.palette().controls().scrollTrack() : theme.palette().controls().controlDisabled());
         int fromX = core.xOf(core.from());
         int toX = core.xOf(core.to());
-        int highlight = enabled ? theme.palette().accent() : theme.palette().controlDisabled();
+        int highlight = enabled ? theme.palette().controls().accent() : theme.palette().controls().controlDisabled();
         if (core.isSinglePoint()) {
             graphics.fill(Math.max(left, fromX - 1), trackY - 1, Math.min(right, fromX + 1),
                     trackY + TRACK_COLOR_HEIGHT + 1, highlight);
@@ -239,21 +239,21 @@ public final class UiCyclicTimeBar extends AbstractBarShell<UiCyclicRange> {
         int gap = ticks.isEmpty() ? Integer.MAX_VALUE : Math.max(1, core.trackWidth() / ticks.size());
         for (UiCyclicRange.Tick tick : ticks) {
             int x = core.xOf(tick.tick());
-            graphics.fill(x, trackRow.y(), x + 1, trackRow.y() + 2, theme.palette().textDisabled());
+            graphics.fill(x, trackRow.y(), x + 1, trackRow.y() + 2, theme.palette().surfaces().disabledText());
             if (tick.label() != null && gap >= TICK_LABEL_MIN_GAP) {
                 String text = tick.label().getString();
-                graphics.drawString(font, text, x - font.width(text) / 2, trackRow.y(), theme.palette().textDisabled(),
+                graphics.drawString(font, text, x - font.width(text) / 2, trackRow.y(), theme.palette().surfaces().disabledText(),
                         false);
             }
         }
-        drawThumb(graphics, fromX, theme.palette().accent());
-        drawThumb(graphics, toX, theme.palette().accentHover());
+        drawThumb(graphics, fromX, theme.palette().controls().accent());
+        drawThumb(graphics, toX, theme.palette().controls().accentHover());
     }
 
     private void drawThumb(GuiGraphics graphics, int x, int color) {
         int width = core.thumbWidth();
         graphics.fill(x - width / 2, trackRow.y(), x - width / 2 + width, trackRow.bottom(),
-                enabled ? color : theme.palette().controlDisabled());
+                enabled ? color : theme.palette().controls().controlDisabled());
     }
 
     private void drawPresets(GuiGraphics graphics, UiPointer pointer) {
@@ -270,14 +270,14 @@ public final class UiCyclicTimeBar extends AbstractBarShell<UiCyclicRange> {
             boolean activePreset = Math.abs(preset.fromTick() - core.from()) < 0.5D
                     && Math.abs(preset.toTick() - core.to()) < 0.5D;
             boolean hovered = enabled && pointer.contains(rect);
-            int fill = activePreset ? theme.palette().controlSelected()
-                    : (hovered ? theme.palette().controlHover() : theme.palette().controlFill());
+            int fill = activePreset ? theme.palette().controls().controlSelected()
+                    : (hovered ? theme.palette().controls().controlHover() : theme.palette().controls().controlFill());
             graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), fill);
-            theme.drawBevel(graphics, rect, theme.palette().controlBevelLight(), theme.palette().controlBevelDark());
+            theme.drawBevel(graphics, rect, theme.palette().controls().controlBevelLight(), theme.palette().controls().controlBevelDark());
             String text = TextScroll.trimToWidth(font, preset.label().getString(), Math.max(1, width - 4));
             graphics.drawString(font, text, rect.x() + Math.max(0, (width - font.width(text)) / 2),
                     rect.y() + Math.max(0, (rect.height() - 8) / 2),
-                    enabled ? theme.palette().textPrimary() : theme.palette().textDisabled(), false);
+                    enabled ? theme.palette().surfaces().text() : theme.palette().surfaces().disabledText(), false);
             x += width + 2;
         }
     }

@@ -156,15 +156,15 @@ final class EditorSectionContent {
         int centerY = headerRect.y() + (dividerY - headerRect.y()) / 2;
         int textY = centerY - font.lineHeight / 2;
         graphics.fill(headerRect.x(), textY, headerRect.x() + HEADER_BAR_WIDTH, textY + font.lineHeight,
-                THEME.palette().accent());
+                THEME.palette().controls().accent());
         int titleX = headerRect.x() + HEADER_BAR_WIDTH + HEADER_TITLE_GAP;
         if (icon != null) {
-            icon.render(graphics, titleX, centerY - icon.height() / 2);
+            icon.render(graphics, titleX, centerY - icon.height() / 2, THEME);
             titleX += icon.width() + RuleEditorPageSupport.PAD;
         }
         var titleLines = font.split(title, Math.max(1, headerRect.right() - titleX));
         if (!titleLines.isEmpty()) {
-            graphics.drawString(font, titleLines.getFirst(), titleX, textY, THEME.palette().textPrimary(), false);
+            graphics.drawString(font, titleLines.getFirst(), titleX, textY, THEME.palette().surfaces().text(), false);
         }
         THEME.drawDivider(graphics, headerRect.x(), dividerY, headerRect.width());
     }

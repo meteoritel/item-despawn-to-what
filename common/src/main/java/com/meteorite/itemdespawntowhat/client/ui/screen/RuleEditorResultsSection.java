@@ -28,6 +28,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
 import com.meteorite.itemdespawntowhat.client.ui.shared.EntityTraits;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostIcon;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiMarkIcons;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCheckBox;
@@ -321,7 +322,7 @@ final class RuleEditorResultsSection {
         // 与行为列表同属一栏：加号只在列表侧显示，窄屏 stage 2 的详情页不出现
         addEffectButton = new UiButton(THEME, font, Component.empty(), UiButtonVariant.SECONDARY, this::openEffectPicker)
                 .setChipStyle(true)
-                .setIcon(THEME.icon(UiHostTheme.ICON_ADD_CONDITION, false))
+                .setIcon(THEME.icon(UiHostIcon.ADD_CONDITION, false))
                 .setAccessibleName(Component.translatable(RuleEditorPageSupport.UI + "button.effect_add"))
                 .setTooltip(Component.translatable(RuleEditorPageSupport.UI + "button.effect_add"));
         content.widgets.add(addEffectButton);
@@ -848,14 +849,14 @@ final class RuleEditorResultsSection {
         }
         if (cached.icon() != null) {
             cached.icon().render(graphics, row.x() + ACTION_CONTENT_INSET,
-                    row.y() + (row.height() - DETAIL_ICON_SIZE) / 2);
+                    row.y() + (row.height() - DETAIL_ICON_SIZE) / 2, THEME);
         }
         UiRect remove = actionRemoveRect(row);
         graphics.drawString(font, cached.text(), row.x() + cached.inset(),
-                row.y() + (row.height() - renderFont.lineHeight) / 2, THEME.palette().textPrimary(), false);
+                row.y() + (row.height() - renderFont.lineHeight) / 2, THEME.palette().surfaces().text(), false);
         // 叉号与目录选中卡保持一致：悬停行才转成危险色，常亮红色会被读成「已有删除待确认」
         UiIcon close = UiMarkIcons.icon(UiMarkIcons.Mark.CLOSE,
-                hovered ? THEME.palette().danger() : THEME.palette().textSecondary());
+                hovered ? THEME.palette().controls().danger() : THEME.palette().surfaces().secondaryText());
         close.render(graphics, remove.x() + (remove.width() - close.width()) / 2,
                 remove.y() + (remove.height() - close.height()) / 2);
     }
@@ -1218,17 +1219,17 @@ final class RuleEditorResultsSection {
             // 空态左上对齐：标题 + 引导句 + 卡内「添加动作」，不再垂直居中留下整块空白
             int y = emptyDetailRect.y();
             content.drawText(graphics, new UiRect(emptyDetailRect.x(), y, emptyDetailRect.width(), font.lineHeight),
-                    emptyTitleText, THEME.palette().textPrimary());
+                    emptyTitleText, THEME.palette().surfaces().text());
             y += font.lineHeight + EMPTY_MESSAGE_GAP;
             for (var line : lines) {
-                graphics.drawString(font, line, emptyDetailRect.x(), y, THEME.palette().textSecondary(), false);
+                graphics.drawString(font, line, emptyDetailRect.x(), y, THEME.palette().surfaces().secondaryText(), false);
                 y += font.lineHeight + 2;
             }
         }
         Component readonlyNote = readonlyEffectNote(shell.editingValue());
-        if (readonlyNote != null) content.drawText(graphics, effectNoteRect, readonlyNote, THEME.palette().warning());
-        content.drawText(graphics, productLabelRect, productKindText, THEME.palette().textSecondary());
-        content.drawText(graphics, actionParametersRect, actionParametersText, THEME.palette().textSecondary());
+        if (readonlyNote != null) content.drawText(graphics, effectNoteRect, readonlyNote, THEME.palette().status().warning());
+        content.drawText(graphics, productLabelRect, productKindText, THEME.palette().surfaces().secondaryText());
+        content.drawText(graphics, actionParametersRect, actionParametersText, THEME.palette().surfaces().secondaryText());
     }
 
     // 悬停只补画面上读不到的信息：动作名、叉号、翻页箭头与产品分段都有文字或符号，不再重复解释。
@@ -1353,9 +1354,9 @@ final class RuleEditorResultsSection {
         // 标记贴图不带禁用态，只能按可用性换染色；启用色与胶囊文字色保持一致。
         private void setIconColors(boolean previousEnabled, boolean nextEnabled) {
             previous.setIcon(UiMarkIcons.icon(UiMarkIcons.Mark.PREVIOUS,
-                    previousEnabled ? THEME.palette().textPrimary() : THEME.palette().textDisabled()));
+                    previousEnabled ? THEME.palette().surfaces().text() : THEME.palette().surfaces().disabledText()));
             next.setIcon(UiMarkIcons.icon(UiMarkIcons.Mark.NEXT,
-                    nextEnabled ? THEME.palette().textPrimary() : THEME.palette().textDisabled()));
+                    nextEnabled ? THEME.palette().surfaces().text() : THEME.palette().surfaces().disabledText()));
         }
 
         private int preferredWidth() {
@@ -1405,7 +1406,7 @@ final class RuleEditorResultsSection {
         public void render(GuiGraphics graphics, Font font, UiPointer pointer) {
             String text = TextScroll.trimToWidth(font, label.getString(), labelRect.width());
             graphics.drawString(font, text, labelRect.x() + (labelRect.width() - font.width(text)) / 2,
-                    labelRect.y() + (labelRect.height() - font.lineHeight) / 2, THEME.palette().textPrimary(), false);
+                    labelRect.y() + (labelRect.height() - font.lineHeight) / 2, THEME.palette().surfaces().text(), false);
         }
     }
 

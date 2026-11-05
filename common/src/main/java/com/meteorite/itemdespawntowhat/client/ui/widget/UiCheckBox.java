@@ -134,14 +134,14 @@ public final class UiCheckBox implements UiWidget, UiFocusTarget {
         theme.drawInset(graphics, box);
         if (checked) {
             graphics.fill(box.x() + 2, box.y() + 2, box.right() - 2, box.bottom() - 2,
-                    enabled ? theme.palette().accent() : theme.palette().controlDisabled());
+                    enabled ? theme.palette().controls().accent() : theme.palette().controls().controlDisabled());
 
-            graphics.drawString(renderFont, "X", box.x() + 2, box.y() + 1, theme.palette().textOnDark(), false);
+            graphics.drawString(renderFont, "X", box.x() + 2, box.y() + 1, theme.palette().controls().textOnDark(), false);
         }
         int textX = box.right() + LABEL_GAP;
         int maxWidth = Math.max(0, bounds.right() - textX);
         String text = TextScroll.trimToWidth(renderFont, label.getString(), maxWidth);
-        int color = !enabled ? theme.palette().textDisabled() : (hovered ? theme.palette().textPrimary() : theme.textColor(true));
+        int color = !enabled ? theme.palette().surfaces().disabledText() : (hovered ? theme.palette().surfaces().text() : theme.textColor(true));
         int textY = bounds.y() + Math.max(0, (bounds.height() - renderFont.lineHeight) / 2);
         graphics.drawString(renderFont, text, textX, textY, color, false);
     }

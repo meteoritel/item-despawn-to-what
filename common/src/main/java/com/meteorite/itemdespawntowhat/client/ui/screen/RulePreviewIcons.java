@@ -12,6 +12,7 @@ import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalogType;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.gui.GuiGraphics;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import org.jetbrains.annotations.Nullable;
@@ -43,9 +44,9 @@ public final class RulePreviewIcons {
     private RulePreviewIcons() { }
 
     // 图标与文本分别处理禁用色；缓冲必须在调色前后提交，避免污染相邻的启用条目。
-    static void render(GuiGraphics graphics, UiIcon icon, int x, int y, boolean active) {
+    static void render(GuiGraphics graphics, UiIcon icon, int x, int y, boolean active, UiHostTheme theme) {
         if (active) {
-            icon.render(graphics, x, y);
+            icon.render(graphics, x, y, theme);
             return;
         }
         graphics.flush();
@@ -54,7 +55,7 @@ public final class RulePreviewIcons {
         graphics.setColor(red * DISABLED_BRIGHTNESS, green * DISABLED_BRIGHTNESS,
                 blue * DISABLED_BRIGHTNESS, alpha);
         try {
-            icon.render(graphics, x, y);
+            icon.render(graphics, x, y, theme);
         } finally {
             try { graphics.flush(); }
             finally { graphics.setColor(red, green, blue, alpha); }

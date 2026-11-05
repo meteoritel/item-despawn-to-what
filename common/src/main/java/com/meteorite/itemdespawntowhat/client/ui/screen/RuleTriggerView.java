@@ -11,6 +11,7 @@ import java.util.List;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -83,7 +84,7 @@ final class RuleTriggerView {
         arrowTextWidth = font.width(arrow);
     }
 
-    void render(GuiGraphics graphics, Font font, UiRect area, Component arrow, int color, boolean active) {
+    void render(GuiGraphics graphics, Font font, UiRect area, Component arrow, int color, boolean active, UiHostTheme theme) {
         measure(font, arrow);
         if (seconds != null) {
             graphics.pose().pushPose();
@@ -102,7 +103,7 @@ final class RuleTriggerView {
             try {
                 graphics.pose().translate(x, area.y() + TIME_HEIGHT + ARROW_HEIGHT, 0);
                 graphics.pose().scale((float) ICON_SIZE / icon.width(), (float) ICON_SIZE / icon.height(), 1);
-                RulePreviewIcons.render(graphics, icon, 0, 0, active);
+                RulePreviewIcons.render(graphics, icon, 0, 0, active, theme);
             } finally { graphics.pose().popPose(); }
             x += ICON_SIZE + ICON_GAP;
         }

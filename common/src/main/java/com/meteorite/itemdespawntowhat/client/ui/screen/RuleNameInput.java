@@ -120,9 +120,9 @@ final class RuleNameInput implements UiWidget, UiFocusTarget, UiLayoutSource {
     public void render(GuiGraphics graphics, Font font, UiPointer incomingPointer) {
         UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
         input.render(graphics, font, pointer);
-        int errorY = drawLines(graphics, help, input.bounds().bottom() + GAP, THEME.palette().textSecondary()) + GAP;
+        int errorY = drawLines(graphics, help, input.bounds().bottom() + GAP, THEME.palette().surfaces().secondaryText()) + GAP;
         if (problem != null) {
-            drawLines(graphics, problem, errorY, THEME.palette().danger());
+            drawLines(graphics, problem, errorY, THEME.palette().controls().danger());
         }
     }
 

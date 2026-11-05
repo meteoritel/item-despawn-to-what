@@ -3,8 +3,7 @@ package com.meteorite.itemdespawntowhat.client.ui.shared;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiPreviewCache;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIcon;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiStyleSource;
 import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalogType;
 import java.util.Optional;
 import net.minecraft.client.Minecraft;
@@ -31,8 +30,6 @@ public final class CatalogPreviewIcons {
     private static final int MAX_CACHED_ICONS = 256;
     // 状态效果贴图按注册名缓存；物品与场景主体的缓存由 PreviewIcons 按完整 PreviewSubject 持有
     private static final UiPreviewCache<IconKey, Optional<UiIcon>> ICONS = new UiPreviewCache<>(MAX_CACHED_ICONS);
-    // 占位标记取宿主灰阶色，不引入状态色
-    private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
 
     private record IconKey(RuleCatalogType type, ResourceLocation id) { }
 
@@ -54,32 +51,32 @@ public final class CatalogPreviewIcons {
      * @return 在给定尺寸内居中绘制占位标记的图标
      */
     public static UiIcon unavailableMarker(int width, int height) {
-        return new UiIcon.Rendered(width, height, (graphics, box) -> {
+        return new UiIcon.Themed(width, height, (graphics, box, theme) -> {
             int size = Math.min(MARKER_MAX_SIZE, Math.min(box.width(), box.height()));
             if (size <= 0) {
                 return;
             }
             int x = box.x() + (box.width() - size) / 2;
             int y = box.y() + (box.height() - size) / 2;
-            drawMarker(graphics, x, y, size);
-        });
+            drawMarker(graphics, theme, x, y, size);
+        }, () -> { });
     }
 
     /** 准备中的中性槽位，与不可用状态的问号标记区分。 */
     public static UiIcon preparingMarker(int width, int height) {
-        return new UiIcon.Rendered(width, height, (graphics, box) -> {
+        return new UiIcon.Themed(width, height, (graphics, box, theme) -> {
             int size = Math.min(MARKER_MAX_SIZE, Math.min(box.width(), box.height()));
             int x = box.x() + (box.width() - size) / 2;
             int y = box.y() + (box.height() - size) / 2;
-            int color = THEME.palette().controlFill();
+            int color = theme.surfaces().secondaryText();
             int inset = Math.min(2, size / 3);
             graphics.fill(x + inset, y + inset, x + size - inset, y + size - inset, color);
-        });
+        }, () -> { });
     }
 
     // 1px 描边方框 + 居中问号：不依赖主题的填充细节，任何主题下都读得出「无预览」
-    private static void drawMarker(GuiGraphics graphics, int x, int y, int size) {
-        int border = THEME.palette().textDisabled();
+    private static void drawMarker(GuiGraphics graphics, UiStyleSource theme, int x, int y, int size) {
+        int border = theme.surfaces().disabledText();
         graphics.fill(x, y, x + size, y + 1, border);
         graphics.fill(x, y + size - 1, x + size, y + size, border);
         graphics.fill(x, y, x + 1, y + size, border);
@@ -87,7 +84,7 @@ public final class CatalogPreviewIcons {
         Font font = Minecraft.getInstance().font;
         String mark = "?";
         graphics.drawString(font, mark, x + (size - font.width(mark)) / 2, y + (size - font.lineHeight) / 2 + 1,
-                THEME.palette().textSecondary(), false);
+                theme.surfaces().secondaryText(), false);
     }
 
     /** 原始草稿引用的展示入口；已解析调用方使用值重载。 */

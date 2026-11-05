@@ -101,6 +101,8 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
     private UiRect bounds = new UiRect(0, 0, 0, 0);
     // 行高
     private int rowHeight;
+    private boolean rowHeightPinned;
+    private long themeRevision = -1;
     private ToIntFunction<UiTreeNode<T>> rowHeightProvider;
     // 选中节点
     private UiTreeProjection<UiTreeNode<T>> projection = UiTreeProjection.forest(List.of(), UiTreeNode::children);
@@ -171,6 +173,7 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
     }
 
     public UiTreeView<T> setRowHeight(int rowHeight) {
+        rowHeightPinned = true;
         this.rowHeight = Math.max(9, rowHeight);
         scrollView.setStep(Math.max(1, this.rowHeight * 2));
         rebuild();
@@ -308,6 +311,12 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
     // 行数或行高变化由 rebuild() 同步滚动范围，因此早退不会漏掉内容变化。
     @Override
     public void setBounds(int x, int y, int width, int height) {
+        if (themeRevision != theme.revision()) {
+            themeRevision = theme.revision();
+            if (!rowHeightPinned) rowHeight = theme.rowHeight();
+            scrollView.setStep(Math.max(1, rowHeight * 2));
+            rebuild();
+        }
         int nextWidth = Math.max(0, width);
         int nextHeight = Math.max(0, height);
         if (bounds.x() == x && bounds.y() == y && bounds.width() == nextWidth && bounds.height() == nextHeight) {
@@ -451,7 +460,7 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
         UiRect viewport = scrollView.viewport();
         if (visibleRows.isEmpty()) {
             UiFlatText.drawCentered(graphics, font, emptyMessage, viewport.x() + viewport.width() / 2,
-                    viewport.y() + Math.max(0, viewport.height() / 2 - 4), theme.palette().textSecondary());
+                    viewport.y() + Math.max(0, viewport.height() / 2 - 4), theme.palette().surfaces().secondaryText());
             return;
         }
         int hoveredIndex = pointer.allowed() && pointer.hit() != null ? pointer.hit().rowIndex(this) : -1;
@@ -466,7 +475,7 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
             if (selected) {
                 theme.drawSelection(graphics, row);
             } else if (i == hoveredIndex) {
-                graphics.fill(row.x(), row.y(), row.right(), row.bottom(), theme.palette().controlHover());
+                graphics.fill(row.x(), row.y(), row.right(), row.bottom(), theme.palette().controls().controlHover());
             }
             int markerX = visibleRow.depth * INDENT_WIDTH;
             if (!visibleRow.node.isLeaf()) {
@@ -487,7 +496,7 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
 
     // 像素三角不依赖字体字形；叶子只保留缩进，不绘制虚假的展开按钮。
     private void drawTriangle(GuiGraphics graphics, int x, int centerY, boolean expanded) {
-        UiTreeRowMarker.draw(graphics, x, centerY, expanded, theme.palette().textPrimary());
+        UiTreeRowMarker.draw(graphics, x, centerY, expanded, theme.palette().surfaces().text());
     }
 
     @Override

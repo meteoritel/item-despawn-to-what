@@ -158,7 +158,7 @@ final class PreviewExamplesScreen extends Screen implements UiLayoutSource {
                     String reason = PreviewIcons.structureReason(id);
                     if (reason != null) {
                         graphics.drawString(font, WorkbenchLayout.ellipsize(font, Component.literal(reason), labelWidth),
-                                WorkbenchLayout.INSET, textTop + 27, theme.palette().danger(), false);
+                                WorkbenchLayout.INSET, textTop + 27, theme.palette().controls().danger(), false);
                     }
                     drawSlot(graphics, small, rowTop, 16);
                     drawSlot(graphics, medium, rowTop, 48);

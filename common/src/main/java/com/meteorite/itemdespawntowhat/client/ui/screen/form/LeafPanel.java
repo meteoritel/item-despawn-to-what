@@ -216,7 +216,7 @@ public final class LeafPanel implements UiWidget, UiFocusTarget {
             }
             UiRect rect = noteRects.get(index);
             String text = TextScroll.trimToWidth(font, note.getString(), Math.max(1, rect.width()));
-            graphics.drawString(font, text, rect.x(), rect.y(), THEME.palette().textSecondary(), false);
+            graphics.drawString(font, text, rect.x(), rect.y(), THEME.palette().surfaces().secondaryText(), false);
         }
     }
 

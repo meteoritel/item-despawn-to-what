@@ -87,7 +87,7 @@ final class ConditionGraphRenderer {
         RenderSystem.defaultBlendFunc();
         try {
             dotGrid.draw(graphics, transform.scale(), gridX, gridY, viewport.right(), viewport.bottom(),
-                    DOT_BASE_STEP, theme.palette().canvasGridDot());
+                    DOT_BASE_STEP, theme.palette().canvas().canvasGridDot());
         } finally {
             graphics.flush();
             RenderSystem.disableBlend();
@@ -100,8 +100,8 @@ final class ConditionGraphRenderer {
     }
 
     void drawCanvasBackground(GuiGraphics graphics, UiRect bounds) {
-        graphics.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), theme.palette().canvasFill());
-        drawBorder(graphics, bounds, theme.palette().canvasBorder());
+        graphics.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), theme.palette().canvas().canvasFill());
+        drawBorder(graphics, bounds, theme.palette().canvas().canvasBorder());
     }
 
     void drawEmptyMessage(GuiGraphics graphics, Font renderFont, UiRect viewport,
@@ -119,7 +119,7 @@ final class ConditionGraphRenderer {
                 Math.max(viewport.x() + EMPTY_HINT_GAP, viewport.right() - textWidth - EMPTY_HINT_GAP));
         int clampedY = Math.clamp(textY, viewport.y() + EMPTY_HINT_GAP,
                 Math.max(viewport.y() + EMPTY_HINT_GAP, viewport.bottom() - renderFont.lineHeight - EMPTY_HINT_GAP));
-        graphics.drawString(renderFont, text, textX, clampedY, theme.palette().canvasHintText(), false);
+        graphics.drawString(renderFont, text, textX, clampedY, theme.palette().canvas().canvasHintText(), false);
     }
 
     void drawLinks(GuiGraphics graphics, Set<UiTreePath> selection) {
@@ -173,7 +173,7 @@ final class ConditionGraphRenderer {
         if (drops.isEmpty()) {
             return;
         }
-        int color = highlighted ? theme.palette().canvasLinkSelected() : theme.palette().canvasLink();
+        int color = highlighted ? theme.palette().canvas().canvasLinkSelected() : theme.palette().canvas().canvasLink();
         int parentCenterX = centerX(parentRect);
         int busY = (parentRect.bottom() + drops.getFirst()[1]) / 2;
         int left = parentCenterX;
@@ -222,7 +222,7 @@ final class ConditionGraphRenderer {
         int fromY = from.y() + from.height() / 2;
         int toY = to.y() + to.height() / 2;
         int middleX = (from.right() + to.x()) / 2;
-        int color = theme.palette().canvasLink();
+        int color = theme.palette().canvas().canvasLink();
         graphics.fill(from.right(), fromY, middleX + LINK_THICKNESS, fromY + LINK_THICKNESS, color);
         graphics.fill(middleX, Math.min(fromY, toY), middleX + LINK_THICKNESS,
                 Math.max(fromY, toY) + LINK_THICKNESS, color);
@@ -231,7 +231,7 @@ final class ConditionGraphRenderer {
 
     private void drawResultFlow(GuiGraphics graphics, UiRect root) {
         int fromY = root.y() + root.height() / 2;
-        int color = theme.palette().canvasFlowLink();
+        int color = theme.palette().canvas().canvasFlowLink();
         drawDashedLine(graphics, root.right(), fromY, graph.resultRect().x(), fromY, color);
         // 提示文字压在虚线上会互相干扰：先垫一块画布底色遮断虚线，再在留白里写字
         String text = graph.flowHintText();
@@ -241,7 +241,7 @@ final class ConditionGraphRenderer {
         // 底板一直铺到虚线所在行：虚线在提示文字下方断开，读起来才不是「文字压在虚线上」
         graphics.fill(hintX - FLOW_HINT_GAP * 2, hintY - FLOW_HINT_GAP,
                 hintX + textWidth + FLOW_HINT_GAP * 2, fromY + LINK_THICKNESS,
-                theme.palette().canvasFill());
+                theme.palette().canvas().canvasFill());
         graphics.drawString(font, text, hintX, hintY, color, false);
     }
 
@@ -281,9 +281,9 @@ final class ConditionGraphRenderer {
 
     private void drawEndpoint(GuiGraphics graphics, Font renderFont, String title, int titleWidth,
                               String summary, UiRect rect) {
-        drawCardBody(graphics, null, rect, theme.palette().canvasEndpointBand(),
-                theme.palette().canvasEndpointFill(), theme.palette().canvasCardBorder());
-        drawCardTitle(graphics, renderFont, title, titleWidth, rect, theme.palette().canvasTextMuted(), NO_MARK);
+        drawCardBody(graphics, null, rect, theme.palette().canvas().canvasEndpointBand(),
+                theme.palette().canvas().canvasEndpointFill(), theme.palette().canvas().canvasCardBorder());
+        drawCardTitle(graphics, renderFont, title, titleWidth, rect, theme.palette().canvas().canvasTextMuted(), NO_MARK);
         drawEndpointSummary(graphics, renderFont, summary, rect);
     }
 
@@ -296,17 +296,17 @@ final class ConditionGraphRenderer {
         boolean issue = graph.hasIssue(node);
         if (selected) {
             drawShape(graphics, node, selectionRing(rect), 0, rect.height() + SELECTION_RING * 2,
-                    theme.palette().canvasCardBorderSelected());
+                    theme.palette().canvas().canvasCardBorderSelected());
         }
-        int fill = selected ? theme.palette().canvasCardSelectedFill()
-                : hovered ? theme.palette().canvasCardHoverFill() : theme.palette().canvasCardFill();
-        drawCardBody(graphics, node, rect, theme.palette().canvasCardBand(), fill,
+        int fill = selected ? theme.palette().canvas().canvasCardSelectedFill()
+                : hovered ? theme.palette().canvas().canvasCardHoverFill() : theme.palette().canvas().canvasCardFill();
+        drawCardBody(graphics, node, rect, theme.palette().canvas().canvasCardBand(), fill,
                 borderColor(selected, issue, hovered));
         CardText cardText = graph.cardText(node);
         drawCardTitle(graphics, renderFont, cardText.title(), cardText.titleWidth(), rect,
-                issue ? theme.palette().canvasTextDanger() : theme.palette().canvasText(), markColor(node));
+                issue ? theme.palette().canvas().canvasTextDanger() : theme.palette().canvas().canvasText(), markColor(node));
         drawSummaryRows(graphics, renderFont, cardText, rect,
-                theme.palette().canvasText(), theme.palette().canvasTextMuted());
+                theme.palette().canvas().canvasText(), theme.palette().canvas().canvasTextMuted());
     }
 
     private void drawLogicCard(GuiGraphics graphics, Font renderFont, ConditionNode node, UiRect rect,
@@ -315,29 +315,29 @@ final class ConditionGraphRenderer {
         int band;
         int text;
         if (node instanceof ConditionNode.AllOf) {
-            fill = theme.palette().canvasAllFill();
-            band = theme.palette().canvasAllBand();
-            text = theme.palette().canvasAllText();
+            fill = theme.palette().canvas().canvasAllFill();
+            band = theme.palette().canvas().canvasAllBand();
+            text = theme.palette().canvas().canvasAllText();
         } else if (node instanceof ConditionNode.AnyOf) {
-            fill = theme.palette().canvasAnyFill();
-            band = theme.palette().canvasAnyBand();
-            text = theme.palette().canvasAnyText();
+            fill = theme.palette().canvas().canvasAnyFill();
+            band = theme.palette().canvas().canvasAnyBand();
+            text = theme.palette().canvas().canvasAnyText();
         } else {
-            fill = theme.palette().canvasNotFill();
-            band = theme.palette().canvasNotBand();
-            text = theme.palette().canvasNotText();
+            fill = theme.palette().canvas().canvasNotFill();
+            band = theme.palette().canvas().canvasNotBand();
+            text = theme.palette().canvas().canvasNotText();
         }
         // 容器保留形状与运算符盖色，强调色只作用于描边和外环，避免覆盖语义色
         boolean issue = graph.hasIssue(node);
         if (selected) {
             drawShape(graphics, node, selectionRing(rect), 0, rect.height() + SELECTION_RING * 2,
-                    theme.palette().canvasCardBorderSelected());
+                    theme.palette().canvas().canvasCardBorderSelected());
         }
         drawCardBody(graphics, node, rect, band, fill, borderColor(selected, issue, hovered));
         CardText cardText = graph.cardText(node);
         drawCardTitle(graphics, renderFont, cardText.title(), cardText.titleWidth(), rect,
-                issue ? theme.palette().canvasTextDanger() : text, markColor(node));
-        drawSummaryRows(graphics, renderFont, cardText, rect, text, theme.palette().canvasTextMuted());
+                issue ? theme.palette().canvas().canvasTextDanger() : text, markColor(node));
+        drawSummaryRows(graphics, renderFont, cardText, rect, text, theme.palette().canvas().canvasTextMuted());
     }
 
     /**
@@ -408,12 +408,12 @@ final class ConditionGraphRenderer {
      */
     private int borderColor(boolean selected, boolean issue, boolean hovered) {
         if (selected) {
-            return theme.palette().canvasCardBorderSelected();
+            return theme.palette().canvas().canvasCardBorderSelected();
         }
         if (issue) {
-            return theme.palette().canvasTextDanger();
+            return theme.palette().canvas().canvasTextDanger();
         }
-        return hovered ? theme.palette().canvasCardBorderSelected() : theme.palette().canvasCardBorder();
+        return hovered ? theme.palette().canvas().canvasCardBorderSelected() : theme.palette().canvas().canvasCardBorder();
     }
 
     /**
@@ -445,7 +445,7 @@ final class ConditionGraphRenderer {
         if (!graph.hasStatus(node)) {
             return NO_MARK;
         }
-        return graph.statusSevere(node) ? theme.palette().canvasTextDanger() : theme.palette().canvasTextMuted();
+        return graph.statusSevere(node) ? theme.palette().canvas().canvasTextDanger() : theme.palette().canvas().canvasTextMuted();
     }
 
     /**
@@ -467,7 +467,7 @@ final class ConditionGraphRenderer {
     private void drawEndpointSummary(GuiGraphics graphics, Font renderFont, String text, UiRect rect) {
         int y = rect.y() + CONTENT_TOP + (CONTENT_ROWS * CARD_ROW_HEIGHT - renderFont.lineHeight) / 2;
         graphics.drawString(renderFont, text, rect.x() + BORDER + CARD_PADDING_X, y,
-                theme.palette().canvasText(), false);
+                theme.palette().canvas().canvasText(), false);
     }
 
     /**
@@ -479,9 +479,9 @@ final class ConditionGraphRenderer {
             UiRect rect = hotspot.rect();
             boolean hovered = hotspot == hoveredHotspot;
             drawChip(graphics, rect,
-                    hovered ? theme.palette().canvasAccentHover() : theme.palette().canvasHotspotFill(),
-                    hovered ? theme.palette().canvasAccentHover() : theme.palette().canvasHotspotBorder());
-            int markColor = hovered ? theme.palette().canvasTextOnAccent() : theme.palette().canvasAccent();
+                    hovered ? theme.palette().canvas().canvasAccentHover() : theme.palette().canvas().canvasHotspotFill(),
+                    hovered ? theme.palette().canvas().canvasAccentHover() : theme.palette().canvas().canvasHotspotBorder());
+            int markColor = hovered ? theme.palette().canvas().canvasTextOnAccent() : theme.palette().canvas().canvasAccent();
             int arm = Math.max(2, rect.width() / 4);
             int thickness = Math.max(1, rect.width() / 9);
             int centerX = rect.x() + rect.width() / 2;
@@ -507,7 +507,7 @@ final class ConditionGraphRenderer {
         if (rect == null) {
             return;
         }
-        int color = preview.outcome().error() == null ? theme.palette().canvasAccent() : theme.palette().canvasTextDanger();
+        int color = preview.outcome().error() == null ? theme.palette().canvas().canvasAccent() : theme.palette().canvas().canvasTextDanger();
         if (preview.position() == UiTreeEditor.DropPosition.INSIDE) {
             drawBorder(graphics, rect, color);
             drawBorder(graphics, new UiRect(rect.x() - BORDER, rect.y() - BORDER,
@@ -527,9 +527,9 @@ final class ConditionGraphRenderer {
         int height = renderFont.lineHeight + 2;
         int x = Math.clamp(mouseX + DRAG_GHOST_GAP, bounds.x(), Math.max(bounds.x(), bounds.right() - width));
         int y = Math.clamp(mouseY + DRAG_GHOST_GAP, bounds.y(), Math.max(bounds.y(), bounds.bottom() - height));
-        graphics.fill(x, y, x + width, y + height, theme.palette().canvasDragGhostFill());
+        graphics.fill(x, y, x + width, y + height, theme.palette().canvas().canvasDragGhostFill());
         graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont, label, Math.max(0, width - DRAG_GHOST_GAP)),
-                x + DRAG_GHOST_GAP / 2, y + 1, theme.palette().canvasText(), false);
+                x + DRAG_GHOST_GAP / 2, y + 1, theme.palette().canvas().canvasText(), false);
     }
 
     static void drawBorder(GuiGraphics graphics, UiRect rect, int color) {

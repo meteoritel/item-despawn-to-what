@@ -1019,5 +1019,8 @@
   "gui.itemdespawntowhat.edit.preview.state.too_large": "场景超限",
   "gui.itemdespawntowhat.edit.preview.state.capacity_rejected": "预览请求容量已满",
   "gui.itemdespawntowhat.edit.preview.state.failed": "准备或绘制失败",
-  "gui.itemdespawntowhat.edit.debug.button.tools": "调试工具"
+  "gui.itemdespawntowhat.edit.debug.button.tools": "调试工具",
+  "gui.itemdespawntowhat.edit.theme.button": "外观：%s",
+  "gui.itemdespawntowhat.edit.theme.current": "当前风格",
+  "gui.itemdespawntowhat.edit.theme.minecraft": "原版风格"
 }

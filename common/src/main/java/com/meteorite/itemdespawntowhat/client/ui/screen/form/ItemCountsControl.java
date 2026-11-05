@@ -366,14 +366,14 @@ final class ItemCountsControl extends FormControl {
         for (Entry entry : entries.values()) {
             // 配对下行只画滑条：物品名、图标与两行文案都由上行统一绘制
             if (pairRole != PairRole.LOWER) {
-                if (entry.icon != null) entry.icon.render(graphics, entry.iconX, entry.iconY);
+                if (entry.icon != null) entry.icon.render(graphics, entry.iconX, entry.iconY, THEME);
                 // 配对上行时名称行固定高度；独立字段沿用滑条行高，保持原有居中
                 int nameRowHeight = pairRole == PairRole.UPPER ? HEADER_HEIGHT : lastRowHeight;
                 // 名称超宽时只有悬停才平移：起点与终点各停顿一次后往返，移开即回到起点
                 boolean hovered = entry.nameHit(mouseX, mouseY, nameRowHeight);
                 entry.scrollTicks = hovered ? entry.scrollTicks + 1 : 0;
                 TextScroll.draw(graphics, renderFont, entry.name.getString(), entry.nameX, entry.nameY,
-                        entry.nameWidth, THEME.palette().textSecondary(), hovered, entry.scrollTicks, false);
+                        entry.nameWidth, THEME.palette().surfaces().secondaryText(), hovered, entry.scrollTicks, false);
             }
             if (pairRole == PairRole.UPPER) {
                 // 两条滑条各配一行含义文案：与各自滑条同一垂直中线，避免上下滑条含义混淆
@@ -390,7 +390,7 @@ final class ItemCountsControl extends FormControl {
     private void drawRowLabel(GuiGraphics graphics, Font renderFont, Component text, int rowY) {
         int labelY = rowY + Math.max(0, (lastRowHeight - renderFont.lineHeight) / 2);
         TextScroll.draw(graphics, renderFont, text.getString(), labelTextX, labelY,
-                labelTextWidth, THEME.palette().textDisabled(), false, 0, false);
+                labelTextWidth, THEME.palette().surfaces().disabledText(), false, 0, false);
     }
 
     @Override

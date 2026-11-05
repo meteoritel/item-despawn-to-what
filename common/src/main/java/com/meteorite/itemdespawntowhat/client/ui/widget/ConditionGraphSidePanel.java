@@ -69,14 +69,14 @@ final class ConditionGraphSidePanel {
         UiTransform.enableScissor(graphics, viewport);
         try {
             UiRenderLayers.draw(graphics, UiRenderLayers.SIDE_PANEL, () -> {
-                graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), theme.palette().canvasPickerFill());
+                graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), theme.palette().canvas().canvasPickerFill());
                 graphics.fill(rect.x() + BORDER, rect.y() + BORDER, rect.right() - BORDER,
-                        rect.y() + SIDE_PANEL_HEADER, theme.palette().canvasPickerHeaderFill());
-                drawBorder(graphics, rect, theme.palette().canvasPickerBorder());
+                        rect.y() + SIDE_PANEL_HEADER, theme.palette().canvas().canvasPickerHeaderFill());
+                drawBorder(graphics, rect, theme.palette().canvas().canvasPickerBorder());
                 graphics.drawString(font, TextScroll.trimToWidth(font, title.getString(),
                                 Math.max(0, rect.width() - SIDE_PANEL_PADDING * 2)),
                         rect.x() + SIDE_PANEL_PADDING, rect.y() + (SIDE_PANEL_HEADER - font.lineHeight) / 2,
-                        theme.palette().canvasPickerHeaderText(), false);
+                        theme.palette().canvas().canvasPickerHeaderText(), false);
                 content.run();
             });
         } finally {

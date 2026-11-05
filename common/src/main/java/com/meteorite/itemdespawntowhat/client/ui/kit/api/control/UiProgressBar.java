@@ -25,7 +25,7 @@ public final class UiProgressBar {
      */
     public record Style(int track, int fill, int border, int highlight) { }
 
-    private final Style style;
+    private Style style;
     private double displayed;
     private long lastMillis;
     private boolean initialized;
@@ -36,6 +36,9 @@ public final class UiProgressBar {
      * @throws NullPointerException style 为 null 时
      */
     public UiProgressBar(Style style) { this.style = Objects.requireNonNull(style); }
+
+    /** 更新外观时保留平滑计数与动画状态。 */
+    public void setStyle(Style style) { this.style = Objects.requireNonNull(style); }
 
     /**
      * 新任务或阶段切换时重置平滑状态，不从上一阶段的计数反向插值。

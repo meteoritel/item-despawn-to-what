@@ -305,7 +305,7 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
         if (items.isEmpty()) {
             String empty = Component.translatable(TypeLabels.UI_PREFIX + "list.empty").getString();
             graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont, empty, Math.max(0, area.width() - 2)),
-                    area.x() + 1, area.y() + 1, theme.palette().textDisabled(), false);
+                    area.x() + 1, area.y() + 1, theme.palette().surfaces().disabledText(), false);
         } else {
             clampOffset(visibleRows);
             for (int row = 0; row < visibleRows; row++) {
@@ -320,13 +320,13 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
                     theme.drawSelection(graphics, rowRect);
                     theme.drawSelectMarker(graphics, rowRect);
                 } else if (hovered) {
-                    graphics.fill(rowRect.x(), rowRect.y(), rowRect.right(), rowRect.bottom(), theme.palette().controlHover());
+                    graphics.fill(rowRect.x(), rowRect.y(), rowRect.right(), rowRect.bottom(), theme.palette().controls().controlHover());
                 }
                 int textX = rowRect.x() + theme.selectMarkerWidth();
                 String text = TextScroll.trimToWidth(renderFont, items.get(index),
                         Math.max(0, rowRect.right() - textX - 2));
                 graphics.drawString(renderFont, text, textX, rowRect.y() + 2,
-                        enabled ? theme.palette().textPrimary() : theme.palette().textDisabled(), false);
+                        enabled ? theme.palette().surfaces().text() : theme.palette().surfaces().disabledText(), false);
             }
         }
         if (enabled) {

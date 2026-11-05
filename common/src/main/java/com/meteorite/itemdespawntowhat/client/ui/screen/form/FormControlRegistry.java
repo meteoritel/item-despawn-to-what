@@ -112,7 +112,7 @@ final class FormControlRegistry {
             super(theme, field);
         }
 
-        @Override int height() { return DEFAULT_HEIGHT; }
+        @Override int height() { return defaultHeight(); }
 
         @Override void setBounds(int x, int y, int width) {
             this.x = x;
@@ -123,7 +123,7 @@ final class FormControlRegistry {
         @Override void render(GuiGraphics graphics, Font font, UiPointer incomingPointer) {
             String text = Component.translatable(TypeLabels.UI_PREFIX + "catalog.unavailable").getString();
             String visible = TextScroll.trimToWidth(font, text, Math.max(0, width - 4));
-            graphics.drawString(font, visible, x + 2, y + 2, THEME.palette().textSecondary(), false);
+            graphics.drawString(font, visible, x + 2, y + 2, THEME.palette().surfaces().secondaryText(), false);
         }
 
         @Override void load(@Nullable RuleValue value) {

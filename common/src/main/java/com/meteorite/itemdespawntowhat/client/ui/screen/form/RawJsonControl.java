@@ -22,7 +22,7 @@ final class RawJsonControl extends FormControl {
 
     @Override
     int height() {
-        return DEFAULT_HEIGHT;
+        return defaultHeight();
     }
 
     @Override

@@ -33,7 +33,7 @@ final class SublistControl extends FormControl {
     private final List<FormView> children = new ArrayList<>();
     private final List<UiButton> removeButtons = new ArrayList<>();
     private final UiButton addButton;
-    private int measuredHeight = DEFAULT_HEIGHT;
+    private int measuredHeight = defaultHeight();
 
     SublistControl(Font font, FormView owner, EditorField field, Runnable onChanged) {
         super(owner.theme(), field);
@@ -107,17 +107,17 @@ final class SublistControl extends FormControl {
     // 依次排列「添加按钮 + 每个子表单（含删除按钮）」，同时算出总高度
     private void layoutAt(int x, int y, int width) {
         int cursor = y;
-        addButton.setBounds(x, cursor, Math.max(40, addButton.preferredWidth(6)), DEFAULT_HEIGHT);
-        cursor += DEFAULT_HEIGHT + 2;
+        addButton.setBounds(x, cursor, Math.max(40, addButton.preferredWidth(6)), defaultHeight());
+        cursor += defaultHeight() + 2;
         for (int i = 0; i < children.size(); i++) {
             UiButton remove = removeButtons.get(i);
             int removeWidth = Math.max(28, remove.preferredWidth(4));
-            remove.setBounds(x + Math.max(0, width - removeWidth), cursor, removeWidth, DEFAULT_HEIGHT);
-            cursor += DEFAULT_HEIGHT + 2;
+            remove.setBounds(x + Math.max(0, width - removeWidth), cursor, removeWidth, defaultHeight());
+            cursor += defaultHeight() + 2;
             int used = children.get(i).layoutUnbounded(x + 4, cursor, Math.max(16, width - 8));
             cursor += used + 2;
         }
-        this.measuredHeight = Math.max(DEFAULT_HEIGHT, cursor - y);
+        this.measuredHeight = Math.max(defaultHeight(), cursor - y);
     }
 
     @Override

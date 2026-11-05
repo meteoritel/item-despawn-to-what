@@ -94,7 +94,7 @@ final class TextControl extends FormControl {
 
     @Override
     int height() {
-        return field.isLongText() ? NOTES_ROWS * font.lineHeight + 4 : DEFAULT_HEIGHT;
+        return field.isLongText() ? NOTES_ROWS * font.lineHeight + 4 : defaultHeight();
     }
 
     @Override

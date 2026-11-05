@@ -132,21 +132,21 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
         try {
             if (values.isEmpty()) graphics.drawString(renderFont, Component.translatable(UI +
                             (catalogType() == RuleCatalogType.FLUID ? "selection.any_fluid" : "selection.empty")),
-                    4, 8, THEME.palette().textSecondary(), false);
+                    4, 8, THEME.palette().surfaces().secondaryText(), false);
             for (int i = 0; i < values.size(); i++) {
                 UiRect chip = chips.get(i);
                 if (chip.bottom() <= scroll.offset() || chip.y() >= scroll.offset() + layoutHeight()) continue;
                 Selection entry = values.get(i);
                 boolean chosen = isFocused() && i == selected;
                 THEME.drawChip(graphics, chip, chosen, enabled && i == hovered);
-                if (entry.icon() != null) entry.icon().render(graphics, chip.x() + 4, chip.y() + 4);
+                if (entry.icon() != null) entry.icon().render(graphics, chip.x() + 4, chip.y() + 4, THEME);
                 int textOffset = entry.icon() == null ? TEXT_PADDING : ICON_TEXT_OFFSET;
                 graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont, entry.name().getString(),
                                 Math.max(0, chip.width() - textOffset - REMOVE_AREA_WIDTH)),
                         chip.x() + textOffset, chip.y() + (CHIP_HEIGHT - renderFont.lineHeight) / 2,
-                        !enabled ? THEME.palette().textDisabled() : chosen ? THEME.palette().textOnDark() : THEME.palette().textPrimary(), false);
+                        !enabled ? THEME.palette().surfaces().disabledText() : chosen ? THEME.palette().controls().textOnDark() : THEME.palette().surfaces().text(), false);
                 // 叉号统一用次要文本灰：与行为卡片的叉号同色，悬停才转危险色；选中卡的浅蓝底上白叉号几乎看不见。
-                int color = enabled && i == hovered ? THEME.palette().danger() : THEME.palette().textSecondary();
+                int color = enabled && i == hovered ? THEME.palette().controls().danger() : THEME.palette().surfaces().secondaryText();
                 UiIcon close = UiMarkIcons.icon(Mark.CLOSE, color);
                 close.render(graphics, chip.right() - REMOVE_HIT_WIDTH + (REMOVE_HIT_WIDTH - close.width()) / 2,
                         chip.y() + (CHIP_HEIGHT - close.height()) / 2);

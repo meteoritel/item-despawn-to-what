@@ -52,7 +52,7 @@ final class FormRowRenderer {
         int issueRoom = Math.max(0, width - MIN_LABEL_WIDTH - markRoom);
         int reserve = inline == null ? 0 : Math.min(issueRoom, font.width(inline) + ISSUE_GAP);
         String trimmed = TextScroll.trimToWidth(font, text, Math.max(4, width - markRoom - reserve));
-        int color = issues.isEmpty() ? theme.palette().textPrimary() : theme.palette().danger();
+        int color = issues.isEmpty() ? theme.palette().surfaces().text() : theme.palette().controls().danger();
         int labelY = row.narrow ? screenY + 1 : screenY + row.controlRelY
                 + Math.max(0, (Math.min(row.control.layoutHeight(),
                         minimumControlHeight > 0 ? minimumControlHeight : theme.rowHeight()) - font.lineHeight) / 2);
@@ -75,7 +75,7 @@ final class FormRowRenderer {
     static void drawNote(GuiGraphics graphics, Font font, FormRow row, int screenY, int viewportX, UiHostTheme theme) {
         String text = ((NoteControl) row.control).note().getString();
         String trimmed = TextScroll.trimToWidth(font, text, Math.max(4, row.controlWidth));
-        graphics.drawString(font, trimmed, viewportX, screenY + 1, theme.palette().textSecondary(), false);
+        graphics.drawString(font, trimmed, viewportX, screenY + 1, theme.palette().surfaces().secondaryText(), false);
     }
 
     // 已命中字段行的提示：说明行给完整说明，其它行优先显示校验问题，其次字段提示与完整标签

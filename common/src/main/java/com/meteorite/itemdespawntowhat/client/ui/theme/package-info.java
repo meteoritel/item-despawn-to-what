@@ -1,10 +1,6 @@
 /**
- * 灰色像素主题层。
- * <p>本包只依赖 Minecraft 客户端通用类型、本模组的 UI kit 与 {@code client.edit.TypeLabels}
- * （取模组命名空间常量拼贴图路径），不依赖 core、不依赖平台 API。
- * 主题负责视觉，控件（{@code client.ui.widget}）负责交互，两者解耦。
- * <p>宿主入口是 {@link com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes}：屏幕从这里取
- * {@link com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme} 后注入自己装配的控件，控件不再
- * 静态读取本包的主题类。画布页的扁平外壳不属于默认主题，仍由该页在调用点显式注入 {@code UiFlatSkin}。
+ * 编辑器宿主主题：不可变 Adapter、业务视觉定义与完整方案。
+ * <p>UiThemeSelection 仅保存客户端运行期间的方案标识；Screen 的正文与画布 Context
+ * 负责发布和 revision。控件共享所属来源，语义表面与图标在主题内部解析颜色、资源和 painter。</p>
  */
 package com.meteorite.itemdespawntowhat.client.ui.theme;

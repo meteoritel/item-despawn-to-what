@@ -1,9 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
-import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphRenderer.drawBorder;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiTooltipPanel;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiTooltipPlacement;
 import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine;
 import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine.Kind;
 import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine.Tone;
@@ -23,7 +21,7 @@ import org.jetbrains.annotations.Nullable;
  * <p><b>排版</b>：标签列取所有字段行标签的最大宽度并以固定间距让出取值列，使同一面板里的取值左对齐；
  * 缩进按层级换算成像素，条目行补圆点，分区标题上方多留一段间距。折行只发生在取值列或整行文本上，
  * 折行后的续行与取值列对齐，标签不重复。面板宽度取排版后最宽的一行，受宿主可视区域与
- * {@link #setMaxWidth(int)} 约束；定位优先落在指针右下，越界时翻到左上。</p>
+ * {@link #setMaxWidth(int)} 约束；定位与普通提示共用指针上方优先、越界翻转的规则。</p>
  *
  * <p><b>取色</b>：本类只按 {@link Tone} 从宿主调色板取色，条件与动作不各自挑颜色；
  * 全 GUI 不使用字体加粗与阴影，标题、分区标题与取值行只靠颜色和缩进区分层次。</p>
@@ -33,9 +31,7 @@ import org.jetbrains.annotations.Nullable;
  */
 public final class UiDescriptionTooltip {
     private static final int TOOLTIP_MIN_WIDTH = 80;
-    private static final int TOOLTIP_MAX_WIDTH = 250;
-    private static final int TOOLTIP_PADDING = 4;
-    private static final int TOOLTIP_MARGIN = 4;
+    private int padding() { return theme.tooltipSkin().padding(); }
     private static final int TOOLTIP_LINE_GAP = 1;
     // 每层缩进的像素宽度
     private static final int TOOLTIP_INDENT = 6;
@@ -51,12 +47,10 @@ public final class UiDescriptionTooltip {
     private static final int TOOLTIP_SPACER_HEIGHT = 4;
     // 条目行圆点；默认字体回落到统一字体，任何语言下都有字形
     private static final String TOOLTIP_BULLET = "· ";
-    // 与鼠标的间距：优先画在指针右下，越界时翻到左上
-    private static final int TOOLTIP_MOUSE_OFFSET = 12;
 
     private final UiHostTheme theme;
     private final Font font;
-    private int maxWidth = TOOLTIP_MAX_WIDTH;
+    private int maxWidth = UiTooltipPanel.DEFAULT_MAX_WIDTH;
     private int maxLines = Integer.MAX_VALUE;
     private Component overflowHint = Component.literal("…");
 
@@ -103,13 +97,13 @@ public final class UiDescriptionTooltip {
      * @param mouseY 鼠标屏幕 Y 坐标
      */
     public void render(GuiGraphics graphics, UiRect bounds, List<DescriptionLine> lines, int mouseX, int mouseY) {
-        if (lines.isEmpty() || bounds.width() <= (TOOLTIP_MARGIN + TOOLTIP_PADDING) * 2
-                || bounds.height() <= (TOOLTIP_MARGIN + TOOLTIP_PADDING) * 2) {
+        if (lines.isEmpty() || bounds.width() <= (UiTooltipPanel.SCREEN_MARGIN + padding()) * 2
+                || bounds.height() <= (UiTooltipPanel.SCREEN_MARGIN + padding()) * 2) {
             return;
         }
         int textWidth = textWidthLimit(bounds);
         int visibleLines = Math.clamp(
-                (bounds.height() - TOOLTIP_MARGIN * 2 - TOOLTIP_PADDING * 2 + TOOLTIP_LINE_GAP)
+                (bounds.height() - UiTooltipPanel.SCREEN_MARGIN * 2 - 2L * padding() + TOOLTIP_LINE_GAP)
                         / (font.lineHeight + TOOLTIP_LINE_GAP), 1, maxLines);
         List<DescriptionLine> content = normalize(lines);
         List<Row> rows = layout(content, textWidth);
@@ -120,28 +114,24 @@ public final class UiDescriptionTooltip {
             return;
         }
         // 分区间距可能让总高略微超出可视区域，按行从末尾继续收敛
-        int maxHeight = bounds.height() - TOOLTIP_MARGIN * 2;
+        int maxHeight = bounds.height() - UiTooltipPanel.SCREEN_MARGIN * 2;
         while (rows.size() > 1 && panelHeight(rows) > maxHeight) {
             rows.removeLast();
         }
         int contentWidth = 0;
         for (Row row : rows) {
-            contentWidth = Math.max(contentWidth, row.contentWidth());
+            contentWidth = Math.max(contentWidth, row.contentWidth(padding()));
         }
-        int minWidth = Math.min(TOOLTIP_MIN_WIDTH, bounds.width() - TOOLTIP_MARGIN * 2);
-        int widthLimit = Math.min(maxWidth, bounds.width() - TOOLTIP_MARGIN * 2);
-        int width = Math.clamp(contentWidth + TOOLTIP_PADDING * 2, minWidth, widthLimit);
+        int minWidth = Math.min(TOOLTIP_MIN_WIDTH, bounds.width() - UiTooltipPanel.SCREEN_MARGIN * 2);
+        int widthLimit = Math.min(maxWidth, bounds.width() - UiTooltipPanel.SCREEN_MARGIN * 2);
+        int width = Math.clamp(contentWidth + 2L * padding(), minWidth, widthLimit);
         int height = panelHeight(rows);
-        UiTooltipPanel panel = UiTooltipPanel.layout(bounds, width - TOOLTIP_PADDING * 2,
-                height - TOOLTIP_PADDING * 2, TOOLTIP_PADDING, mouseX, mouseY, TOOLTIP_MOUSE_OFFSET,
-                TOOLTIP_MARGIN, UiTooltipPlacement.VerticalPreference.BELOW);
-        int labelColor = theme.palette().canvasPickerTextMuted();
+        UiTooltipPanel panel = UiTooltipPanel.layout(bounds, width - 2 * padding(),
+                height - 2 * padding(), padding(), mouseX, mouseY);
+        int labelColor = theme.tooltipSkin().style().secondaryText();
         List<Row> frame = rows;
-        panel.render(graphics, rect -> {
-            graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), theme.palette().canvasPickerFill());
-            drawBorder(graphics, rect, theme.palette().canvasPickerBorder());
-        }, contentBounds -> {
-            int x = contentBounds.x() - TOOLTIP_PADDING;
+        panel.render(graphics, rect -> theme.tooltipSkin().paint(graphics, rect), contentBounds -> {
+            int x = contentBounds.x() - padding();
             int textY = contentBounds.y();
             for (int index = 0; index < frame.size(); index++) {
                 Row row = frame.get(index);
@@ -162,8 +152,8 @@ public final class UiDescriptionTooltip {
 
     // 折行宽度上限：由面板可用宽度决定换行位置，避免折行后再次超出屏幕
     private int textWidthLimit(UiRect bounds) {
-        return UiTooltipPanel.contentWidth(bounds, maxWidth - TOOLTIP_PADDING * 2,
-                TOOLTIP_PADDING, TOOLTIP_MARGIN);
+        return UiTooltipPanel.contentWidth(bounds, maxWidth - 2 * padding(),
+                padding(), UiTooltipPanel.SCREEN_MARGIN);
     }
 
     // 去掉空文本行与多余的间距行：间距行只保留一个，且不出现在首尾
@@ -229,7 +219,7 @@ public final class UiDescriptionTooltip {
     private List<Row> layout(List<DescriptionLine> lines, int textWidth) {
         int labelColumn = labelColumn(lines, textWidth);
         List<Row> rows = new ArrayList<>();
-        int labelColor = theme.palette().canvasPickerTextMuted();
+        int labelColor = theme.tooltipSkin().style().secondaryText();
         boolean first = true;
         for (DescriptionLine line : lines) {
             if (line.kind() == Kind.SPACER) {
@@ -237,14 +227,14 @@ public final class UiDescriptionTooltip {
                 first = false;
                 continue;
             }
-            int left = TOOLTIP_PADDING + line.indent() * TOOLTIP_INDENT;
+            int left = padding() + line.indent() * TOOLTIP_INDENT;
             int color = colorOf(line.tone());
             Component text = line.text();
             int topGap = line.kind() == Kind.SECTION && !first ? TOOLTIP_SECTION_GAP : 0;
             if (line.kind() == Kind.FIELD) {
                 int valueX = left + labelColumn + TOOLTIP_LABEL_GAP;
                 int valueWidth = Math.max(TOOLTIP_MIN_VALUE_WIDTH,
-                        textWidth - (left - TOOLTIP_PADDING) - labelColumn - TOOLTIP_LABEL_GAP);
+                        textWidth - (left - padding()) - labelColumn - TOOLTIP_LABEL_GAP);
                 List<FormattedCharSequence> values = font.split(text, valueWidth);
                 FormattedCharSequence label = line.label() == null ? null
                         : firstRow(font.split(line.label(), Math.max(1, labelColumn)));
@@ -268,7 +258,7 @@ public final class UiDescriptionTooltip {
 
     // 整行折行：续行与行首左对齐
     private void appendWrapped(List<Row> rows, Component text, int left, int textWidth, int color, int topGap) {
-        int wrapWidth = Math.max(TOOLTIP_MIN_VALUE_WIDTH, textWidth - (left - TOOLTIP_PADDING));
+        int wrapWidth = Math.max(TOOLTIP_MIN_VALUE_WIDTH, textWidth - (left - padding()));
         List<FormattedCharSequence> sequences = font.split(text, wrapWidth);
         for (int index = 0; index < sequences.size(); index++) {
             rows.add(new Row(null, 0, 0, sequences.get(index), left, font.width(sequences.get(index)), color,
@@ -279,15 +269,15 @@ public final class UiDescriptionTooltip {
     private int colorOf(Tone tone) {
         UiHostPalette palette = theme.palette();
         return switch (tone) {
-            case TITLE, SECTION -> palette.tooltipTitle();
-            case VALUE -> palette.canvasPickerText();
-            case METRIC -> palette.tooltipMetric();
-            case REFERENCE -> palette.tooltipReference();
-            case NOTE -> palette.canvasPickerTextMuted();
-            case DANGER -> palette.canvasTextDanger();
-            case ALL -> palette.canvasAllText();
-            case ANY -> palette.canvasAnyText();
-            case NOT -> palette.canvasNotText();
+            case TITLE, SECTION -> palette.description().tooltipTitle();
+            case VALUE -> theme.tooltipSkin().style().tooltipText();
+            case ALL -> palette.description().tooltipAll();
+            case ANY -> palette.description().tooltipAny();
+            case NOT -> palette.description().tooltipNot();
+            case METRIC -> palette.description().tooltipMetric();
+            case REFERENCE -> palette.description().tooltipReference();
+            case NOTE -> theme.tooltipSkin().style().secondaryText();
+            case DANGER -> palette.controls().danger();
         };
     }
 
@@ -306,8 +296,8 @@ public final class UiDescriptionTooltip {
         return count;
     }
 
-    private static int panelHeight(List<Row> rows) {
-        int height = TOOLTIP_PADDING * 2;
+    private int panelHeight(List<Row> rows) {
+        int height = 2 * padding();
         for (Row row : rows) {
             height += row.height() + row.topGap();
         }
@@ -333,12 +323,12 @@ public final class UiDescriptionTooltip {
                        int color, int height, int topGap, boolean spacer) {
 
         // 本行对面板宽度的贡献：标签末端与正文末端取大者
-        private int contentWidth() {
+        private int contentWidth(int padding) {
             int textEnd = textX + textWidth;
             if (label == null) {
-                return textEnd - TOOLTIP_PADDING;
+                return textEnd - padding;
             }
-            return Math.max(labelX + labelWidth, textEnd) - TOOLTIP_PADDING;
+            return Math.max(labelX + labelWidth, textEnd) - padding;
         }
     }
 }

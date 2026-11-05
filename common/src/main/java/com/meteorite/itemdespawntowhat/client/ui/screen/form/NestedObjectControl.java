@@ -51,7 +51,7 @@ final class NestedObjectControl extends FormControl {
         // 子字段高度变化（如条件树摘要）要传给外层表单重新测量整行
         this.child.setOnGeometryChanged(this::notifyGeometryChanged);
         // 空对象至少保留一行高度，避免子表单尚未布局时行高塌陷
-        this.measuredHeight = Math.max(DEFAULT_HEIGHT, font.lineHeight);
+        this.measuredHeight = Math.max(defaultHeight(), font.lineHeight);
     }
 
     @Override
@@ -72,7 +72,7 @@ final class NestedObjectControl extends FormControl {
     // 子表单占满控件宽度；高度随内部字段内容变化
     private void layoutAt(int x, int y, int width) {
         int used = child.layoutUnbounded(x, y, Math.max(16, width));
-        measuredHeight = Math.max(DEFAULT_HEIGHT, used);
+        measuredHeight = Math.max(defaultHeight(), used);
     }
 
     @Override

@@ -34,7 +34,7 @@ public final class TagPreviewIcons {
         }
         public UiIcon icon() {
             if (members.isEmpty()) return PreviewIcons.item(new ItemStack(Items.NAME_TAG));
-            return new UiIcon.Rendered(18, 18, (graphics, box) -> carousel.render(graphics, box, Util.getMillis()),
+            return new UiIcon.Themed(18, 18, (graphics, box, theme) -> carousel.render(graphics, box, Util.getMillis(), theme),
                     () -> carousel.prepare(Util.getMillis()));
         }
     }

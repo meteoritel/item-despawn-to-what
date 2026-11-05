@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostSurface;
 import java.util.function.Consumer;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
@@ -82,7 +83,7 @@ final class CardListControl extends FormControl implements UiLayoutSource {
     private final List<EditorField> valueFields;
     private final UiButton addButton;
     private final List<Entry> entries = new ArrayList<>();
-    private int measuredHeight = DEFAULT_HEIGHT;
+    private int measuredHeight = defaultHeight();
     private UiRect titleBounds = new UiRect(0, 0, 0, 0);
     private @Nullable UiRect emptyBounds;
 
@@ -217,7 +218,7 @@ final class CardListControl extends FormControl implements UiLayoutSource {
                 () -> chooseReference(entry)).setChipStyle(true);
         entry.remove = new UiButton(THEME, font, Component.empty(), UiButtonVariant.DANGER,
                 () -> removeEntry(entry)).setChipStyle(true)
-                .setIcon(UiMarkIcons.icon(UiMarkIcons.Mark.CLOSE, THEME.palette().danger()))
+                .setIcon(UiMarkIcons.icon(UiMarkIcons.Mark.CLOSE, THEME.palette().controls().danger()))
                 .setAccessibleName(Component.translatable(UI + "remove"));
         for (EditorField sub : valueFields) {
             FormControl control = FormControl.create(font, owner, sub, () -> {
@@ -299,15 +300,15 @@ final class CardListControl extends FormControl implements UiLayoutSource {
         titleBounds = new UiRect(x, cursor, Math.max(0, width - addWidth - COLUMN_GAP), HEADER_HEIGHT);
         cursor += HEADER_HEIGHT + CARD_GAP;
         if (entries.isEmpty()) {
-            emptyBounds = new UiRect(x, cursor, width, DEFAULT_HEIGHT);
-            cursor += DEFAULT_HEIGHT;
+            emptyBounds = new UiRect(x, cursor, width, defaultHeight());
+            cursor += defaultHeight();
         } else {
             emptyBounds = null;
         }
         for (Entry entry : entries) {
             cursor = layoutCard(entry, x, cursor, width) + CARD_GAP;
         }
-        measuredHeight = Math.max(DEFAULT_HEIGHT, cursor - y - (entries.isEmpty() ? 0 : CARD_GAP));
+        measuredHeight = Math.max(defaultHeight(), cursor - y - (entries.isEmpty() ? 0 : CARD_GAP));
     }
 
     // 单张卡片排版，返回卡片底边
@@ -373,18 +374,18 @@ final class CardListControl extends FormControl implements UiLayoutSource {
         UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
         graphics.drawString(renderFont, label(), titleBounds.x(),
                 titleBounds.y() + Math.max(0, (titleBounds.height() - renderFont.lineHeight) / 2),
-                THEME.palette().textSecondary(), false);
+                THEME.palette().surfaces().secondaryText(), false);
         addButton.render(graphics, renderFont, pointer);
         if (emptyBounds != null) {
             graphics.drawString(renderFont, Component.translatable(TypeLabels.UI_PREFIX + "list.empty"),
                     emptyBounds.x() + CARD_PADDING,
                     emptyBounds.y() + Math.max(0, (emptyBounds.height() - renderFont.lineHeight) / 2),
-                    THEME.palette().textSecondary(), false);
+                    THEME.palette().surfaces().secondaryText(), false);
             return;
         }
         for (Entry entry : entries) {
             if (entry.card != null) {
-                THEME.drawCard(graphics, entry.card);
+                THEME.drawSurface(graphics, entry.card, UiHostSurface.CARD);
             }
         }
         for (Entry entry : entries) {
@@ -401,7 +402,7 @@ final class CardListControl extends FormControl implements UiLayoutSource {
     private void drawCaption(GuiGraphics graphics, Font renderFont, EditorField sub, UiRect box) {
         String text = TextScroll.trimToWidth(renderFont, Component.translatable(sub.labelKey()).getString(), box.width());
         graphics.drawString(renderFont, text, box.x(), box.y() + Math.max(0, (box.height() - renderFont.lineHeight) / 2),
-                THEME.palette().textSecondary(), false);
+                THEME.palette().surfaces().secondaryText(), false);
     }
 
     // 标题行高度：跟随字体行高，小字号主题下同比例收紧

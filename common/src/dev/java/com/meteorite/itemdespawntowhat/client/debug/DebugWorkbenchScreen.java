@@ -144,7 +144,7 @@ public class DebugWorkbenchScreen extends Screen {
                 button.render(graphics, font, pointer);
                 var description = WorkbenchLayout.ellipsize(font, text(tool.id() + ".description"), descriptionWidth);
                 graphics.drawString(font, description, WorkbenchLayout.INSET + buttonWidth + 12,
-                        top + i * TOOL_ROW_HEIGHT + textY, theme.palette().textSecondary(), false);
+                        top + i * TOOL_ROW_HEIGHT + textY, theme.palette().surfaces().secondaryText(), false);
             }
             back.render(graphics, font, pointer);
         }
@@ -212,7 +212,7 @@ public class DebugWorkbenchScreen extends Screen {
             range = new UiRangeBar(theme, font, UiNumberPolicy.integer(0, 100, 1), UiRangeValue.of(20, 80),
                     new UiRangeBar.Texts(text("low"), text("high"), text("absent"), text("precise")), value -> {});
             list = new UiListView<>(theme, (g, f, value, index, rect, selected, hovered, focused) ->
-                    g.drawString(f, Component.translatable(UI + "list.item", value), rect.x(), rect.y() + 3, theme.palette().textPrimary(), false));
+                    g.drawString(f, Component.translatable(UI + "list.item", value), rect.x(), rect.y() + 3, theme.palette().surfaces().text(), false));
             list.setItems(List.of(1, 2, 3, 4, 5, 6, 7, 8));
             scalar = UiSliderExamples.scalarSlider(text("scalar"), new UiRect(0, 0, 100, 18), new UiValueInteraction.Listener<>() {
                 @Override public void committed(Double start, Double value) { committed = value; }
@@ -325,7 +325,7 @@ public class DebugWorkbenchScreen extends Screen {
             try {
                 for (Caption caption : captions) {
                     if (inViewport(new UiRect(caption.x(), caption.y(), 1, font.lineHeight), top, bottom)) {
-                        graphics.drawString(font, caption.text(), caption.x(), caption.y(), theme.palette().textSecondary(), false);
+                        graphics.drawString(font, caption.text(), caption.x(), caption.y(), theme.palette().surfaces().secondaryText(), false);
                     }
                 }
                 for (UiWidget widget : widgets) {
@@ -337,10 +337,10 @@ public class DebugWorkbenchScreen extends Screen {
                     scalar.render(graphics, font, pointer);
                     addNode(UiLayoutNode.Kind.CONTROL, scalar.bounds(), text("scalar"));
                 }
-                graphics.drawString(font, text("values.label"), WorkbenchLayout.INSET, valuesTop, theme.palette().textSecondary(), false);
+                graphics.drawString(font, text("values.label"), WorkbenchLayout.INSET, valuesTop, theme.palette().surfaces().secondaryText(), false);
                 int lineY = valuesTop + font.lineHeight + 2;
                 for (String line : valuesLines) {
-                    graphics.drawString(font, line, WorkbenchLayout.INSET, lineY, theme.palette().textPrimary(), false);
+                    graphics.drawString(font, line, WorkbenchLayout.INSET, lineY, theme.palette().surfaces().text(), false);
                     lineY += font.lineHeight + 2;
                 }
                 int valuesHeight = font.lineHeight + 2 + valuesLines.size() * (font.lineHeight + 2);
@@ -355,7 +355,7 @@ public class DebugWorkbenchScreen extends Screen {
             modals.render(graphics, font, scope.pointer(mx, my)); overlayNodes.addAll(modals.layoutNodes());
             // 提示画在所有内容之后：被裁的内容区不会切掉它，模态开启时由模态自己出提示
             if (modals.isEmpty() && pointer.allowsTooltip() && pointer.hit() != null) {
-                pointer.hit().renderTooltip(graphics, font, theme.surfaces(), mx, my);
+                pointer.hit().renderTooltip(graphics, font, theme.tooltipSkin(), mx, my);
             }
             synchronize();
         }

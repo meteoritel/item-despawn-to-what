@@ -7,7 +7,6 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiFlatText;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
@@ -17,6 +16,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 import com.meteorite.itemdespawntowhat.core.service.edit.RuleEdit;
 
 import java.util.function.Function;
+import java.util.List;
 
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -29,7 +29,6 @@ final class RuleChangesView implements UiWidget, UiFocusTarget {
     private final UiHostTheme THEME;
     private static final String UI = TypeLabels.UI_PREFIX;
     private static final int NOTE_GAP = 4;
-    private static final int TOOLTIP_WIDTH = 240;
     private final Font font;
     private final UiListView<Change> list;
     private final int rowHeight;
@@ -44,7 +43,7 @@ final class RuleChangesView implements UiWidget, UiFocusTarget {
         rowHeight = font.lineHeight + 5 + RuleRecipeView.CONTENT_HEIGHT;
         list = new UiListView<>(THEME, (graphics, rowFont, change, index, row, selected, hovered, focused) ->
                 RuleRecipeView.renderRow(graphics, rowFont, row, change.title(), change.kind(),
-                        THEME.palette().textPrimary(), THEME.palette().textSecondary(), change.recipe(), hovered));
+                        THEME.palette().surfaces().text(), THEME.palette().surfaces().secondaryText(), change.recipe(), hovered, THEME));
         list.setRowHeight(rowHeight);
         // 删除标志独立于规则体，因此仍展示待删除草稿的名称、输入和产出。
         list.setItems(model.dirtyRuleIds().stream().map(id -> {
@@ -92,25 +91,17 @@ final class RuleChangesView implements UiWidget, UiFocusTarget {
     }
 
     /**
-     * 绘制条目后展示完整配方提示，滚动条拖动时不产生悬停提示。
+     * 绘制条目；配方提示由活动作用域根据统一命中结果呈现。
      */
     @Override
     public void render(GuiGraphics graphics, Font rowFont, UiPointer incomingPointer) {
         UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
-        int mouseX = (int) pointer.x();
-        int mouseY = (int) pointer.y();
         int y = bounds.y();
         for (var line : rowFont.split(Component.translatable(UI + "changes.note"), Math.max(1, bounds.width()))) {
-            graphics.drawString(rowFont, line, bounds.x(), y, THEME.palette().textSecondary(), false);
+            graphics.drawString(rowFont, line, bounds.x(), y, THEME.palette().surfaces().secondaryText(), false);
             y += rowFont.lineHeight;
         }
         list.render(graphics, rowFont, pointer);
-        int index = list.itemIndexAt(mouseX, mouseY);
-        if (index < 0) return;
-        Change change = list.items().get(index);
-        Component tip = Component.literal(change.title()).append("\n").append(change.recipe().tooltip())
-                .append("\n").append(change.kind());
-        UiFlatText.tooltip(graphics, rowFont, tip, Math.clamp(bounds.width(), 1, TOOLTIP_WIDTH), mouseX, mouseY, THEME.surfaces());
     }
 
     /**
@@ -201,7 +192,15 @@ final class RuleChangesView implements UiWidget, UiFocusTarget {
     public @Nullable UiPointerHit hitTest(double x, double y) {
         if (!isVisible()) return null;
         UiPointerHit hit = list.hitTest(x, y);
-        return hit == null ? null : hit.within(this);
+        if (hit == null) return null;
+        int index = hit.rowIndex(list);
+        if (index >= 0) {
+            Change change = list.items().get(index);
+            Component tip = Component.literal(change.title()).append("\n").append(change.recipe().tooltip())
+                    .append("\n").append(change.kind());
+            hit = hit.withTextTooltip(List.of(tip), bounds);
+        }
+        return hit.within(this);
     }
 
 }

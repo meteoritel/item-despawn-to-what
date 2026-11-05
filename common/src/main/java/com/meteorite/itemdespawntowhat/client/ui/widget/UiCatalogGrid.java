@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostSurface;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlStyle;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiFooterHost;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiTextInput;
@@ -766,7 +768,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         if (enabled) {
             theme.drawChip(graphics, scopeRect, false, hovered);
         } else {
-            theme.drawSegment(graphics, scopeRect, false, false, false);
+            theme.drawSurface(graphics, scopeRect, UiHostSurface.SEGMENT, UiControlStyle.State.DISABLED);
         }
         String label = scopeLabel(scope).getString();
         int labelWidth = font.width(label);
@@ -775,9 +777,9 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         int x = scopeRect.x() + Math.max(0, (scopeRect.width() - contentWidth) / 2);
         graphics.drawString(font, label, x,
                 scopeRect.y() + Math.max(0, (scopeRect.height() - font.lineHeight) / 2),
-                enabled ? theme.palette().textPrimary() : theme.palette().textDisabled(), false);
+                enabled ? theme.palette().surfaces().text() : theme.palette().surfaces().disabledText(), false);
         UiIcon arrow = UiMarkIcons.icon(Mark.NEXT,
-                enabled ? theme.palette().textSecondary() : theme.palette().textDisabled());
+                enabled ? theme.palette().surfaces().secondaryText() : theme.palette().surfaces().disabledText());
         arrow.render(graphics, x + labelWidth + SCOPE_ARROW_GAP,
                 scopeRect.y() + Math.max(0, (scopeRect.height() - arrow.height()) / 2));
     }
@@ -812,10 +814,10 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         boolean chosen = isSelected(entry.id());
         boolean unavailable = unavailableReason.apply(entry.id()) != null;
         int cellRight = cellX + columnWidth();
-        int fill = !enabled ? theme.palette().slotFill()
-                : chosen ? theme.palette().controlSelected()
-                : hovered ? theme.palette().controlHover()
-                : (row % 2 == 0 ? theme.palette().slotFill() : theme.palette().listRowOdd());
+        int fill = !enabled ? theme.palette().surfaces().inputBorder()
+                : chosen ? theme.palette().controls().controlSelected()
+                : hovered ? theme.palette().controls().controlHover()
+                : (row % 2 == 0 ? theme.palette().surfaces().inputBorder() : theme.palette().controls().listRowOdd());
         graphics.fill(cellX, cellY, cellRight, cellY + ROW_HEIGHT, fill);
 
         if (entry.icon() != null) {
@@ -824,14 +826,14 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         int textX = cellX + PADDING_X + ICON_BOX + ICON_GAP;
         int textWidth = Math.max(0, cellRight - MARK_WIDTH - textX);
         String label = rowLabelText(entry);
-        int color = enabled && !unavailable ? theme.palette().textPrimary() : theme.palette().textDisabled();
+        int color = enabled && !unavailable ? theme.palette().surfaces().text() : theme.palette().surfaces().disabledText();
         int textY = cellY + Math.max(0, (ROW_HEIGHT - font.lineHeight) / 2);
         TextScroll.draw(graphics, font, label, textX, textY,
                 textWidth, color, enabled && hovered, hovered ? hoverScrollTicks : 0, false);
         if (unavailable) {
-            drawRowMark(graphics, Mark.UNAVAILABLE, theme.palette().warning(), cellRight, cellY);
+            drawRowMark(graphics, Mark.UNAVAILABLE, theme.palette().status().warning(), cellRight, cellY);
         } else if (chosen) {
-            drawRowMark(graphics, Mark.CHECK, theme.palette().accentPressed(), cellRight, cellY);
+            drawRowMark(graphics, Mark.CHECK, theme.palette().controls().accentPressed(), cellRight, cellY);
         }
         if (cursorAt) {
             theme.drawFocusOutline(graphics, focusRect(cellX, cellY));
@@ -865,7 +867,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         int size = Math.max(icon.width(), icon.height());
         int y = rowY + Math.max(0, (ROW_HEIGHT - icon.height()) / 2);
         if (size <= ICON_BOX) {
-            icon.render(graphics, x + Math.max(0, (ICON_BOX - icon.width()) / 2), y);
+            icon.render(graphics, x + Math.max(0, (ICON_BOX - icon.width()) / 2), y, theme);
             return;
         }
         float scale = ICON_BOX / (float) size;
@@ -873,7 +875,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         try {
             graphics.pose().translate(x, rowY + (ROW_HEIGHT - ICON_BOX) / 2F, 0F);
             graphics.pose().scale(scale, scale, 1F);
-            icon.render(graphics, 0, 0);
+            icon.render(graphics, 0, 0, theme);
         } finally {
             graphics.pose().popPose();
         }
@@ -906,10 +908,10 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         String trimmed = trimmedStatus(status, Math.max(0, statusRect.width() - textOffset), textOffset);
         graphics.drawString(font, trimmed, statusRect.x() + textOffset,
                 statusRect.y() + Math.max(0, (statusRect.height() - font.lineHeight) / 2),
-                error != null ? theme.palette().danger() : theme.palette().textSecondary(), false);
+                error != null ? theme.palette().controls().danger() : theme.palette().surfaces().secondaryText(), false);
         if (canClear()) {
             boolean hovered = pointer.contains(clearRect);
-            int color = hovered ? theme.palette().accentPressed() : theme.palette().link();
+            int color = hovered ? theme.palette().controls().accentPressed() : theme.palette().controls().link();
             String link = trimmedClear(Math.max(1, clearRect.width()));
             int clearY = clearRect.y() + Math.max(0, (clearRect.height() - font.lineHeight) / 2);
             graphics.drawString(font, link, clearRect.x(), clearY, color, false);
@@ -922,7 +924,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         graphics.drawString(font, pages,
                 pageRect.x() + Math.max(0, (pageRect.width() - font.width(pages)) / 2),
                 pageRect.y() + Math.max(0, (pageRect.height() - font.lineHeight) / 2),
-                theme.palette().textPrimary(), false);
+                theme.palette().surfaces().text(), false);
     }
 
     private void drawPagerButton(GuiGraphics graphics, UiRect rect, Mark mark, boolean allowed, UiPointer pointer) {
@@ -931,10 +933,10 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         }
         boolean hovered = enabled && allowed && pointer.contains(rect);
         graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(),
-                !allowed ? theme.palette().controlDisabled() : (hovered ? theme.palette().controlHover() : theme.palette().controlFill()));
-        theme.drawBevel(graphics, rect, theme.palette().controlBevelLight(), theme.palette().controlBevelDark());
+                !allowed ? theme.palette().controls().controlDisabled() : (hovered ? theme.palette().controls().controlHover() : theme.palette().controls().controlFill()));
+        theme.drawBevel(graphics, rect, theme.palette().controls().controlBevelLight(), theme.palette().controls().controlBevelDark());
         UiIcon icon = UiMarkIcons.icon(mark,
-                allowed ? theme.palette().textPrimary() : theme.palette().textDisabled());
+                allowed ? theme.palette().surfaces().text() : theme.palette().surfaces().disabledText());
         icon.render(graphics, rect.x() + Math.max(0, (rect.width() - icon.width()) / 2),
                 rect.y() + Math.max(0, (rect.height() - icon.height()) / 2));
     }

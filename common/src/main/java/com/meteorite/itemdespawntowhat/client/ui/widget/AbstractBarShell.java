@@ -309,7 +309,7 @@ abstract class AbstractBarShell<C extends UiRangeControl>
             return;
         }
         String text = TextScroll.trimToWidth(font, hint.getString(), available);
-        graphics.drawString(font, text, start, bounds.y(), theme.palette().textDisabled(), false);
+        graphics.drawString(font, text, start, bounds.y(), theme.palette().surfaces().disabledText(), false);
     }
 
     // 聚焦且宿主给足高度时的独立提示行
@@ -319,7 +319,7 @@ abstract class AbstractBarShell<C extends UiRangeControl>
             return;
         }
         String text = TextScroll.trimToWidth(font, hint.getString(), Math.max(1, row.width()));
-        graphics.drawString(font, text, row.x(), row.y(), theme.palette().textDisabled(), false);
+        graphics.drawString(font, text, row.x(), row.y(), theme.palette().surfaces().disabledText(), false);
     }
 
     // ---- 捕获与宿主生命周期：两侧顺序一致，统一结束精确输入 ----

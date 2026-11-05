@@ -1160,7 +1160,7 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
             renderer.drawCards(graphics, renderFont, tree.selection(), hoveredNode);
             renderer.drawHotspots(graphics, hoveredHotspot);
             if (rubberActive) {
-                rubberBand.draw(graphics, theme.palette().canvasRubberFill(), theme.palette().canvasAccent());
+                rubberBand.draw(graphics, theme.palette().canvas().canvasRubberFill(), theme.palette().canvas().canvasAccent());
             }
             if (move.isActive()) {
                 renderer.drawDropMarker(graphics, move.preview(), dropTarget);
@@ -1296,21 +1296,21 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
             return;
         }
         graphics.fill(kindMenuRect.x(), kindMenuRect.y(), kindMenuRect.right(), kindMenuRect.bottom(),
-                theme.palette().canvasPickerFill());
-        drawBorder(graphics, kindMenuRect, theme.palette().canvasPickerBorder());
+                theme.palette().canvas().canvasPickerFill());
+        drawBorder(graphics, kindMenuRect, theme.palette().canvas().canvasPickerBorder());
         for (int index = 0; index < kindMenuEntries.size(); index++) {
             int rowY = kindMenuRect.y() + BORDER + index * KIND_MENU_ROW_HEIGHT;
             boolean current = index == Math.clamp(kindMenuIndex, 0, kindMenuEntries.size() - 1);
             if (current) {
                 graphics.fill(kindMenuRect.x() + BORDER, rowY, kindMenuRect.right() - BORDER,
-                        rowY + KIND_MENU_ROW_HEIGHT, theme.palette().canvasPickerRowSelected());
+                        rowY + KIND_MENU_ROW_HEIGHT, theme.palette().canvas().canvasPickerRowSelected());
             }
             graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont,
                             kindMenuEntries.get(index).label().getString(),
                             Math.max(0, kindMenuRect.width() - KIND_MENU_PADDING * 2)),
                     kindMenuRect.x() + KIND_MENU_PADDING,
                     rowY + (KIND_MENU_ROW_HEIGHT - renderFont.lineHeight) / 2,
-                    current ? theme.palette().canvasPickerText() : theme.palette().canvasPickerTextMuted(), false);
+                    current ? theme.palette().canvas().canvasPickerText() : theme.palette().canvas().canvasPickerTextMuted(), false);
         }
     }
 

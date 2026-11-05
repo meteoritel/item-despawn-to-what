@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostSurface;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
@@ -50,14 +51,16 @@ final class RuleSaveOverlay implements UiInputTarget {
     private final UiButton cancelButton;
     private RuleSaveProgress.Stage lastStage;
     private boolean advanced;
+    private long themeRevision = -1;
+    private UiRect panel = new UiRect(0, 0, 0, 0);
 
     RuleSaveOverlay(Font font, UiHostTheme theme, RuleEditClientWorkspace workspace) {
         this.font = font;
         this.theme = theme;
         this.workspace = workspace;
         var colors = theme.palette();
-        bar = new UiProgressBar(new UiProgressBar.Style(colors.controlFill(), colors.accent(),
-                colors.controlBevelDark(), colors.accentHover()));
+        bar = new UiProgressBar(new UiProgressBar.Style(colors.controls().controlFill(), colors.controls().accent(),
+                colors.controls().controlBevelDark(), colors.controls().accentHover()));
         advancedButton = new UiButton(theme, font, Component.translatable(UI + "advanced.show"),
                 UiButtonVariant.SECONDARY, () -> {
             advanced = !advanced;
@@ -91,16 +94,31 @@ final class RuleSaveOverlay implements UiInputTarget {
                 || progress.stage() == RuleSaveProgress.Stage.ROLLING_BACK;
         cancelButton.setEnabled(progress.cancellable() && !cancelling);
         cancelButton.setLabel(Component.translatable(UI + (cancelling ? "cancelling" : "cancel")));
-        int width = Math.clamp(screenWidth - MARGIN * 2, 1, PANEL_WIDTH);
-        int height = Math.clamp(screenHeight - MARGIN * 2, 1, advanced ? EXPANDED_HEIGHT : COLLAPSED_HEIGHT);
-        UiRect panel = new UiRect((screenWidth - width) / 2, (screenHeight - height) / 2, width, height);
+        int width = panel.width();
         overlay.render(graphics, new UiRect(0, 0, screenWidth, screenHeight), 0, theme.surfaces().modalDim(),
                 () -> renderContent(graphics, pointer, milliseconds, progress, cancelling, width, panel));
     }
 
+    void layout(int screenWidth, int screenHeight) {
+        if (themeRevision != theme.revision()) {
+            var colors = theme.palette().controls();
+            bar.setStyle(new UiProgressBar.Style(colors.controlFill(), colors.accent(),
+                    colors.controlBevelDark(), colors.accentHover()));
+            themeRevision = theme.revision();
+        }
+        int width = Math.clamp(screenWidth - MARGIN * 2, 1, PANEL_WIDTH);
+        int height = Math.clamp(screenHeight - MARGIN * 2, 1, advanced ? EXPANDED_HEIGHT : COLLAPSED_HEIGHT);
+        panel = new UiRect((screenWidth - width) / 2, (screenHeight - height) / 2, width, height);
+        int innerWidth = Math.max(1, width - PADDING * 2);
+        int buttonY = panel.y() + PADDING + (font.lineHeight + ROW_GAP) * 3 + BAR_HEIGHT + ROW_GAP;
+        advancedButton.setBounds(panel.x() + PADDING, buttonY, innerWidth, RuleEditorPageSupport.DIALOG_BUTTON_H);
+        cancelButton.setBounds(panel.x() + PADDING, panel.bottom() - PADDING - RuleEditorPageSupport.DIALOG_BUTTON_H,
+                innerWidth, RuleEditorPageSupport.DIALOG_BUTTON_H);
+    }
+
     private void renderContent(GuiGraphics graphics, UiPointer pointer, long milliseconds, RuleSaveProgress progress,
                                boolean cancelling, int width, UiRect panel) {
-        theme.drawPanel(graphics, panel);
+        theme.drawSurface(graphics, panel, UiHostSurface.PANEL);
         graphics.enableScissor(panel.x(), panel.y(), panel.right(), panel.bottom());
         try {
             int left = panel.x() + PADDING;
@@ -122,7 +140,6 @@ final class RuleSaveOverlay implements UiInputTarget {
                     : Component.translatable(UI + "count", progress.completed(), progress.total());
             drawLine(graphics, count, left, y, innerWidth, false);
             y += font.lineHeight + ROW_GAP;
-            advancedButton.setBounds(left, y, innerWidth, RuleEditorPageSupport.DIALOG_BUTTON_H);
             advancedButton.render(graphics, font, pointer);
             y += RuleEditorPageSupport.DIALOG_BUTTON_H + ROW_GAP;
             if (advanced) {
@@ -132,11 +149,10 @@ final class RuleSaveOverlay implements UiInputTarget {
                 Component content = Component.translatable(UI + "current", progress.current().isEmpty()
                         ? Component.translatable(UI + "whole_batch") : Component.literal(progress.current()));
                 for (var line : font.split(content, innerWidth).stream().limit(2).toList()) {
-                    graphics.drawString(font, line, left, y, theme.palette().textSecondary(), false);
+                    graphics.drawString(font, line, left, y, theme.palette().surfaces().secondaryText(), false);
                     y += font.lineHeight;
                 }
             }
-            cancelButton.setBounds(left, panel.bottom() - PADDING - RuleEditorPageSupport.DIALOG_BUTTON_H, innerWidth, RuleEditorPageSupport.DIALOG_BUTTON_H);
             cancelButton.render(graphics, font, pointer);
         } finally {
             graphics.disableScissor();
@@ -145,7 +161,7 @@ final class RuleSaveOverlay implements UiInputTarget {
 
     private void drawLine(GuiGraphics graphics, Component text, int x, int y, int width, boolean primary) {
         graphics.drawString(font, TextScroll.trimToWidth(font, text.getString(), width), x, y,
-                primary ? theme.palette().textPrimary() : theme.palette().textSecondary(), false);
+                primary ? theme.palette().surfaces().text() : theme.palette().surfaces().secondaryText(), false);
     }
 
     UiInputScope inputScope() {

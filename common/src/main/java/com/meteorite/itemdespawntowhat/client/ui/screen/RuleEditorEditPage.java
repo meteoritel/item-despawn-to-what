@@ -308,7 +308,7 @@ final class RuleEditorEditPage implements EditorPage {
         // 内容区整块铺面板底：页签条与各分区在这块底上排布
         graphics.fill(contentArea.x() - 2, contentArea.y() - 2,
                 contentArea.x() + contentArea.width() + 2, contentArea.y() + contentArea.height(),
-                THEME.palette().panelFill());
+                THEME.palette().surfaces().panelFill());
         if (pages == null) return;
         pages.render(graphics, renderFont, pointer);
     }
@@ -433,6 +433,7 @@ final class RuleEditorEditPage implements EditorPage {
 
     /** 依视觉顺序贡献焦点目标；登记事务由作用域根统一提交。 */
     public void addFocusTargets(Consumer<UiFocusTarget> focus) {
+        focus.accept(shell.themeButton());
         if (tabControl != null) {
             focus.accept(tabControl);
         }
@@ -480,6 +481,7 @@ final class RuleEditorEditPage implements EditorPage {
     // ---- 输入委托 ----
 
     public boolean mousePressed(UiInputContext context) {
+        if (context.hits(shell.themeButton())) return shell.themeButton().mousePressed(context);
         if (tabControl != null && context.hits(tabControl) && tabControl.mousePressed(context)) {
             return true;
         }
@@ -765,7 +767,7 @@ final class RuleEditorEditPage implements EditorPage {
     /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
     @Override
     public @Nullable UiPointerHit hitTest(double x, double y) {
-        return UiPointerHit.first(x, y, footerBar, pages, tabControl);
+        return UiPointerHit.first(x, y, shell.themeButton(), footerBar, pages, tabControl);
     }
 
 }

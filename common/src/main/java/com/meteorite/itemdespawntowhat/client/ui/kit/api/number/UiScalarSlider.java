@@ -152,6 +152,7 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInt
     }
 
     public UiSliderPainter painter() {
+        refreshTheme();
         return painter;
     }
 

@@ -66,7 +66,7 @@ final class EnumControl extends FormControl {
 
     @Override
     int height() {
-        return DEFAULT_HEIGHT;
+        return defaultHeight();
     }
 
     @Override

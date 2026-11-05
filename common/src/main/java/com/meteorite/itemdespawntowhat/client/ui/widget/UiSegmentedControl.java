@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlStyle;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostSurface;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
@@ -233,9 +235,10 @@ public final class UiSegmentedControl implements UiWidget, UiFocusTarget, UiLayo
             // 底图矩形左右各缩进 EDGE_INSET：最外两侧各留 1 像素，相邻两段之间合计 SEGMENT_GAP 像素
             UiRect surface = new UiRect(segment.x() + EDGE_INSET, segment.y(),
                     Math.max(0, segment.width() - SEGMENT_GAP), segment.height());
-            theme.drawSegment(graphics, surface, enabled, i == chosen, i == hovered);
+            theme.drawSurface(graphics, surface, UiHostSurface.SEGMENT, !enabled ? UiControlStyle.State.DISABLED
+                    : i == chosen ? UiControlStyle.State.SELECTED : i == hovered ? UiControlStyle.State.HOVER : UiControlStyle.State.NORMAL);
             // 选中态只由底图区分：浅蓝选中底上的白字对比度不足，故两态段内文字统一用主要文本色
-            int color = enabled ? theme.palette().textPrimary() : theme.palette().textDisabled();
+            int color = enabled ? theme.palette().surfaces().text() : theme.palette().surfaces().disabledText();
             String label = TextScroll.trimToWidth(renderFont, options.get(i).label().getString(),
                     Math.max(0, segment.width() - LABEL_INSET));
             graphics.drawString(renderFont, label, segment.x() + Math.max(0, (segment.width() - renderFont.width(label)) / 2),
@@ -248,7 +251,7 @@ public final class UiSegmentedControl implements UiWidget, UiFocusTarget, UiLayo
             int dotY = segment.y() + Math.max(0, (segment.height() - FOCUS_DOT_SIZE) / 2);
             int dotX = segment.x() + FOCUS_DOT_INSET;
             graphics.fill(dotX, dotY,
-                    dotX + FOCUS_DOT_SIZE, dotY + FOCUS_DOT_SIZE, theme.palette().textPrimary());
+                    dotX + FOCUS_DOT_SIZE, dotY + FOCUS_DOT_SIZE, theme.palette().surfaces().text());
         }
     }
 

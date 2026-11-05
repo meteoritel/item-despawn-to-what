@@ -301,7 +301,7 @@ final class RuleEditorInfoSection {
             graphics.pose().scale(TEXT_SCALE, TEXT_SCALE, 1);
             int lineY = 0;
             for (FormattedCharSequence line : lines) {
-                graphics.drawString(font, line, 0, lineY, THEME.palette().textSecondary(), false);
+                graphics.drawString(font, line, 0, lineY, THEME.palette().surfaces().secondaryText(), false);
                 lineY += font.lineHeight + 1;
             }
         } finally {

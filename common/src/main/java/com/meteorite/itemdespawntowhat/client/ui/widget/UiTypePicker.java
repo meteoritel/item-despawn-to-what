@@ -343,17 +343,17 @@ public final class UiTypePicker implements UiWidget, UiLayoutSource {
 
     private void renderSearch(GuiGraphics graphics, Font renderFont) {
         graphics.fill(searchRect.x(), searchRect.y(), searchRect.right(),
-                searchRect.bottom(), theme.palette().canvasPickerInputFill());
-        drawBorder(graphics, searchRect, theme.palette().canvasPickerInputBorder());
+                searchRect.bottom(), theme.palette().canvas().canvasPickerInputFill());
+        drawBorder(graphics, searchRect, theme.palette().canvas().canvasPickerInputBorder());
         String filter = filterText.toString();
         String searchText = filter.isEmpty()
                 ? Component.translatable(TypeLabels.UI_PREFIX + "picker.filter").getString() : filter;
-        int searchColor = filter.isEmpty() ? theme.palette().canvasPickerTextDisabled() : theme.palette().canvasTextOnAccent();
+        int searchColor = filter.isEmpty() ? theme.palette().canvas().canvasPickerTextDisabled() : theme.palette().canvas().canvasTextOnAccent();
         graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont, searchText, searchRect.width() - SEARCH_PADDING * 2 - CARET_WIDTH * 2),
                 searchRect.x() + SEARCH_PADDING, searchRect.y() + SEARCH_PADDING, searchColor, false);
         int caretX = searchRect.x() + SEARCH_PADDING + Math.min(renderFont.width(filter), searchRect.width() - SEARCH_PADDING * 2);
         graphics.fill(caretX, searchRect.y() + SEARCH_PADDING, caretX + CARET_WIDTH, searchRect.bottom() - SEARCH_PADDING,
-                theme.palette().canvasTextOnAccent());
+                theme.palette().canvas().canvasTextOnAccent());
 
     }
 
@@ -369,7 +369,7 @@ public final class UiTypePicker implements UiWidget, UiLayoutSource {
                 graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont,
                                 Component.translatable(TypeLabels.UI_PREFIX + "picker.empty").getString(),
                                 rowWidth - CARD_PADDING_X),
-                        CARD_PADDING_X, CARD_PADDING_Y, theme.palette().canvasPickerTextMuted(), false);
+                        CARD_PADDING_X, CARD_PADDING_Y, theme.palette().canvas().canvasPickerTextMuted(), false);
             } else {
                 int first = scroll.offset() / PICKER_ROW_HEIGHT;
                 int end = Math.min(filteredOptions.size(),
@@ -379,12 +379,12 @@ public final class UiTypePicker implements UiWidget, UiLayoutSource {
                     boolean current = optionIndex == cursor;
                     if (current) {
                         graphics.fill(0, rowY, rowWidth, rowY + PICKER_ROW_HEIGHT,
-                                theme.palette().canvasPickerRowSelected());
+                                theme.palette().canvas().canvasPickerRowSelected());
                     }
                     graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont,
                                     filteredOptions.get(optionIndex).label().getString(), rowWidth - CARD_PADDING_X * 2),
                             CARD_PADDING_X, rowY + (PICKER_ROW_HEIGHT - renderFont.lineHeight) / 2,
-                            current ? theme.palette().canvasPickerText() : theme.palette().canvasPickerTextMuted(), false);
+                            current ? theme.palette().canvas().canvasPickerText() : theme.palette().canvas().canvasPickerTextMuted(), false);
                 }
             }
         } finally {

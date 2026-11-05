@@ -1,6 +1,5 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputRouter;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputScope;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTypePicker;
@@ -40,11 +39,6 @@ final class EditorInputRouter {
             } else next = shell.activePage().inputScope();
         }
         return next;
-    }
-
-    void cancelPointerPreview() {
-        if (router.active() != null && router.active().interaction().pointerTarget() != null)
-            router.active().interaction().end(UiInteractionSession.EndReason.CANCEL);
     }
 
     void close() {

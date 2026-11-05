@@ -133,35 +133,20 @@ public final class UiTheme {
 
     // ---- 绘制：窗口与面板 ----
 
-    // 绘制带高光/阴影的窗口面板（外描边 + 底色 + 四条立体边）
-    public static void drawWindow(GuiGraphics graphics, UiRect rect) {
-        if (rect.width() < 2 || rect.height() < 2) {
-            return;
-        }
-        graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), UiPalette.SHADOW);
-        graphics.fill(rect.x() + 1, rect.y() + 1, rect.right() - 1, rect.bottom() - 1, UiPalette.WINDOW_FILL);
-        drawBevel(graphics, inset(rect), UiPalette.WINDOW_BORDER_LIGHT, UiPalette.WINDOW_BORDER_DARK);
-    }
+    private static final UiNineSlice CARD_FILL = surface("card_fill");
+    private static final UiNineSlice CARD_BORDER = surface("card_border");
+    private static final UiNineSlice CONTROL_FILL = surface("control_fill");
+    private static final UiNineSlice CONTROL_BORDER = surface("control_border");
 
-    // 绘制分区面板（比窗口更深的底色）
-    public static void drawPanel(GuiGraphics graphics, UiRect rect) {
-        if (rect.width() < 2 || rect.height() < 2) {
-            return;
-        }
-        graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), UiPalette.PANEL_FILL);
-        drawBevel(graphics, rect, UiPalette.PANEL_BORDER_LIGHT, UiPalette.PANEL_BORDER_DARK);
-    }
-
-    private static final UiNineSlice CARD = surface("card");
-    private static final UiNineSlice CHIP = surface("chip");
-    private static final UiNineSlice CONTROL = surface("control");
-    private static final UiNineSlice HOVER = surface("hover");
-    private static final UiNineSlice SELECTED = surface("selected");
-    private static final UiNineSlice DISABLED = surface("disabled");
-
-    // 小尺寸底图只拉伸边与中心，圆角保持尺寸，不形成整条白色高光。
     private static UiNineSlice surface(String name) {
         return new UiNineSlice(ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "textures/gui/editor/" + name + ".png"), 32, 8);
+    }
+
+    /** 掩码仅持几何，填充与描边颜色来自同一个主题 skin。 */
+    static void drawRounded(GuiGraphics graphics, UiRect rect, boolean card, int fill, int border) {
+        if (rect.width() < 4 || rect.height() < 4) return;
+        drawTintedChrome(graphics, rect, card ? CARD_FILL : CONTROL_FILL, fill);
+        drawTintedChrome(graphics, rect, card ? CARD_BORDER : CONTROL_BORDER, border);
     }
 
     // ---- 结构贴图：立体边与滚动条共用一张图集 ----
@@ -181,11 +166,6 @@ public final class UiTheme {
 
     private static UiNineSlice chrome(int originU) {
         return new UiNineSlice(CHROME, originU, 0, CHROME_TILE, CHROME_CORNER, CHROME_TILE * 4, CHROME_TILE);
-    }
-
-    private static void drawSurface(GuiGraphics graphics, UiRect rect, UiNineSlice surface) {
-        if (rect.width() < 4 || rect.height() < 4) return;
-        drawChrome(graphics, rect, surface);
     }
 
     // 烘焙色贴图按原色绘制，不染色
@@ -242,38 +222,6 @@ public final class UiTheme {
 
     private static float alpha(int color) {
         return ((color >>> 24) & 0xFF) / 255.0F;
-    }
-
-    // 浅灰底与柔和单层描边，圆角透明边缘与页面背景自然混合。
-    public static void drawCard(GuiGraphics graphics, UiRect rect) {
-        drawSurface(graphics, rect, CARD);
-    }
-
-    public static void drawChip(GuiGraphics graphics, UiRect rect, boolean selected, boolean hovered) {
-        drawSurface(graphics, rect, selected ? SELECTED : hovered ? HOVER : CHIP);
-    }
-
-    public static void drawSegment(GuiGraphics graphics, UiRect rect, boolean enabled, boolean selected, boolean hovered) {
-        drawSurface(graphics, rect, !enabled ? DISABLED : selected ? SELECTED : hovered ? HOVER : CONTROL);
-    }
-
-    // 绘制内凹区域（输入框、列表底、槽位）
-    public static void drawInset(GuiGraphics graphics, UiRect rect) {
-        if (rect.width() < 2 || rect.height() < 2) {
-            return;
-        }
-        graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), UiPalette.SLOT_FILL);
-        graphics.fill(rect.x() + 1, rect.y() + 1, rect.right() - 1, rect.bottom() - 1, UiPalette.SLOT_FILL);
-        drawBevel(graphics, rect, UiPalette.SLOT_BORDER_DARK, UiPalette.SLOT_BORDER_LIGHT);
-    }
-
-    // 绘制分区标题栏（上方标题、下方内容）
-    public static void drawHeader(GuiGraphics graphics, UiRect rect) {
-        if (rect.width() < 2 || rect.height() < 2) {
-            return;
-        }
-        graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), UiPalette.HEADER_FILL);
-        drawBevel(graphics, rect, UiPalette.PANEL_BORDER_LIGHT, UiPalette.PANEL_BORDER_DARK);
     }
 
     public static void drawDivider(GuiGraphics graphics, int x, int y, int width) {

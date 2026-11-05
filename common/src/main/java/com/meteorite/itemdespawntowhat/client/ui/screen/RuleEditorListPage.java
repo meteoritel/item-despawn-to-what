@@ -23,7 +23,6 @@ import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine;
 import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine.Tone;
 import com.meteorite.itemdespawntowhat.client.ui.shared.TagPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiDescriptionTooltip;
@@ -74,7 +73,7 @@ final class RuleEditorListPage implements EditorPage {
     // ---- 页面度量与标题状态：屏幕按这些声明统一排版，页不自己算窗口几何 ----
 
     public int headerHeight() {
-        return UiTheme.HEADER_HEIGHT;
+        return THEME.headerHeight();
     }
 
     public int pagePadding() {
@@ -331,10 +330,10 @@ final class RuleEditorListPage implements EditorPage {
         UiListView<ExportScope> list = new UiListView<>(THEME,
                 (graphics, rowFont, item, index, row, selected, hovered, focused) -> {
                     graphics.drawString(rowFont, Component.translatable(UI + item.labelKey()),
-                            row.x() + 4, row.y() + 6, THEME.palette().textPrimary(), false);
+                            row.x() + 4, row.y() + 6, THEME.palette().surfaces().text(), false);
                     Component count = Component.translatable(UI + item.countKey(), item.count());
                     graphics.drawString(rowFont, count, row.right() - 4 - rowFont.width(count),
-                            row.y() + 6, THEME.palette().textSecondary(), false);
+                            row.y() + 6, THEME.palette().surfaces().secondaryText(), false);
                 });
         list.setItems(List.of(
                 new ExportScope(RulePackExporter.SCOPE_OVERLAY, "export.scope_overlay", "export.count", false,
@@ -535,10 +534,10 @@ final class RuleEditorListPage implements EditorPage {
     // 一帧内只读展示快照：不读规则体、不逐帧重算状态。
     private void renderRuleRow(GuiGraphics graphics, Font rowFont, String id, UiRect row, boolean hovered) {
         RuleListDisplaySnapshot snapshot = display.snapshot(id);
-        int color = snapshot.active() ? THEME.palette().textPrimary() : THEME.palette().textDisabled();
+        int color = snapshot.active() ? THEME.palette().surfaces().text() : THEME.palette().surfaces().disabledText();
         // 标题/状态宽度与配方预览都缓存在快照上：绘制只取结果，静止帧不测文本
         RuleRecipeView.renderRow(graphics, rowFont, row, snapshot, color,
-                snapshot.error() ? THEME.palette().danger() : THEME.palette().textSecondary(), hovered);
+                snapshot.error() ? THEME.palette().controls().danger() : THEME.palette().surfaces().secondaryText(), hovered, THEME);
     }
 
     // 分类行标题只随节点、行宽与字体/语言变化：命中缓存时静止帧不再调用 font.width
@@ -556,7 +555,7 @@ final class RuleEditorListPage implements EditorPage {
             categoryTitles.put(node, cached);
         }
         graphics.drawString(font, cached.text(), row.x() + 2, row.y() + (row.height() - font.lineHeight) / 2,
-                THEME.palette().textSecondary(), false);
+                THEME.palette().surfaces().secondaryText(), false);
     }
 
     // ---- 列表维护 ----
@@ -812,6 +811,7 @@ final class RuleEditorListPage implements EditorPage {
 
 
     public boolean mousePressed(UiInputContext context) {
+        if (context.hits(shell.themeButton())) return shell.themeButton().mousePressed(context);
         double mouseX = context.pointerX();
         double mouseY = context.pointerY();
         int button = context.button();
@@ -944,6 +944,7 @@ final class RuleEditorListPage implements EditorPage {
 
     /** 依视觉顺序贡献焦点目标；登记事务由作用域根统一提交。 */
     public void addFocusTargets(Consumer<UiFocusTarget> focus) {
+        focus.accept(shell.themeButton());
         if (searchField != null) {
             focus.accept(searchField);
         }
@@ -957,7 +958,7 @@ final class RuleEditorListPage implements EditorPage {
     /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
     @Override
     public @Nullable UiPointerHit hitTest(double x, double y) {
-        UiPointerHit hit = UiPointerHit.first(x, y, listBar, ruleList, filterBar, searchField, globalBar);
+        UiPointerHit hit = UiPointerHit.first(x, y, shell.themeButton(), listBar, ruleList, filterBar, searchField, globalBar);
         return describeHit(hit, x, y);
     }
 

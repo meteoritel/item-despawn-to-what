@@ -24,6 +24,8 @@ public abstract class UiScreen extends Screen {
     protected abstract UiInputScope inputScope();
     /** 业务路由可共享本根的唯一输入路由器。 */
     protected final UiInputRouter inputRouter() { return input; }
+    /** 输入派发已结束，在下一次布局和命中前应用根拥有的待发布状态。 */
+    protected void prepareUi() { }
     /** 内容布局钩子；稳定控件只更新几何，事件与绘制读取同一布局。 */
     protected void layoutUi() { }
     /** 在准备完布局、资源和焦点后绘制内容。 */
@@ -36,6 +38,7 @@ public abstract class UiScreen extends Screen {
             invalidateUiResources();
             resources = current;
         }
+        prepareUi();
         layoutUi();
         refreshUiState();
         renderUi(graphics, x, y, delta);
@@ -53,10 +56,13 @@ public abstract class UiScreen extends Screen {
         return scope;
     }
     private boolean finish(boolean consumed) {
+        prepareUi();
+        layoutUi();
         refreshUiState();
         return consumed;
     }
     private UiInputContext pointer(double x, double y, int button) {
+        prepareUi();
         layoutUi();
         return UiInputContext.of(selectScope(), x, y, button, hasShiftDown(), hasControlDown(), hasAltDown());
     }
@@ -77,14 +83,20 @@ public abstract class UiScreen extends Screen {
         return finish(input.mouseScrolled(context, sx, sy));
     }
     @Override public boolean keyPressed(int key, int scan, int modifiers) {
+        prepareUi();
+        layoutUi();
         selectScope();
         return finish(input.keyPressed(key, scan, modifiers));
     }
     @Override public boolean keyReleased(int key, int scan, int modifiers) {
+        prepareUi();
+        layoutUi();
         selectScope();
         return finish(input.keyReleased(key, scan, modifiers));
     }
     @Override public boolean charTyped(char value, int modifiers) {
+        prepareUi();
+        layoutUi();
         selectScope();
         return finish(input.charTyped(value, modifiers));
     }

@@ -8,6 +8,8 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderSkin;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderStyle;
 import net.minecraft.client.gui.GuiGraphics;
+import java.util.EnumMap;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlSkin;
 
 /**
  * 扁平宿主主题：画布页的扁平外观（1 像素同色描边 + 灰阶层次，无立体凸凹与阴影），
@@ -72,6 +74,9 @@ public final class UiFlatTheme extends AbstractHostTheme {
             UiFlatPalette.PANEL_TEXT, UiFlatPalette.PANEL_TEXT, UiPalette.TEXT_DISABLED,
             UiFlatPalette.CANVAS_TEXT_DANGER, 6, 5, 4);
 
+    private static final UiSliderSkin COMPACT_SKIN = new UiSliderSkin(COMPACT_SLIDER, PixelSliderPainter.INSTANCE);
+    private static final UiSliderSkin ROOMY_SKIN = new UiSliderSkin(ROOMY_SLIDER, PixelSliderPainter.INSTANCE);
+
     private final UiHostPalette palette = UiHostPalette.flatDefaults();
 
     private UiFlatTheme() {
@@ -117,30 +122,9 @@ public final class UiFlatTheme extends AbstractHostTheme {
     @Override
     public UiSliderSkin sliderSkin(UiSliderRole role) {
         return switch (role) {
-            case COMPACT -> new UiSliderSkin(COMPACT_SLIDER, PixelSliderPainter.INSTANCE);
-            case ROOMY -> new UiSliderSkin(ROOMY_SLIDER, PixelSliderPainter.INSTANCE);
+            case COMPACT -> COMPACT_SKIN;
+            case ROOMY -> ROOMY_SKIN;
         };
-    }
-
-    // 功能栏与工具列格子：扁平反馈样式
-    @Override
-    public UiControlStyle stripStyle() {
-        return UiFlatSkin.STRIP_STYLE;
-    }
-
-    @Override
-    public void drawWindow(GuiGraphics graphics, UiRect rect) {
-        UiFlatSkin.drawSurface(graphics, rect, UiFlatPalette.PANEL_FILL, UiFlatPalette.PANEL_BORDER);
-    }
-
-    @Override
-    public void drawInset(GuiGraphics graphics, UiRect rect) {
-        UiFlatSkin.drawSurface(graphics, rect, UiFlatPalette.PANEL_INSET_FILL, UiFlatPalette.PANEL_BORDER);
-    }
-
-    @Override
-    public void drawHeader(GuiGraphics graphics, UiRect rect) {
-        UiFlatSkin.drawSurface(graphics, rect, UiFlatPalette.PANEL_HEADER_FILL, UiFlatPalette.PANEL_BORDER);
     }
 
     @Override
@@ -198,34 +182,8 @@ public final class UiFlatTheme extends AbstractHostTheme {
         graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), UiFlatPalette.PANEL_CONTROL_FILL);
     }
 
-    @Override
-    public void drawSegment(GuiGraphics graphics, UiRect rect, boolean enabled, boolean selected, boolean hovered) {
-        int fill = !enabled ? UiFlatPalette.PANEL_CONTROL_DISABLED
-                : selected ? UiFlatPalette.PANEL_CONTROL_SELECTED
-                : hovered ? UiFlatPalette.PANEL_CONTROL_HOVER
-                : UiFlatPalette.PANEL_CONTROL_FILL;
-        UiFlatSkin.drawSurface(graphics, rect, fill, UiFlatPalette.PANEL_BORDER);
-    }
-
     // 扁平卡片：画布页的卡片用同色描边面，不使用九宫格贴图
-    @Override
-    public void drawCard(GuiGraphics graphics, UiRect rect) {
-        UiFlatSkin.drawSurface(graphics, rect, UiFlatPalette.CANVAS_CARD_FILL, UiFlatPalette.CANVAS_CARD_BORDER);
-    }
 
-    // 扁平分区面板：底色与 1 像素描边
-    @Override
-    public void drawPanel(GuiGraphics graphics, UiRect rect) {
-        UiFlatSkin.drawSurface(graphics, rect, UiFlatPalette.PANEL_FILL, UiFlatPalette.PANEL_BORDER);
-    }
-
-    // 扁平可选中小底
-    @Override
-    public void drawChip(GuiGraphics graphics, UiRect rect, boolean selected, boolean hovered) {
-        int fill = selected ? UiFlatPalette.PANEL_CONTROL_SELECTED
-                : hovered ? UiFlatPalette.PANEL_CONTROL_HOVER
-                : UiFlatPalette.PANEL_CONTROL_FILL;
-        UiFlatSkin.drawSurface(graphics, rect, fill, UiFlatPalette.PANEL_BORDER);
-    }
-
+    private final EnumMap<UiHostSurface, UiControlSkin> surfaceSkins = UiHostSurfaceSkins.create(palette, false, false);
+    @Override public UiControlSkin surfaceSkin(UiHostSurface role) { return surfaceSkins.get(role); }
 }
