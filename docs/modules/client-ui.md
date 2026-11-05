@@ -236,9 +236,13 @@ resize 保留已有页面、文本控件与编辑会话，只重排几何；单�
 
 ### 运行时换肤
 
-宿主调用 `RuleEditorScreen.setTheme(UiHostThemeSet.minecraft())`、`pixel()` 或 `flat()` 发布整套正文/外壳主题；自定义主题用 `UiHostThemeSet` 配对。根持有稳定 `UiHostThemeContext`，已有及后续页面、模态、浮层共享来源，业务图标与画布色板由 `UiHostTheme` 保留。原版方案通过宿主 adapter 复用 kit 默认主题。
+编辑器公共工具行提供「外观：当前风格 / 原版风格」按钮，管理、编辑和调试页共享同一实例；标题独占标题带，状态说明按工具行剩余宽度折行，页签从工具行下方开始。按钮通过页面正常命中、焦点、Tab、Enter/Space 和旁白链激活，并导出真实布局快照；保存、模态和选择器沿现有作用域阻断背景操作。
 
-发布前取消未提交指针预览，随后刷新模态布局并同步输入；表单和代码视图按 revision 使度量或着色缓存失效。主题入口保留已有编辑实例、文本历史、焦点与选择。
+`RuleEditorScreen.requestTheme(UiThemeScheme)` 请求完整方案，`UiThemeSelection` 保存客户端运行期间的方案标识，首次默认当前风格，重开编辑器恢复选择。当前风格是像素正文与扁平画布组合；原版风格以组合方式复用 `UiMinecraftTheme`，正文与画布 Context 同次发布。主题定义与按角色解析的 skin 保持不可变，业务色按 `UiHostPalette` 的表面、控件、状态、代码、画布和说明职责组合。语义表面同时封装颜色与 painter，像素圆角使用可染色掩码；`UiHostIcon` 表达业务用途，图集切片由 Adapter 解析。
+
+根在输入派发结束后的准备点应用最后一次主题请求，存在指针捕获时等待原手势正常结束；重复选择不发布版本。先替换完整方案，再刷新页面、模态和覆盖面布局并同步输入。表单、摘要、树与代码视图按 revision 更新度量或着色缓存；原控件保留文本原文、选区、局部历史、草稿、业务选择、折叠、焦点及有效滚动位置。
+
+普通 tooltip 与结构化说明共享 `UiTooltipSkin` 的外框、留白及 `UiTooltipPanel` 默认定位；内容的标签列、Tone 和行数策略由宿主说明面板维护。提示贡献沿 `UiPointerHit` 命中结果和活动作用域的 `allowsTooltip` 门禁呈现。缓存的目录预览通过 `UiIcon.Themed` 在绘制位置接收主题，占位与标签标记随所在区域配色，真实物品及事件图像保留自身语义。
 
 ### 调试工作台
 
@@ -262,7 +266,7 @@ resize 保留已有页面、文本控件与编辑会话，只重排几何；单�
 - **新增条件类型**：数据与校验在 `client/edit` 的条件模型上落点（见 [client-editor](client-editor.md)），界面侧在 `ConditionTreeContract` 的类型选项与叶子工厂登记；画布与缩进摘要消费字段级 `ConditionTreeViewModel` 的结构诊断投影；字体、语言和宽度只影响各渲染器的文本与几何缓存。
 - **新增编辑分区或结果分区动作**：在 `RuleEditorEditSections.EditSection` 增加常量并实现对应分区；面板装配放 `RuleEditorPanelFactory`。页面共享的布局常量（页内留白、行高、表单与对话框的按钮高度）、`UI` 文案前缀与 2 个存在条件叶类型 id 收在 `RuleEditorPageSupport`，3 个页描述符 id 由 `BuiltinEditorDescriptors` 提供；`RuleEditorPageSupport` 不持有界面状态、不装配控件；同一层的业务助手按关注点分开：`PresenceLeaves` 管存在条件叶的构造、扫描与增删，`CatalystQuantities` 管催化剂数量表对账，`EditorQuantityBindings` 管共享数量与存在条件写回；规则结构与严格值读取由 `client/edit` 的 `ResultStructure`、`RuleValue` 提供。
 - **新增行尾动作**：`UiButton` 配 `FormField#addAction` 挂到某个字段行；动作按钮不进入表单字段，读写模型而非草稿 JSON，需要参与保存时在变更集组装处接线。
-- **新增主题**：实现 `UiHostTheme`（它本身就是 kit `UiStyleSource` 的宿主侧入口），在 `UiHostThemes` 暴露取用入口；控件经注入取色，新增皮肤只改主题实现。
+- **新增主题**：实现 `UiHostTheme`（它本身就是 kit `UiStyleSource` 的宿主侧入口），在 `UiHostThemes` 暴露取用入口；控件经注入取色，新增皮肤集中修改主题实现；可选完整方案由 `UiThemeScheme` 解析，发布沿屏幕统一请求入口。
 - **新增宿主控件**：实现 `UiWidget`，沿所属作用域的内容树派发输入；需要模态行为时放进 `UiModalStack`，焦点由 `UiInputTarget.addFocusTargets` 贡献，作用域自动收集；普通容器使用 `UiChildren`，独立结构变更使焦点索引失效。
 - **新增调试能力**：测试规则的身份前缀、分类归属与规则体在 `DebugTestRules` 统一约定，调试页只负责批量填充与按前缀删除。
 

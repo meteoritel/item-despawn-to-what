@@ -43,7 +43,7 @@ kit 是记录来源与差异的维护副本，按可独立发布的库 API 维�
 按调用方角色划分：
 
 - **屏幕与页面装配者**：`UiDocument` 与节点、`UiWidget`、`UiControl`/`UiControlGroup`/`UiScrollView`、布局与几何类型、`UiRenderLayers`/`UiPointer`、`UiFlatText`（无阴影文本与悬停提示）、`UiFloatingPanel`、`UiLightbox` 与预览轮播原语。
-- **主题实现者**：实现 `UiStyleSource`，按角色给出控件样式与滑块皮肤；默认直接使用 `UiMinecraftTheme.INSTANCE`；运行时换肤共享 `UiThemeContext`，原版 sprites 随资源包生效。
+- **主题实现者**：实现 `UiStyleSource`，按角色给出控件、滑块与 tooltip 完整皮肤；默认直接使用 `UiMinecraftTheme.INSTANCE`；运行时换肤共享 `UiThemeContext`，原版 sprites 随资源包生效。
 - **控件实现者**：实现 `UiInputTarget`，需要键盘焦点时再实现 `UiFocusTarget`；指针、键盘重复与数值文本编辑登记到所属作用域的 `UiInteractionSession`，数值快照交给 `UiValueInteraction<V>`，标量、普通区间与有向周期区间使用各自不可变值和等价规则。
 - **树与数据适配方**：`UiTreeEditor.Adapter` 提供不可变节点的读取、替换与容量，`UiTreeCodec` 提供外部表示编解码，`UiTreeMoveInteraction` 把拖动绑定到捕获。
 - **数值字段装配方**：`UiNumberPolicy` + `UiSliderWindow` 描述合法域与显示窗口，`UiNumbers` 负责显示与解析，`UiValueTextBinding` 负责数值文本的双向同步；`UiNumberField` 组合标量核心与宿主提供的 `UiSingleLineEditor` 端口。
@@ -108,7 +108,7 @@ flowchart LR
 
 | 类型（`client/ui/kit/api`） | 角色 | 职责 | 协作对象 |
 |---|---|---|---|
-| `UiStyleSource` | 扩展点 | 按角色给出控件与滑块皮肤、通用语义色和度量；默认复用原版主题 | 宿主主题、`UiControl`、`UiScalarSlider` |
+| `UiStyleSource` | 扩展点 | 按角色给出控件与滑块皮肤、tooltip skin、通用语义色和度量；默认复用原版主题 | 宿主主题、`UiControl`、`UiScalarSlider` |
 | `UiControlStyle` / `UiControlRole` / `UiSliderSkin` / `UiSliderRole` | 注入值 | 角色只表达语义（如主要、次要、危险等操作语义，以及紧凑、宽松两档几何尺度）；交互状态由样式按 `State` 解析，不属于角色；皮肤把“样式 + 画法”配成一对，使两者来自同一套主题 | 主题实现、控件渲染 |
 | `UiDocument` / `UiNode` | 只读排版聚合根 | 把文档内容块排成几何并缓存；渲染、提示和命中查询共用几何，命中数据由宿主解释 | 布局类型、`UiPointerHit`、`UiRenderLayers` |
 | `UiControl` / `UiControlGroup` | 控件聚合根 | 控件按角色取样式并解析交互状态；控件组按稳定 key 复用实例、按层序命中并给 tooltip | `UiStyleSource`、`UiFocusManager` |
@@ -215,13 +215,13 @@ sequenceDiagram
 
 ### 样式注入到渲染
 
-默认控件直接使用 `UiMinecraftTheme.INSTANCE`。根创建 `UiThemeContext.minecraft()` 后将同一来源注入控件；换肤更新上下文，控件按 revision 刷新不可变皮肤和语义色。原版默认用 button/slider sprites，宿主皮肤可使用纯色或自有 painter。
+默认控件直接使用 `UiMinecraftTheme.INSTANCE`。`metrics()` 是基础度量源，便利方法从中派生；固定行、可见行与表单测量在布局阶段响应 revision。根创建 `UiThemeContext.minecraft()` 后将同一来源注入控件；换肤更新上下文，控件按 revision 刷新不可变皮肤和语义色。原版默认用 button/slider sprites，宿主皮肤可使用纯色或自有 painter。`UiTooltipSkin` 将背景 painter、通用文字色与 padding 配套提供；`UiFlatText` 与宿主结构化说明复用 `UiTooltipPanel` 的默认宽度、边距和定位。`UiIcon.Themed` 在真实绘制位置接收主题，缓存的图标内容不持有活动 Screen 或 Context。
 
-根先以 CANCEL 结束未提交的指针预览，再发布主题并刷新受度量影响的布局。文本原文、选区、局部撤销、业务选择、焦点与有效滚动偏移由原控件保持；显式样式和颜色覆盖继续优先。
+根在输入派发结束后的准备点发布主题；指针捕获期间保留最后一次请求，原手势正常结束后才应用。重复选择保持 revision，随后以新度量刷新布局并同步作用域。文本原文、选区、局部撤销、业务选择、焦点与有效滚动偏移由原控件保持；显式样式和颜色覆盖继续优先。
 
 ### Screen 与模态接入
 
-`UiScreen` 的 final `render` 依次同步资源、调用 `layoutUi`、刷新作用域，再进入子类 `renderUi`；指针事件前也完成布局。子类的 `inputScope` 只返回当前页或顶层覆盖面的稳定作用域，kit 是唯一应用选择的入口。根通过资源 hook 使自己拥有的缓存失效或释放。
+`UiScreen` 的 final `render` 依次同步资源、调用 `prepareUi` 和 `layoutUi`、刷新作用域，再进入子类 `renderUi`；指针与键盘事件前完成准备和布局，派发结束后再次准备待发布状态。子类的 `inputScope` 只返回当前页或顶层覆盖面的稳定作用域，kit 是唯一应用选择的入口。根通过资源 hook 使自己拥有的缓存失效或释放。
 
 `UiInputTarget.addFocusTargets` 是有类型的贡献契约。`UiChildren` 是容器实际成员，绘制遍历同一集合，逆序命中、顺序贡献焦点，并将结构及子树版本向上传递。`UiInputScope.refreshFocus` 只在 dirty 或 `focusRevision` 变化时提交索引，其他调用仅刷新资格；独立结构变更可调用 `invalidateFocus`。语义组仍由 `UiFocusTarget.focusTargets` 表达，复合编辑模式保持原有 Tab 锚点。resize 保持控件与编辑会话，只调整几何；多行换宽通过 snapshot/restore 恢复原版模型、选区与历史。
 
