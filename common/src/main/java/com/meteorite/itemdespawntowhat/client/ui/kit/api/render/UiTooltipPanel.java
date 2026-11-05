@@ -7,6 +7,19 @@ import net.minecraft.client.gui.GuiGraphics;
 
 /** 同一份提示外框与正文几何，统一 TOOLTIP 层和正文裁剪。 */
 public record UiTooltipPanel(UiRect bounds, UiRect contentBounds) {
+    /** 通用提示正文的默认宽度预算。 */
+    public static final int DEFAULT_MAX_WIDTH = 240;
+    /** 提示与宿主边缘的默认间距。 */
+    public static final int SCREEN_MARGIN = 4;
+    private static final int POINTER_OFFSET = 12;
+
+    /** 两类提示共用指针上方优先、越界翻转的默认定位。 */
+    public static UiTooltipPanel layout(UiRect host, int contentWidth, int contentHeight, int padding,
+                                        int mouseX, int mouseY) {
+        return layout(host, contentWidth, contentHeight, padding, mouseX, mouseY,
+                POINTER_OFFSET, SCREEN_MARGIN, UiTooltipPlacement.VerticalPreference.ABOVE);
+    }
+
     /** 折行前的正文宽度预算；宿主边距与面板内边距先行扣除，零表示没有正文空间。 */
     public static int contentWidth(UiRect host, int maximum, int padding, int margin) {
         int available = Math.max(0, host.width() - Math.max(0, padding) * 2 - Math.max(0, margin) * 2);

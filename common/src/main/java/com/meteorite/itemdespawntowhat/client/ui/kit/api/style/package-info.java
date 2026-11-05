@@ -11,6 +11,7 @@
  *   <li>{@code UiControlPainter}: host</li>
  *   <li>{@code UiControlSkin}: host</li>
  *   <li>{@code UiSurfaceStyle}: host</li>
+ *   <li>{@code UiTooltipSkin}: host</li>
  *   <li>{@code UiThemeMetrics}: host</li>
  *   <li>{@code UiThemeContext}: host</li>
  *   <li>{@code UiMinecraftTheme}: host</li>

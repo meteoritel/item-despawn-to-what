@@ -7,12 +7,38 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.Objects;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiStyleSource;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiMinecraftTheme;
 
 /** 可测量的原版物品或贴图图块；纹理尺寸显式提供，避免隐含 256 像素图集。 */
-public sealed interface UiIcon permits UiIcon.Item, UiIcon.Sprite, UiIcon.Rendered {
+public sealed interface UiIcon permits UiIcon.Item, UiIcon.Sprite, UiIcon.Rendered, UiIcon.Themed {
     int width();
     int height();
     void render(GuiGraphics graphics, int x, int y);
+    /** 按使用位置提供主题；真实物品和贴图保留自身视觉语义。 */
+    default void render(GuiGraphics graphics, int x, int y, UiStyleSource theme) { render(graphics, x, y); }
+
+    /** 缓存内容与主题分离的图标；来源在绘制时传入，不捕获屏幕。 */
+    record Themed(int width, int height, ThemePainter painter, Runnable preparation) implements UiIcon {
+        /** 保持可测量尺寸与有效绘制回调。 */
+        public Themed {
+            if (width <= 0 || height <= 0) throw new IllegalArgumentException("Invalid icon size");
+            Objects.requireNonNull(painter);
+            Objects.requireNonNull(preparation);
+        }
+        @Override public void prepare() { preparation.run(); }
+        @Override public void render(GuiGraphics graphics, int x, int y) { render(graphics, x, y, UiMinecraftTheme.INSTANCE); }
+        @Override public void render(GuiGraphics graphics, int x, int y, UiStyleSource theme) {
+            painter.render(graphics, new UiRect(x, y, width, height), theme);
+        }
+    }
+
+    /** 只读绘制数据与当前视觉来源。 */
+    @FunctionalInterface
+    interface ThemePainter {
+        /** 在布局框内绘制图标。 */
+        void render(GuiGraphics graphics, UiRect bounds, UiStyleSource theme);
+    }
 
     /** 提前登记即将展示的内容；准备工作由图标所有者按共享预算推进。 */
     default void prepare() { }

@@ -193,7 +193,7 @@ public final class UiControlGroup implements UiInputTarget {
      */
     public void renderTooltip(GuiGraphics graphics, Font font, UiPointer pointer) {
         if (!pointer.allowsTooltip() || pointer.hit() == null) return;
-        pointer.hit().renderTooltip(graphics, font, theme.surfaces(), (int) pointer.x(), (int) pointer.y());
+        pointer.hit().renderTooltip(graphics, font, theme.tooltipSkin(), (int) pointer.x(), (int) pointer.y());
     }
 
     /**

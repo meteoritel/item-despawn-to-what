@@ -33,6 +33,7 @@ public class UiThemeContext<T extends UiStyleSource> implements UiStyleSource {
     @Override public UiControlStyle controlStyle(UiControlRole role) { return current.controlStyle(role); }
     @Override public UiControlSkin controlSkin(UiControlRole role) { return current.controlSkin(role); }
     @Override public UiSliderSkin sliderSkin(UiSliderRole role) { return current.sliderSkin(role); }
+    @Override public UiTooltipSkin tooltipSkin() { return current.tooltipSkin(); }
     @Override public UiSurfaceStyle surfaces() { return current.surfaces(); }
     @Override public UiThemeMetrics metrics() { return current.metrics(); }
     @Override public int textColor(boolean enabled) { return current.textColor(enabled); }

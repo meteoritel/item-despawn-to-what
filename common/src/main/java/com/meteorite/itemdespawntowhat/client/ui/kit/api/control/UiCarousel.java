@@ -5,6 +5,8 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIcon;
 
 import java.util.List;
 import net.minecraft.client.gui.GuiGraphics;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiStyleSource;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiMinecraftTheme;
 
 /**
  * 固定尺寸的图标轮播。
@@ -75,11 +77,17 @@ public final class UiCarousel {
 
     /** 绘制当前项；图标按区域等比缩放并居中。 */
     public void render(GuiGraphics graphics, UiRect box, long milliseconds) {
+        render(graphics, box, milliseconds, UiMinecraftTheme.INSTANCE);
+    }
+
+    /** 轮播复用内容与相位，绘制时消费当前主题。 */
+    public void render(GuiGraphics graphics, UiRect box, long milliseconds, UiStyleSource theme) {
         prepare(milliseconds);
         int index = index(milliseconds);
         if (index < 0) return;
         UiIcon icon = icons.get(index);
-        if (icon instanceof UiIcon.Rendered rendered) rendered.painter().render(graphics, box);
+        if (icon instanceof UiIcon.Themed themed) themed.painter().render(graphics, box, theme);
+        else if (icon instanceof UiIcon.Rendered rendered) rendered.painter().render(graphics, box);
         else {
             float scale = Math.min((float) box.width() / icon.width(), (float) box.height() / icon.height());
             graphics.pose().pushPose();
@@ -87,7 +95,7 @@ public final class UiCarousel {
                 graphics.pose().translate(box.x() + (box.width() - icon.width() * scale) / 2,
                         box.y() + (box.height() - icon.height() * scale) / 2, 0);
                 graphics.pose().scale(scale, scale, 1);
-                icon.render(graphics, 0, 0);
+                icon.render(graphics, 0, 0, theme);
             } finally { graphics.pose().popPose(); }
         }
     }

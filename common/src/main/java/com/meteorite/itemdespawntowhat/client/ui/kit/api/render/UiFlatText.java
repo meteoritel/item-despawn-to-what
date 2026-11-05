@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.client.ui.kit.api.render;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiSurfaceStyle;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiTooltipSkin;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.client.gui.Font;
@@ -16,12 +17,8 @@ import net.minecraft.util.FormattedCharSequence;
  * <p>悬停提示保留原版的深色底板与渐变描边观感，只去掉文字阴影；顶部优先从指针上方展开，越界时翻转并钳制在屏幕内。</p>
  */
 public final class UiFlatText {
-    // 提示底板内边距（四周描边外的留白）
-    private static final int TOOLTIP_PADDING = 3;
     // 首行之后额外让出的间距，与原版提示的行距一致
     private static final int TOOLTIP_FIRST_LINE_GAP = 2;
-    private static final int TOOLTIP_MOUSE_OFFSET = 12;
-    private static final int TOOLTIP_SCREEN_MARGIN = 4;
 
     private UiFlatText() { }
 
@@ -82,25 +79,24 @@ public final class UiFlatText {
      * @param mouseY 指针屏幕 Y 坐标
      */
     public static void tooltip(GuiGraphics graphics, Font font, List<FormattedCharSequence> lines, int mouseX, int mouseY) {
-        tooltip(graphics, font, new UiRect(0, 0, graphics.guiWidth(), graphics.guiHeight()), lines, mouseX, mouseY, UiSurfaceStyle.MINECRAFT);
+        tooltip(graphics, font, new UiRect(0, 0, graphics.guiWidth(), graphics.guiHeight()), lines, mouseX, mouseY, UiTooltipSkin.MINECRAFT);
     }
 
     private static void tooltip(GuiGraphics graphics, Font font, UiRect host,
-                                List<FormattedCharSequence> lines, int mouseX, int mouseY, UiSurfaceStyle style) {
+                                List<FormattedCharSequence> lines, int mouseX, int mouseY, UiTooltipSkin skin) {
         if (lines.isEmpty() || UiTooltipPanel.contentWidth(host, Integer.MAX_VALUE,
-                TOOLTIP_PADDING + 1, TOOLTIP_SCREEN_MARGIN) == 0) return;
+                skin.padding(), UiTooltipPanel.SCREEN_MARGIN) == 0) return;
         int widest = 0;
         for (FormattedCharSequence line : lines) {
             widest = Math.max(widest, font.width(line));
         }
         int height = lines.size() * font.lineHeight + (lines.size() > 1 ? TOOLTIP_FIRST_LINE_GAP : 0);
         UiTooltipPanel panel = UiTooltipPanel.layout(host,
-                widest, height, TOOLTIP_PADDING + 1, mouseX, mouseY, TOOLTIP_MOUSE_OFFSET,
-                TOOLTIP_SCREEN_MARGIN, UiTooltipPlacement.VerticalPreference.ABOVE);
-        panel.render(graphics, rect -> background(graphics, rect, style), content -> {
+                widest, height, skin.padding(), mouseX, mouseY);
+        panel.render(graphics, rect -> skin.paint(graphics, rect), content -> {
             int lineY = content.y();
             for (int index = 0; index < lines.size(); index++) {
-                graphics.drawString(font, lines.get(index), content.x(), lineY, style.tooltipText(), false);
+                graphics.drawString(font, lines.get(index), content.x(), lineY, skin.style().tooltipText(), false);
                 lineY += font.lineHeight + (index == 0 ? TOOLTIP_FIRST_LINE_GAP : 0);
             }
         });
@@ -124,7 +120,7 @@ public final class UiFlatText {
     public static void tooltip(GuiGraphics graphics, Font font, Component text, int maxWidth,
                                int mouseX, int mouseY, UiSurfaceStyle style) {
         componentTooltip(graphics, font, new UiRect(0, 0, graphics.guiWidth(), graphics.guiHeight()),
-                List.of(text), maxWidth, mouseX, mouseY, style);
+                List.of(text), maxWidth, mouseX, mouseY, UiTooltipSkin.minecraft(style));
     }
 
     /**
@@ -145,34 +141,30 @@ public final class UiFlatText {
     /** 在有限宿主内先预算正文宽度，再折行和放置面板。 */
     public static void componentTooltip(GuiGraphics graphics, Font font, UiRect host, List<Component> lines,
                                         int maxWidth, int mouseX, int mouseY) {
-        componentTooltip(graphics, font, host, lines, maxWidth, mouseX, mouseY, UiSurfaceStyle.MINECRAFT);
+        componentTooltip(graphics, font, host, lines, maxWidth, mouseX, mouseY, UiTooltipSkin.MINECRAFT);
     }
 
-    /** 使用根主题的提示底、边框和文字色；位置与折行仍由同一布局算法负责。 */
+    /** 显式结构色沿用原版提示画法，供 library 宿主使用。 */
+    @SuppressWarnings("unused")
     public static void componentTooltip(GuiGraphics graphics, Font font, UiRect host, List<Component> lines,
                                         int maxWidth, int mouseX, int mouseY, UiSurfaceStyle style) {
-        int width = UiTooltipPanel.contentWidth(host, maxWidth, TOOLTIP_PADDING + 1, TOOLTIP_SCREEN_MARGIN);
+        componentTooltip(graphics, font, host, lines, maxWidth, mouseX, mouseY, UiTooltipSkin.minecraft(style));
+    }
+
+    /** 使用完整主题 skin，折行和定位由通用呈现负责。 */
+    public static void componentTooltip(GuiGraphics graphics, Font font, UiRect host, List<Component> lines,
+                                        int maxWidth, int mouseX, int mouseY, UiTooltipSkin skin) {
+        int width = UiTooltipPanel.contentWidth(host, maxWidth, skin.padding(), UiTooltipPanel.SCREEN_MARGIN);
         if (width == 0) return;
         List<FormattedCharSequence> sequences = new ArrayList<>();
         for (Component line : lines) sequences.addAll(font.split(line, width));
-        tooltip(graphics, font, host, sequences, mouseX, mouseY, style);
+        tooltip(graphics, font, host, sequences, mouseX, mouseY, skin);
     }
 
-    // 底板与描边沿用原版提示观感：深色底、四周一圈暗边、内侧自上而下由紫蓝渐变到深紫
-    private static void background(GuiGraphics graphics, UiRect bounds, UiSurfaceStyle style) {
-        int left = bounds.x() + 1;
-        int top = bounds.y() + 1;
-        int outerWidth = bounds.width() - 2;
-        int outerHeight = bounds.height() - 2;
-        graphics.fill(left, top - 1, left + outerWidth, top, style.tooltipFill());
-        graphics.fill(left, top + outerHeight, left + outerWidth, top + outerHeight + 1, style.tooltipFill());
-        graphics.fill(left, top, left + outerWidth, top + outerHeight, style.tooltipFill());
-        graphics.fill(left - 1, top, left, top + outerHeight, style.tooltipFill());
-        graphics.fill(left + outerWidth, top, left + outerWidth + 1, top + outerHeight, style.tooltipFill());
-        graphics.fillGradient(left, top + 1, left + 1, top + outerHeight - 1, style.tooltipBorderTop(), style.tooltipBorderBottom());
-        graphics.fillGradient(left + outerWidth - 1, top + 1, left + outerWidth, top + outerHeight - 1,
-                style.tooltipBorderTop(), style.tooltipBorderBottom());
-        graphics.fill(left, top, left + outerWidth, top + 1, style.tooltipBorderTop());
-        graphics.fill(left, top + outerHeight - 1, left + outerWidth, top + outerHeight, style.tooltipBorderBottom());
+    /** 单个主题提示的完整 skin 入口。 */
+    public static void tooltip(GuiGraphics graphics, Font font, Component text, int maxWidth,
+                               int mouseX, int mouseY, UiTooltipSkin skin) {
+        componentTooltip(graphics, font, new UiRect(0, 0, graphics.guiWidth(), graphics.guiHeight()),
+                List.of(text), maxWidth, mouseX, mouseY, skin);
     }
 }

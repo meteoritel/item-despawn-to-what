@@ -16,7 +16,7 @@
  *   <li>{@code UiRenderLayers}: host</li>
  *   <li>{@code UiRubberBand}: host</li>
  *   <li>{@code UiSpinner}: host</li>
- *   <li>{@code UiTooltipPlacement}: host</li>
+ *   <li>{@code UiTooltipPlacement}: library；用途：为提示面板提供显式定位偏好与越界翻转，默认宿主通过 UiTooltipPanel 使用；当前无直接生产引用</li>
  *   <li>{@code UiTooltipPanel}: host</li>
  * </ul>
  */

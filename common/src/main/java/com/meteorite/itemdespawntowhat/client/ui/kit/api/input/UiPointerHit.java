@@ -3,7 +3,9 @@ package com.meteorite.itemdespawntowhat.client.ui.kit.api.input;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiFlatText;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiTooltipPanel;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiSurfaceStyle;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiTooltipSkin;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -89,10 +91,15 @@ public record UiPointerHit(List<UiInputTarget> owners, double x, double y,
     }
     /** 普通文字和富内容的共同呈现出口；调用方先检查作用域门禁。 */
     public void renderTooltip(GuiGraphics graphics, Font font, UiSurfaceStyle style, int pointerX, int pointerY) {
+        renderTooltip(graphics, font, UiTooltipSkin.minecraft(style), pointerX, pointerY);
+    }
+
+    /** 普通和富内容共用完整提示 skin 的呈现出口。 */
+    public void renderTooltip(GuiGraphics graphics, Font font, UiTooltipSkin skin, int pointerX, int pointerY) {
         if (presentation != null) presentation.render(graphics, font, pointerX, pointerY);
         else if (tooltip != null && !tooltip.tooltip().isEmpty()) UiFlatText.componentTooltip(graphics, font,
                 new UiRect(0, 0, graphics.guiWidth(), graphics.guiHeight()), tooltip.tooltip(),
-                graphics.guiWidth(), pointerX, pointerY, style);
+                UiTooltipPanel.DEFAULT_MAX_WIDTH, pointerX, pointerY, skin);
     }
 
     /** 按输入优先级查询子目标，不消费事件；容器需先检查自己的裁剪。 */

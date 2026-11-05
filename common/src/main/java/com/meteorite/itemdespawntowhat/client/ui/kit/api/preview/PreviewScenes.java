@@ -123,7 +123,7 @@ public final class PreviewScenes implements AutoCloseable {
     /** 实际绘制优先使用本帧准备预算；PREPARING 与不可用状态分别由宿主绘制。 */
     public UiIcon icon(String id, PreviewSubject subject, int size, PreviewMotion motion,
                        UiSceneStyle style, @Nullable UiIcon preparing, UiIcon fallback) {
-        return new UiIcon.Rendered(size, size, (graphics, box) -> {
+        return new UiIcon.Themed(size, size, (graphics, box, theme) -> {
             PreviewScene scene = request(id, subject);
             if (canPrepare(scene)) { graphics.flush(); prepare(scene); }
             if (scene.state == PreviewState.READY) {
@@ -136,8 +136,8 @@ public final class PreviewScenes implements AutoCloseable {
                     } catch (RuntimeException exception) { fail(scene, PreviewState.FAILED, exception); }
                 }
             }
-            if (scene.state == PreviewState.PREPARING && preparing != null) preparing.render(graphics, box.x(), box.y());
-            if (scene.state.unavailable()) fallback.render(graphics, box.x(), box.y());
+            if (scene.state == PreviewState.PREPARING && preparing != null) preparing.render(graphics, box.x(), box.y(), theme);
+            if (scene.state.unavailable()) fallback.render(graphics, box.x(), box.y(), theme);
         }, () -> prefetch(id, subject));
     }
 

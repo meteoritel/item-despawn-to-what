@@ -358,7 +358,7 @@ public final class UiControl implements UiButtonWidget, UiInteractionSession.Tar
         boolean clip = needsClip(x, iconY, iconWidth, iconHeight, textX, textY, font.lineHeight);
         if (clip) UiTransform.enableScissor(graphics, bounds);
         try {
-            if (icon != null) icon.render(graphics, x, iconY);
+            if (icon != null) icon.render(graphics, x, iconY, theme);
             // 放不下时不再静默裁掉：留在矩形内、悬停滚动。
             scrollTicks = hovered ? scrollTicks + 1 : 0;
             TextScroll.draw(graphics, font, text, textWidth, textX, textY, textMax, textColor(), hovered, scrollTicks);

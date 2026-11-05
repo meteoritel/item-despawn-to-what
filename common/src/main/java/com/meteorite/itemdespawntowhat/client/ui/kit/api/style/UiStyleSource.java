@@ -18,6 +18,8 @@ public interface UiStyleSource {
     UiSliderSkin sliderSkin(UiSliderRole role);
     /** 面板和内容语义色。 */
     default UiSurfaceStyle surfaces() { return UiSurfaceStyle.MINECRAFT; }
+    /** 提示的完整外框皮肤。 */
+    default UiTooltipSkin tooltipSkin() { return UiTooltipSkin.MINECRAFT; }
     /** 共享布局度量。 */
     default UiThemeMetrics metrics() { return UiThemeMetrics.MINECRAFT; }
     /** 普通控件完整皮肤；纯色主题可沿用此实现。 */
