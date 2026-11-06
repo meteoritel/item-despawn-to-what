@@ -191,7 +191,9 @@ final class RuleEditorListActions {
                 return false;
             }
             model.createSession(key, BuiltinEditorDefaults.copyOf(key, body));
-            model.setEnableIntent(key, sourceEnabled);
+            if (sourceEnabled != model.defaultEnabled(key)) {
+                model.setEnableIntent(key, sourceEnabled);
+            }
             shell.refreshList();
             shell.openEditor(key);
             shell.setNotice(null, EditorShell.NoticeLevel.INFO);
@@ -202,8 +204,7 @@ final class RuleEditorListActions {
     /**
      * 切换选中条目的本服启停状态。
      *
-     * <p>内容只读的条目同样可切：只读约束的是内容，不是启停。目标值等于默认启用时改用
-     * reset 消除冗余覆盖，因此提示按模型返回的动作给出。</p>
+     * <p>内容只读的条目与尚未保存的新规则同样可切；切换只记录本服覆盖意图。</p>
      */
     void toggleSelectedEnabled() {
         if (!shell.editable()) {
@@ -220,12 +221,7 @@ final class RuleEditorListActions {
             return;
         }
         shell.refreshList();
-        // 新建规则在服务端还没有条目：这时切换的是内容里的默认启用，不该用「（本服）」反馈
-        if (model.isCreated(id)) {
-            return;
-        }
-        String notice = action == RuleEdit.Action.ENABLE ? "notice.enabled"
-                : action == RuleEdit.Action.DISABLE ? "notice.disabled" : "notice.reset_default";
+        String notice = action == RuleEdit.Action.ENABLE ? "notice.enabled" : "notice.disabled";
         shell.setNotice(Component.translatable(UI + notice), EditorShell.NoticeLevel.SUCCESS);
     }
 

@@ -73,7 +73,7 @@ stateDiagram-v2
 
 快照是客户端视图的唯一来源：确认成功后服务端自动下发首份快照，保存回执为版本冲突或已写盘未重载时再补拉。快照条目携带来源层（`origin`）、物理来源（`source`：builtin / world / overlay / mixed，其中 overlay / mixed 表示含用户覆盖内容）、状态（`active` / `disabled` / `invalid`）、分类、生效视图与逐条问题，条目形状与状态取值见 `RuleSnapshotEntry`。
 
-启用信息分三值：`default_enabled` 是规则 JSON 里的默认启用，`enabled` 是本服实际生效值，`enabled_override` 是本服覆盖，取 `null` 表示该 id 没有本服覆盖、生效值继承默认。保存把覆盖改回默认时摘除记录，快照随之回到 `enabled_override` 为 `null`。
+启用信息分三值：`default_enabled` 是规则 JSON 里的默认启用，`enabled` 是本服实际生效值，`enabled_override` 是本服覆盖，取 `null` 表示该 id 没有本服覆盖、生效值继承默认。保存 `enable` / `disable` 时保留显式覆盖，即使覆盖值与默认值相同；保存 `reset` 时摘除记录，快照随之回到 `enabled_override` 为 `null`。
 
 `editable` 只描述内容可写：含覆盖内容的 overlay / mixed 为真，内置数据包与世界数据包为假。条目能否停用由本服启用状态决定，与 `editable` 无关；能否删除覆盖条目同样只看 `source`。
 

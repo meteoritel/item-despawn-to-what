@@ -259,44 +259,19 @@ public final class RuleEditorModel {
     /**
      * 切换某条规则在本服的启用状态。
      *
-     * <p>目标值等于默认启用时改用 reset 消除冗余覆盖；本次新建的规则在服务端还没有条目，
-     * 直接改内容里的 {@code enabled} 字段，否则意图要等内容保存后才有着落。</p>
+     * <p>包括尚未保存的新规则，切换只记录显式本服覆盖，不修改规则内容。
+     * 继承默认启用由「恢复默认」单独表达。</p>
      *
      * @param id 规则 id
-     * @return 实际采用的启停动作；条目不存在且没有会话时为 null
+     * @return 本次设定的启停动作；条目不存在且没有会话时为 null
      */
     public @Nullable RuleEdit.Action toggleEnabled(String id) {
-        RuleSnapshotEntry entry = this.entries.get(id);
-        if (entry == null || this.createdIds.contains(id)) {
-            EditSession session = this.sessions.get(id);
-            if (session == null) {
-                return null;
-            }
-            boolean enabled = !session.root().flag(RuleFields.ENABLED, true);
-            session.apply(EditSession.OP_SET_FIELD, edits -> edits.setAt(RuleFields.ENABLED, RuleValue.flag(enabled)));
-            return enabled ? RuleEdit.Action.ENABLE : RuleEdit.Action.DISABLE;
+        if (!this.entries.containsKey(id) && !this.sessions.containsKey(id)) {
+            return null;
         }
-        // 列表页直接点启停时还没有会话：先按服务端内容打开，草稿才会带上内容与基线
-        ensureSessionForIntent(id);
         boolean target = !effectiveEnabled(id);
-        if (target == defaultEnabled(id)) {
-            // 回到默认启用即消除覆盖；服务端本来没有覆盖时连意图都不需要留
-            if (entry.enabledOverride() == null) {
-                this.enableIntents.remove(id);
-                this.intentRevision++;
-                this.republishIntent(id);
-                return RuleEdit.Action.RESET;
-            }
-            this.enableIntents.put(id, RuleEdit.Action.RESET);
-            this.intentRevision++;
-            this.republishIntent(id);
-            return RuleEdit.Action.RESET;
-        }
-        RuleEdit.Action action = target ? RuleEdit.Action.ENABLE : RuleEdit.Action.DISABLE;
-        this.enableIntents.put(id, action);
-        this.intentRevision++;
-        this.republishIntent(id);
-        return action;
+        setEnableIntent(id, target);
+        return target ? RuleEdit.Action.ENABLE : RuleEdit.Action.DISABLE;
     }
 
     /**
@@ -317,7 +292,7 @@ public final class RuleEditorModel {
     }
 
     /**
-     * 按生效状态设置某条规则的启停意图。
+     * 按生效状态设置某条规则的显式本服覆盖意图。
      *
      * <p>复制为新规则时用它把源条目的本服覆盖带到新 id：副本的内容可能与源不同，
      * 只有写同样的意图才能让副本的生效状态与源一致。</p>
@@ -327,11 +302,7 @@ public final class RuleEditorModel {
      */
     public void setEnableIntent(String id, boolean enabled) {
         ensureSessionForIntent(id);
-        if (enabled == defaultEnabled(id)) {
-            this.enableIntents.remove(id);
-        } else {
-            this.enableIntents.put(id, enabled ? RuleEdit.Action.ENABLE : RuleEdit.Action.DISABLE);
-        }
+        this.enableIntents.put(id, enabled ? RuleEdit.Action.ENABLE : RuleEdit.Action.DISABLE);
         this.intentRevision++;
         this.republishIntent(id);
     }

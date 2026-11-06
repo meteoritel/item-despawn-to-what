@@ -136,7 +136,7 @@ final class RuleEditorInfoSection {
         resetButton.setEnabled(editable && model.hasEnabledOverride(id));
     }
 
-    // 本服两态开关：切换后重建页面（新建规则改的是内容字段），提示按实际动作给出
+    // 本服两态开关：只更新启停意图，再重建页面同步状态
     private void toggleServerEnabled() {
         EditSession session = shell.editingSession();
         if (session == null) {
@@ -148,12 +148,7 @@ final class RuleEditorInfoSection {
         }
         shell.draftChanged();
         commands.requestRebuild();
-        // 新建规则切的是内容里的默认启用（内容动作），不套用本服启停的反馈文案
-        if (model.isCreated(session.targetId())) {
-            return;
-        }
-        String notice = action == RuleEdit.Action.ENABLE ? "notice.enabled"
-                : action == RuleEdit.Action.DISABLE ? "notice.disabled" : "notice.reset_default";
+        String notice = action == RuleEdit.Action.ENABLE ? "notice.enabled" : "notice.disabled";
         shell.setNotice(Component.translatable(UI + notice),EditorShell.NoticeLevel.SUCCESS);
     }
 
