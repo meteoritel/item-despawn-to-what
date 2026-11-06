@@ -9,7 +9,7 @@ These settings control how the server runs: how often the mod checks, how much w
 - Location: `config/itemdespawntowhat/server.json`, inside the game instance's `config` directory. It has nothing to do with a world or a data pack.
 - One file for both loaders: Fabric and NeoForge read the same file and the same values.
 - When it appears: the game creates it on the first launch of the client or the server. After that the mod never rewrites an existing file, so your edits stay.
-- When it takes effect: the server reads it once at startup. Restart the server after a change. `/idtw config reload` reloads rules only; it does not reread this file.
+- When it takes effect: the server reads it once at startup. Restart the server after a change. `/idtw rule reload` reloads rules only; it does not reread this file.
 - Missing fields take their default values, so write only the entries you want to change.
 - What happens when a value is wrong: one bad entry voids the whole file, which then falls back to its default values. A bad entry is a value out of range, a wrong type such as text where a number belongs, or JSON that does not parse, from a stray bracket or comma to content that is not a JSON object. Correct entries elsewhere do not apply either, and the startup log records one error. The mod never rewrites the file, so check the startup log after an edit.
 - Unknown fields produce a startup WARN with the full path, such as `nearby_products.item_limt`. Other valid fields still apply. Correct the spelling and restart the server.
@@ -21,7 +21,7 @@ The **overlay directory** is the folder under `config/` that holds your own rule
 | What it is | Server run parameters | Conversion content, meaning what turns into what |
 | Scope | One file for the whole server, shared by every rule | Each rule is independent |
 | Location | `config/itemdespawntowhat/server.json` | `config/itemdespawntowhat/rules/*.json`, or `data/<namespace>/idtw/rules/*.json` in a data pack |
-| How it applies | Restart the server | `/idtw config reload` |
+| How it applies | Restart the server | `/idtw rule reload` |
 
 You can indent and wrap the file however you like. The game writes it as one compact JSON line on the first launch, and the two forms are equivalent.
 

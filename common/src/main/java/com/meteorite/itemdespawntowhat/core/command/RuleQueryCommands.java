@@ -1,228 +1,261 @@
 package com.meteorite.itemdespawntowhat.core.command;
 
+import com.meteorite.itemdespawntowhat.core.load.LoadedRule;
+import com.meteorite.itemdespawntowhat.core.load.RawRuleEntry;
 import com.meteorite.itemdespawntowhat.core.load.RuleLoadResult;
+import com.meteorite.itemdespawntowhat.core.load.RuleOrigin;
+import com.meteorite.itemdespawntowhat.core.load.RuleSourceIndex;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
-import com.meteorite.itemdespawntowhat.core.service.edit.RuleEdit;
 import com.meteorite.itemdespawntowhat.core.service.RuleEnableApplyService;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleEdit;
 import com.meteorite.itemdespawntowhat.core.state.RuleEnableState;
-import com.mojang.brigadier.arguments.ArgumentType;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.suggestion.Suggestions;
+import com.mojang.brigadier.suggestion.SuggestionsBuilder;
+import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
-import net.minecraft.network.chat.Component;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.commands.arguments.ResourceLocationArgument;
+import net.minecraft.network.chat.ClickEvent;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.MinecraftServer;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
-/**
- * /idtw rule 子命令组：list / show &lt;id&gt; / &lt;id&gt; enable|disable|default / orphans [clear]。
- * show 在文件队列按 id 读取胜出来源的原始 JSON，保留未解码字段；
- * 启停与恢复默认只改本服启用状态，随后按保存链路同一路径重建索引并回扫全部维度。
- */
+/** 规则查询与本服启停；普通查询只消费已发布视图，文件读取集中于显式来源与维护命令。 */
 final class RuleQueryCommands {
+    private static final String PREFIX = "itemdespawntowhat.command.";
+    private static final int RAW_LINE_CODE_POINTS = 1200;
 
-    private RuleQueryCommands() {
-        throw new UnsupportedOperationException("Utility class");
-    }
+    private RuleQueryCommands() { }
 
-    // 组装 rule 分支：查询 / 单条启停与本服状态 / 无主记录查看与清理
     static LiteralArgumentBuilder<CommandSourceStack> build(RuleCommandContext context) {
-        ArgumentType<ResourceLocation> idArgument = ResourceLocationArgument.id();
-        return Commands.literal("rule")
-                .requires(RuleCommandTree::hasAccess)
-                .then(Commands.literal("list").executes(ctx -> list(ctx, context)))
+        var rule = Commands.literal("rule").requires(RuleCommandTree::hasAccess)
+                .executes(RuleCommandTree::help)
+                .then(Commands.literal("list").executes(ctx -> list(ctx, context, 1, ""))
+                        .then(Commands.argument("page", IntegerArgumentType.integer(1))
+                                .executes(ctx -> list(ctx, context, page(ctx), ""))
+                                .then(Commands.argument("filter", StringArgumentType.greedyString())
+                                        .executes(ctx -> list(ctx, context, page(ctx), StringArgumentType.getString(ctx, "filter"))))))
                 .then(Commands.literal("show")
-                        .then(Commands.argument("id", idArgument)
-                                .executes(ctx -> show(ctx, context,
-                                        ResourceLocationArgument.getId(ctx, "id")))))
-                .then(Commands.literal("orphans")
-                        .executes(ctx -> orphans(ctx, context))
-                        .then(Commands.literal("clear").executes(ctx -> clearOrphans(ctx, context))))
-                .then(Commands.argument("id", idArgument)
-                        .then(Commands.literal("enable")
-                                .executes(ctx -> setEnabled(ctx, context,
-                                        ResourceLocationArgument.getId(ctx, "id"), true)))
-                        .then(Commands.literal("disable")
-                                .executes(ctx -> setEnabled(ctx, context,
-                                        ResourceLocationArgument.getId(ctx, "id"), false)))
-                        .then(Commands.literal("default")
-                                .executes(ctx -> restoreDefault(ctx, context,
-                                        ResourceLocationArgument.getId(ctx, "id")))));
+                        .then(Commands.argument("id", ResourceLocationArgument.id())
+                                .suggests((ctx, builder) -> suggest(builder, context, null))
+                                .executes(ctx -> show(ctx, context))
+                                .then(Commands.literal("raw").executes(ctx -> raw(ctx, context, 1))
+                                        .then(Commands.argument("page", IntegerArgumentType.integer(1))
+                                                .executes(ctx -> raw(ctx, context, page(ctx)))))))
+                .then(Commands.literal("orphans").executes(ctx -> orphans(ctx, context, false, 1))
+                        .then(Commands.argument("page", IntegerArgumentType.integer(1))
+                                .executes(ctx -> orphans(ctx, context, false, page(ctx))))
+                        .then(Commands.literal("clear").executes(ctx -> orphans(ctx, context, true, 1))));
+        action(rule, context, "enable", RuleEdit.Action.ENABLE);
+        action(rule, context, "disable", RuleEdit.Action.DISABLE);
+        action(rule, context, "reset", RuleEdit.Action.RESET);
+        RuleMaintenanceCommands.attach(rule, context);
+        return rule;
     }
 
-    // rule list：紧凑清单（id / 来源层 / 生效启用 / 来源标识）
-    private static int list(CommandContext<CommandSourceStack> ctx, RuleCommandContext context) {
-        if (context.editingBusy()) { return RuleCommandTree.saveBusy(ctx); }
-        RuleLoadResult<Rule> result = load(ctx, context);
-        if (result == null) {
-            return RuleCommandTree.notReady(ctx);
-        }
-        List<Component> lines = new ArrayList<>();
-        lines.add(RuleCommandText.summary("rule_list", result));
-        for (var entry : result.rules()) {
+    private static void action(LiteralArgumentBuilder<CommandSourceStack> rule, RuleCommandContext context,
+                               String name, RuleEdit.Action action) {
+        rule.then(Commands.literal(name).then(Commands.argument("id", ResourceLocationArgument.id())
+                .suggests((ctx, builder) -> suggest(builder, context, action))
+                .executes(ctx -> apply(ctx, context, ResourceLocationArgument.getId(ctx, "id"), action))));
+    }
+
+    private static int page(CommandContext<CommandSourceStack> ctx) {
+        return IntegerArgumentType.getInteger(ctx, "page");
+    }
+
+    private static int list(CommandContext<CommandSourceStack> ctx, RuleCommandContext context, int page, String filter) {
+        RuleLoadResult<Rule> result = context.publishedRules();
+        if (result == null) { return RuleCommandTree.notReady(ctx); }
+        String query = filter.toLowerCase(Locale.ROOT);
+        List<LoadedRule<Rule>> entries = result.rules().stream()
+                .filter(entry -> entry.id().toString().contains(query)
+                        || entry.value().displayName() != null && entry.value().displayName().toLowerCase(Locale.ROOT).contains(query))
+                .sorted(Comparator.comparing(entry -> entry.id().toString())).toList();
+        Map<ResourceLocation, Boolean> overrides = context.publishedOverrides();
+        long enabled = entries.stream().filter(entry -> entry.value().enabled()).count();
+        Component header = RuleCommandText.of(PREFIX + "rule.list.header").arg(entries.size())
+                .arg(enabled).arg(entries.size() - enabled).arg(filter).build();
+        return RuleCommandOutput.page(ctx, header, entries.size(), page,
+                value -> "/idtw rule list " + value + (filter.isEmpty() ? "" : " " + filter), index -> {
+                    LoadedRule<Rule> entry = entries.get(index);
+                    var line = RuleCommandText.of(PREFIX + "rule.list.entry")
+                            .arg(RuleCommandText.state(entry.value().enabled()))
+                            .arg(overrides.get(entry.id()) == null ? Component.empty()
+                                    : RuleCommandText.of(PREFIX + "rule.override_badge").build())
+                            .arg(name(entry.value())).arg(entry.id()).build();
+                    return RuleCommandOutput.inspect(line, detail(entry, overrides.get(entry.id())),
+                                    "/idtw rule show " + entry.id()).copy()
+                            .withStyle(entry.value().enabled() ? ChatFormatting.WHITE : ChatFormatting.GRAY);
+                });
+    }
+
+    private static int show(CommandContext<CommandSourceStack> ctx, RuleCommandContext context) {
+        RuleLoadResult<Rule> result = context.publishedRules();
+        if (result == null) { return RuleCommandTree.notReady(ctx); }
+        ResourceLocation id = ResourceLocationArgument.getId(ctx, "id");
+        RuleSourceIndex.Entry source = result.sourceIndex().find(id);
+        if (source == null) { return notFound(ctx, id); }
+        LoadedRule<Rule> entry = find(result, id);
+        RuleCommandTree.reply(ctx, RuleCommandText.of(PREFIX + "rule.show.title")
+                .arg(entry == null ? Component.empty() : name(entry.value())).arg(id).build());
+        RuleCommandTree.reply(ctx, RuleCommandText.of(PREFIX + "rule.show.source")
+                .arg(origin(winner(source).origin())).build());
+        if (entry == null) {
+            RuleCommandTree.reply(ctx, RuleCommandText.of(PREFIX + "rule.show.invalid").build());
+        } else {
             Rule rule = entry.value();
-            lines.add(RuleCommandText.of("itemdespawntowhat.command.rule.list.entry")
-                    .kv("id", rule.id())
-                    .kv("layer", entry.origin().layer().name().toLowerCase(java.util.Locale.ROOT))
-                    .kv("enabled", rule.enabled())
-                    .kv("origin", entry.origin().display())
-                    .build());
+            Boolean override = context.publishedOverrides().get(id);
+            var declaredEnabled = winner(source).body().get("enabled");
+            boolean defaultEnabled = declaredEnabled == null || declaredEnabled.isJsonNull() || declaredEnabled.getAsBoolean();
+            RuleCommandTree.reply(ctx, RuleCommandText.of(PREFIX + "rule.show.state")
+                    .arg(RuleCommandText.state(rule.enabled()))
+                    .arg(RuleCommandText.state(defaultEnabled)).arg(RuleCommandText.state(override)).build());
+            var triggers = Component.empty();
+            rule.effectiveTriggers().forEach(trigger -> {
+                if (!triggers.getSiblings().isEmpty()) { triggers.append(" / "); }
+                triggers.append(RuleCommandText.of(PREFIX + "trigger." + trigger.key()).build());
+            });
+            RuleCommandTree.reply(ctx, RuleCommandText.of(PREFIX + "rule.show.structure")
+                    .arg(rule.priority()).arg(triggers).arg(rule.triggerAfterSeconds())
+                    .arg(rule.effectiveOutcomes().size()).arg(rule.allEffects().size()).build());
         }
-        return RuleCommandTree.replyAll(ctx, lines);
+        return RuleCommandTree.reply(ctx, RuleCommandOutput.command("rule.show.raw_link", "/idtw rule show " + id + " raw"));
     }
 
-    // rule show <id>：输出该规则的原始 JSON（覆盖层文件原文优先）
-    private static int show(CommandContext<CommandSourceStack> ctx, RuleCommandContext context, ResourceLocation id) {
+    private static int raw(CommandContext<CommandSourceStack> ctx, RuleCommandContext context, int page) {
         if (context.editingBusy()) { return RuleCommandTree.saveBusy(ctx); }
         var service = context.editContext().editService();
-        if (service == null || !context.available()) { return RuleCommandTree.notReady(ctx); }
+        if (!context.available() || service == null) { return RuleCommandTree.notReady(ctx); }
+        ResourceLocation id = ResourceLocationArgument.getId(ctx, "id");
         service.readRawRule(context.editContext(), ctx.getSource().getServer(), id, result -> {
             switch (result.status()) {
                 case SUCCESS -> {
-                    Boolean override = RuleEnableState.get(ctx.getSource().getServer().overworld()).overrideFor(id);
-                    RuleCommandTree.reply(ctx, RuleCommandText.of("itemdespawntowhat.command.rule.show.source")
-                            .kv("id", id).kv("origin", result.origin())
-                            .kv("override", override == null
-                                    ? RuleCommandText.showInheritFallback()
-                                    : override).build());
-                    RuleCommandTree.reply(ctx, RuleCommandText.of("itemdespawntowhat.command.rule.show.json").kv("json", result.json()).build());
+                    String text = result.json();
+                    int points = text.codePointCount(0, text.length());
+                    int lines = (points + RAW_LINE_CODE_POINTS - 1) / RAW_LINE_CODE_POINTS;
+                    RuleCommandOutput.page(ctx, RuleCommandText.of(PREFIX + "rule.show.raw_source")
+                                    .arg(id).arg(result.origin()).build(), lines, page,
+                            value -> "/idtw rule show " + id + " raw " + value, index -> {
+                                int start = text.offsetByCodePoints(0, index * RAW_LINE_CODE_POINTS);
+                                int end = text.offsetByCodePoints(start, Math.min(RAW_LINE_CODE_POINTS, points - index * RAW_LINE_CODE_POINTS));
+                                String fragment = text.substring(start, end);
+                                return Component.literal(fragment).withStyle(style -> style
+                                        .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, fragment))
+                                        .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                                                RuleCommandText.of(PREFIX + "rule.show.copy").build())));
+                            });
                 }
                 case INVALID_REQUEST -> notFound(ctx, id);
-                default -> RuleCommandTree.replyFailure(ctx, RuleCommandText.of("itemdespawntowhat.command.rule.show.failed").kv("id", id).build());
+                default -> RuleCommandTree.replyFailure(ctx, RuleCommandText.of(PREFIX + "rule.show.failed").arg(id).build());
             }
         });
-        return RuleCommandTree.reply(ctx, RuleCommandText.of("itemdespawntowhat.command.rule.show.accepted").kv("id", id).build());
+        return RuleCommandTree.reply(ctx, RuleCommandText.of(PREFIX + "rule.show.accepted").arg(id).build());
     }
 
-    // rule <id> enable|disable：写本服启用状态，随后重建索引并回扫
-    private static int setEnabled(CommandContext<CommandSourceStack> ctx, RuleCommandContext context,
-                                  ResourceLocation id, boolean enabled) {
+    private static int apply(CommandContext<CommandSourceStack> ctx, RuleCommandContext context,
+                              ResourceLocation id, RuleEdit.Action action) {
         if (context.editingBusy()) { return RuleCommandTree.saveBusy(ctx); }
-        MinecraftServer server = ctx.getSource().getServer();
-        RuleLoadResult<Rule> merged = load(ctx, context);
-        if (merged == null) {
-            return RuleCommandTree.notReady(ctx);
+        RuleLoadResult<Rule> result = context.publishedRules();
+        if (result == null) { return RuleCommandTree.notReady(ctx); }
+        if (find(result, id) == null) { return notFound(ctx, id); }
+        var outcome = RuleEnableApplyService.apply(ctx.getSource().getServer(), context.editContext(),
+                List.of(new RuleEdit(id, action, null)), result.sourceIndex(), result.allIssues());
+        if (outcome.changed() != 0 && outcome.publication() == null) {
+            return RuleCommandTree.replyFailure(ctx, RuleCommandText.of(PREFIX + "rule.enable.not_applied").build());
         }
-        // 只接受现存规则：否则写入会立刻变成无主记录，通常意味着 id 打错
-        if (find(merged, id) == null) {
-            return notFound(ctx, id);
-        }
-        Component success = RuleCommandText.of(enabled
-                ? "itemdespawntowhat.command.rule.enable.enabled"
-                : "itemdespawntowhat.command.rule.enable.disabled").kv("id", id).build();
-        return applyAndReply(ctx, context, server,
-                List.of(new RuleEdit(id, enabled ? RuleEdit.Action.ENABLE : RuleEdit.Action.DISABLE, null)),
-                success, null, merged);
+        String status = outcome.changed() == 0 ? "unchanged" : action.name().toLowerCase(Locale.ROOT);
+        RuleCommandTree.reply(ctx, RuleCommandText.of(PREFIX + "rule.enable." + status).arg(id).build());
+        return showState(ctx, context, id);
     }
 
-    // rule <id> default：删除本服记录，使该规则重新继承默认启用
-    private static int restoreDefault(CommandContext<CommandSourceStack> ctx, RuleCommandContext context,
-                                      ResourceLocation id) {
+    private static int showState(CommandContext<CommandSourceStack> ctx, RuleCommandContext context, ResourceLocation id) {
+        var result = context.publishedRules();
+        var entry = result == null ? null : find(result, id);
+        if (entry == null) { return 1; }
+        return RuleCommandTree.reply(ctx, detail(entry, context.publishedOverrides().get(id)));
+    }
+
+    private static int orphans(CommandContext<CommandSourceStack> ctx, RuleCommandContext context, boolean clear, int page) {
         if (context.editingBusy()) { return RuleCommandTree.saveBusy(ctx); }
-        MinecraftServer server = ctx.getSource().getServer();
-        RuleLoadResult<Rule> merged = load(ctx, context);
-        if (merged == null) {
-            return RuleCommandTree.notReady(ctx);
-        }
-        if (find(merged, id) == null) {
-            return notFound(ctx, id);
-        }
-        return applyAndReply(ctx, context, server,
-                List.of(new RuleEdit(id, RuleEdit.Action.RESET, null)),
-                RuleCommandText.of("itemdespawntowhat.command.rule.enable.default").kv("id", id).build(),
-                RuleCommandText.of("itemdespawntowhat.command.rule.enable.default.none").kv("id", id).build(), merged);
-    }
-
-    // rule orphans：列出已没有对应规则的本服启用记录（加载时被忽略）
-    private static int orphans(CommandContext<CommandSourceStack> ctx, RuleCommandContext context) {
-        if (context.editingBusy()) { return RuleCommandTree.saveBusy(ctx); }
-        // 运行时未就绪时规则集合不可信，若照常判定会把全部记录误报成无主
-        if (!context.available()) { return RuleCommandTree.notReady(ctx); }
-        RuleLoadResult<Rule> merged = load(ctx, context);
-        if (merged == null) {
-            return RuleCommandTree.notReady(ctx);
-        }
-        RuleEnableState state = RuleEnableState.get(ctx.getSource().getServer().overworld());
-        List<ResourceLocation> orphans = state.orphans(existingIds(merged));
-        if (orphans.isEmpty()) {
-            return RuleCommandTree.reply(ctx, RuleCommandText.of(
-                    "itemdespawntowhat.command.rule.orphans.none").build());
-        }
-        List<Component> lines = new ArrayList<>();
-        lines.add(RuleCommandText.of("itemdespawntowhat.command.rule.orphans.header")
-                .kv("count", orphans.size()).build());
-        for (ResourceLocation id : orphans) {
-            lines.add(RuleCommandText.of("itemdespawntowhat.command.rule.orphans.entry")
-                    .kv("id", id)
-                    .kv("enabled", state.overrideFor(id))
-                    .build());
-        }
-        return RuleCommandTree.replyAll(ctx, lines);
-    }
-
-    // rule orphans clear：只清理无主记录，不影响仍存在规则的启停状态
-    private static int clearOrphans(CommandContext<CommandSourceStack> ctx, RuleCommandContext context) {
-        if (context.editingBusy()) { return RuleCommandTree.saveBusy(ctx); }
-        if (!context.available()) { return RuleCommandTree.notReady(ctx); }
-        RuleLoadResult<Rule> merged = load(ctx, context);
-        if (merged == null) {
-            return RuleCommandTree.notReady(ctx);
-        }
-        RuleEnableState state = RuleEnableState.get(ctx.getSource().getServer().overworld());
-        int removed = state.clearOrphans(existingIds(merged));
-        return RuleCommandTree.reply(ctx, RuleCommandText.of(
-                "itemdespawntowhat.command.rule.orphans.cleared").kv("count", removed).build());
-    }
-
-    // 状态写入与轻量重建共用 RuleEnableApplyService：不重读数据包，索引重建后由运行时发布并排队回扫
-    private static int applyAndReply(CommandContext<CommandSourceStack> ctx, RuleCommandContext context,
-                                     MinecraftServer server, List<RuleEdit> edits,
-                                     Component success, @Nullable Component noChange, RuleLoadResult<Rule> merged) {
-        RuleEnableApplyService.Outcome outcome = RuleEnableApplyService.apply(
-                server, context.editContext(), edits, merged.sourceIndex());
-        if (outcome.changed() == 0) {
-            return RuleCommandTree.reply(ctx, noChange == null ? success : noChange);
-        }
-        if (outcome.publication() == null) {
-            // 状态已随存档保存，但运行时上下文不可用：明确告知本次没有进入运行时
-            return RuleCommandTree.replyFailure(ctx, RuleCommandText.of(
-                    "itemdespawntowhat.command.rule.enable.not_applied").kv("message", "").build());
-        }
-        return RuleCommandTree.reply(ctx, success);
-    }
-
-    // 规则不存在时的统一反馈（启停与详情共用）
-    private static int notFound(CommandContext<CommandSourceStack> ctx, ResourceLocation id) {
-        return RuleCommandTree.replyFailure(ctx, RuleCommandText.of(
-                "itemdespawntowhat.command.rule.show.not_found").kv("id", id).build());
-    }
-
-    // 按 id 找生效规则；找不到时返回 null
-    private static @Nullable Rule find(RuleLoadResult<Rule> merged, ResourceLocation id) {
-        for (var entry : merged.rules()) {
-            if (entry.id().equals(id)) {
-                return entry.value();
+        var service = context.editContext().editService();
+        if (!context.available() || service == null) { return RuleCommandTree.notReady(ctx); }
+        service.readRuleSources(context.editContext(), ctx.getSource().getServer(), read -> {
+            if (read == null || read.issues().hasErrors()) {
+                RuleCommandTree.replyFailure(ctx, RuleCommandText.of(PREFIX + "rule.orphans.read_failed").build());
+                return;
             }
-        }
-        return null;
+            Set<ResourceLocation> existing = read.index().entries().stream().map(RuleSourceIndex.Entry::id).collect(Collectors.toSet());
+            RuleEnableState state = RuleEnableState.get(ctx.getSource().getServer().overworld());
+            if (clear) {
+                RuleCommandTree.reply(ctx, RuleCommandText.of(PREFIX + "rule.orphans.cleared")
+                        .arg(state.clearOrphans(existing)).build());
+            } else {
+                List<ResourceLocation> ids = state.orphans(existing);
+                RuleCommandOutput.page(ctx, RuleCommandText.of(PREFIX + "rule.orphans.header").arg(ids.size()).build(),
+                        ids.size(), page, value -> "/idtw rule orphans " + value,
+                        index -> RuleCommandText.of(PREFIX + "rule.orphans.entry").arg(ids.get(index))
+                                .arg(RuleCommandText.state(state.overrideFor(ids.get(index)))).build());
+            }
+        });
+        return RuleCommandTree.reply(ctx, RuleCommandText.of(PREFIX + "rule.orphans.accepted").build());
     }
 
-    // 现存规则 id 集合：无主判定以合并加载结果为准
-    private static List<ResourceLocation> existingIds(RuleLoadResult<Rule> merged) {
-        List<ResourceLocation> ids = new ArrayList<>(merged.rules().size());
-        for (var entry : merged.rules()) {
-            ids.add(entry.id());
-        }
-        return ids;
+    private static CompletableFuture<Suggestions> suggest(SuggestionsBuilder builder,
+                                                           RuleCommandContext context, @Nullable RuleEdit.Action action) {
+        RuleLoadResult<Rule> result = context.publishedRules();
+        if (result == null) { return builder.buildFuture(); }
+        Map<ResourceLocation, LoadedRule<Rule>> valid = result.rules().stream()
+                .collect(Collectors.toMap(LoadedRule::id, entry -> entry));
+        Map<ResourceLocation, Boolean> overrides = context.publishedOverrides();
+        var entries = result.sourceIndex().entries().stream()
+                .filter(entry -> action == null || valid.containsKey(entry.id()))
+                .filter(entry -> action != RuleEdit.Action.RESET || overrides.get(entry.id()) != null).toList();
+        return SharedSuggestionProvider.suggestResource(entries, builder, RuleSourceIndex.Entry::id, entry -> {
+            LoadedRule<Rule> loaded = valid.get(entry.id());
+            return loaded == null ? RuleCommandText.of(PREFIX + "rule.show.invalid").build()
+                    : detail(loaded, overrides.get(entry.id()));
+        });
     }
 
-    // 复用编辑层的合并加载（只读）
-    private static RuleLoadResult<Rule> load(CommandContext<CommandSourceStack> ctx, RuleCommandContext context) {
-        return context.editContext().loadMerged(ctx.getSource().getServer());
+    private static Component name(Rule rule) {
+        return rule.displayName() == null ? Component.empty() : Component.literal(rule.displayName());
+    }
+
+    private static Component detail(LoadedRule<Rule> entry, @Nullable Boolean override) {
+        return RuleCommandText.of(PREFIX + "rule.detail").arg(name(entry.value())).arg(entry.id())
+                .arg(RuleCommandText.state(entry.value().enabled())).arg(RuleCommandText.state(override))
+                .arg(origin(entry.origin())).build();
+    }
+
+    private static Component origin(RuleOrigin origin) {
+        return RuleCommandText.layer(origin.layer()).copy().append(" ")
+                .append(origin.packId() == null ? "" : "[" + origin.packId() + "] ").append(origin.path());
+    }
+
+    private static RawRuleEntry winner(RuleSourceIndex.Entry entry) {
+        return entry.overlay() != null ? entry.overlay() : entry.base();
+    }
+
+    private static @Nullable LoadedRule<Rule> find(RuleLoadResult<Rule> result, ResourceLocation id) {
+        return result.rules().stream().filter(entry -> entry.id().equals(id)).findFirst().orElse(null);
+    }
+
+    private static int notFound(CommandContext<CommandSourceStack> ctx, ResourceLocation id) {
+        return RuleCommandTree.replyFailure(ctx, RuleCommandText.of(PREFIX + "rule.show.not_found").arg(id).build());
     }
 }

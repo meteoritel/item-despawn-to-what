@@ -7,7 +7,7 @@ import java.util.Objects;
 
 /**
  * 规则来源的可读标识：所属层 + 数据包标识 + 文件路径。
- * 作为 {@code Issue.origin} 的统一取值，用于在报错与 {@code /idtw config list} 中定位规则出处。
+ * 作为 {@code Issue.origin} 的统一取值，用于在报错与 {@code /idtw rule list} 中定位规则出处。
  * 数据包层的 path 形如 {@code data/<ns>/idtw/rules/x.json}；覆盖层的 path 相对于 config/itemdespawntowhat 目录。
  */
 public record RuleOrigin(RuleSourceLayer layer, @Nullable String packId, String path) {

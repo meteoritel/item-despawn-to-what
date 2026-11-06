@@ -34,7 +34,7 @@ Rules come from two locations with different write access, and the mod merges th
 
 | Location | Write access | Notes |
 | --- | --- | --- |
-| `config/itemdespawntowhat/rules/**/*.json` | Writable (config overlay) | Write your own rules here; this is also where the editor and `/idtw config edit` write |
+| `config/itemdespawntowhat/rules/**/*.json` | Writable (config overlay) | Write your own rules here; this is also where the editor and `/idtw editor` write |
 | `data/<namespace>/idtw/rules/**/*.json` | Read-only (datapack) | Supplied by datapacks, including the built-in samples; syncs through the vanilla datapack mechanism |
 
 A **source layer** is one of those locations. It decides which copy of a rule wins. Merge order, from lowest to highest, is builtin, world, then config overlay. When two layers hold the same ID, the higher layer replaces the lower one as a whole.
@@ -108,17 +108,17 @@ The rule above omits two fields you can ignore for now: `enabled` (already `true
 The whole flow has three steps:
 
 1. **Place the file**: put the JSON under `config/itemdespawntowhat/rules/` or under `data/<namespace>/idtw/rules/` in a datapack. Save the file to disk after every edit.
-2. **Check for errors**: run `/idtw config validate`. It reads every source again from what is on disk and reports once. It first prints a **summary line** (total rules, the count per source layer, errors, warnings), then lists each **issue line** in the form `[error] message origin#field_path`. It only checks; it does not change the rules that are active and does not apply your edits.
-3. **Apply**: run `/idtw config reload`. It reads every rule again and applies the new content immediately, printing the same summary line and issue list as `validate`.
+2. **Check for errors**: run `/idtw rule validate`. It reads every source again from what is on disk and reports once. It reports the validation outcome and counts of valid rules per layer, errors, and warnings, then pages through issues with source and field paths. It only checks; it does not change the rules that are active and does not apply your edits.
+3. **Apply**: run `/idtw rule reload`. It reads every rule again and applies the new content immediately, reporting the applied outcome, counts, and a bounded issue preview. Use `validate` to page through all file issues.
 
 Two points to remember:
 
-- **Reload after every file change** (run `/idtw config reload`, or reload datapacks, or restart the server). Otherwise the game never reads your edits.
+- **Reload after every file change** (run `/idtw rule reload`, or reload datapacks, or restart the server). Otherwise the game never reads your edits.
 - **Only the broken part is rejected**: when the whole file fails to parse as JSON, or when the root is neither a rule object nor a rule array, none of that file takes effect. A field error in one rule rejects only that rule; other rules in the same file still load.
 
 The commands need you to own the singleplayer save, or to hold permission level 2 or higher. For the other commands, see [Command Reference](en-08-commands).
 
-To edit rules in the built-in editor instead, `/idtw config edit` is an equivalent entry point. A player runs it, and the server opens the editor after taking the edit lock.
+To edit rules in the built-in editor instead, `/idtw editor` is an equivalent entry point. A player runs it, and the server opens the editor after taking the edit lock.
 
 ## Built-in Sample Rules
 
@@ -137,21 +137,21 @@ The mod ships a set of sample rules in the builtin datapack. Some of them are en
 | No | `itemdespawntowhat:builtin_biome_or_time` | An apple becomes a golden apple in a forest or in daytime |
 | No | `itemdespawntowhat:builtin_dark_blast` | Gunpowder explodes in the dark or in weather that is not clear |
 
-**How to inspect them**: run `/idtw config list` to list the active rules one by one. Each line shows the ID, source layer, priority, trigger seconds, effect count, and enabled state. You can also open `data/itemdespawntowhat/idtw/rules/` in the datapack and read the samples.
+**How to inspect them**: run `/idtw rule list` to browse published names, IDs, and enable states by page. Hover for the source and use `rule show <id>` for priority and outcome structure. You can also open `data/itemdespawntowhat/idtw/rules/` in the datapack and read the samples.
 
-**How to change one**: builtin rules are read-only, so a change means writing a full rule with the same `id` in the config overlay and taking the rule over. To switch one off for now, run `/idtw rule <id> disable`, which applies to this save. For the syntax and the merge rules, see [Source Layers and Overrides](en-06-layers-and-overrides).
+**How to change one**: builtin rules are read-only, so a change means writing a full rule with the same `id` in the config overlay and taking the rule over. To switch one off for now, run `/idtw rule disable <id>`, which applies to this save. For the syntax and the merge rules, see [Source Layers and Overrides](en-06-layers-and-overrides).
 
 ## Rule Not Working? Check in Order
 
 1. **Is the file in the right place?** It must sit under `config/itemdespawntowhat/rules/` or under `data/<namespace>/idtw/rules/` in a datapack, with the extension `.json`. A file in the wrong folder does nothing.
 2. **Is the JSON valid?** A syntax error, a stray comma, or a root that is neither a rule object nor a rule array keeps the whole file out, and `validate` reports "JSON 解析失败" or "规则文件顶层必须是规则对象或规则数组".
-3. **Is the rule switched off?** `enabled` in the content is the default; a rule with `false` still loads but does not take part in matching (`config list` shows "启用=false"). A save can also switch a rule off on its own, and that effective value shows in the same column; run `/idtw rule <id> default` to follow the default again.
+3. **Is the rule switched off?** `enabled` in the content is the default; a rule with `false` still loads but does not take part in matching (`rule list` marks it Disabled). A save can also switch a rule off on its own, and that published effective value appears in the state marker; run `/idtw rule reset <id>` to follow the default again.
 4. **Does `source` match?** Check the spelling of the item ID, its namespace, and the tag name. An unknown static item ID rejects that rule. Also check that `exclude` is not removing the item you want.
 5. **Are the trigger kind and timing right?** With no `triggers` field, only `natural` applies. To watch a burn, a lava, or a cactus case, list that value in `triggers`. When `trigger_after_seconds` is longer than the item actually survives, the trigger moves up to the moment of natural despawn instead of waiting for the configured seconds.
 6. **Are the conditions met?** If any condition in `conditions` fails, the mod never picks that rule. For condition types and semantics, see [Conditions](en-03-conditions).
 7. **Did a higher-priority rule win?** One dropped item runs one rule at a time. The mod sorts candidates by higher `priority` first, then by more condition leaves, then by definition order, and picks the first rule whose trigger kind matches and whose conditions hold. When several rules claim the same item, raise the `priority` of the one you want, narrow its `source`, or tighten its conditions.
 
-Start with the output of `/idtw config validate`. It tells you which origin and which field path holds the problem.
+Start with the output of `/idtw rule validate`. It tells you which origin and which field path holds the problem.
 
 ## Related
 

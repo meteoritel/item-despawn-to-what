@@ -9,7 +9,7 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat/core/service/Rul
 
 ## TL;DR
 
-- 先分层定位：规则没加载看 Issue 与 `/idtw config validate`，加载了不生效看候选顺序与条件，保存失败看回执状态码。
+- 先分层定位：规则没加载看 Issue 与 `/idtw rule validate`，加载了不生效看候选顺序与条件，保存失败看回执状态码。
 - 每种症状都对应源码里的确定分支或状态码，按表里的判定线索走，不要凭现象猜测。
 - 多数失败不会破坏既有规则：加载失败保留上一版索引，保存失败整批不落盘并保留备份文件。
 
@@ -21,9 +21,9 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat/core/service/Rul
 
 | 步骤 | 看什么 | 对应分支 |
 |---|---|---|
-| 1 | `/idtw config list`、`/idtw config validate` 的输出 | 规则是否被合并进来、校验是否通过 |
+| 1 | `/idtw rule list` 的已发布视图与 `/idtw rule validate` 的文件校验输出 | 规则是否被合并进来、校验是否通过 |
 | 2 | 日志中的 Issue 行 | WARN 表示条目保留但有可疑内容（例如未知顶层字段）；ERROR 表示条目被拒载 |
-| 3 | 规则的默认启用与本服启用状态 | `/idtw rule list` 的启用列是本服生效值；本服停用过时用 `/idtw rule <id> default` 恢复默认 |
+| 3 | 规则的默认启用与本服启用状态 | `/idtw rule list` 的状态标记是已发布生效值；本服停用过时用 `/idtw rule reset <id>` 恢复默认 |
 | 4 | 同物品的更高优先级规则 | 候选按 优先级降序、条件复杂度降序、定义序 排序，第一条命中即执行，后面的规则不再判定 |
 | 5 | `trigger_after_seconds` 与存活时长 | 自然消失的年龄门槛是秒数换算的 tick，且不超过自然消失前一刻 |
 | 6 | `triggers` 是否包含当前消失方式 | 规则未声明消失方式时按自然消失参与判定 |
@@ -31,13 +31,13 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat/core/service/Rul
 | 8 | 条件求值结果 | 条件不成立时按退避重试到自然消失 |
 | 9 | 计划期产出预算 | 初始邻近存量与声明理论产量折算不出完整一组时不支付成本，整堆作为返还物保留 |
 
-若规则文件本身读不进来，日志会写「数据包重载失败，已保留上一版规则索引与追踪（本次未应用任何规则变更）」并附具体原因，说明运行时仍在使用旧索引；命令回执也会写明本次未应用任何规则变更。修正文件后执行 `/idtw config reload`。
+若规则文件本身读不进来，日志会写「数据包重载失败，已保留上一版规则索引与追踪（本次未应用任何规则变更）」并附具体原因，说明运行时仍在使用旧索引；命令回执也会写明本次未应用任何规则变更。修正文件后执行 `/idtw rule reload`。
 
 ## 编辑器打不开或锁被占用
 
 | 现象 | 判定 | 处置 |
 |---|---|---|
-| 打开回执为锁占用 | 回执的文案参数带当前持有者名 | 用 `/idtw config edit-lock status` 查看状态；确认无人操作后用 `edit-lock release` 释放 |
+| 打开回执为锁占用 | 回执的文案参数带当前持有者名 | 用 `/idtw editor status` 查看状态；确认无人操作后用 `/idtw editor release` 释放 |
 | 查询显示持有者是自己 | 会话仍在，可能是界面关闭但未发送关闭请求 | 等待租约到期，或释放会话 |
 | 释放回执提示等待 | 会话处于应用阶段，保存收尾前不释放 | 等保存回执后再释放 |
 | 回执为环境不可用 | 运行时未就绪：覆盖层根目录或类型注册表不可用 | 检查启动日志中的降级信息，修正后重启服务端 |

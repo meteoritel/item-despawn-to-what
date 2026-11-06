@@ -8,6 +8,7 @@ import com.meteorite.itemdespawntowhat.core.service.edit.*;
 import com.meteorite.itemdespawntowhat.core.api.Issue;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.IssueSeverity;
+import com.meteorite.itemdespawntowhat.core.load.RuleSourceRead;
 import com.meteorite.itemdespawntowhat.core.load.RuleSourceIndex;
 import com.meteorite.itemdespawntowhat.core.service.edit.RuleIssue;
 import com.meteorite.itemdespawntowhat.core.service.edit.RuleSaveStatus;
@@ -26,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 /**
@@ -295,9 +297,20 @@ public final class RuleEditService {
     /** 命令详情的原始来源结果；JSON 在文件队列序列化，启用覆盖由命令单独展示。 */
     public record RawRuleResult(RuleSaveStatus status, String json, String origin) { }
 
+    /**
+     * 为维护命令读取稳定的原始来源，保留可识别 id 的非法条目；读取失败以空结果交付。
+     * @param context 当前编辑上下文
+     * @param server 本次服务端
+     * @param completion 在本次服务端线程消费来源与解析问题的回调
+     */
+    public void readRuleSources(RuleAuthoringContext context, MinecraftServer server,
+                                Consumer<@Nullable RuleSourceRead> completion) {
+        readSources(context, server, sources -> completion.accept(sources == null ? null : sources.read()));
+    }
+
     /** 按 id 异步读取原始来源；最终反馈回到本次服务端主线程。 */
     public void readRawRule(RuleAuthoringContext context, MinecraftServer server, ResourceLocation id,
-                            java.util.function.Consumer<RawRuleResult> completion) {
+                            Consumer<RawRuleResult> completion) {
         RuleSaveReloadContext captured = context.saveReloadContext();
         if (captured == null || saving()) { completion.accept(new RawRuleResult(RuleSaveStatus.UNAVAILABLE, "", "")); return; }
         store.submit("rule-show", () -> {
@@ -314,7 +327,7 @@ public final class RuleEditService {
     }
 
     private void readSources(RuleAuthoringContext context, MinecraftServer server,
-                              java.util.function.Consumer<RuleOverlayStore.Sources> completion) {
+                              Consumer<RuleOverlayStore.Sources> completion) {
         RuleSaveReloadContext captured = context.saveReloadContext();
         if (captured == null || saving()) { completion.accept(null); return; }
         store.submit("source-read", () -> store.readSources(captured, () -> !closed))

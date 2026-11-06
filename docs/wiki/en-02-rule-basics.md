@@ -58,10 +58,10 @@ These two fields affect display only. Changing them does not change what the rul
 
 ## enabled: The Default Enable State
 
-- **What it does**: the **default enable state** of the rule, meaning whether a new save (or a save that never set this rule itself) runs it. A rule with `false` is still read and still listed in `/idtw config list`, but it takes no part in matching.
+- **What it does**: the **default enable state** of the rule, meaning whether a new save (or a save that never set this rule itself) runs it. A rule with `false` is still read and still listed in `/idtw rule list`, but it takes no part in matching.
 - **Values and ranges**: `true` or `false`. Any other type, such as the string `false`, rejects that rule at load.
 - **Default**: `true`.
-- **What overrides it**: the save's local enable state wins. Switch a rule on or off in game with `/idtw rule <id> enable|disable|default`; the setting is stored with the save and never written back to the JSON. See [Source Layers and Overrides](en-06-layers-and-overrides).
+- **What overrides it**: the save's local enable state wins. Switch a rule on or off in game with `/idtw rule enable|disable|reset <id>`; the setting is stored with the save and never written back to the JSON. See [Source Layers and Overrides](en-06-layers-and-overrides).
 - **When to change it**: to ship a rule that starts out off (sample rules, or configuration meant for specific saves). To turn a rule off only in your own save, use the commands above.
 
 ```json

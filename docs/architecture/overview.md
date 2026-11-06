@@ -67,9 +67,9 @@ flowchart LR
 |---|---|---|
 | 内置数据包 | jar 内 `data/<ns>/idtw/rules/*.json` | 默认规则与示例，只读；层优先级最低 |
 | 世界数据包 | 存档内 `datapacks/<pack>/data/<ns>/idtw/rules/*.json` | 存档级规则，只读；覆盖同 id 内置规则 |
-| config 覆盖层 | `config/<overlay_directory>/rules/*.json` | 编辑器与命令的写入目标；覆盖同 id 其它层规则 |
+| config 覆盖层 | `config/<overlay_directory>/rules/*.json` | 编辑器的规则内容写入目标；覆盖同 id 其它层规则 |
 | 模组配置 | `config/<overlay_directory>/server.json` | 调度预算、检查间隔、实体状态时长、邻近产物阈值等运行参数；缺失时由 `ServerConfig.loadOrCreate` 落盘默认值 |
-| 命令 | `/idtw` 命令树 | 查询、配置写回与重载；权限判定见 [RuleCommandTree](../../common/src/main/java/com/meteorite/itemdespawntowhat/core/command/RuleCommandTree.java) |
+| 命令 | `/idtw` 命令树 | 规则查询、启停、重载与编辑器入口；权限判定见 [RuleCommandTree](../../common/src/main/java/com/meteorite/itemdespawntowhat/core/command/RuleCommandTree.java) |
 | 编辑协议上行载荷 | `core/network/transport` | 独占会话的取锁、确认、心跳、快照与目录请求、变更集提交、取消保存 |
 | 平台生命周期事件 | fabric 与 neoforge 的 `runtime/RuleRuntimeEvents` | 服务端启停、数据包重载、实体入世界与离开、维度加载与卸载、服务器 tick 结束 |
 | 平台实体事件与 Mixin | `mixin` 包、`PlatformAdapter` | 自然消失前延后判定、环境致死请求、实体层状态读取与写入、死亡掉落排除标记 |

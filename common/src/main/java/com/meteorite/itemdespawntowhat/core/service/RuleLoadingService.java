@@ -116,7 +116,7 @@ public final class RuleLoadingService {
     }
 
     /**
-     * 按来源层统计规则条数，供 /idtw config list 与 /idtw debug stats 输出
+     * 按来源层统计规则条数，供来源诊断与 /idtw debug stats 输出
      */
     public static Map<RuleSourceLayer, Integer> countByLayer(RuleLoadResult<Rule> result) {
         Map<RuleSourceLayer, Integer> counts = new EnumMap<>(RuleSourceLayer.class);

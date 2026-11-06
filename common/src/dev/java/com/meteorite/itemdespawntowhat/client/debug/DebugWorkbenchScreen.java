@@ -68,7 +68,7 @@ public class DebugWorkbenchScreen extends Screen {
         if (workspace.session().editable()) {
             Minecraft.getInstance().setScreen(new RuleEditorScreen(workspace));
         } else if (Minecraft.getInstance().getConnection() != null) {
-            Minecraft.getInstance().getConnection().sendCommand("idtw config edit");
+            Minecraft.getInstance().getConnection().sendCommand("idtw editor");
         } else { Minecraft.getInstance().setScreen(null); }
     }
 
@@ -126,7 +126,7 @@ public class DebugWorkbenchScreen extends Screen {
             WorkbenchLayout.drawPage(graphics, font, theme, width, height, text("title"));
             WorkbenchLayout.drawSubtitle(graphics, font, theme, width, text("description"));
             int contentWidth = WorkbenchLayout.contentWidth(width);
-            int buttonWidth = Math.min(TOOL_BUTTON_WIDTH, Math.max(60, contentWidth - 40));
+            int buttonWidth = Math.clamp(contentWidth - 40, 60, TOOL_BUTTON_WIDTH);
             int top = WorkbenchLayout.CONTENT_TOP;
             for (int i = 0; i < tools.size(); i++) {
                 var tool = tools.get(i); var button = buttons.get(i);
@@ -261,11 +261,11 @@ public class DebugWorkbenchScreen extends Screen {
                     .cancel(text("close")).preferredWidth(Math.min(280, width - 20)).layoutCentered(width, height));
         }
         /**
-         * 按当前滚动量排版一屏内容，返回内容总高度。
+         * 按当前滚动量排版一屏内容，并更新内容总高度。
          *
          * <p>说明文字与控件一起参与滚动，因此总高度与滚动位置无关，可用于计算滚动上限。</p>
          */
-        private int layoutContent(int contentWidth, int extraListHeight) {
+        private void layoutContent(int contentWidth, int extraListHeight) {
             int start = WorkbenchLayout.CONTENT_TOP - scroll;
             int y = start;
             int gap = WorkbenchLayout.GAP;
@@ -287,7 +287,6 @@ public class DebugWorkbenchScreen extends Screen {
             valuesLines = WorkbenchLayout.wrapLines(font, values.getString(), contentWidth, VALUES_MAX_LINES);
             y += font.lineHeight + 2 + valuesLines.size() * (font.lineHeight + 2);
             contentHeight = y - start;
-            return contentHeight;
         }
         private int captionRow(String key, UiWidget widget, int y, int height, int contentWidth) {
             captions.add(new Caption(text(key), WorkbenchLayout.INSET, y));

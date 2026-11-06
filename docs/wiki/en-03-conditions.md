@@ -10,7 +10,7 @@ For the other rule fields, see [Rule Fields](en-02-rule-basics). For effects and
 - Leave out the whole `conditions` field to run a rule with no conditions. The check then passes at any time.
 - The rule is selected and converts only when the result is satisfied. An unsatisfied, unavailable, or error result never triggers it.
 - A condition that stays unsatisfied is not an error. It only means the rule rarely fires.
-- A malformed condition is a separate matter. A broken structure or an out-of-range value rejects the whole rule, and the load log and `/idtw config validate` report why.
+- A malformed condition is a separate matter. A broken structure or an out-of-range value rejects the whole rule, and the load log and `/idtw rule validate` report why.
 
 ## The Four Node Types
 
@@ -115,7 +115,7 @@ Every format below is reported as a clear error rather than accepted silently. I
 | Condition nodes | 256 | `all_of`, `any_of`, `inverted`, and `leaf` all count |
 | Tree depth | 16 | The root sits at depth 1, and each step down adds 1 |
 
-Exceeding any of these rejects the whole rule, so that rule does not run. The load log and `/idtw config validate` report that the leaf count, node count, or depth is over the limit, and the other rules in the same file still load. An empty `terms` array in `all_of` or `any_of`, or an `inverted` node with no `term`, is a structure error as well, and the rule is rejected.
+Exceeding any of these rejects the whole rule, so that rule does not run. The load log and `/idtw rule validate` report that the leaf count, node count, or depth is over the limit, and the other rules in the same file still load. An empty `terms` array in `all_of` or `any_of`, or an `inverted` node with no `term`, is a structure error as well, and the rule is rejected.
 
 What this means in practice: flattening hundreds of conditions into one `all_of` layer goes over the leaf limit, and nesting deeper than 16 levels, such as an AND inside an AND, is rejected outright. Restructure such a tree to be flatter.
 
@@ -147,7 +147,7 @@ When a condition is unsatisfied, the mod does not drop the rule. It schedules an
 
 A condition with a window, such as "only at night", is a normal way to write a rule. The drop converts when the window opens, so you do not need to shrink `trigger_after_seconds`. The stricter the condition, the longer the wait before the condition is satisfied and the greater the chance that the drop is picked up or despawns early. That is a trade-off, not a fault.
 
-A rule whose condition can never be satisfied gives no warning at all: the item despawns as usual. To check your work, run `/idtw config validate` to test the syntax and the parameter values, or use `/idtw config edit` to open the rule in the editor.
+A rule whose condition can never be satisfied gives no warning at all: the item despawns as usual. To check your work, run `/idtw rule validate` to test the syntax and the parameter values, or use `/idtw editor` to open the rule in the editor.
 
 ## Condition Types at a Glance
 

@@ -1,11 +1,11 @@
 # ItemDespawnToWhat Player Guide
 
-Install the mod, enter a world, and type `/idtw config edit` to open the configuration editor. **To try the mod, open the editor and follow what the screen shows**; the rest of this page is an index for when you need to look something up.
+Install the mod, enter a world, and type `/idtw editor` to open the configuration editor. **To try the mod, open the editor and follow what the screen shows**; the rest of this page is an index for when you need to look something up.
 
 ## Open the in-game editor first
 
 1. Enter a world.
-2. Type `/idtw config edit` and press Enter.
+2. Type `/idtw editor` and press Enter.
 3. Pick a rule in the list and click **Edit**; the **Basic / Input / Trigger / Results** tabs change what it becomes and when it converts.
 
 The editor ships with example rules, so you can play without writing any file first:
@@ -18,7 +18,7 @@ The editor ships with example rules, so you can play without writing any file fi
 
 When you are not sure what a field or button does, hover over it.
 
-**Permissions and occupancy**: a single-player world works directly; a multiplayer server needs an administrator (permission level 2). Only one player can edit at a time; when the message says the editor is locked by someone else, wait for them to close it, or have an admin run `/idtw config edit-lock release`.
+**Permissions and occupancy**: a single-player world works directly; a multiplayer server needs an administrator (permission level 2). Only one player can edit at a time; when the message says the editor is locked by someone else, wait for them to close it, or have an admin run `/idtw editor release`.
 
 To write rules as files instead, read [Getting Started](en-01-getting-started): it has a minimal rule you can copy, and it covers where the file goes and how to make the rule take effect.
 
@@ -53,7 +53,7 @@ Each page solves one problem. Read them in the order below, or jump straight to 
 
 | I want to... | Go to |
 | --- | --- |
-| Edit rules in game | Type `/idtw config edit` to open the editor; see [Command Reference](en-08-commands) for details |
+| Edit rules in game | Type `/idtw editor` to open the editor; see [Command Reference](en-08-commands) for details |
 | Write my first rule (for example, chicken to rotten flesh after 10 seconds) | [Getting Started](en-01-getting-started) |
 | Change what a dropped item becomes (an item, a mob, a block, experience, weather) | [Effects](en-04-effects) |
 | Convert only under certain conditions (dimension, biome, time, weather, height, light level...) | [Conditions](en-03-conditions) |
@@ -63,6 +63,6 @@ Each page solves one problem. Read them in the order below, or jump straight to 
 | Make one item alternate between results, or add a cost to a conversion | [Outcome Candidates and Settlement](en-05-outcomes-and-settlement) |
 | Fix server lag, conversions that fire too often, or too many products piling up | [Server Configuration](en-07-server-config) |
 | Find out why a rule change did nothing, or read an error message | [Getting Started](en-01-getting-started), [Command Reference](en-08-commands) |
-| The editor is held by another player | The edit-lock section of [Command Reference](en-08-commands) |
+| The editor is held by another player | The Editor Sessions section of [Command Reference](en-08-commands) |
 
 For how the mod works and how it is structured, see [docs/README.md](https://github.com/meteoritel/item-despawn-to-what/blob/1.21.1/docs/README.md) and the [architecture overview](https://github.com/meteoritel/item-despawn-to-what/blob/1.21.1/docs/architecture/overview.md) in the repository.

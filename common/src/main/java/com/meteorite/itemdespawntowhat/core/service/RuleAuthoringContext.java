@@ -5,7 +5,6 @@ import com.meteorite.itemdespawntowhat.core.type.BuiltinTypeRegistries;
 
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTask;
 import com.meteorite.itemdespawntowhat.core.load.RuleLoadResult;
-import com.meteorite.itemdespawntowhat.core.load.RuleSourceIndex;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
 import com.meteorite.itemdespawntowhat.core.runtime.RuleIndex;
 import net.minecraft.server.MinecraftServer;
@@ -51,13 +50,10 @@ public interface RuleAuthoringContext {
      * 发布已解码的索引：换入索引、候选结构摘要整表失效，并逐维排队回扫。
      * @param server 当前服务端
      * @param index 后台基于校验后模型准备的索引
-     * @param sources 与规则来自同批读取的原始来源索引
+     * @param result 同批加载结果，保留停用规则、来源与问题供只读查询
      * @return 发布收尾观测任务；保存链路在公共预算内推进它
      */
-    ServerTask publishIndex(MinecraftServer server, RuleIndex index, RuleSourceIndex sources);
-
-    /** 当前运行时发布的同批原始来源。 */
-    RuleSourceIndex publishedSources();
+    ServerTask publishIndex(MinecraftServer server, RuleIndex index, RuleLoadResult<Rule> result);
 
     /**
      * 读取服务端缓存的普通物品参考寿命，仅用于 GUI 滑条窗口。

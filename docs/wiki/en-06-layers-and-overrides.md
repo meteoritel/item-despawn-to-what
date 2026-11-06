@@ -12,7 +12,7 @@ For the basic rule fields (`id`, `priority`, `source`, and more), see [Rule Fiel
 | --- | --- | --- | --- |
 | Built-in datapack (`builtin`) | `data/<namespace>/idtw/rules/*.json` inside the mod | No. A mod update replaces it. | Lowest |
 | World datapack (`world`) | `datapacks/<pack name>/data/<namespace>/idtw/rules/*.json` in the world save | Yes, by shipping a datapack. | Middle |
-| Config overlay (`overlay`) | Any `*.json` under `config/itemdespawntowhat/rules/`, subdirectories included | Yes. Commands and the rule editor write only here. | Highest |
+| Config overlay (`overlay`) | Any `*.json` under `config/itemdespawntowhat/rules/`, subdirectories included | Yes. The rule editor writes rule content here. | Highest |
 
 - The mod reads all three layers at once and merges them. Priority decides only which copy wins for the same ID; it never drops rules that use another `id` in a lower layer.
 - An overlay file name does not matter. The `id` inside the file is the identity of the rule, and subdirectories are read as well.
@@ -119,13 +119,13 @@ Change it with commands (they need permission; the host of a singleplayer world 
 
 | Command | What it does |
 | --- | --- |
-| `/idtw rule <id> disable` | Turns the rule off in this save only; the rule content stays as written |
-| `/idtw rule <id> enable` | Turns the rule back on in this save |
-| `/idtw rule <id> default` | Drops the save's setting so the rule follows its default enable state again |
+| `/idtw rule disable <id>` | Turns the rule off in this save only; the rule content stays as written |
+| `/idtw rule enable <id>` | Turns the rule back on in this save |
+| `/idtw rule reset <id>` | Drops the save's setting so the rule follows its default enable state again |
 
 - Switching a rule off affects only whether it runs: content, priority, and conditions are read from the file as written, so a mod or datapack update still changes them.
 - The setting travels with the save: another save or another server keeps its own state, and every player on a multiplayer server shares the same local state.
-- A disabled rule still appears in `/idtw config list` and `/idtw rule list`, and that line shows "enabled=false".
+- Disabled rules remain in `/idtw rule list`, marked Disabled, with a server-override badge when applicable.
 - When the rule content disappears, for example because you deleted the overlay file or a datapack no longer provides the ID, the save's setting has no rule left to apply to and loading ignores it. `/idtw rule orphans` lists those records and `/idtw rule orphans clear` removes them. If the rule comes back later, an uncleared record applies again; a cleared one follows the default enable state.
 
 What you want to do, and the tool for it:
@@ -186,23 +186,11 @@ Note that an overlay does **not** outrank a built-in or datapack rule on its own
 
 ## Finding Out Which Layer and File a Rule Comes From
 
-These three commands answer that question, and each one requires a singleplayer world or permission level 2 or higher. A singleplayer world always passes.
+Use `/idtw rule list [page] [filter]` to browse published rules. Rows show the name, ID, effective state, and server-override badge. Hover for the source, or click to fill the inspection command.
 
-- `/idtw config list` lists the active rules one by one (`id`, source layer, priority, trigger seconds, effect count, enabled state, origin), and its first line is a **summary line** (the total count, the count per source layer, and the number of errors and warnings).
-- `/idtw rule list` prints a shorter list (`id`, source layer, enabled state, origin). Use it to scan many rules quickly.
-- `/idtw rule show <id>` acknowledges the request, then reads the winning source in the background and prints its origin, local enable override, and raw JSON. The overlay wins over the datapack base; unknown fields and original declarations are preserved.
+`/idtw rule show <id>` displays the published source, default/override/effective enable states, priority, and outcome structure. `/idtw rule show <id> raw [page]` reads the winning raw content from current overlay files and the loaded datapack base, preserving unknown fields.
 
-The enabled state in the list commands is the **effective value for this save** (the local setting, or `enabled` from the rule content when the save holds none). Change it with `/idtw rule <id> enable|disable|default`; the full syntax is in [Command Reference](en-08-commands).
-
-One line of `/idtw config list` looks like this:
-
-```text
-mypack:diamond_to_gold | layer=overlay | priority=10 | trigger=60s | effects=1 | enabled=true | origin=config 覆盖层:rules/diamond_to_gold.json
-```
-
-The `layer` value is `builtin`, `world`, or `overlay`. The **origin** (the `origin` value) reads `layer name[pack name]:file path`, and only a datapack layer carries the pack name in brackets, for example `世界数据包[mypack]:data/mypack/idtw/rules/xxx.json`. An overlay rule shows a path relative to `config/itemdespawntowhat`. The layer name inside `origin` comes from the mod and is not translated.
-
-Reload after you change a file. The full syntax of the commands is in [Command Reference](en-08-commands).
+After editing files, validate with `/idtw rule validate`, then publish with `/idtw rule reload`. Lists and ordinary summaries update after reload; reading raw sources leaves the runtime unchanged. See [Command Reference](en-08-commands) for syntax, suggestions, and interactions.
 
 ## Troubleshooting: An Override or Disable That Seems to Do Nothing
 
@@ -210,9 +198,9 @@ Check these in order:
 
 1. **File location and extension.** An overlay file must sit under `config/itemdespawntowhat/rules/` (subdirectories are allowed) and end in `.json`. A datapack file must sit under `data/<namespace>/idtw/rules/`.
 2. **An `id` that matches the target exactly.** One wrong character adds a new rule, and both rules stay, so nothing is overridden.
-3. **A successful load.** Run `/idtw config validate` or `/idtw config list` and read the errors and warnings, which name the source and the field path. A JSON syntax error, an empty file, or a top level that is neither a rule object nor a rule array makes the mod reject the whole file. An error inside one rule stops only that rule.
-4. **A rule switched off in this save.** `enabled` in the rule content is only the default; the local setting for this save wins. Read the enabled column of `/idtw config list`, which shows the effective value, and use `/idtw rule <id> default` to drop the local setting.
-5. **Another rule taking over.** One dropped item runs one rule, so check for a rule with a higher priority or more condition leaves that also covers this item. Use `/idtw config list` and read the priority and the origin.
+3. **A successful load.** Run `/idtw rule validate` and read the file validation errors and warnings, which name the source and the field path. A JSON syntax error, an empty file, or a top level that is neither a rule object nor a rule array makes the mod reject the whole file. An error inside one rule stops only that rule.
+4. **A rule switched off in this save.** `enabled` in the rule content is only the default; the local setting for this save wins. Read the effective state marker in `/idtw rule list`, and use `/idtw rule reset <id>` to drop the local setting.
+5. **Another rule taking over.** One dropped item runs one rule, so check for a rule with a higher priority or more condition leaves that also covers this item. Use `/idtw rule show <id>` to inspect priority and the published source.
 6. **A reload after the change.** See [Getting Started](en-01-getting-started).
 
 ## Related

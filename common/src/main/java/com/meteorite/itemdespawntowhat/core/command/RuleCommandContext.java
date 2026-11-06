@@ -2,16 +2,26 @@ package com.meteorite.itemdespawntowhat.core.command;
 
 import com.meteorite.itemdespawntowhat.core.config.ServerConfig;
 import com.meteorite.itemdespawntowhat.core.load.RuleReloadOutcome;
+import com.meteorite.itemdespawntowhat.core.load.RuleLoadResult;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerContext;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
+
+import java.util.Map;
 
 /** 正式命令所需的宿主能力；运行时未启动时由就绪谓词和可空结果表达。 */
 public interface RuleCommandContext {
 
     /** 当前运行时是否已启动。 */
     boolean available();
+
+    /** 当前已发布的完整加载结果，包含停用规则；尚未就绪时为空。 */
+    @Nullable RuleLoadResult<Rule> publishedRules();
+
+    /** 与已发布规则同批捕捉的本服覆盖；保存进行中保持上一份发布值。 */
+    Map<ResourceLocation, Boolean> publishedOverrides();
 
     /** 当前模组级配置，未启动时为空。 */
     @Nullable ServerConfig serverConfig();

@@ -7,8 +7,7 @@ import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
-
-import java.util.List;
+import net.minecraft.server.level.ServerPlayer;
 
 /** 正式 /idtw 命令树；配置与查询位于 command，开发诊断由开发源集追加注册。 */
 public final class RuleCommandTree {
@@ -20,12 +19,11 @@ public final class RuleCommandTree {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    // 把命令树注册到调度器；平台初始化时调用一次
+    /** 注册正式命令；根帮助与会话状态公开，管理能力在各操作内判定权限。 */
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher, RuleCommandContext context) {
-        // 根节点不统一鉴权：edit-lock status 任何玩家可用，
-        // 权限下放到各子分支（config 的写操作与 rule 保留 hasAccess）
         var root = Commands.literal(ROOT)
-                .then(RuleConfigCommands.build(context))
+                .executes(RuleCommandTree::help)
+                .then(RuleEditorCommands.build(context))
                 .then(RuleQueryCommands.build(context));
         dispatcher.register(root);
     }
@@ -40,27 +38,19 @@ public final class RuleCommandTree {
         return RuleEditPermissions.hasAccess(source);
     }
 
-    // 统一反馈出口：下发可翻译组件，由客户端按玩家语言渲染
+    /** 下发可翻译反馈，成功返回 1。 */
     public static int reply(CommandContext<CommandSourceStack> context, Component text) {
         context.getSource().sendSuccess(() -> text, false);
         return 1;
     }
 
-    // 清单类输出：逐行下发组件，空清单返回 0
-    public static int replyAll(CommandContext<CommandSourceStack> context, List<Component> lines) {
-        for (Component line : lines) {
-            context.getSource().sendSuccess(() -> line, false);
-        }
-        return lines.isEmpty() ? 0 : 1;
-    }
-
-    // 失败反馈出口：错误类信息走 sendFailure（客户端渲染为红色），命令返回 0
+    /** 下发失败反馈并返回 0。 */
     public static int replyFailure(CommandContext<CommandSourceStack> context, Component text) {
         context.getSource().sendFailure(text);
         return 0;
     }
 
-    // 运行时尚未就绪时的统一提示
+    /** 提示服务端运行时尚未就绪。 */
     public static int notReady(CommandContext<CommandSourceStack> context) {
         return replyFailure(context, RuleCommandText.of("itemdespawntowhat.command.not_ready").build());
     }
@@ -72,5 +62,21 @@ public final class RuleCommandTree {
      */
     public static int saveBusy(CommandContext<CommandSourceStack> context) {
         return replyFailure(context, RuleCommandText.of("itemdespawntowhat.command.save_busy").build());
+    }
+
+    static int help(CommandContext<CommandSourceStack> ctx) {
+        reply(ctx, RuleCommandText.of("itemdespawntowhat.command.help.title").build());
+        if (hasAccess(ctx.getSource())) {
+            reply(ctx, RuleCommandOutput.command("help.rule", "/idtw rule list"));
+            reply(ctx, RuleCommandText.of("itemdespawntowhat.command.help.actions").build());
+            if (ctx.getSource().getEntity() instanceof ServerPlayer) {
+                reply(ctx, RuleCommandOutput.command("help.editor", "/idtw editor"));
+            }
+        }
+        reply(ctx, RuleCommandOutput.command("help.status", "/idtw editor status"));
+        if (RuleEditPermissions.isAdmin(ctx.getSource())) {
+            reply(ctx, RuleCommandOutput.command("help.release", "/idtw editor release"));
+        }
+        return 1;
     }
 }

@@ -3,8 +3,10 @@ package com.meteorite.itemdespawntowhat.core.service;
 import com.meteorite.itemdespawntowhat.core.type.BuiltinTypeRegistries;
 
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
+import com.meteorite.itemdespawntowhat.core.api.Issue;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTask;
 import com.meteorite.itemdespawntowhat.core.load.LoadedRule;
+import com.meteorite.itemdespawntowhat.core.load.RuleLoadResult;
 import com.meteorite.itemdespawntowhat.core.load.RawRuleEntry;
 import com.meteorite.itemdespawntowhat.core.load.RuleLoader;
 import com.meteorite.itemdespawntowhat.core.load.RuleMerger;
@@ -19,11 +21,12 @@ import net.minecraft.server.MinecraftServer;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 
 /**
  * 启用状态应用服务：把一批启停动作写入本服状态层，并按保存链路的轻量路径重建索引、回扫全部维度。
- * GUI 应用（纯启停批次）与 /idtw rule ... enable|disable|default 共用同一入口，避免命令侧改走
+ * GUI 应用（纯启停批次）与 /idtw rule enable|disable|reset 共用同一入口，避免命令侧改走
  * 完整数据包重载这种两套路径。索引重建只用保存链路缓存的数据包基底，不重读数据包；
  * 内容动作仍由保存任务先把覆盖层原子提交，再调用 {@link #commitState} 写状态，
  * 因此不会出现「状态已改、内容没落盘」或反过来的半成品。
@@ -78,24 +81,27 @@ public final class RuleEnableApplyService {
      * @param context 编辑运行上下文；需要保存链路已捕捉的数据包基底
      * @param edits   启用状态动作
      * @param sources 调用方本次读取的来源，存在性检查与运行时发布共用它
+     * @param sourceIssues 与来源同批的问题，发布时保留读取和解析诊断
      * @return 应用结果；状态无变化或未进入运行时时为 null 发布任务
      */
-    public static Outcome apply(MinecraftServer server, RuleAuthoringContext context, List<RuleEdit> edits, RuleSourceIndex sources) {
+    public static Outcome apply(MinecraftServer server, RuleAuthoringContext context, List<RuleEdit> edits,
+                                RuleSourceIndex sources, List<Issue> sourceIssues) {
         int changed = commitState(server, edits);
         if (changed == 0) {
             return new Outcome(0, null);
         }
-        Prepared prepared = buildSavedIndex(server, context, sources);
+        Prepared prepared = buildSavedIndex(server, context, sources, sourceIssues);
         if (prepared == null) {
             return new Outcome(changed, null);
         }
-        return new Outcome(changed, context.publishIndex(server, prepared.index(), prepared.sources()));
+        return new Outcome(changed, context.publishIndex(server, prepared.index(), prepared.result()));
     }
 
     // 复用调用方本次读取的来源重建运行期索引，存在性判断与发布使用同批内容。
-    private record Prepared(RuleIndex index, RuleSourceIndex sources) { }
+    private record Prepared(RuleIndex index, RuleLoadResult<Rule> result) { }
 
-    private static @Nullable Prepared buildSavedIndex(MinecraftServer server, RuleAuthoringContext context, RuleSourceIndex sources) {
+    private static @Nullable Prepared buildSavedIndex(MinecraftServer server, RuleAuthoringContext context,
+                                                       RuleSourceIndex sources, List<Issue> sourceIssues) {
         RuleSaveReloadContext saved = context.saveReloadContext();
         BuiltinTypeRegistries types = context.typeRegistries();
         if (saved == null || types == null) {
@@ -103,6 +109,7 @@ public final class RuleEnableApplyService {
         }
         IssueCollector issues = new IssueCollector();
         saved.baseIssues().forEach(issues::add);
+        sourceIssues.forEach(issues::add);
         List<RawRuleEntry> raw = sources.entries().stream()
                 .map(entry -> entry.overlay() != null ? entry.overlay() : entry.base()).toList();
         var load = saved.loadContext();
@@ -115,6 +122,10 @@ public final class RuleEnableApplyService {
                             && RuleReferenceValidator.validate(rule, server, issues, entry.origin().display()))
                     .ifPresent(rule -> decoded.add(new LoadedRule<>(entry.id(), entry.origin(), rule)));
         }
-        return new Prepared(RuleIndex.build(RuleLoadingService.applyEnableState(load, decoded), new IssueCollector()), sources);
+        List<LoadedRule<Rule>> rules = RuleLoadingService.applyEnableState(load, decoded);
+        RuleIndex index = RuleIndex.build(rules, issues);
+        IssueCollector publishedIssues = new IssueCollector();
+        new LinkedHashSet<>(issues.issues()).forEach(publishedIssues::add);
+        return new Prepared(index, new RuleLoadResult<>(rules, publishedIssues, sources));
     }
 }

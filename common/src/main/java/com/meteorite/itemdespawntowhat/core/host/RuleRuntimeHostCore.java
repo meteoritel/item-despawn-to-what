@@ -32,6 +32,7 @@ import com.meteorite.itemdespawntowhat.core.state.DropStateStore;
 import com.meteorite.itemdespawntowhat.core.state.RuleEnableState;
 import com.meteorite.itemdespawntowhat.platform.Services;
 import net.minecraft.core.RegistryAccess;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -41,9 +42,11 @@ import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.item.ItemEntity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.Nullable;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -73,7 +76,8 @@ public final class RuleRuntimeHostCore {
     private volatile ConversionRuntime runtime;
     private RuleSaveReloadContext saveReloadContext;
     private AuthoringHost authoring;
-    private RuleSourceIndex publishedSources = RuleSourceIndex.build(List.of());
+    private @Nullable RuleLoadResult<Rule> publishedRules;
+    private Map<ResourceLocation, Boolean> publishedOverrides = Map.of();
 
     // 网络编辑层入口：以窄接口暴露运行时的覆盖层路径与重建能力
     private final RuleEditServerContext editContext = new EditContext();
@@ -174,7 +178,8 @@ public final class RuleRuntimeHostCore {
             RuleLoadResult<Rule> result = RuleLoadingService.loadAndValidate(saveContext.loadContext(), saveContext.baseRules());
             saveContext.baseIssues().forEach(result.issues()::add);
             newRuntime.replaceRules(result.rules(), result.issues());
-            publishedSources = result.sourceIndex();
+            publishedRules = result;
+            publishedOverrides = RuleEnableState.get(server.overworld()).snapshot();
             logLoadResult("服务端启动", result);
 
             platform.sampleReferenceLifespan(server);
@@ -258,7 +263,8 @@ public final class RuleRuntimeHostCore {
             RuntimeObserver.current().reloadApplying(server);
             // 换入：索引与候选摘要一次替换，各维度旧追踪随之失效，随后由回扫重建
             current.publish(server, prepared);
-            publishedSources = result.sourceIndex();
+            publishedRules = result;
+            publishedOverrides = RuleEnableState.get(server.overworld()).snapshot();
             // 换入之后的收尾不再适用「保留旧索引」语义：索引已经生效，收尾异常只记录、不改变成功回执
             try {
                 saveReloadContext = saveContext;
@@ -289,7 +295,8 @@ public final class RuleRuntimeHostCore {
         // 停服后复位实体状态时长，避免同一进程内下一个服务端实例沿用上一轮配置
         DropStateStore.configure(0, 0);
         runtime = null;
-        publishedSources = RuleSourceIndex.build(List.of());
+        publishedRules = null;
+        publishedOverrides = Map.of();
         saveReloadContext = null;
         typeRegistries = null;
         overlayRoot = null;
@@ -494,8 +501,6 @@ public final class RuleRuntimeHostCore {
                     server, runtimeLimits()));
         }
 
-        @Override public RuleSourceIndex publishedSources() { return publishedSources; }
-
         @Override
         public RuleSaveReloadContext saveReloadContext() { return saveReloadContext; }
 
@@ -505,15 +510,26 @@ public final class RuleRuntimeHostCore {
         }
 
         @Override
-        public ServerTask publishIndex(MinecraftServer server, RuleIndex index, RuleSourceIndex sources) {
+        public ServerTask publishIndex(MinecraftServer server, RuleIndex index, RuleLoadResult<Rule> result) {
             ServerTask publication = Objects.requireNonNull(runtime).publishDecoded(server, index);
-            publishedSources = sources;
+            publishedRules = result;
+            publishedOverrides = RuleEnableState.get(server.overworld()).snapshot();
             return publication;
         }
     }
 
     // 命令层能力适配器：状态都在宿主实例上，调用时实时读取
     private final class CommandContext implements RuleRuntimeDiagnosticsContext {
+
+        @Override
+        public RuleLoadResult<Rule> publishedRules() {
+            return publishedRules;
+        }
+
+        @Override
+        public Map<ResourceLocation, Boolean> publishedOverrides() {
+            return publishedOverrides;
+        }
 
         @Override
         public boolean available() {

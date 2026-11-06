@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.core.service;
 
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.load.LoadedRule;
+import com.meteorite.itemdespawntowhat.core.load.RuleLoadResult;
 import com.meteorite.itemdespawntowhat.core.load.RuleSourceRead;
 import com.meteorite.itemdespawntowhat.core.load.RuleSourceIndex;
 import com.meteorite.itemdespawntowhat.core.load.RawRuleEntry;
@@ -72,6 +73,7 @@ final class RuleSaveTask implements ServerTask {
     private @Nullable Throwable pendingFailure;
     private RawReload reload;
     private final List<LoadedRule<Rule>> decoded = new ArrayList<>();
+    private List<LoadedRule<Rule>> readyRules = List.of();
     private ServerTask apply;
 
     RuleSaveTask(RuleOverlayStore store, EditAdmission admission, RuleAuthoringContext context, MinecraftServer server,
@@ -269,7 +271,7 @@ final class RuleSaveTask implements ServerTask {
                         return true;
                     }
                     RuleEnableApplyService.Outcome outcome = RuleEnableApplyService.apply(server, context,
-                            changes.enableEdits(), reload.index());
+                            changes.enableEdits(), reload.index(), reload.issues().issues());
                     if (outcome.changed() == 0) { finish(RuleSaveStatus.NO_CHANGES, ""); }
                     else if (outcome.publication() == null) { finish(RuleSaveStatus.UNAVAILABLE, ""); }
                     else { apply = outcome.publication(); phase = Phase.APPLY; }
@@ -291,7 +293,7 @@ final class RuleSaveTask implements ServerTask {
                 } else {
                     // 纯模型索引构建没有世界访问，后台使用的模型集合不再由服务端线程修改。
                     // 先注入「本服覆盖 ?? 默认启用」：否则刚保存的规则会按 JSON 默认值生效，与加载链路分叉
-                    List<LoadedRule<Rule>> readyRules = List.copyOf(RuleLoadingService.applyEnableState(
+                    readyRules = List.copyOf(RuleLoadingService.applyEnableState(
                             reloadContext.loadContext(), decoded));
                     byte[] indexedRevision = diskRevision.clone();
                     prepared = store.submit("save-index", () -> {
@@ -306,7 +308,8 @@ final class RuleSaveTask implements ServerTask {
             }
             case INDEX -> {
                 if (!prepared.isDone()) { return false; }
-                apply = context.publishIndex(server, prepared.join(), reload.index()); prepared = null;
+                apply = context.publishIndex(server, prepared.join(),
+                        new RuleLoadResult<>(readyRules, issues, reload.index())); prepared = null;
                 phase = Phase.APPLY;
             }
             case APPLY -> {

@@ -37,11 +37,11 @@ authority: common/core/catalog、common/core/network、common/core/service、com
 ### 对外入口
 
 - 网络入口：两端从 `RuleEditChannels` 取得 C2S 处理器并调用 `RuleEditServerHandler`；后者无状态地完成就绪判定与请求转换，会话号、持有者与权限由 `EditAdmission` 统一判定，每次服务端的 `RuleEditTransport` 在 tick 交付业务完成事件和列表分片，并按活动刻回收会话与传输。
-- 命令入口：`RuleCommandTree.register()` 注册 `idtw` 根节点，`config` 与 `rule` 子树常驻，`debug` 子树在开发环境挂载。
+- 命令入口：`RuleCommandTree.register()` 注册 `idtw` 根节点，`editor` 与 `rule` 子树常驻，根命令按身份显示帮助，`debug` 子树在开发环境挂载。
 - 服务端服务：`AuthoringHost` 随服务端生命周期创建和关闭编辑组件；`RuleEditService` 接收业务请求、产出语义应答；`EditSessionManager` 持有会话；`RuleOverlayStore` 唯一持有修订与文件工作，`RuleEditTransport` 负责载荷映射与发送。
 - 目录入口：`RuleCatalogService` 的分页查询与失效，数据来自 `RuleCatalogSources`。
 - 落盘入口：`RuleOverlayWriter.apply(...)`，由 `RuleSaveTask` 编排调用；启用状态入口：`RuleEnableApplyService`，保存与命令共用。
-- 正式命令通过 `RuleCommandContext` 读取就绪状态、配置与编辑能力；开发入口通过宿主的 `RuleRuntimeDiagnosticsContext` 取得诊断所需运行时。
+- 正式命令通过 `RuleCommandContext` 读取就绪状态、完整已发布加载结果、本服覆盖快照与编辑能力；开发入口通过宿主的 `RuleRuntimeDiagnosticsContext` 取得诊断所需运行时。
 - 调试入口：`RuleDebugCommands`，背后是 `DebugScenarioManager`、`DebugPipelineManager` 与场景清单、统一序列目录及共享运行器。
 
 ### 依赖方向
@@ -85,7 +85,7 @@ flowchart LR
 | `RuleTextChunker` / `RuleChunkPayload` / `RuleChunkAssembly` | 分片公共层 | 按通道的字节档位决定直发或分片、单片校验、批次身份与收齐判定；服务端装配器与客户端缓冲共用 | `RuleEditTransport`、客户端 `RuleChunkBuffer` |
 | `RuleEditChunkAccumulator` / `RuleEditLimits` | 分片与限额 | 按玩家保留在途批次（每玩家上限、超出淘汰最早）、收齐后复核总量、空闲过期与清理 | `RuleEditTransport` |
 | `RuleCatalogSources` / `RuleCatalogService` | 候选目录 | 数据源给出全量与修订号；服务做大小写不敏感过滤、分页与按“类别 + 修订号”缓存 | `RuleCatalogType`、客户端列表、保存后失效 |
-| `RuleCommandTree`（含 config / rule 命令组） | 命令面 | 组装根树、把权限下放到子分支、统一本地化反馈出口 | `RuleEditService`、`RuleEnableApplyService` |
+| `RuleCommandTree`（含 editor / rule 命令组） | 命令面 | 组装根树、把权限下放到子分支、统一本地化反馈出口 | `RuleEditService`、`RuleEnableApplyService` |
 | `RuleDebugCommands` / `DebugScenarioManager` / `DebugPipelineManager` | 调试 | 开发环境场景与流水线的启动、推进、收尾；声明目录是唯一注册来源；复用正式编解码与真实运行时 | `RuleRuntimeDiagnosticsContext`、`RuntimeObserver` |
 
 ## 4. 关键流程
@@ -128,7 +128,7 @@ stateDiagram-v2
 
 启停状态按存档保存：`RuleEnableState` 以 SavedData 形式挂在主世界数据存储上，按 id 记录布尔覆盖，没有记录的 id 继承规则默认启用；恢复默认即摘除记录。保存写盘成功后立即提交同批启停动作，再走重读与索引重建；内容没有实际改动、只有状态变化时同样重建索引并回扫。
 
-存档里保留、但合并结果中已不存在的 id 在应用时被忽略，记录作为孤儿保留；`/idtw rule orphans` 查看、`/idtw rule orphans clear` 清理。
+存档里保留、但原始来源中已不存在的 id 在应用时被忽略，记录作为孤儿保留。孤儿检查经文件队列读取稳定来源，按原始来源索引的 id 判定存在性；可识别 id 的非法内容仍视为现存。来源读取或解析有错误时停止检查与清理，完整保留存档记录。
 
 - **幂等**：同一会话内以操作标识回放结果，重复提交不再二次落盘；幂等表按会话整体失效。
 - **版本戳推进**：成功保存与成功重载都推进版本；快照装配与保存重读前后都比对磁盘指纹，中途变化即判失败而不是覆盖别人的改动。
@@ -178,10 +178,10 @@ flowchart TB
 ### 4.5 命令权限口径
 
 - 根节点不统一鉴权：编辑锁状态查询对所有玩家开放，权限下放到各子分支，避免“查看”也被权限挡住。
-- 编辑与写操作沿用同一口径：单人存档房主直接放行，其余执行者按权限等级判定；权限来源统一为 `RuleEditPermissions.hasAccess`，命令分支经 `requires` 接入，编辑权限谓词由 `AuthoringHost` 在装配时注入 `RuleEditService` 并交给 `EditAdmission`，开放局域网后的访客按权限等级判定。
+- 编辑与写操作沿用同一口径：单人存档房主直接放行，其余执行者按权限等级判定；权限来源统一为 `RuleEditPermissions.hasAccess`，`rule` 分支经 `requires` 接入，`editor` 打开操作在执行时判权以保留公开状态子命令，编辑权限谓词由 `AuthoringHost` 在装配时注入 `RuleEditService` 并交给 `EditAdmission`，开放局域网后的访客按权限等级判定。
 - 编辑命令要求玩家实体：先判权限与当前连接的编辑通道能力再取锁；客户端缺少编辑通道时回复安装提示并保持会话空闲，取锁失败时回显持有者；强制释放需要编辑权限等级，原持有者在线时收到会话过期回执；会话处于在途保存时，改由保存收尾的终态回执携带。
-- 读取、重载、启停与孤儿清理子命令在保存进行中回“保存忙碌”，避开文件替换窗口；启停与孤儿清理在应用成功后由运行时换入并排队回扫，运行时未就绪时明确回答未应用。
-- 反馈统一走命令层的本地化出口：成功与失败都按语言 key 组装，并携带内置英文模板作为 fallback；已安装模组的客户端按自身语言渲染，原版客户端直接使用 fallback。英文模板由命令反馈构造器从语言资源一次加载，缺省参数带裁剪上限。
+- 列表、普通详情和 ID 补全只读已发布加载结果，保存期间继续展示上一份发布视图；结果保留停用规则、同批原始来源与本服覆盖快照，随启动、重载、内容保存和纯启停发布一起替换。原始 JSON、校验、重载、启停与孤儿检查在保存进行中回“保存忙碌”。命令启停基于已发布来源重建索引并排队回扫；孤儿清理只更新存档记录。
+- 反馈统一走命令层的本地化出口：成功与失败都按语言 key 组装，并携带内置英文模板作为 fallback；已安装模组的客户端按自身语言渲染，原版客户端直接使用 fallback。英文模板由命令反馈构造器从语言资源一次加载；参数保留 Component 的本地化与交互。列表与校验问题分页，规则详情默认展示发布摘要，原始来源以 raw 显式请求并按 Unicode 片段分页；点击链接预填命令，点击原始片段复制文本。具体语法见[命令参考](../wiki/zh-08-commands.md)。
 
 ### 4.6 调试场景与流水线
 
