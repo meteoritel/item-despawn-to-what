@@ -61,6 +61,10 @@ public final class RuleEditorScreen extends UiScreen implements UiLayoutSource {
     private static final int NOTICE_H = 10;
     // 实心提示色块的左右内边距
     private static final int NOTICE_CHIP_PAD = 3;
+    // 顶部栏状态标签的左右内边距
+    private static final int STATE_PAD = 4;
+    // 顶部栏必须为标题保留的最小宽度：状态标签在窄窗口下优先压缩，标题按剩余宽度截断
+    private static final int HEADER_TITLE_MIN_W = 48;
     // i18n 前缀
     private static final String UI = TypeLabels.UI_PREFIX;
 
@@ -71,6 +75,8 @@ public final class RuleEditorScreen extends UiScreen implements UiLayoutSource {
     private UiRect contentArea = new UiRect(0, 0, 0, 0);
     private UiRect footerArea = new UiRect(0, 0, 0, 0);
     private int noticeY;
+    // 顶部栏：标题、状态标签与换肤按钮同处一栏，栏高由控件高度决定
+    private int headerBandHeight;
     private UiRect stateArea = new UiRect(0, 0, 0, 0);
     private List<FormattedCharSequence> stateLines = List.of();
     // 提示的折行判定与命中矩形每帧重算，属于渲染态，不进外壳
@@ -153,16 +159,8 @@ public final class RuleEditorScreen extends UiScreen implements UiLayoutSource {
         EditorPage page = shell.activePage();
         int pad = page.pagePadding();
         int available = Math.max(0, width - pad * 2);
-        UiButton themeButton = shell.themeButton();
-        int toolsY = page.headerHeight() + PAD;
-        int buttonWidth = Math.min(available, themeButton.preferredWidth(6));
-        int stateWidth = Math.clamp(available - buttonWidth - PAD, 0, font.width(page.stateLabel()) + PAD * 2);
-        stateLines = font.split(Component.literal(page.stateLabel()), Math.max(1, stateWidth - PAD * 2));
-        int buttonHeight = Math.max(RuleEditorPageSupport.DIALOG_BUTTON_H, THEME.rowHeight());
-        int toolsHeight = Math.max(buttonHeight, stateLines.size() * font.lineHeight + PAD * 2);
-        themeButton.setBounds(width - pad - buttonWidth, toolsY + (toolsHeight - buttonHeight) / 2, buttonWidth, buttonHeight);
-        stateArea = new UiRect(pad, toolsY, stateWidth, toolsHeight);
-        int top = page.layoutHeader(pad, toolsY + toolsHeight + PAD);
+        layoutHeader(page, pad, available);
+        int top = page.layoutHeader(pad, headerBandHeight + PAD);
         int footerHeight = page.footerHeight(available);
         int footerY = height - pad - footerHeight;
         noticeY = footerY - PAD - (shell.notice() == null ? 0 : NOTICE_H);
@@ -173,6 +171,34 @@ public final class RuleEditorScreen extends UiScreen implements UiLayoutSource {
         if (picker != null) picker.setBounds(contentArea.x(), contentArea.y(), contentArea.width(), contentArea.height());
         if (shell.saving()) saveOverlay().layout(width, height);
         else saveOverlay = null;
+    }
+
+    /**
+     * 排版顶部栏：标题占左侧，状态标签与换肤按钮靠右，三者同处一栏。
+     *
+     * <p>栏高取「页声明的最小标题带高度」与「控件高度 + 上下留白」的较大值，三页共用同一栏高，
+     * 因此状态与换肤入口不再额外占用一行。状态标签的宽度上限为「可用宽度扣除换肤按钮与标题最小宽度」，
+     * 窄窗口下先压缩状态标签、再由标题截断兜底；两者都放不下时隐藏状态标签以保证标题与按钮可用。</p>
+     *
+     * @param page      当前活动页，用于取内边距、最小标题带高度与状态文案
+     * @param pad       页内边距
+     * @param available 窗口内容的可用宽度
+     */
+    private void layoutHeader(EditorPage page, int pad, int available) {
+        UiButton themeButton = shell.themeButton();
+        int buttonWidth = Math.min(available, themeButton.preferredWidth(6));
+        int buttonHeight = Math.max(RuleEditorPageSupport.DIALOG_BUTTON_H, THEME.rowHeight());
+        String stateText = page.stateLabel();
+        int stateLimit = Math.max(0, available - buttonWidth - PAD - HEADER_TITLE_MIN_W);
+        int stateWidth = Math.min(font.width(stateText) + STATE_PAD * 2, stateLimit);
+        stateLines = stateWidth > STATE_PAD * 2
+                ? font.split(Component.literal(stateText), stateWidth - STATE_PAD * 2)
+                : List.of();
+        int stateHeight = stateLines.isEmpty() ? 0 : stateLines.size() * font.lineHeight + STATE_PAD * 2;
+        headerBandHeight = Math.max(page.headerHeight(), Math.max(buttonHeight, stateHeight) + PAD * 2);
+        themeButton.setBounds(width - pad - buttonWidth, (headerBandHeight - buttonHeight) / 2, buttonWidth, buttonHeight);
+        stateArea = stateLines.isEmpty() ? new UiRect(0, 0, 0, 0)
+                : new UiRect(themeButton.bounds().x() - PAD - stateWidth, (headerBandHeight - stateHeight) / 2, stateWidth, stateHeight);
     }
 
     // ---- 渲染 ----
@@ -188,8 +214,7 @@ public final class RuleEditorScreen extends UiScreen implements UiLayoutSource {
         int w = this.width;
         int h = this.height;
         THEME.drawWindow(graphics, new UiRect(0, 0, w, h));
-        int headerHeight = page.headerHeight();
-        THEME.drawDivider(graphics, 0, headerHeight, w);
+        drawHeaderBand(graphics, w);
         drawHeaderText(graphics, page);
         UiPointer pointer = page.inputScope().pointer(mouseX, mouseY).resolve(page);
         shell.themeButton().render(graphics, font, pointer);
@@ -235,7 +260,7 @@ public final class RuleEditorScreen extends UiScreen implements UiLayoutSource {
     }
 
     /**
-     * 导出当前界面层的排版快照：活动页控件在前，模态层在后。
+     * 导出当前界面层的排版快照：活动页控件在前，顶部栏状态标签与换肤按钮随后，模态层在最后。
      *
      * <p>只导出活动页：另两页在切换后不再重排，其控件矩形会停留在上一次的屏幕位置，
      * 报出来会让探针误以为那部分内容仍然可见。坐标已是屏幕 GUI 坐标——页每帧按内容区重排，
@@ -244,12 +269,30 @@ public final class RuleEditorScreen extends UiScreen implements UiLayoutSource {
     @Override
     public List<UiLayoutNode> layoutNodes() {
         List<UiLayoutNode> nodes = new ArrayList<>(shell.activePage().layoutNodes());
+        nodes.addAll(headerNodes());
         nodes.addAll(shell.themeButton().layoutNodes());
         nodes.addAll(shell.modals().layoutNodes());
         return nodes;
     }
 
-    // 顶部标题与状态：文本与状态标签由页声明，屏幕只负责排版与配色
+    // 顶部栏的状态标签是屏幕直接绘制的文字行：按真实文案与胶囊内带宽导出，供探针按语言 key 断言
+    private List<UiLayoutNode> headerNodes() {
+        if (stateLines.isEmpty()) {
+            return List.of();
+        }
+        Component label = Component.literal(shell.activePage().stateLabel());
+        return List.of(new UiLayoutNode(UiLayoutNode.Kind.ROW, stateArea, label, font.width(label),
+                Math.max(0, stateArea.width() - STATE_PAD * 2), true, true, List.of()));
+    }
+
+    // 顶部栏底色：窗口内缩一个描边宽度，保留窗口自身的外框；栏底再用分隔线与正文分开
+    private void drawHeaderBand(GuiGraphics graphics, int w) {
+        int border = THEME.border();
+        THEME.drawHeader(graphics, new UiRect(border, border, Math.max(0, w - border * 2), Math.max(0, headerBandHeight - border)));
+        THEME.drawDivider(graphics, 0, headerBandHeight, w);
+    }
+
+    // 顶部栏文字：左侧标题，右侧状态标签；文本与状态由页声明，屏幕只负责排版与配色
     private void drawHeaderText(GuiGraphics graphics, EditorPage page) {
         truncatedTitleRect = null;
         String title = page.title();
@@ -257,29 +300,36 @@ public final class RuleEditorScreen extends UiScreen implements UiLayoutSource {
             title = this.getTitle().getString();
         }
         int padding = page.pagePadding();
-        int headerHeight = page.headerHeight();
-        // 头部带比默认高度更高时（编辑页）标题垂直居中，其余页贴顶
-        int textY = headerHeight > THEME.headerHeight() ? (headerHeight - font.lineHeight) / 2 : 3;
+        // 标题让位给同栏的状态标签与换肤按钮，放不下时按剩余宽度截断并登记悬停详情
+        int titleRight = stateLines.isEmpty() ? shell.themeButton().bounds().x() : stateArea.x();
+        int textY = (headerBandHeight - font.lineHeight) / 2;
         String fullTitle = title;
-        title = TextScroll.trimToWidth(font, title, Math.max(0, this.width - padding * 2));
+        title = TextScroll.trimToWidth(font, title, Math.max(0, titleRight - PAD - padding));
         if (!title.equals(fullTitle)) {
             truncatedTitleRect = new UiRect(padding, textY, font.width(title), font.lineHeight);
         }
         graphics.drawString(font, title, padding, textY, THEME.palette().surfaces().headerText(), false);
-        int stateColor = THEME.palette().surfaces().text();
-        UiRect stateRect = stateArea;
+        drawStateChip(graphics, page);
+    }
+
+    // 状态标签：有底板的页画胶囊，只读警示用警告色填充（与底部警告提示同色，替代额外的常驻说明文字）
+    private void drawStateChip(GuiGraphics graphics, EditorPage page) {
+        if (stateLines.isEmpty()) {
+            return;
+        }
+        UiHostPalette palette = THEME.palette();
+        int stateColor = palette.surfaces().text();
         if (page.statePanel()) {
             if (page.statePanelHighlighted()) {
-                // 只读来源用警告色填充状态标签：与底部警告提示同色，替代额外的常驻说明文字
-                THEME.drawSurface(graphics, stateRect, THEME.palette().status().warning(), THEME.palette().controls().controlBevelDark());
-                stateColor = THEME.palette().status().filledText();
+                THEME.drawSurface(graphics, stateArea, palette.status().warning(), palette.controls().controlBevelDark());
+                stateColor = palette.status().filledText();
             } else {
-                THEME.drawSurface(graphics, stateRect, UiHostSurface.PANEL);
+                THEME.drawSurface(graphics, stateArea, UiHostSurface.CHIP);
             }
         }
-        int stateY = stateRect.y() + (stateRect.height() - stateLines.size() * font.lineHeight) / 2;
+        int stateY = stateArea.y() + (stateArea.height() - stateLines.size() * font.lineHeight) / 2;
         for (FormattedCharSequence line : stateLines) {
-            graphics.drawString(font, line, stateRect.x() + PAD, stateY, stateColor, false);
+            graphics.drawString(font, line, stateArea.x() + STATE_PAD, stateY, stateColor, false);
             stateY += font.lineHeight;
         }
     }

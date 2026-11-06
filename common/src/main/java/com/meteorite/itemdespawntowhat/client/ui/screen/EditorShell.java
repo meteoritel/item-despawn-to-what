@@ -117,7 +117,8 @@ final class EditorShell {
         this.model = model;
         this.display = display;
         this.font = font;
-        this.themeButton = new UiButton(THEME, font, themeLabel, UiButtonVariant.SECONDARY, changeTheme);
+        // 换肤是顶部栏的胶囊按钮：与状态标签同处一栏，带真实命中、焦点与旁白
+        this.themeButton = new UiButton(THEME, font, themeLabel, UiButtonVariant.SECONDARY, changeTheme).setChipStyle(true);
         this.listPage = new RuleEditorListPage(this, model, display, font, modals);
         this.editPage = new RuleEditorEditPage(this, model, workspace, font, modals);
         this.debugPage = new RuleEditorDebugPage(this, model, font, modals);
