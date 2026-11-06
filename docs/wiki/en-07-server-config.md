@@ -2,34 +2,33 @@
 
 > Applies to **2.0.0** (Minecraft **1.21.1**).
 
-This page explains what each setting in `server.json` does, which values it accepts, and when you need to change it.
+This page details the settings in `server.json`, their default values, and common tuning scenarios.
 
-These settings control how the server runs: how often the mod checks, how much work it does per tick, and how it protects and cools down its products. They do not decide what a drop turns into. For that, see [Rule Fields](en-02-rule-basics).
+These settings govern server runtime performance and safety budgets (such as check frequency, per-tick processing budgets, and product protection cooldowns). They **do not define conversion products**. To add or edit conversion rules, see [Rule Fields](en-02-rule-basics).
 
-## What This File Is
+---
 
-- Location: `config/itemdespawntowhat/server.json`, inside the game instance's `config` directory. It has nothing to do with a world or a data pack.
-- One file for both loaders: Fabric and NeoForge read the same file and the same values.
-- When it appears: the game creates it on the first launch of the client or the server. After that the mod never rewrites an existing file, so your edits stay.
-- When it takes effect: the server reads it once at startup. Restart the server after a change. `/idtw rule reload` reloads rules only; it does not reread this file.
-- Missing fields take their default values, so write only the entries you want to change.
-- What happens when a value is wrong: one bad entry voids the whole file, which then falls back to its default values. A bad entry is a value out of range, a wrong type such as text where a number belongs, or JSON that does not parse, from a stray bracket or comma to content that is not a JSON object. Correct entries elsewhere do not apply either, and the startup log records one error. The mod never rewrites the file, so check the startup log after an edit.
-- Unknown fields produce a startup WARN with the full path, such as `nearby_products.item_limt`. Other valid fields still apply. Correct the spelling and restart the server.
+## File Behavior & Application
 
-The **overlay directory** is the folder under `config/` that holds your own rule files, and `overlay_directory` is the only setting that moves it. How `server.json` differs from rule files:
+- **File location**: `config/itemdespawntowhat/server.json`, located in the global `config` directory;
+- **Unified configuration**: Fabric and NeoForge use the exact same file and format;
+- **Safe modifications**: Generated automatically on first launch; missing fields fall back to their official defaults;
+- **Applying changes**: **You must restart the server or game client for edits to take effect**. The command `/idtw rule reload` reloads rule files only, not server configuration.
 
-| Item | `server.json` | Rule Files |
-|---|---|---|
-| What it is | Server run parameters | Conversion content, meaning what turns into what |
-| Scope | One file for the whole server, shared by every rule | Each rule is independent |
-| Location | `config/itemdespawntowhat/server.json` | `config/itemdespawntowhat/rules/*.json`, or `data/<namespace>/idtw/rules/*.json` in a data pack |
-| How it applies | Restart the server | `/idtw rule reload` |
+### Server Config vs Rule Files
 
-You can indent and wrap the file however you like. The game writes it as one compact JSON line on the first launch, and the two forms are equivalent.
+| Dimension | Server Config (`server.json`) | Rule Files (`rules/*.json`) |
+| --- | --- | --- |
+| **Main Purpose** | Performance budgets and lag prevention | What items convert into |
+| **Scope** | Server-wide; affects all rules | Independent per rule |
+| **Location** | `config/itemdespawntowhat/server.json` | `config/itemdespawntowhat/rules/` or datapacks |
+| **How to Apply** | **Restart server/game** | Run `/idtw rule reload` |
+
+---
 
 ## Default Configuration
 
-The following lists the complete default values. The Codec omits keys equal to their defaults when saving. Configuration keys remain flat, with `nearby_products` as a nested object:
+Here is the default configuration generated on first startup:
 
 <!-- config-reference:defaults:begin -->
 ```json
@@ -69,11 +68,11 @@ The following lists the complete default values. The Codec omits keys equal to t
 ```
 <!-- config-reference:defaults:end -->
 
-`max_work_units_per_tick` does not appear in the file by default, because its fallback applies only while the entry is absent. See the next section. Its absence from the generated file is normal.
+---
 
-## All Fields
+## Field Reference
 
-See the table for each time field's unit. At the normal game speed, 20 ticks equal 1 second.
+Time parameters are specified in game ticks (normally 20 ticks = 1 second).
 
 <!-- config-reference:fields:begin -->
 | Field | What It Does | Type / Range | Default | When to Change It |
@@ -105,13 +104,11 @@ See the table for each time field's unit. At the normal game speed, 20 ticks equ
 | `nearby_products` | The nearby product limits. The count of products already nearby, together with the declared output per group, decides how many groups this settlement may open. See the next section | Object | See sub-fields | Lower it when piled-up products cause lag. Set the matching limit to `0` to remove the cap |
 <!-- config-reference:fields:end -->
 
-Use the table for accepted ranges and defaults. A `0` state duration and a `0` nearby capacity limit each have their own meaning. Any out-of-range value makes the whole file fall back to the defaults and logs an error.
+---
 
-## Nearby Product Limits
+## Nearby Product Density Limits (`nearby_products`)
 
-At the start of a settlement, the mod allocates an output budget from the initial nearby count and the declared theoretical output per group, without discounting probability. With a limit of 100, 90 existing items and one declared item per group, only 10 groups may convert; the remaining source items are returned. Nearby limits are not checked again during generation. Products added elsewhere do not reduce those 10 groups, and the final nearby count may exceed the limit. Actual budget use depends on the conversion type; producing less does not permit extra groups. Items and entities (mobs and other entities) use their respective budgets; experience orb counts do not affect admission.
-
-These limits apply to every rule. They are not set per rule.
+When items or entities accumulate heavily in one location, the mod pauses new conversions in that radius. Excess items are safely returned to the ground to protect server TPS.
 
 <!-- config-reference:nearby-products:begin -->
 | Field | What It Does | Type / Range | Default |
@@ -124,61 +121,21 @@ These limits apply to every rule. They are not set per rule.
 | `experience_radius` | A kept field as well. It maps to no counting radius at all | Integer [1, 32] | `6` |
 <!-- config-reference:nearby-products:end -->
 
-Notes:
+*Tip: Setting `item_limit` or `entity_limit` to `0` removes the limit for that product type.*
 
-- Set an item or entity capacity limit to `0` to turn that check off. Only `item_radius` and `entity_radius` are active counting radii. Experience fields retain config read/write compatibility and the ranges shown in the table.
-- A limit only decides whether a new conversion group can start. It is not a hard ceiling on what exists nearby, and it does not keep the count at or below the limit.
-- A group stopped by a limit consumes no source items. The source items that cannot start a group go through the return path, as described in [Outcome Candidates and Settlement](en-05-outcomes-and-settlement). A returned item never converts again, so the surplus does not queue up for a later slot.
-- Lowering a limit makes conversions easier to postpone, and heavy product buildup can stop output for a long time. When the item and entity limits are both in use, the tightest one decides.
-- The two experience fields exist only so that existing config files keep loading. Within their allowed ranges, no value you write there changes conversion behavior.
+---
 
-Example: lift the nearby count limits for items and entities while the other settings keep their defaults. The two experience fields already do nothing, so leave them out:
+## Common Tuning Scenarios
 
-```json
-{
-  "nearby_products": {
-    "item_limit": 0,
-    "entity_limit": 0
-  }
-}
-```
+Add any of these snippets to `config/itemdespawntowhat/server.json`. **Restart the server or game client after modifying**.
 
-## Product Protection and Conversion Cooldown
+### Scenario 1: Low-spec servers or mob farms with massive drops
 
-`new_product_protection_seconds` covers every product: dropped items, mobs, and other entities. `conversion_cooldown_seconds` affects dropped items only, because entity products take part in no conversion. Returned items follow other rules, as the note at the end of this section explains.
-
-| Field | What It Does | What `0` Means |
-| --- | --- | --- |
-| `new_product_protection_seconds` | A freshly produced product resists destruction by fire, lava, and cacti for this long. Other damage sources are unaffected | No protection. A product can burn, sink into lava, or break on a cactus as soon as it appears |
-| `conversion_cooldown_seconds` | A freshly produced item cannot start another conversion for this long, which prevents a product from converting on immediately under another rule | No cooldown. A product that matches a rule converts again right away |
-
-Protection for mobs and other entities is not written to entity data: it is kept in memory under the entity identity and ends when the entity unloads or the server restarts. Those products take part in no conversion, so they have no cooldown.
-
-The two settings are independent, so you can set them separately:
-
-- Products often land next to lava and burn: raise `new_product_protection_seconds`, to `10` for example.
-- Products turn into something else the moment they appear: raise `conversion_cooldown_seconds`.
-- No extra protection wanted, with products destroyable and convertible again right away:
+Lower the time budget and increase intervals to protect TPS:
 
 ```json
 {
-  "new_product_protection_seconds": 0,
-  "conversion_cooldown_seconds": 0
-}
-```
-
-One more behavior that has nothing to do with these settings: a returned item, meaning a source item already handed back to the world, stays protected for its whole life and never converts again. Neither setting affects it.
-
-## Tuning by Scenario
-
-Each block below is part of `server.json`. Fields you leave out keep their defaults, so paste a block straight into the file. Restart the server after every change.
-
-A weak server with a lot of drops, where smoothness comes first:
-
-```json
-{
-  "server_budget_us": 1000,
-  "effects_work_units_per_tick": 32,
+  "server_budget_us": 2000,
   "check_interval_ticks": 40,
   "backoff_max_ticks": 200,
   "check_spread_window_ticks": 40,
@@ -186,9 +143,9 @@ A weak server with a lot of drops, where smoothness comes first:
 }
 ```
 
-Effect: the mod spends less time per tick, checks less often, and spreads a large batch of simultaneous expirations more evenly. The cost is slower conversion overall, so a rule may take a moment to fire after its condition holds.
+### Scenario 2: Responsive environment reactions
 
-Faster conversion:
+Lower check intervals so items convert faster when conditions are met:
 
 ```json
 {
@@ -197,41 +154,30 @@ Faster conversion:
 }
 ```
 
-Effect: after a condition fails once, the mod retries sooner, with the example setting the wait cap to 2 seconds. The cost is more checks in the same time.
+### Scenario 3: Prevent products burning in lava or fire immediately
 
-Setting the work per tick on its own, where the `max_checks_per_tick` value applies while `max_work_units_per_tick` is absent:
-
-```json
-{
-  "max_checks_per_tick": 512,
-  "max_work_units_per_tick": 1024
-}
-```
-
-Moving the rule overlay to another directory:
+Increase new product protection time (e.g. 10 seconds):
 
 ```json
 {
-  "overlay_directory": "my_idtw"
+  "new_product_protection_seconds": 10
 }
 ```
 
-Effect: rules now load from `config/my_idtw/rules/`. Move the contents of the old `config/itemdespawntowhat/` directory into `config/my_idtw/` first, or none of the existing overlay rules load. `server.json` itself stays in `config/itemdespawntowhat/`.
+### Scenario 4: Prevent endless conversion loops
 
-## Fields You Normally Leave Alone
+Increase cooldown to prevent secondary rules immediately consuming new outputs:
 
-- `overlay_directory`: change it only when you want a different directory layout, because a mistake stops every overlay rule from loading.
-- `max_checks_per_tick`, `max_work_units_per_tick`, `effects_work_units_per_tick`, `dispatch_batch_size`, `prepare_groups_per_step`, `position_search_checks_per_tick`, `rescan_entities_per_step`, `cancels_per_step`: the defaults suit most servers. Change them only when you see lag or a clear backlog.
-- `fabric_lifespan_fallback_ticks`: used on Fabric until the current server run samples a reference drop lifespan.
-- `debug_logging`: turn it on temporarily while you diagnose a problem.
-- `settlement_recovery_max_attempts`: the number of recovery attempts in the current server session. Change it only when a dimension is expected to stay unavailable for a long time.
-- `debug_scenario_prepare_batch_size`, `debug_scenario_prepare_budget_us`: these serve test scenarios in a development environment only, and normal play never needs them.
-- The default limits under `nearby_products` are generous, so normal play rarely reaches them. Its two experience sub-fields no longer do anything, so leave them alone.
+```json
+{
+  "conversion_cooldown_seconds": 15
+}
+```
 
-## Related
+---
 
-- File location and the first launch: [Getting Started](en-01-getting-started)
-- Top-level rule fields, such as `trigger_after_seconds`: [Rule Fields](en-02-rule-basics)
-- The overlay directory and source priority: [Source Layers and Overrides](en-06-layers-and-overrides)
-- The return path and settlement: [Outcome Candidates and Settlement](en-05-outcomes-and-settlement)
-- How to use each command: [Command Reference](en-08-commands)
+## Next Steps
+
+- [Getting Started](en-01-getting-started): Walkthrough and setup.
+- [Rule Fields](en-02-rule-basics): Complete reference for rule options.
+- [Command Reference](en-08-commands): All in-game commands.

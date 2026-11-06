@@ -1,39 +1,33 @@
-# Conditions
+# Conditions (`conditions`)
 
 > Applies to **2.0.0** (Minecraft **1.21.1**).
 
-This page explains how to write the `conditions` field and when the mod checks it.
+This page explains how to use `conditions` to restrict when rules trigger. For example: allowing apples to ferment only at night, ice to melt only in hot biomes, or rituals to complete only during thunderstorms.
 
-For the other rule fields, see [Rule Fields](en-02-rule-basics). For effects and material costs, see [Effects](en-04-effects) and [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
+---
 
-## What Conditions Do
+## Core Concepts
 
-- A condition only decides whether it is satisfied. It consumes no items and no fluids; the rule input settings (source items, catalysts, and fluid) are what actually pay materials.
-- Leave out the whole `conditions` field to run a rule with no conditions. The check then passes at any time.
-- The rule is selected and converts only when the result is satisfied. An unsatisfied, unavailable, or error result never triggers it.
-- A condition that stays unsatisfied is not an error. It only means the rule rarely fires.
-- A malformed condition is a separate matter. A broken structure or an out-of-range value rejects the whole rule, and the load log and `/idtw rule validate` report why.
+- **Gatekeeping only**: Conditions check whether the current environment allows the rule to trigger; they **never consume items or fluids**. Material costs are deducted by the rule's settlement configuration (see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement)).
+- **Unconditional triggers**: To let a rule trigger under any circumstance, simply **omit the `conditions` field entirely**.
+- **Automatic retry**: If a dropped item reaches its trigger time while conditions are not met (e.g. waiting for rain on a sunny day), the mod **does not delete the item**. Instead, it retries at backoff intervals until conditions are met or the item despawns naturally.
 
-## The Four Node Types
+---
 
-A **condition tree**, the value of the `conditions` field, has exactly one root node. Every node is a JSON object, and `op` says which type it is:
+## Condition Tree Structure
 
-| `op` | Meaning | Child field | Fields allowed here |
-|---|---|---|---|
-| `all_of` | Matches when every child matches (AND) | `terms` | `op`, `terms` |
-| `any_of` | Matches when any child matches (OR) | `terms` | `op`, `terms` |
-| `inverted` | Swaps satisfied and unsatisfied (NOT) | `term` | `op`, `term` |
-| `leaf` | One concrete condition | `condition` | `op`, `condition` |
+In JSON, `conditions` forms a **condition tree** made of logical nodes. Each node specifies its logical operation with `op`:
 
-Three things that are easy to get wrong:
+| `op` Type | Meaning | When to Use | Child Node Field |
+| --- | --- | --- | --- |
+| `leaf` | **Concrete condition leaf** | Wraps an actual condition evaluation object | `condition` |
+| `all_of` | **Logical AND** | Succeeds only if **all conditions in the list** pass | `terms` (array) |
+| `any_of` | **Logical OR** | Succeeds if **any condition in the list** passes | `terms` (array) |
+| `inverted` | **Logical NOT** | Inverts child condition result (e.g. "not thundering") | `term` (single node) |
 
-- `terms` is an array, used by `all_of` and `any_of`. `term` is a single node, used by `inverted`. `condition` is a **condition object**, used by `leaf`. The wrong field rejects the whole rule.
-- A condition object is flat. `type` and the parameters of that type sit in the same object, with no extra layer around them.
-- A node accepts only the fields listed above, so one extra field, such as `terms` inside a `leaf`, is rejected. The `terms` array of `all_of` and `any_of` cannot be empty. To run without conditions, omit the `conditions` field instead.
+### 1. Single Condition (`leaf`)
 
-### Condition Leaf (leaf)
-
-The `condition` of a `leaf` is an object built from `type` and the parameters of that type. Every `type` carries the namespace prefix `idtw:`:
+Each `leaf` node holds a `condition` object. Its `type` must start with `idtw:`:
 
 ```json
 {
@@ -45,13 +39,18 @@ The `condition` of a `leaf` is an object built from `type` and the parameters of
 }
 ```
 
-### Combining Nodes (all_of, any_of, inverted)
+### 2. Combining Conditions (`all_of`, `any_of`, `inverted`)
+
+Nodes can be nested freely. For example, to require **"outdoors AND not during a thunderstorm"**:
 
 ```json
 {
   "op": "all_of",
   "terms": [
-    { "op": "leaf", "condition": { "type": "idtw:outdoor" } },
+    {
+      "op": "leaf",
+      "condition": { "type": "idtw:outdoor" }
+    },
     {
       "op": "inverted",
       "term": {
@@ -63,155 +62,54 @@ The `condition` of a `leaf` is an object built from `type` and the parameters of
 }
 ```
 
-This example means "outdoors, and not a thunderstorm".
+### 3. Tree Limits
 
-### Put the Tree in a Rule
+To protect server performance, single-rule condition trees observe these bounds:
+- Up to **128** condition leaves (`leaf`);
+- Up to **256** total nodes (all leaves and composite nodes combined);
+- Maximum tree depth of **16** levels.
 
-`conditions` is one top-level rule field, and its value is the tree above. A rule has exactly one root node. The example lists only the condition-related fields; see [Rule Fields](en-02-rule-basics) for the required fields it leaves out:
+---
 
-```json
-{
-  "id": "example:only_in_forest_at_night",
-  "source": { "items": ["minecraft:apple"] },
-  "conditions": {
-    "op": "all_of",
-    "terms": [
-      {
-        "op": "leaf",
-        "condition": {
-          "type": "idtw:biome",
-          "mode": "exact",
-          "biomes": ["#minecraft:is_forest"]
-        }
-      },
-      {
-        "op": "leaf",
-        "condition": { "type": "idtw:time_of_day", "from": 13000, "to": 23000 }
-      }
-    ]
-  },
-  "trigger_after_seconds": 300
-}
-```
+## 10 Available Condition Types
 
-What happens after you set this up: the apple converts when the rule comes due only if it sits in a forest biome and the world time is at night, from 13000 to 23000 ticks. Otherwise the apple stays where it is and despawns the vanilla way once its time runs out.
+All condition types are prefixed with the `idtw:` namespace. References to items, blocks, fluids, and biomes support `#` tag notation.
 
-To run without conditions, delete the whole `conditions` line. Do not write `"conditions": {}` or `"conditions": []`.
+| Type ID | Name | What It Checks |
+| --- | --- | --- |
+| `idtw:dimension` | Dimension | Checks if the dropped item is in specified dimensions |
+| `idtw:biome` | Biome | Matches biome IDs or vanilla climate parameters (temperature/humidity) |
+| `idtw:time_of_day` | Time of Day | Matches world daytime in ticks (supports wrapping midnight) |
+| `idtw:weather` | Weather | Checks world weather (`clear`, `rain`, `thunder`) |
+| `idtw:light_level` | Light Level | Checks block light level at item position (0 to 15) |
+| `idtw:y_level` | Y Height | Checks if item altitude is within a range (min/max) |
+| `idtw:outdoor` | Outdoors | Checks if there are no solid blocks directly above to the sky |
+| `idtw:surrounding_blocks` | Surrounding Blocks | Matches 6 adjacent blocks (up, down, north, south, east, west) |
+| `idtw:fluid_present` | Fluid Present | Checks if specified fluid exists at the item's location |
+| `idtw:catalyst_present` | Catalyst Present | Checks for sufficient catalyst item entities nearby |
 
-### Old Formats Are Gone
+---
 
-Every format below is reported as a clear error rather than accepted silently. If you hit one, rewrite it as the right column shows:
+## Parameter Reference & Examples
 
-| Old format | Write this instead |
-|---|---|
-| `conditions` is a plain JSON array, `[ {...} ]` | Wrap the entries in an `all_of` or `any_of` node |
-| A `groups` block under `conditions` | Wrap the entries in an `all_of` or `any_of` node |
-| `negated` inside a condition leaf | Use `{ "op": "inverted", "term": ... }` |
-| A condition object inlined directly under `conditions`, with `type` at that level | Wrap it in `{ "op": "leaf", "condition": { ... } }` |
-
-## Tree Limits
-
-| Item | Limit | How it is counted |
-|---|---|---|
-| Condition leaves | 128 | Each `leaf` node counts as 1 |
-| Condition nodes | 256 | `all_of`, `any_of`, `inverted`, and `leaf` all count |
-| Tree depth | 16 | The root sits at depth 1, and each step down adds 1 |
-
-Exceeding any of these rejects the whole rule, so that rule does not run. The load log and `/idtw rule validate` report that the leaf count, node count, or depth is over the limit, and the other rules in the same file still load. An empty `terms` array in `all_of` or `any_of`, or an `inverted` node with no `term`, is a structure error as well, and the rule is rejected.
-
-What this means in practice: flattening hundreds of conditions into one `all_of` layer goes over the leaf limit, and nesting deeper than 16 levels, such as an AND inside an AND, is rejected outright. Restructure such a tree to be flatter.
-
-## How a Tree Is Judged
-
-A condition tree returns one of four results, not a simple yes or no:
-
-| Result | Meaning | What happens |
-|---|---|---|
-| Satisfied | The condition is true | The rule takes part in selection and converts once selected |
-| Unsatisfied | The condition is false | The mod does not convert the rule this time and retries at a later check |
-| Unavailable | The mod cannot decide yet, for example when the nearby chunks are not loaded | The mod does not convert the rule this time and retries at a later check, and the result never counts as satisfied |
-| Error | Something went wrong while judging | The rule is skipped, and the log records the error |
-
-Only a satisfied result triggers a conversion. That matters for `inverted` too:
-
-- `inverted` swaps satisfied and unsatisfied only. Unavailable and error pass through unchanged.
-- Inverting a condition you cannot judge yet therefore never turns it into a satisfied result, and never wastes materials.
-- Combining nodes settle this way. `all_of` returns unsatisfied as soon as a child is unsatisfied, and `any_of` returns satisfied as soon as a child is satisfied. In every other case unavailable outranks error, and neither makes the rule convert.
-
-The typical case where you see unavailable is `surrounding_blocks`. When the neighboring chunks are not loaded, the mod cannot decide. The next check after those chunks load gives a real answer.
-
-### An Unsatisfied Condition Retries Automatically
-
-When a condition is unsatisfied, the mod does not drop the rule. It schedules another check later:
-
-- The backoff starts at the check interval and doubles on every failure until it reaches the ceiling. The default check interval is 20 ticks and the ceiling is 100 ticks, so 1 second, then 2, then 4, then at most 5. Two server settings control these numbers: `check_interval_ticks` and `backoff_max_ticks`. See [Server Configuration](en-07-server-config).
-- Retries continue until shortly before the drop would despawn on its own. If no rule has converted the drop by then, it despawns the vanilla way and never converts.
-
-A condition with a window, such as "only at night", is a normal way to write a rule. The drop converts when the window opens, so you do not need to shrink `trigger_after_seconds`. The stricter the condition, the longer the wait before the condition is satisfied and the greater the chance that the drop is picked up or despawns early. That is a trade-off, not a fault.
-
-A rule whose condition can never be satisfied gives no warning at all: the item despawns as usual. To check your work, run `/idtw rule validate` to test the syntax and the parameter values, or use `/idtw editor` to open the rule in the editor.
-
-## Condition Types at a Glance
-
-Every `type` carries the namespace prefix `idtw:`. Reference parameters, meaning items, blocks, fluids, and biomes, accept the `#` tag form except in `dimension`, for example `"#minecraft:logs"`.
-
-| `type` | Name | What It Does | Parameters |
-|---|---|---|---|
-| `idtw:dimension` | Dimension | The drop is in one of the listed dimensions | `dimensions` |
-| `idtw:biome` | Biome | The biome matches, or the climate parameters fall inside the ranges | `mode`, `biomes`, six climate ranges |
-| `idtw:time_of_day` | Time of day | The world time falls inside a range | `from`, `to` |
-| `idtw:weather` | Weather | The current weather equals the given value | `weather` |
-| `idtw:light_level` | Light level | The light level at the position falls inside a range | `min`, `max` |
-| `idtw:y_level` | Y level | The height falls inside a range | `min`, `max` |
-| `idtw:outdoor` | Outdoor | Nothing blocks the sky above the drop | None |
-| `idtw:surrounding_blocks` | Surrounding blocks | The six neighboring blocks match | `up`, `down`, `north`, `south`, `east`, `west` |
-| `idtw:fluid_present` | Fluid present | The position contains the named fluid | `fluid`, `fluids` |
-| `idtw:catalyst_present` | Catalyst present | The shared radius contains enough catalyst | `items`, `count`, `counts` |
-
-## Condition Types in Detail
-
-### dimension (Dimension)
-
-The condition matches when the drop's dimension is any entry in `dimensions`.
-
-| Field | What It Does | Value | Default |
-|---|---|---|---|
-| `dimensions` | Dimension list | Array of dimension IDs, at least 1 entry | Required |
-
-Only dimension IDs are accepted. The `#` tag form is not supported.
+### 1. dimension
 
 ```json
 {
   "op": "leaf",
   "condition": {
     "type": "idtw:dimension",
-    "dimensions": ["minecraft:overworld", "minecraft:the_end"]
+    "dimensions": ["minecraft:the_nether"]
   }
 }
 ```
+*Triggers only in the Nether.*
 
-Typical uses: keep a rule in the Nether, or wrap it in `inverted` to mean "not the Overworld".
+### 2. biome
 
-### biome (Biome)
-
-The condition matches the biome at the drop's block position, and `mode` picks how.
-
-| Field | What It Does | Value | Default |
-|---|---|---|---|
-| `mode` | Match mode | `exact` or `climate` | Required |
-| `biomes` | Biome reference list | Biome IDs or `#` tags, at least 1 entry when `mode=exact` | Empty |
-| `temperature` | Temperature range | `{"min": number, "max": number}`, values from -1 to 1 | No limit on this parameter |
-| `humidity` | Humidity range | Same as above | No limit on this parameter |
-| `continentalness` | Continentalness range | Same as above | No limit on this parameter |
-| `erosion` | Erosion range | Same as above | No limit on this parameter |
-| `depth` | Depth range | Same as above | No limit on this parameter |
-| `weirdness` | Weirdness range | Same as above | No limit on this parameter |
-
-- `exact` compares the biome ID at that position and matches when any entry matches. A tag such as `#minecraft:is_forest` covers several biomes at once.
-- `climate` reads the vanilla climate parameters at that position and matches only when every parameter you wrote falls inside its range. At least one parameter must be bounded on one side, because a range that is empty at both ends, such as `{ "temperature": {} }`, counts as unwritten.
-- Either end of a range may be left out. `min` alone sets a floor, and `max` alone sets a ceiling.
-- When `mode=exact` also carries climate ranges, or `mode=climate` also carries `biomes`, the mod ignores the extra content and logs a warning. It is not an error, and it has no effect.
-- A place that is not a multi-noise biome source, such as the End, has no climate parameters in `climate` mode. The result is unsatisfied, not unavailable.
+Supports two modes:
+- `mode: "exact"`: Match biome IDs or `#` tags;
+- `mode: "climate"`: Match climate ranges (temperature, humidity, etc.).
 
 ```json
 {
@@ -223,32 +121,11 @@ The condition matches the biome at the drop's block position, and `mode` picks h
   }
 }
 ```
+*Triggers only in forest biomes.*
 
-```json
-{
-  "op": "leaf",
-  "condition": {
-    "type": "idtw:biome",
-    "mode": "climate",
-    "temperature": { "min": 0.2 },
-    "humidity": { "max": -0.2 }
-  }
-}
-```
+### 3. time_of_day
 
-Typical uses: `exact` for "only these biomes", and `climate` for "only this kind of climate", such as a hot and dry place, without listing biomes one by one.
-
-### time_of_day (Time of day)
-
-The condition matches a range of world time. One day is 24000 ticks.
-
-| Field | What It Does | Value | Default |
-|---|---|---|---|
-| `from` | Start tick | Integer from 0 to 23999 | Required |
-| `to` | End tick | Integer from 0 to 23999 | Required |
-
-- When `from` is not greater than `to`, the range is a plain interval that includes both ends. When `from` is greater than `to`, the range wraps past midnight, as in 22000 to 2000. That is not an error.
-- For reference: tick 0 is about 6:00 in the morning, tick 6000 is noon, tick 12000 is evening, night starts at tick 13000, and tick 18000 is midnight.
+One Minecraft day has 24,000 ticks (0 = dawn, 6000 = noon, 12000 = dusk, 18000 = midnight). Ranges are inclusive:
 
 ```json
 {
@@ -260,90 +137,53 @@ The condition matches a range of world time. One day is 24000 ticks.
   }
 }
 ```
+*Triggers during the night (13000 to 23000). Setting `from` greater than `to` (e.g. 22000 to 2000) matches across midnight.*
 
-Typical uses: convert only at night, or use 22000 to 2000 for the small hours.
+### 4. weather
 
-### weather (Weather)
-
-The condition matches the current weather in the drop's dimension.
-
-| Field | What It Does | Value | Default |
-|---|---|---|---|
-| `weather` | Target weather | `clear`, `rain`, or `thunder` | Required |
-
-What each value means:
-
-- `clear`: it is neither raining nor thundering.
-- `rain`: it is raining, and it is not a thunderstorm.
-- `thunder`: it is thundering, which usually means it is raining as well.
-
-A thunderstorm therefore never matches `rain`. To accept both rain and thunder, list `rain` and `thunder` side by side under `any_of`.
+Options: `clear`, `rain`, `thunder`.
 
 ```json
 {
   "op": "leaf",
   "condition": {
     "type": "idtw:weather",
-    "weather": "thunder"
+    "weather": "rain"
   }
 }
 ```
 
-Typical uses: conversions that happen only in a thunderstorm, often paired with `outdoor` so that a drop inside a building does not count as rained on.
+### 5. light_level and y_level
 
-### light_level (Light level)
-
-The condition matches a range of the light level, from 0 to 15, at the drop's position.
-
-| Field | What It Does | Value | Default |
-|---|---|---|---|
-| `min` | Lower bound | Integer from 0 to 15 | No limit |
-| `max` | Upper bound | Integer from 0 to 15 | No limit |
-
-Light level here means the larger of the time-adjusted sky light and the block light, the same value that entities and mob spawning use. An open spot is bright by day and darker at night in the same place. `min` cannot be greater than `max`.
+- `light_level`: Integer 0 to 15, with `min` and `max`.
+- `y_level`: World coordinate height, with `min` and `max` (either may be omitted).
 
 ```json
 {
   "op": "leaf",
   "condition": {
     "type": "idtw:light_level",
-    "max": 7
+    "min": 0,
+    "max": 4
   }
 }
 ```
-
-Typical uses: convert only in dim light, with `max` around 7. Paired with `outdoor`, it separates an open spot in daylight from a lit spot in a cave.
-
-### y_level (Y level)
-
-The condition matches a range of the Y coordinate of the drop's block.
-
-| Field | What It Does | Value | Default |
-|---|---|---|---|
-| `min` | Lower bound | Integer, -2048 or more | No limit |
-| `max` | Upper bound | Integer, -2048 or more | No limit |
-
-The height parameters have no upper bound, so values above 512 or 2048 are allowed for mods that extend world height. The parameters still use 32-bit signed integers. `min` cannot be greater than `max`.
-
-With both ends omitted the condition is always satisfied, which is legal but pointless. One end alone means at or below, or at or above, that height.
+*Triggers only in dark areas (light ≤ 4).*
 
 ```json
 {
   "op": "leaf",
   "condition": {
     "type": "idtw:y_level",
-    "max": 0
+    "min": 64
   }
 }
 ```
+*Triggers at surface level or above (Y ≥ 64).*
 
-Typical uses: conversions underground, with `max` at 0 or lower, or a special rule that fires only up high, with `min` at 100.
+### 6. outdoor
 
-### outdoor (Outdoor)
-
-The condition decides whether the top of the drop is open to the sky. It has no parameters.
-
-To decide, the mod reads the highest "motion blocking, no leaves" heightmap surface in that column. The condition matches when that surface is no higher than the item's height plus 1. A spot under a tree can therefore still count as outdoors, while a spot under a roof or in a cave does not.
+No extra parameters. Satisfied when there are no opaque blocks between the item and the sky.
 
 ```json
 {
@@ -354,49 +194,24 @@ To decide, the mod reads the highest "motion blocking, no leaves" heightmap surf
 }
 ```
 
-Typical uses: convert outdoors only. Wrap the condition in `inverted` when the rule should fire indoors instead.
+### 7. surrounding_blocks
 
-### surrounding_blocks (Surrounding blocks)
-
-The condition matches the six blocks next to the drop: up, down, north, south, east, and west.
-
-| Field | What It Does | Value | Default |
-|---|---|---|---|
-| `up` | Block above | Block ID or `#` tag | No limit on this direction |
-| `down` | Block below | Same as above | No limit on this direction |
-| `north` | Block to the north | Same as above | No limit on this direction |
-| `south` | Block to the south | Same as above | No limit on this direction |
-| `east` | Block to the east | Same as above | No limit on this direction |
-| `west` | Block to the west | Same as above | No limit on this direction |
-
-- The mod checks only the directions you fill in, and every direction you fill in must match. The directions are ANDed.
-- Leaving all six directions out is invalid and rejects the rule.
-- When a neighboring chunk is not loaded, the mod cannot decide. The result is unavailable, not unsatisfied, and a retry after those chunks load gives an answer. This matters most with `inverted`: a condition you cannot judge stays undecided, and inverting it never turns it into a satisfied result.
+Checks 6 adjacent blocks (`up`, `down`, `north`, `south`, `east`, `west`). Unspecified directions are ignored.
 
 ```json
 {
   "op": "leaf",
   "condition": {
     "type": "idtw:surrounding_blocks",
-    "down": "#minecraft:logs"
+    "down": "#minecraft:dirt"
   }
 }
 ```
+*Requires a dirt block directly beneath the item.*
 
-Typical uses: a drop on top of a log, a drop packed in stone, or a drop against a certain kind of block.
+### 8. fluid_present
 
-### fluid_present (Fluid present)
-
-The condition looks at the fluid at the drop's block position.
-
-| Field | What It Does | Value | Default |
-|---|---|---|---|
-| `fluid` | One fluid reference | Fluid ID or `#` tag | Empty |
-| `fluids` | Fluid reference list | Fluid IDs or `#` tags; any entry matching is enough | Empty |
-
-- Leaving out both `fluid` and `fluids` means any fluid, but the position must still contain a fluid or the condition is unsatisfied. When you write both, `fluids` wins.
-- Both source and flowing fluids match; `minecraft:water` accepts the flowing variant of the same fluid family.
-- Writing `minecraft:empty` matches no real fluid and logs a warning when the rule loads.
+Checks for fluid at the item's position. Use `fluid` for single entries or `fluids` for an array.
 
 ```json
 {
@@ -408,154 +223,75 @@ The condition looks at the fluid at the drop's block position.
 }
 ```
 
-Typical use: convert a dropped item while it sits in water with bone meal nearby. Combine fluid-present and catalyst-present conditions.
+### 9. catalyst_present
 
-### catalyst_present (Catalyst present)
-
-The condition decides whether the shared rule radius contains enough of the named **catalyst** items. It is an on-site check, and it consumes nothing.
-
-| Field | What It Does | Value | Default |
-|---|---|---|---|
-| `items` | Catalyst reference list | Item IDs or `#` tags, at least 1 entry | Required |
-| `count` | Count threshold | Integer from 1 to 64 | Uses rule `catalyst_cost.counts` when omitted, defaulting to 1 per reference |
-| `counts` | Threshold per reference | Object whose keys must appear in `items`, with values from 1 to 64 | Empty |
-
-- Every entry in `items` must reach its own threshold.
-- The mod uses rule `catalyst_cost.radius`, defaulting to 1. It excludes the source and dead entities and adds matching stacks together.
-- Omitted `count` uses the rule threshold. Consumption amounts are independent and resolved values are not written back.
-- A key in `counts` that does not appear in `items` is an error.
+Checks whether sufficient dropped item entities exist nearby.
+- `items`: Item IDs or tags;
+- `count`: Required quantity.
 
 ```json
 {
   "op": "leaf",
   "condition": {
     "type": "idtw:catalyst_present",
-    "items": ["minecraft:bone_meal"],
-    "count": 1
+    "items": ["minecraft:redstone"],
+    "count": 4
   }
 }
 ```
+*Requires at least 4 dropped redstone dust items nearby.*
+
+---
+
+## Full Example
+
+Here is a complete rule where **an apple transforms into an enchanted golden apple only on rainy nights outdoors in a forest**:
 
 ```json
 {
-  "op": "leaf",
-  "condition": {
-    "type": "idtw:catalyst_present",
-    "items": ["minecraft:redstone", "minecraft:glowstone_dust"],
-    "counts": { "minecraft:redstone": 4, "minecraft:glowstone_dust": 1 }
-  }
-}
-```
-
-Typical uses: recipe-style rules that need the materials on site. The condition only decides; the actual consumption follows `catalyst_cost.consume_counts` in the rule, as described in [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
-
-## Common Combinations
-
-Each block below gives only the value of `conditions`. Paste it straight into the rule's `conditions` field.
-
-Night or rain, whichever matches. A thunderstorm does not count as `rain`, so list `thunder` as well:
-
-```json
-{
-  "op": "any_of",
-  "terms": [
-    {
-      "op": "leaf",
-      "condition": { "type": "idtw:time_of_day", "from": 13000, "to": 23000 }
-    },
-    { "op": "leaf", "condition": { "type": "idtw:weather", "weather": "rain" } },
-    { "op": "leaf", "condition": { "type": "idtw:weather", "weather": "thunder" } }
-  ]
-}
-```
-
-Certain biomes only, covering a whole group at once:
-
-```json
-{
-  "op": "leaf",
-  "condition": {
-    "type": "idtw:biome",
-    "mode": "exact",
-    "biomes": ["#minecraft:is_taiga", "minecraft:swamp"]
-  }
-}
-```
-
-Below a given height and in the dark:
-
-```json
-{
-  "op": "all_of",
-  "terms": [
-    { "op": "leaf", "condition": { "type": "idtw:y_level", "max": 20 } },
-    { "op": "leaf", "condition": { "type": "idtw:light_level", "max": 7 } }
-  ]
-}
-```
-
-Not in the Overworld, and indoors, which shows how to use inverting nodes:
-
-```json
-{
-  "op": "all_of",
-  "terms": [
-    {
-      "op": "inverted",
-      "term": {
+  "id": "myrules:mystic_apple",
+  "display_name": "Mystic Apple Transformation",
+  "source": { "items": ["minecraft:apple"] },
+  "trigger_after_seconds": 60,
+  "conditions": {
+    "op": "all_of",
+    "terms": [
+      {
         "op": "leaf",
-        "condition": { "type": "idtw:dimension", "dimensions": ["minecraft:overworld"] }
+        "condition": { "type": "idtw:outdoor" }
+      },
+      {
+        "op": "leaf",
+        "condition": { "type": "idtw:weather", "weather": "rain" }
+      },
+      {
+        "op": "leaf",
+        "condition": { "type": "idtw:time_of_day", "from": 13000, "to": 23000 }
+      },
+      {
+        "op": "leaf",
+        "condition": {
+          "type": "idtw:biome",
+          "mode": "exact",
+          "biomes": ["#minecraft:is_forest"]
+        }
       }
-    },
-    { "op": "inverted", "term": { "op": "leaf", "condition": { "type": "idtw:outdoor" } } }
-  ]
-}
-```
-
-Flowing water with bone meal nearby: use the following as the rule's `conditions` field. Presence conditions only check the environment; configure the corresponding consumption fields if bone meal or fluid should be consumed.
-
-```json
-{
-  "op": "all_of",
-  "terms": [
+    ]
+  },
+  "effects": [
     {
-      "op": "leaf",
-      "condition": {
-        "type": "idtw:fluid_present",
-        "fluid": "minecraft:water"
-      }
-    },
-    {
-      "op": "leaf",
-      "condition": {
-        "type": "idtw:catalyst_present",
-        "items": ["minecraft:bone_meal"],
-        "count": 1
-      }
+      "type": "idtw:spawn_entity",
+      "variant": "item",
+      "item": "minecraft:enchanted_golden_apple",
+      "count": 1
     }
   ]
 }
 ```
 
-Logs on all six sides, where every direction you fill in must match:
+---
 
-```json
-{
-  "op": "leaf",
-  "condition": {
-    "type": "idtw:surrounding_blocks",
-    "up": "#minecraft:logs",
-    "down": "#minecraft:logs",
-    "north": "#minecraft:logs",
-    "south": "#minecraft:logs",
-    "east": "#minecraft:logs",
-    "west": "#minecraft:logs"
-  }
-}
-```
+## Next Steps
 
-## Related
-
-- Rule fields and source entries: [Rule Fields](en-02-rule-basics)
-- Effects and material costs: [Effects](en-04-effects)
-- Conversion results and the return path: [Outcome Candidates and Settlement](en-05-outcomes-and-settlement)
+- [Effects](en-04-effects): Actions, entities, block placing, lightning, and weather.
+- [Outcome Candidates and Settlement](en-05-outcomes-and-settlement): Multiple outcomes, weights, costs, and refunds.

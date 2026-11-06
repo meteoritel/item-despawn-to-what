@@ -1,212 +1,100 @@
-# Source Layers and Overrides
+# Source Layers and Overrides (`layers & overrides`)
 
 > Applies to **2.0.0** (Minecraft **1.21.1**).
 
-This page covers world datapack and config overlay loading order, overrides by ID, per-save enable states, and how the mod chooses between matching rules.
+This page explains how rules are loaded across layers: how datapacks and local configuration files cooperate, how to completely replace existing rules by ID, and which rule wins when multiple rules match the same dropped item.
 
-See [Rule Fields](en-02-rule-basics) for rule fields, [Conditions](en-03-conditions) for matching, and [Effects](en-04-effects) and [Outcome Candidates and Settlement](en-05-outcomes-and-settlement) for results. [Getting Started](en-01-getting-started) explains how to apply file changes.
+---
 
-## Sources and priority
+## Source Layers and Priority
 
-In 2.0.0, supply custom rules through either location below. For the same ID, the **config overlay takes priority over world datapacks**.
+Rules can reside in two different source layers. When matching `id`s appear, **the local config overlay takes priority over world datapacks**:
 
-| Source layer | Rule file location | How to edit | Priority |
-| --- | --- | --- | --- |
-| World datapack (`world`) | `<world save>/datapacks/<pack>/data/<namespace>/idtw/rules/*.json` | Edit datapack files; the GUI treats them as a read-only base | Low |
-| Config overlay (`overlay`) | Any `*.json` under `config/itemdespawntowhat/rules/`, including subfolders | GUI or manual JSON edits | High |
+| Source Layer | File Path | Primary Editing Method | Priority | Role & Purpose |
+| --- | --- | --- | --- | --- |
+| **World Datapack** (`world`) | `<save>/datapacks/<pack>/data/<namespace>/idtw/rules/*.json` | Text editors / Datapack tools | Low | **Rule Base**: Bundled with maps or modpacks; treated as read-only templates by GUI editor |
+| **Config Overlay** (`overlay`) | `config/itemdespawntowhat/rules/**/*.json` | In-game GUI or manual editing | **High** | **Highest Authority**: Rules saved via the GUI editor reside here |
 
-- Rules from both sources are merged. Rules with different IDs are kept independently.
-- An explicit `id` determines the rule's identity. A file containing just one rule may omit `id` and derive it from the path.
-- Datapack rule files belong under `data/<namespace>/idtw/rules/` and end in `.json`. When several datapacks provide the same path, the higher-priority pack is applied later and replaces earlier content with the same ID.
+### Merging Principles
+- **Different IDs**: Rules from datapacks and the overlay are merged together into one unified ruleset;
+- **Identical IDs**: **The higher-priority source completely replaces the lower-priority rule** (overlay replaces datapack).
 
-## Overriding by ID: Full Replacement
+---
 
-**Override by ID**: when rules in different source layers carry exactly the same `id`, only the copy from the highest-priority layer stays, and it takes over as a **full replacement** rather than a field-by-field merge. The merge works by `id`:
+## Complete Replacement by ID
 
-- **Different IDs**: rules stack independently and do not affect each other.
-- **The same ID**: only the highest-priority copy survives.
+If you want to alter a rule provided by a world datapack (for example, turning a datapack's chicken-to-rotten-flesh into chicken-to-gold), you don't need to unpack and edit the datapack. Simply create an overlay rule with the **exact same `id`**.
 
-This example uses rules you create yourself. In an enabled world datapack, create `data/mypack/idtw/rules/chicken_to_rotten_flesh.json` with the following content. It turns a dropped chicken item into rotten flesh after 300 seconds:
+> [!IMPORTANT]
+> **Complete Replacement**: Overriding replaces the entire rule definition rather than merging fields. When overriding, define all necessary fields (inputs, triggers, effects); omitted optional fields revert to their default values.
 
-```json
-{
-  "id": "mypack:chicken_to_rotten_flesh",
-  "enabled": true,
-  "source": {
-    "items": [
-      "minecraft:chicken"
-    ]
-  },
-  "trigger_after_seconds": 300,
-  "triggers": [
-    "natural"
-  ],
-  "source_cost": {"minecraft:chicken": 1},
-  "combination": "round_robin",
-  "schema_version": 1,
-  "effects": [
-    {
-      "type": "idtw:spawn_entity",
-      "item": "minecraft:rotten_flesh",
-      "count": 1,
-      "variant": "item"
-    }
-  ]
-}
-```
+### Walkthrough: Overriding an Existing Rule
 
-Save the next file as `config/itemdespawntowhat/rules/chicken_to_gold.json`. It carries the **same `id`**:
+Suppose a datapack provides a rule `mypack:chicken_to_rotten_flesh` that spawns rotten flesh after 300 seconds.
+
+To change it to spawn gold ingots after 60 seconds, create a local file at `config/itemdespawntowhat/rules/chicken_to_gold.json`:
 
 ```json
 {
   "id": "mypack:chicken_to_rotten_flesh",
-  "enabled": true,
   "priority": 10,
   "source": {
-    "items": [
-      "minecraft:chicken"
-    ]
+    "items": ["minecraft:chicken"]
   },
   "trigger_after_seconds": 60,
-  "triggers": [
-    "natural"
-  ],
-  "source_cost": {"minecraft:chicken": 1},
-  "combination": "round_robin",
-  "schema_version": 1,
+  "triggers": ["natural"],
   "effects": [
     {
       "type": "idtw:spawn_entity",
+      "variant": "item",
       "item": "minecraft:gold_ingot",
-      "count": 1,
-      "variant": "item"
+      "count": 1
     }
   ]
 }
 ```
 
-After saving both files and running `/idtw rule reload`:
+Run `/idtw rule reload`:
+- The active rule `mypack:chicken_to_rotten_flesh` now uses your customized version;
+- The timer drops to 60 seconds and produces gold ingots;
+- To revert, delete your local file and reload again to restore the datapack's original rule.
 
-- The dropped item is still a chicken, because the `source` in effect is the one you wrote.
-- The wait time drops from 300 seconds to 60 seconds, the product changes from rotten flesh to a gold ingot, and `priority` becomes 10.
-- For this ID, the complete overlay rule is used.
-- A field you leave out falls back to its default instead of inheriting the base rule: an omitted `conditions` is always satisfied, an omitted `trigger_after_seconds` is 300, an omitted `enabled` is `true`, an omitted `combination` is `round_robin`, and an omitted `schema_version` is 1. **Write the whole rule when you override**, not only the fields you want to change.
-- To undo the override, delete this overlay file, or change its `id` so the file becomes a new rule.
+---
 
-### Where the Rule ID Comes From
+## Per-Save Enable Overrides
 
-- The file declares an `id`: the mod uses it.
-- The file holds exactly one rule and omits `id`: the mod derives the ID from the file path, in the form `idtw:<relative path without .json>`. Subdirectory names count too, so `rules/mypack/chicken_to_gold.json` becomes `idtw:mypack/chicken_to_gold`.
-- The file holds a rule array (several rules): every entry must declare its own `id`, and an entry without one is rejected at load and reports an error.
-- Two entries in the same file share an `id`: the later one is rejected at load.
-- To override a world datapack rule, your `id` must match the target exactly. One wrong character adds a new rule, and both rules stay. Use only lowercase letters, digits, and `_`, `-`, `.`, `/` in an `id`; an uppercase letter makes the mod reject that rule.
+Rules define an `enabled` default in JSON. Administrators can also toggle rules in-game for the current save:
 
-## Overlay Entries: Full Takeover
+- `/idtw rule enable <id>`: Force-enable the rule in this save;
+- `/idtw rule disable <id>`: Force-disable the rule in this save;
+- `/idtw rule reset <id>`: Remove the override and follow the rule's default `enabled` state.
 
-Every entry in the overlay is a **full rule** that uses the same fields and validation as a world datapack rule:
+*Note: Save-level toggles are stored with world save data and do not modify your JSON files.*
 
-- Writing a rule with the same `id` takes the rule over: the overlay entry replaces the whole base rule, and fields you leave out fall back to their defaults (see the previous section).
-- Undoing a takeover means removing the overlay entry: delete the whole file, or remove that entry from a rule array, and the original world datapack rule comes back unchanged. Change the `id` instead, and the entry becomes a new rule.
-- When a config file carries an unregistered top-level field, loading reports a warning and keeps that field as written; the rule is still parsed as a full rule and its other fields apply as usual.
+---
 
-## Switching Rules On and Off Per Save: Local Enable State
+## Conflict Resolution: Multiple Rules Matching One Item
 
-Whether a rule runs is decided by two things:
+If a dropped item matches multiple rules (e.g. raw chicken matches both "chicken-to-flesh" and "all-meats-to-fertilizer"), **only one rule executes**.
 
-- `enabled` inside the rule content is the **default enable state**: whether the author wants the rule on or off by default.
-- The effective value is the setting this save holds for that rule, or the default enable state when the save holds none. That setting is the **local enable state**, and it is stored with the save rather than written into rule files.
+The conflict arbitrator resolves ties as follows:
 
-Change it with commands (they need permission; the host of a singleplayer world always passes):
-
-| Command | What it does |
-| --- | --- |
-| `/idtw rule disable <id>` | Turns the rule off in this save only; the rule content stays as written |
-| `/idtw rule enable <id>` | Turns the rule back on in this save |
-| `/idtw rule reset <id>` | Drops the save's setting so the rule follows its default enable state again |
-
-- Switching a rule off affects only whether it runs: content, priority, and conditions are read from the file as written, so a datapack update still changes them.
-- The setting travels with the save: another save or another server keeps its own state, and every player on a multiplayer server shares the same local state.
-- Disabled rules remain in `/idtw rule list`, marked Disabled, with a server-override badge when applicable.
-- When the rule content disappears, for example because you deleted the overlay file or a datapack no longer provides the ID, the save's setting has no rule left to apply to and loading ignores it. `/idtw rule orphans` lists those records and `/idtw rule orphans clear` removes them. If the rule comes back later, an uncleared record applies again; a cleared one follows the default enable state.
-
-What you want to do, and the tool for it:
-
-| I want to... | Use |
-| --- | --- |
-| Replace all the content of a world datapack rule | Write a full rule with the same `id` in the overlay |
-| Undo a takeover and return to the world datapack version | Delete the overlay file or the array entry |
-| Turn a rule off for now, keeping its content and restoring it later | The local enable commands |
-| Change the default switch state for new saves | `enabled` inside the rule JSON |
-
-## Application Order Inside One Layer
-
-1. **Between layers**: the mod reads world datapacks before the config overlay, whatever the file names are.
-2. **The same ID several times in one layer**: a later file wins. In a datapack layer the packs are compared first, so the higher-priority pack comes later and wins, then the file path decides; in the overlay the file path decides.
-3. **The merged order**: it equals the order in which each `id` is first read (world datapacks first, then the config overlay, using the file order above within each layer). That order is the **definition order** used in the next section.
-4. **The enable state stays out of the merge**: the merge produces rule content in the order above, and the save's switch settings are applied to each rule afterwards, at the end of assembly.
-
-## When Several Rules Match the Same Dropped Item
-
-One dropped item runs exactly **one** rule at a time. The rules queue up by three keys, and the mod takes the first rule that declares the **trigger kind** for this destruction path and whose conditions match. A **trigger kind** (`triggers`) is one way a dropped item is destroyed: `natural`, `fire`, `lava`, or `cactus`. A rule that omits `triggers` applies to `natural` only.
-
-1. **Priority** (`priority`, an integer, default 0): a higher value goes first. See [Rule Fields](en-02-rule-basics) for the field itself.
-2. **Condition leaf count** (the number of leaf nodes in the condition tree): more leaves go first. Under `all_of` two leaves count as 2, `inverted` around one leaf counts as 1, and a combination node does not count by itself. A rule with more specific conditions is more likely to win; see [Conditions](en-03-conditions) for the syntax.
-3. **Definition order** (the order in which each `id` is first read): when the first two keys tie, the rule read first runs first.
-
-A rule that queues higher but whose conditions do not match is skipped, and the mod keeps looking until it finds one it can run. When no rule matches, the dropped item does not convert this time, and the mod retries on a **backoff** rhythm: the interval starts at 1 second and grows, up to the cap in `backoff_max_ticks` (see [Server Configuration](en-07-server-config)).
-
-The following rule converts diamonds into gold ingots at priority 10. Save it as `config/itemdespawntowhat/rules/diamond_to_gold.json`. If this rule and another rule at priority 0 can both handle the same dropped item at that moment, with their timing and conditions satisfied, this rule runs first:
-
-```json
-{
-  "id": "mypack:diamond_to_gold",
-  "priority": 10,
-  "source": {
-    "items": [
-      "minecraft:diamond"
-    ]
-  },
-  "trigger_after_seconds": 60,
-  "triggers": [
-    "natural"
-  ],
-  "effects": [
-    {
-      "type": "idtw:spawn_entity",
-      "item": "minecraft:gold_ingot",
-      "count": 1,
-      "variant": "item"
-    }
-  ]
-}
+```mermaid
+flowchart TD
+    A["Item matches multiple candidate rules"] --> B{"1. Compare priority"}
+    B -->|"Different priority"| C["Rule with highest priority wins"]
+    B -->|"Equal priority"| D{"2. Compare conditions"}
+    D -->|"Different leaf counts"| E["Rule with more conditions wins (more specific)"]
+    D -->|"Equal conditions"| F["3. Rule loaded first wins"]
 ```
 
-After reloading, a dropped diamond item that meets this rule's timing and conditions produces a gold ingot. Lower-priority rules with different IDs remain in the list.
+1. **Priority value (`priority`)**: Highest integer wins. Rules with high priority (e.g. `10`) take precedence over default rules (`0`);
+2. **Specificity (Condition leaf count)**: When priorities tie, rules with more condition leaves win (specific rules beat generic fallbacks);
+3. **Registration order**: When still tied, the rule loaded earlier executes.
 
-Source-layer priority chooses the content for the **same ID**. Rules with **different IDs** are selected by `priority`, condition leaf count, and definition order. To change a world datapack rule, use the same ID in the overlay.
+---
 
-## Finding Out Which Layer and File a Rule Comes From
+## Next Steps
 
-Use `/idtw rule list [page] [filter]` to browse published rules. Rows show the name, ID, effective state, and server-override badge. Hover for the source, or click to fill the inspection command.
-
-`/idtw rule show <id>` displays the published source, default/override/effective enable states, priority, and outcome structure. `/idtw rule show <id> raw [page]` reads the winning raw content from current overlay files and the loaded datapack base, preserving unknown fields.
-
-After editing files, validate with `/idtw rule validate`, then publish with `/idtw rule reload`. Lists and ordinary summaries update after reload; reading raw sources leaves the runtime unchanged. See [Command Reference](en-08-commands) for syntax, suggestions, and interactions.
-
-## Troubleshooting: An Override or Disable That Seems to Do Nothing
-
-Check these in order:
-
-1. **File location and extension.** An overlay file must sit under `config/itemdespawntowhat/rules/` (subdirectories are allowed) and end in `.json`. A datapack file must sit under `data/<namespace>/idtw/rules/`.
-2. **An `id` that matches the target exactly.** One wrong character adds a new rule, and both rules stay, so nothing is overridden.
-3. **A successful load.** Run `/idtw rule validate` and read the file validation errors and warnings, which name the source and the field path. A JSON syntax error, an empty file, or a top level that is neither a rule object nor a rule array makes the mod reject the whole file. An error inside one rule stops only that rule.
-4. **A rule switched off in this save.** `enabled` in the rule content is only the default; the local setting for this save wins. Read the effective state marker in `/idtw rule list`, and use `/idtw rule reset <id>` to drop the local setting.
-5. **Another rule taking over.** One dropped item runs one rule, so check for a rule with a higher priority or more condition leaves that also covers this item. Use `/idtw rule show <id>` to inspect priority and the published source.
-6. **A reload after the change.** See [Getting Started](en-01-getting-started).
-
-## Related
-
-- [Getting Started](en-01-getting-started)
-- [Rule Fields](en-02-rule-basics)
-- [Outcome Candidates and Settlement](en-05-outcomes-and-settlement)
-- [Command Reference](en-08-commands)
+- [Server Configuration](en-07-server-config): Check intervals, lag-prevention budgets, and cooldowns.
+- [Command Reference](en-08-commands): All in-game commands and operational permissions.

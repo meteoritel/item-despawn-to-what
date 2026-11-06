@@ -2,284 +2,225 @@
 
 > Applies to **2.0.0** (Minecraft **1.21.1**).
 
-This page explains what a rule can do after it fires: which `type` each effect uses, which parameters it takes, and what players see in game.
+This page details the **effects** (called "Actions" in the GUI editor) executed when a rule triggers. When dropped items satisfy their conditions, the mod executes your configured effect list in sequence.
 
-After a rule fires, the mod runs every effect object in the `effects` array in order: it hands out items, spawns entities, awards experience, places blocks, strikes lightning, or changes the weather. In JSON, **one effect is one object**, and `type` says which effect it is. You can write effects in the top-level `effects` array of a rule or in the `effects` array of a candidate. For conditions, see [Conditions](en-03-conditions); for costs and group settlement, see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
+---
 
-| Effect | `type` | One-shot | What it does |
-|---|---|---|---|
-| Entities | `idtw:spawn_entity` | No | Hands out items, spawns entities, or awards experience |
-| Arrow rain | `idtw:arrow_rain` | No | Drops a volley of arrows from above the trigger position, with optional potion effects |
-| Place block | `idtw:place_block` | No | Places blocks near the trigger position |
-| Loot table | `idtw:loot_table` | No | Rolls a loot table and drops the results |
-| Lightning | `idtw:lightning` | Yes | Strikes 1 to 16 bolts |
-| Explosion | `idtw:explosion` | Yes | Blows up once at the trigger position |
-| Weather | `idtw:weather` | Yes | Makes the current dimension rain or clear up |
+## Effect Types Overview
 
-This page starts with the fields every effect shares, then walks through the table row by row.
+Each effect in JSON is an object whose `type` specifies what it does:
 
-## Fields Every Effect Shares
+| Effect Type | `type` | One-Shot? | Gameplay Description |
+| --- | --- | --- | --- |
+| **Entity Spawn** | `idtw:spawn_entity` | No (per group) | Spawn items, mobs, vehicles/entities, or experience orbs |
+| **Arrow Rain** | `idtw:arrow_rain` | No (per group) | Rain down a shower of arrows from above (optional potion effects) |
+| **Place Block** | `idtw:place_block` | No (per group) | Place blocks around the trigger location (e.g. saplings taking root) |
+| **Loot Table** | `idtw:loot_table` | No (per group) | Roll a vanilla loot table (e.g. dungeon chest) for random drops |
+| **Lightning** | `idtw:lightning` | **Yes** (one-shot) | Strike 1 to 16 real or cosmetic lightning bolts |
+| **Explosion** | `idtw:explosion` | **Yes** (one-shot) | Create an explosion with custom radius and block damage settings |
+| **Weather** | `idtw:weather` | **Yes** (one-shot) | Change world weather to clear, rain, or thunder for a duration |
 
-Every effect object can carry the three fields below. `type` is required and the rest are optional. The parameters of the effect itself, such as `item` or `count`, sit **at the same level** as these three fields. Do not wrap them in another object such as `value`.
+*Note: Lightning, explosions, and weather changes are "one-shot" effects. Even if 64 items convert at once, they fire only once to prevent extreme server lag.*
 
-| Field | What it does | Values | Default | Notes |
-|---|---|---|---|---|
-| `type` | Says which effect this is | An effect id that starts with `idtw:`, listed in the table above | None, required | A wrong name rejects the rule, and the message lists the registered types |
-| `delay_ticks` | How long to wait before running this effect | Integer (unit: ticks, 20 ticks = 1 second) | `0` | Counts from the moment the rule fires; a negative value rejects the rule, and the message names `delay_ticks` |
-| `chance` | The chance this effect passes, rolled when its turn comes | `0.0` to `1.0` | `1.0` | A value outside this range rejects the rule with a message about `chance`; `1` or `1.0` always runs |
+---
 
-Three things worth knowing:
+## Common Effect Fields
 
-- **A rejected rule never loads**: when the content of a rule has a problem, the mod does not load it and reports why. A field the effect does not recognize also rejects the rule, and the message carries the field name.
-- To refer to an item, block, entity, fluid, or potion effect, write a concrete id (`minecraft:water`) or a **tag**, which is a reference that starts with `#`, such as `#minecraft:logs`.
-- Tags mean two different things. A producing reference, such as the `item`, `mob`, and `entity` of `spawn_entity`, the `block` of `place_block`, or the `effect` of a potion effect, takes **one random member** every time it runs. A matching reference, such as a rule-level `source_cost` or `catalyst_cost` reference, matches **any member of the tag** and never picks at random.
+All effect types support these 3 common fields (`type` is required; others are optional):
 
-## How Several Effects Run
-
-- **Effects start in written order**: the object written first starts first. Every effect carries its own delay, so effects do not always finish in written order; an arrow rain that starts early can finish after an explosion that starts later.
-- **Work spreads over several ticks**: when one effect has to produce many things, the mod does not stack them all up in a single tick but finishes them over several ticks, with at most 16 item entities per batch, 8 entities per tick, and 128 block positions per tick. Players watch the results appear one batch at a time.
-- **Chance belongs to one effect**: every effect rolls its own `chance`. When one effect fails its roll, the other effects of the same group still run.
-- **One effect failing does not stop the others**: when an effect errors out at run time, for example because an item it refers to no longer exists after a data pack update, the mod records that failure and continues with the next effect. Nothing already done rolls back, and the whole rule is not cancelled. The failure appears in the result; for how to trace it, see [Getting Started](en-01-getting-started).
-- **Timing of the check**: effects that need their input fixed when the conversion succeeds, such as `place_block` (which decides at that moment what to place, where the candidates are and the cap), roll `chance` right then; a later delay or an already consumed source item no longer changes the result. Effects without fixed input still roll `chance` at the moment they are due to run, after their delay.
-- **Every group runs the effects once**: each group that starts runs the effects once, so `count` is the amount for that single run and a loot table rolls once per group. For how a whole stack splits into groups, see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
-- **A cap of 32**: one rule can hold at most 32 effects in total, counting the `effects` of every candidate. A rule above the cap is rejected.
-- **One-shot effects**: `lightning`, `explosion`, and `weather` are one-shot. They play once for a given source, they do not repeat with the group count, and they take no part in the capacity check of a candidate. Each source gets at most one attempt at them: a failed roll and a run-time error both count as that one attempt. Arrow rain is not one-shot: it plays once per group and merges its groups into a single delayed task.
-
-## Entities (spawn_entity)
-
-`type`: `idtw:spawn_entity`
-
-The **variant** field decides what comes out: `variant` is required and takes `item` (drops), `mob` (mobs), `entity` (other entities), or `experience` (experience). The parameters of the variant sit at the same level as `type` and `variant`.
-
-| Field | What it does | Values | Default | Notes |
-|---|---|---|---|---|
-| `variant` | Which variant to use | `item` / `mob` / `entity` / `experience` | None, required | Leaving it out rejects the rule, and the message asks for an outcome variant |
-
-Rule categories follow the variant: `entity.item`, `entity.mob`, `entity.entity`, and `entity.experience`; a rule that uses several entity variants lands in `entity.mixed`.
-
-### Variant item: Items
-
-| Field | What it does | Values | Default | Notes |
-|---|---|---|---|---|
-| `item` | Which item to produce | Item id or tag | None, required | A tag takes one random member |
-| `count` | How many items to produce | 1 to 64 | `1` | When the amount is above the stack size of the item, the mod splits it into several stacks; at most 16 stacks per tick, the rest continue on later ticks |
+| Field | Description | Type / Range | Default |
+| --- | --- | --- | --- |
+| `type` | Unique effect identifier | Starting with `idtw:` | **Required** |
+| `delay_ticks` | Ticks to wait after rule triggers before executing this effect | Non-negative integer (20 ticks = 1s) | `0` (immediate) |
+| `chance` | Probability of this effect succeeding | Float `0.0` to `1.0` | `1.0` (100% chance) |
 
 ```json
-{ "type": "idtw:spawn_entity", "variant": "item", "item": "minecraft:rotten_flesh", "count": 1 }
+{
+  "type": "idtw:lightning",
+  "delay_ticks": 40,
+  "chance": 0.5
+}
 ```
+*Waits 2 seconds (40 ticks), then has a 50% chance to strike lightning.*
 
-What you see in game: one piece of rotten flesh lands near the trigger position and players can pick it up right away. If the source item was still moving horizontally when it was destroyed, the product's horizontal velocity points the opposite way, so it flies back toward the direction the item was thrown from and is easier to pick up; a source item at rest has no direction to mirror, so the product keeps the original small scatter (within 0.15 blocks horizontally). Larger amounts arrive over several ticks instead of all at once; which item comes out and how many pieces is decided the moment the conversion succeeds, not later. The new drop carries protection and a conversion cooldown so that the rules do not consume it again at once; see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
+---
 
-### Variant mob: Mobs
+## 7 Available Effect Types
 
-| Field | What it does | Values | Default | Notes |
-|---|---|---|---|---|
-| `entity` | Which mob to spawn | Mob id or tag | None, required | Candidates have `safe_spawn` on by default, so the mod first looks for a spot to stand on nearby; see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement) |
-| `count` | How many mobs to spawn | 1 to 64 | `1` | The mod spawns at most 8 per tick and continues on later ticks |
-| `age` | Age | Integer from `-24000` to `0` | `0` | Applies only to mobs that grow up, such as farm animals and villagers; `0` is an adult and `-24000` is a newborn; a value outside this range rejects the rule when it loads |
+### 1. spawn_entity
+
+Use `variant` to specify the entity subtype: `item`, `mob`, `entity`, or `experience`.
+
+#### A. Spawn Items (`variant: "item"`)
+- `item`: Item ID or tag (randomly picks one member from a tag);
+- `count`: Quantity (1 to 64).
 
 ```json
-{ "type": "idtw:spawn_entity", "variant": "mob", "entity": "minecraft:chicken", "count": 1, "age": -24000 }
+{
+  "type": "idtw:spawn_entity",
+  "variant": "item",
+  "item": "minecraft:diamond",
+  "count": 1
+}
 ```
+*Gameplay detail*: If the source item was moving horizontally when destroyed (e.g. thrown by a player), spawned products receive a slight reverse momentum, **flying back toward the thrower**.
 
-What you see in game: a baby chicken spawns near the trigger position. With `safe_spawn` on by default, the mod searches the 5x5x5 block box centered on the trigger position, 125 blocks in all, from near to far for a spot: a completely safe spot is taken at once, and when every remaining candidate is hazardous it takes the least hazardous spot. Only when none of the remaining candidates can host the entity does the conversion fail, and the source items come back through the return path during delivery. The exact rules are on [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
-
-### Variant entity: Other entities
-
-| Field | What it does | Values | Default | Notes |
-|---|---|---|---|---|
-| `entity` | Which entity to spawn | Entity type id or tag | None, required | Mobs go in the `mob` variant; `safe_spawn` works for this variant too, see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement) |
-| `count` | How many entities to spawn | 1 to 64 | `1` | The mod spawns at most 8 per tick and continues on later ticks |
+#### B. Spawn Mobs (`variant: "mob"`)
+- `entity`: Mob type ID or tag;
+- `count`: Quantity (1 to 64);
+- `age`: Mob age (-24000 for baby, 0 for adult).
 
 ```json
-{ "type": "idtw:spawn_entity", "variant": "entity", "entity": "minecraft:minecart", "count": 2 }
+{
+  "type": "idtw:spawn_entity",
+  "variant": "mob",
+  "entity": "minecraft:cow",
+  "count": 1,
+  "age": -24000
+}
 ```
+*Safe spawn protection*: Enabled by default. Automatically searches nearby ground for a safe spot so mobs don't suffocate inside blocks or spawn in lava.
 
-What you see in game: 2 minecarts spawn near the trigger position with a small random horizontal offset. With `safe_spawn` on by default, the mod picks a spot from near to far in the same way, taking a completely safe spot first and the least hazardous one when every remaining candidate is hazardous, and the conversion fails only when none of the remaining candidates can host the entity.
-
-Note: both `mob` and `entity` reject `minecraft:item` and `minecraft:experience_orb`; drops and experience orbs use the dedicated `item` and `experience` variants, and a wrong reference rejects the rule. Types that cannot be summoned (`minecraft:player`, `minecraft:fishing_bobber`) and technical presentation entities (falling block, block / item / text display, marker, interaction, area effect cloud, lightning bolt, eye of ender, ominous item spawner) cannot be products either: they never show up in the editor list and hand-written JSON is rejected at load time. The editor filters the entity picker by variant, while hand-written rule JSON is not checked against the mob split at load time: loading has no world context and a tag may mix mobs with other entities, so a strict check would make valid tag references fail at random.
-
-### Variant experience: Experience
-
-| Field | What it does | Values | Default | Notes |
-|---|---|---|---|---|
-| `amount` | Experience points per source item | 1 to 65536 | `1` | The group total is `amount` times the source items that group actually took. The mod fills orbs up to 32767 points each, so anything smaller is one orb, and the remainder goes into the last orb. It spawns at most 16 orbs per batch and keeps going until all points are out |
+#### C. Spawn Other Entities (`variant: "entity"`)
+- Used for minecarts, boats, and other non-living entities.
 
 ```json
-{ "type": "idtw:spawn_entity", "variant": "experience", "amount": 100 }
+{
+  "type": "idtw:spawn_entity",
+  "variant": "entity",
+  "entity": "minecraft:minecart",
+  "count": 1
+}
 ```
 
-What you see in game: with a group that paid one source item, 100 experience points fit inside one orb, so you see exactly **one** experience orb near the trigger position. Orbs land at random points on a disc of radius 0.5 blocks around the trigger position, raised 0.2 blocks above it. Only a larger amount splits into more orbs: at most 16 orbs per batch, with the next batch waiting at least one more game tick, until all points are out. Each experience effect and each group computes its own points from the source items that group actually took, and points from different effects or groups never merge. Collect them by walking over them.
-
-The number of nearby experience orbs never blocks a group over experience storage. A group that also produces items or entities still passes their separate capacity checks.
-
-## Arrow Rain (arrow_rain)
-
-`type`: `idtw:arrow_rain`
-
-| Field | What it does | Values | Default | Notes |
-|---|---|---|---|---|
-| `count` | How many arrows | 1 to 256 | `16` | One arrow every 1 to 3 ticks |
-| `pickup` | Whether players may pick the arrows up | `disallowed` / `allowed` / `creative_only` | `disallowed` | The three values mean never, always, and only in creative mode |
-| `potion_effects` | Potion effects carried by the arrows | Array, optional | Omit for none | The fields of each entry are in the table below |
-
-Each entry in `potion_effects`:
-
-| Field | What it does | Values | Default | Notes |
-|---|---|---|---|---|
-| `effect` | The potion effect | Potion effect id or tag | None, required | A tag takes one random member, shared by every arrow of that volley; each group rolls its own |
-| `duration_ticks` | How long it lasts (ticks) | 1 to 1000000 | `100` | 20 ticks = 1 second |
-| `amplifier` | Level | 0 to 255 | `0` | `0` is level I and `1` is level II |
+#### D. Spawn Experience (`variant: "experience"`)
+- `amount`: Experience points (1 to 10000).
 
 ```json
-{ "type": "idtw:arrow_rain", "count": 32, "pickup": "allowed", "delay_ticks": 10 }
+{
+  "type": "idtw:spawn_entity",
+  "variant": "experience",
+  "amount": 20
+}
 ```
+
+---
+
+### 2. place_block
+
+Places blocks into the world around the item.
+
+| Field | Description | Range | Default |
+| --- | --- | --- | --- |
+| `block` | Block ID or tag to place | Block ID/tag | Matches source item if `use_source_block` is true |
+| `use_source_block` | Use the block corresponding to the source item | `true` / `false` | `false` |
+| `shape` | Area shape | `circle`, `square`, `cube` | `circle` |
+| `radius` | Placement radius | 1 to 8 | `1` |
+| `count` | Number of blocks to place | 1 to 64 | `1` |
+
+```json
+{
+  "type": "idtw:place_block",
+  "block": "minecraft:ice",
+  "shape": "circle",
+  "radius": 2,
+  "count": 4
+}
+```
+
+---
+
+### 3. loot_table
+
+Rolls a vanilla loot table for random items.
+
+- `table`: Loot table resource location;
+- `seed`: Optional random seed.
+
+```json
+{
+  "type": "idtw:loot_table",
+  "table": "minecraft:chests/simple_dungeon"
+}
+```
+
+---
+
+### 4. lightning
+
+- `visual_only`: Cosmetic bolt without damage or fire;
+- `count`: Number of bolts (1 to 16).
+
+```json
+{
+  "type": "idtw:lightning",
+  "visual_only": false,
+  "count": 1
+}
+```
+
+---
+
+### 5. explosion
+
+- `radius`: Blast radius (0.0 to 32.0; vanilla TNT is 4.0);
+- `causes_fire`: Whether the explosion ignites fires;
+- `block_interaction`: Block destruction: `keep` (no block damage), `destroy` (normal destruction), `trigger` (blocks drop and trigger).
+
+```json
+{
+  "type": "idtw:explosion",
+  "radius": 3.0,
+  "causes_fire": false,
+  "block_interaction": "keep"
+}
+```
+
+---
+
+### 6. weather
+
+- `weather`: Target weather: `clear`, `rain`, `thunder`;
+- `duration_ticks`: Duration in ticks (e.g. 6000 ticks = 5 minutes).
+
+```json
+{
+  "type": "idtw:weather",
+  "weather": "clear",
+  "duration_ticks": 12000
+}
+```
+
+---
+
+### 7. arrow_rain
+
+Rains arrows from above the item position.
+
+- `count`: Arrow count (1 to 128);
+- `pickup`: Pickup mode: `allowed`, `disallowed`, `creative_only`;
+- `potion_effects`: Optional potion effects array.
 
 ```json
 {
   "type": "idtw:arrow_rain",
   "count": 16,
-  "pickup": "creative_only",
-  "potion_effects": [
-    { "effect": "minecraft:poison", "duration_ticks": 200, "amplifier": 0 }
-  ]
+  "pickup": "disallowed"
 }
 ```
 
-What you see in game: after a 10 tick delay the volley starts and drops 32 angled arrows, one every 1 to 3 ticks, landing within a radius of 5 blocks around the trigger position, and players can pick them up. Where the arrows start depends on the space overhead: the mod walks up from one block above the trigger position, at most 20 blocks, and stops under the first block or ceiling it meets, so outdoors they start about 20 blocks up while indoors and in caves they fall from just under the ceiling. Each arrow gets a random launch speed between 0.5 and 2.0 and a direction at most about 25 degrees off vertical, so the volley drifts down at a slant and one arrow deals roughly 3 to 5 damage when it hits. With potion effects, an entity the arrows hit takes the matching effect.
+---
 
-Each group of the same candidate and slot plays its own volley: every volley rolls its own `chance` and draws its own potion effects, and one delayed task runs the volleys back to back with no extra pause, so the total duration grows with the number of groups. For how many groups a stack opens, see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
+## Performance & Safety Protections
 
-## Place Block (place_block)
+The mod includes safeguards to preserve server TPS and fair play:
+1. **Spread delivery**: Large batches of items spawn across multiple game ticks to prevent lag spikes;
+2. **Safe mob spawning**: Spawning algorithms search for solid ground away from lava and the void;
+3. **Product cooldown**: Newly converted items have temporary immunity against instant burn damage or secondary rule triggering.
 
-`type`: `idtw:place_block`
+---
 
-| Field | What it does | Values | Default | Notes |
-|---|---|---|---|---|
-| `block` | Which block to place | Block id or tag | Omit | Write this or `use_source_block`, and at least one of the two |
-| `use_source_block` | Places the block that matches the source item | `true` / `false` | `false` | A dirt source places dirt; when the source item has no matching block, this run fails |
-| `shape` | Shape of the candidate positions | `square` / `circle` / `cross` / `cube` / `sphere` | `square` | A square, a circle, or a cross that keeps only the cells along the x axis or the z axis stays on the trigger level; a cube or a sphere expands above and below the trigger position; not case sensitive. In the editor the Shape row is a button: click it to switch to the next value |
-| `count` | Result budget per group | 1 to 64 | `1` | Positions are tried from the inside out, subject to the environment budget |
-| `radius` | Search radius (blocks) | 1 to the server setting `max_place_block_radius` (default 8) | `6` | The horizontal range for squares, circles and crosses, and the three-dimensional range a cube or a sphere expands into; rules above the server cap are rejected, and the editor takes the same setting as the radius slider window |
-| `limit` | Cap on how many of this block may sit in the area `shape` covers at this `radius` | 1 or more | Omit for no limit | The mod counts the blocks of the same type already inside that area and fills up to the cap; in the editor the slider window equals the capacity of the current shape at the current radius, and a value above that capacity means no limit |
+## Next Steps
 
-Notes:
-
-- When you write neither field, the rule is rejected with a message about `block` and `use_source_block`. When you write both, `block` wins.
-- Squares, circles and crosses go only at **the same height as the trigger position**; a cube or a sphere expands above and below the trigger position as well.
-- Only replaceable positions, such as grass and water, are used, and the block needs support. A position that does not fit is skipped, and the mod never steps outside `radius` to reach `count`.
-- The **result budget** is the output available from qualifying source items. The **environment budget** is the amount allowed by usable positions inside the radius and by `limit`. When the task ends, source cost follows actual placement and unused source items return: with 10 source items and 2 blocks per source, placing 6 returns 7 sources; placing 7 consumes 4 and returns 6.
-- Each group rounds `placed × source_cost ÷ count` up to whole source items. Multiple block effects in one group share the highest cost used; a dispatched non-block effect, a missed chance or an invalid target uses the full group cost. Catalysts and fluid sources are paid when the group opens.
-- Groups with the same candidate, slot and target block share one position scan while retaining their individual chance results and due times. Counting reads the same candidate positions the group can place into, and is skipped entirely when `limit` already covers all of them. Placement remains subject to the shared tick budget.
-- Blocks that need a direction or support, such as buttons, torches, and ladders, get the orientation vanilla would give them: the mod tries standing on the floor, then hanging from the ceiling, then attaching to each of the four walls, and places the first orientation that can stand; when none can, that position is skipped.
-- `limit` counts the positions `shape` covers at `radius`: `radius` decides how far the mod may place, `limit` only caps how many, and never widens the area. The area counted is the same one placement can use, so a sphere of radius 4 is counted over its own cells rather than over a surrounding box. When one candidate produces several groups of blocks in the same conversion, those groups share one count and one remaining allowance, so the area never ends up holding more than `limit` of the block.
-- The `limit` slider maximum is the capacity of the current shape at the current radius: (2 × radius + 1)² for a square, 4 × radius + 1 for a cross, (2 × radius + 1)³ for a cube, and the number of covered positions for a circle or a sphere (169 for a square and 2197 for a cube at the default radius 6). Typing a larger value is not rejected, because the area cannot hold more of that block anyway, so the value means no limit; a valid value outside the slider window can still be typed and saved.
-- A new place action writes `limit` as the capacity of the default shape `square` at the default radius, so the slider sits at its maximum; when `shape` or `radius` changes afterwards, `limit` follows to the new capacity. Once you edit `limit` yourself that follow stops and changing either field no longer overwrites it; switching to another action or rule starts the follow again.
-- Whether the trigger position itself takes part depends on the fill origin switch of the candidate; see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
-
-```json
-{ "type": "idtw:place_block", "use_source_block": true, "shape": "square", "count": 1, "radius": 1 }
-```
-
-What you see in game: the block that matches the source item this run used appears within 1 block of the trigger position, at most 1 block.
-
-```json
-{ "type": "idtw:place_block", "block": "minecraft:cobblestone", "shape": "circle", "count": 32, "radius": 4, "limit": 64 }
-```
-
-What you see in game: cobblestone fills in from the inside out across a circle of radius 4 around the trigger position, up to 32 blocks. When that volume already holds 64 cobblestone, the mod places nothing at all.
-
-```json
-{ "type": "idtw:place_block", "block": "minecraft:glass", "shape": "sphere", "count": 24, "radius": 2 }
-```
-
-What you see in game: up to 24 glass blocks fill in from the inside out across a sphere of radius 2 centered on the trigger position. The sphere covers only positions less than 3 blocks from the center, so the eight corners of the enclosing cube stay empty.
-
-## Loot Table (loot_table)
-
-`type`: `idtw:loot_table`
-
-| Field | What it does | Values | Default | Notes |
-|---|---|---|---|---|
-| `loot_table` | Which loot table to use | Loot table id | None, required | A concrete id only; `#` tags are not supported |
-| `luck` | Luck value | `-100` to `100` | `0` | Affects entries that carry a luck check and may be negative |
-
-```json
-{ "type": "idtw:loot_table", "loot_table": "minecraft:chests/simple_dungeon", "luck": 0, "chance": 0.5 }
-```
-
-What you see in game: with a 50 percent chance the mod rolls the simple dungeon chest loot table once and the results scatter near the trigger position, and each product's horizontal velocity is opposite to the source item's motion when it was destroyed, so it flies back toward the direction the item came from. The roll uses the trigger position as its origin and hands the source entity to the table as the acting entity, the same way a chest does. It provides no killer, so entries that need a player kill never apply. The table is rolled exactly once, at the moment the conversion succeeds: a delayed or multi-tick delivery never re-rolls, and an empty roll simply drops nothing.
-
-## Lightning (lightning)
-
-`type`: `idtw:lightning`
-
-| Field | What it does | Values | Default | Notes |
-|---|---|---|---|---|
-| `count` | How many bolts | 1 to 16 | `1` | 8 ticks (0.4 seconds) between bolts |
-
-```json
-{ "type": "idtw:lightning", "count": 1, "delay_ticks": 20 }
-```
-
-What you see in game: after a 1 second delay one bolt strikes, identical to vanilla lightning, so it deals damage and sets blocks on fire. With `count: 3`, the first bolt keeps the trigger's horizontal coordinates and the other two scatter randomly within 5 blocks. Bolts land on the topmost collision or fluid surface, including slabs and stairs; an underground trigger still strikes the surface above. In the void, where no surface exists, bolts use the heightmap height.
-
-## Explosion (explosion)
-
-`type`: `idtw:explosion`
-
-| Field | What it does | Values | Default | Notes |
-|---|---|---|---|---|
-| `power` | Explosion power | `0` to `16` | `3` | For reference, a creeper is about `3` and TNT is `4` |
-| `fire` | Whether fire is left behind | `true` / `false` | `false` | When true, the blast sets nearby blocks on fire |
-| `visual_only` | Visuals only, with no world change | `true` / `false` | `false` | When true, the mod plays particles and sound without breaking blocks or hurting entities |
-
-```json
-{ "type": "idtw:explosion", "power": 2, "fire": true, "visual_only": false }
-```
-
-What you see in game: an explosion of power 2 goes off at the trigger position, breaking blocks and leaving fire behind.
-
-```json
-{ "type": "idtw:explosion", "power": 4, "visual_only": true }
-```
-
-What you see in game: only the particles and the sound of an explosion, with no effect on the world or on entities. This suits a loud but harmless show.
-
-## Weather (weather)
-
-`type`: `idtw:weather`
-
-| Field | What it does | Values | Default | Notes |
-|---|---|---|---|---|
-| `mode` | Rain or clear up | `rain` / `clear` | None, required | Leaving it out rejects the rule |
-| `duration_ticks` | How long it lasts (ticks) | 1 to 24000 | `6000` | 6000 ticks is 5 minutes and 24000 ticks is 20 minutes |
-| `thundering` | Whether to make it a thunderstorm | `true` / `false` | `false` | Applies only with `rain` |
-
-```json
-{ "type": "idtw:weather", "mode": "rain", "duration_ticks": 6000, "thundering": true }
-```
-
-What you see in game: the current dimension turns into a thunderstorm at once for 6000 ticks (5 minutes).
-
-A few notes: `clear` switches the weather to clear, the mod does not set the weather again when it already matches, which keeps the timer from being refreshed over and over, and dimensions without sky light, such as the Nether, are not affected.
-
-## Input Consumption
-
-Source, catalyst and fluid payments are rule input settings. See [Outcome Candidates and Settlement](en-05-outcomes-and-settlement) for fields and examples. Output effects describe products and world actions.
-
-## About Limit and Radius
-
-`limit` and `radius` are **parameters of an effect**, written inside a concrete effect object rather than as rule-level fields:
-
-- `limit`: the cap on the number of products, counted within `radius`.
-- `radius`: the meaning depends on the effect. In `place_block` it is the search radius for placement. It is also the range that `limit` counts.
-
-A server-level protection also stops a conversion when too many products lie nearby. It works per rule and is independent of the parameters of a single effect; see [Server Configuration](en-07-server-config).
-
-## Related
-
-- [Conditions](en-03-conditions)
-- [Outcome Candidates and Settlement](en-05-outcomes-and-settlement)
-- [Rule Fields](en-02-rule-basics)
-- [Server Configuration](en-07-server-config)
+- [Outcome Candidates and Settlement](en-05-outcomes-and-settlement): Multiple outcomes, weights, costs, and refunds.
+- [Rule Fields](en-02-rule-basics): Top-level rule properties and timing options.
