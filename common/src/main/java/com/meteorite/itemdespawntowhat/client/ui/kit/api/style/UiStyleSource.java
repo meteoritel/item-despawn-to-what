@@ -16,6 +16,8 @@ public interface UiStyleSource {
     UiControlStyle controlStyle(UiControlRole role);
     /** 滑条结构与画法。 */
     UiSliderSkin sliderSkin(UiSliderRole role);
+    /** 通用表面完整皮肤；遗漏角色使用 kit 原版默认。 */
+    default UiSurfaceSkin surfaceSkin(UiSurfaceRole role) { return UiMinecraftTheme.INSTANCE.surfaceSkin(role); }
     /** 面板和内容语义色。 */
     default UiSurfaceStyle surfaces() { return UiSurfaceStyle.MINECRAFT; }
     /** 提示的完整外框皮肤。 */
@@ -44,34 +46,37 @@ public interface UiStyleSource {
     default int border() { return metrics().border(); }
     /** 列表选择标记宽度。 */
     default int selectMarkerWidth() { return metrics().selectMarkerWidth(); }
+    /** 绘制常态语义表面。 */
+    default void drawSurface(GuiGraphics graphics, UiRect rect, UiSurfaceRole role) {
+        drawSurface(graphics, rect, role, UiControlStyle.State.NORMAL);
+    }
+    /** 绘制指定状态的语义表面。 */
+    default void drawSurface(GuiGraphics graphics, UiRect rect, UiSurfaceRole role, UiControlStyle.State state) {
+        surfaceSkin(role).paint(graphics, rect, state);
+    }
     /** 面板底与边框。 */
-    default void drawWindow(GuiGraphics graphics, UiRect rect) { surface(graphics, rect, surfaces().panelFill(), surfaces().panelBorder()); }
+    default void drawWindow(GuiGraphics graphics, UiRect rect) { drawSurface(graphics, rect, UiSurfaceRole.WINDOW); }
     /** 输入和列表底板。 */
-    default void drawInset(GuiGraphics graphics, UiRect rect) { surface(graphics, rect, surfaces().inputFill(), surfaces().inputBorder()); }
+    default void drawInset(GuiGraphics graphics, UiRect rect) { drawSurface(graphics, rect, UiSurfaceRole.INSET); }
     /** 标题栏底色。 */
-    default void drawHeader(GuiGraphics graphics, UiRect rect) { fill(graphics, rect, surfaces().headerFill()); }
+    default void drawHeader(GuiGraphics graphics, UiRect rect) { drawSurface(graphics, rect, UiSurfaceRole.HEADER); }
     /** 分隔线。 */
-    default void drawDivider(GuiGraphics graphics, int x, int y, int width) { graphics.fill(x, y, x + width, y + 1, surfaces().panelBorder()); }
+    default void drawDivider(GuiGraphics graphics, int x, int y, int width) {
+        drawSurface(graphics, new UiRect(x, y, Math.max(0, width), 1), UiSurfaceRole.DIVIDER);
+    }
     /** 矩形内部的键盘焦点框。 */
-    default void drawFocusOutline(GuiGraphics graphics, UiRect rect) { graphics.renderOutline(rect.x(), rect.y(), rect.width(), rect.height(), controlStyle(UiControlRole.SECONDARY).focusOutline()); }
+    default void drawFocusOutline(GuiGraphics graphics, UiRect rect) { drawSurface(graphics, rect, UiSurfaceRole.FOCUS); }
     /** 列表与文本选择底色。 */
-    default void drawSelection(GuiGraphics graphics, UiRect rect) { fill(graphics, rect, surfaces().selectionFill()); }
+    default void drawSelection(GuiGraphics graphics, UiRect rect) { drawSurface(graphics, rect, UiSurfaceRole.SELECTION); }
     /** 行左侧的选择标记。 */
-    default void drawSelectMarker(GuiGraphics graphics, UiRect rect) { graphics.fill(rect.x() + 1, rect.y() + 2, rect.x() + 3, rect.bottom() - 2, surfaces().text()); }
+    default void drawSelectMarker(GuiGraphics graphics, UiRect rect) { drawSurface(graphics, rect, UiSurfaceRole.SELECT_MARKER); }
     /** 滚动轨道。 */
-    default void drawScrollTrack(GuiGraphics graphics, UiRect rect) { fill(graphics, rect, controlStyle(UiControlRole.SECONDARY).scrollbarTrack()); }
+    default void drawScrollTrack(GuiGraphics graphics, UiRect rect) { drawSurface(graphics, rect, UiSurfaceRole.SCROLL_TRACK); }
     /** 滚动滑块。 */
-    default void drawScrollThumb(GuiGraphics graphics, UiRect rect) { fill(graphics, rect, controlStyle(UiControlRole.SECONDARY).scrollbarThumb()); }
+    default void drawScrollThumb(GuiGraphics graphics, UiRect rect) { drawSurface(graphics, rect, UiSurfaceRole.SCROLL_THUMB); }
     /** 可选中行或标签底。 */
     default void drawChip(GuiGraphics graphics, UiRect rect, boolean selected, boolean hovered) {
-        UiControlStyle style = controlStyle(UiControlRole.SECONDARY);
-        fill(graphics, rect, style.background(selected ? UiControlStyle.State.SELECTED : hovered ? UiControlStyle.State.HOVER : UiControlStyle.State.NORMAL));
-    }
-    private static void fill(GuiGraphics graphics, UiRect rect, int color) {
-        if (rect.width() > 0 && rect.height() > 0) graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), color);
-    }
-    private static void surface(GuiGraphics graphics, UiRect rect, int fill, int border) {
-        fill(graphics, rect, fill);
-        if (rect.width() > 0 && rect.height() > 0) graphics.renderOutline(rect.x(), rect.y(), rect.width(), rect.height(), border);
+        drawSurface(graphics, rect, UiSurfaceRole.CHIP, selected ? UiControlStyle.State.SELECTED
+                : hovered ? UiControlStyle.State.HOVER : UiControlStyle.State.NORMAL);
     }
 }

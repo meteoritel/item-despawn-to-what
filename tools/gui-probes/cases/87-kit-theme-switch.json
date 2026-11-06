@@ -1,6 +1,6 @@
 {
   "name": "kit-theme-switch",
-  "description": "Theme publication preserves existing text, focus, history and scalar commit state",
+  "description": "Theme publication preserves text and history, waits for pointer release and preserves its commit",
   "start": {
     "kind": "scene",
     "scene": "kit_showcase"
@@ -158,19 +158,26 @@
       }
     },
     {
+      "capture": "preview",
+      "query": {
+        "source": "text",
+        "selector": {
+          "kind": "ROW",
+          "within": {
+            "lang": "gui.itemdespawntowhat.debug.workbench.values.label"
+          }
+        }
+      }
+    },
+    {
       "action": {
         "kind": "key",
         "code": 295
       }
     },
     {
-      "action": {
-        "kind": "release"
-      }
-    },
-    {
       "assert": {
-        "name": "换肤取消未提交的指针预览",
+        "name": "捕获期间换肤请求保持预览与旧提交值",
         "kind": "value_equals",
         "query": {
           "source": "text",
@@ -181,7 +188,62 @@
             }
           }
         },
-        "expected_capture": "values"
+        "expected_capture": "preview"
+      }
+    },
+    {
+      "action": {
+        "kind": "release"
+      }
+    },
+    {
+      "assert": {
+        "name": "正常释放提交原手势后发布主题",
+        "kind": "value_changed",
+        "query": {
+          "source": "text",
+          "selector": {
+            "kind": "ROW",
+            "within": {
+              "lang": "gui.itemdespawntowhat.debug.workbench.values.label"
+            }
+          }
+        },
+        "capture": "preview"
+      }
+    },
+    {
+      "capture": "committed",
+      "query": {
+        "source": "text",
+        "selector": {
+          "kind": "ROW",
+          "within": {
+            "lang": "gui.itemdespawntowhat.debug.workbench.values.label"
+          }
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "key",
+        "code": 295
+      }
+    },
+    {
+      "assert": {
+        "name": "继续换肤保持已提交值",
+        "kind": "value_equals",
+        "query": {
+          "source": "text",
+          "selector": {
+            "kind": "ROW",
+            "within": {
+              "lang": "gui.itemdespawntowhat.debug.workbench.values.label"
+            }
+          }
+        },
+        "expected_capture": "committed"
       }
     }
   ]

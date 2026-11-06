@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostSurface;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiSurfaceRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
@@ -118,7 +118,7 @@ final class RuleSaveOverlay implements UiInputTarget {
 
     private void renderContent(GuiGraphics graphics, UiPointer pointer, long milliseconds, RuleSaveProgress progress,
                                boolean cancelling, int width, UiRect panel) {
-        theme.drawSurface(graphics, panel, UiHostSurface.PANEL);
+        theme.drawSurface(graphics, panel, UiSurfaceRole.PANEL);
         graphics.enableScissor(panel.x(), panel.y(), panel.right(), panel.bottom());
         try {
             int left = panel.x() + PADDING;

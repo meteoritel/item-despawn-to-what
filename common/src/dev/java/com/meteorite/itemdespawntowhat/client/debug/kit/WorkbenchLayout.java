@@ -68,6 +68,11 @@ public final class WorkbenchLayout {
     /** 绘制窗口底板、标题与标题分隔线。 */
     public static void drawPage(GuiGraphics graphics, Font font, UiStyleSource theme, int width, int height, Component title) {
         theme.drawWindow(graphics, new UiRect(0, 0, width, height));
+        drawPageHeading(graphics, font, theme, width, title);
+    }
+
+    /** 已由带皮肤屏幕绘制底板时，只绘制标题和分隔线。 */
+    public static void drawPageHeading(GuiGraphics graphics, Font font, UiStyleSource theme, int width, Component title) {
         graphics.drawString(font, title, INSET, TITLE_Y, theme.surfaces().text(), false);
         theme.drawDivider(graphics, INSET, RULE_Y, contentWidth(width));
     }

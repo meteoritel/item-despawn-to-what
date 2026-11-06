@@ -15,6 +15,11 @@
  *   <li>{@code UiThemeMetrics}: host</li>
  *   <li>{@code UiThemeContext}: host</li>
  *   <li>{@code UiMinecraftTheme}: host</li>
+ *   <li>{@code UiSurfaceRole}: host</li>
+ *   <li>{@code UiSurfaceSkin}: host</li>
+ *   <li>{@code UiThemes}: library；用途：宿主组合完整主题；当前无直接生产引用</li>
+ *   <li>{@code UiSkinImages}: library；用途：sprite/九宫格状态皮肤工厂；当前无直接生产引用</li>
+ *   <li>{@code UiThemePublication}: host</li>
  * </ul>
  */
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.style;

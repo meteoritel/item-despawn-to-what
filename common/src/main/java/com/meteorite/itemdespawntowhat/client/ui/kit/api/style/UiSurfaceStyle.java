@@ -6,10 +6,46 @@ public record UiSurfaceStyle(int text, int secondaryText, int disabledText, int 
                              int headerFill, int headerText, int selectionFill, int modalDim,
                              int tooltipFill, int tooltipBorderTop, int tooltipBorderBottom,
                              int tooltipText, int loading) {
-    /** 原版输入框、灰色面板与紫色提示边框。 */
+    /** 半透明 Minecraft 外壳的通用语义色，提示保持原版紫色渐变边框。 */
     public static final UiSurfaceStyle MINECRAFT = new UiSurfaceStyle(
-            0xFFFFFFFF, 0xFFAAAAAA, 0xFFA0A0A0, 0xFFE0E0E0,
-            0xFF000000, 0xFFA0A0A0, 0xFF313131, 0xFF101010,
-            0xFF444444, 0xFFFFFFFF, 0xFF555577, 0xA0000000,
+            0xFFF2F4F8, 0xFFB8C0CC, 0xFF7C8592, 0xFFEFF2F7,
+            0x960A0C10, 0x8A5A6474, 0xC02E3642, 0x80505A6A,
+            0xB4374150, 0xFFF4F6FA, 0x80506A8A, 0xA8000000,
             0xF0100010, 0x505000FF, 0x5028007F, 0xFFFFFFFF, 0xFFFFFFFF);
+
+    /** 替换内容文字组，其余语义色保持。 */
+    public UiSurfaceStyle withText(int normal, int secondary, int disabled) {
+        return new UiSurfaceStyle(normal, secondary, disabled, inputText, inputFill, inputBorder, panelFill, panelBorder,
+                headerFill, headerText, selectionFill, modalDim, tooltipFill, tooltipBorderTop, tooltipBorderBottom, tooltipText, loading);
+    }
+
+    /** 替换输入与列表内凹组。 */
+    public UiSurfaceStyle withInput(int fill, int border, int text) {
+        return new UiSurfaceStyle(this.text, secondaryText, disabledText, text, fill, border, panelFill, panelBorder,
+                headerFill, headerText, selectionFill, modalDim, tooltipFill, tooltipBorderTop, tooltipBorderBottom, tooltipText, loading);
+    }
+
+    /** 替换面板组。 */
+    public UiSurfaceStyle withPanel(int fill, int border) {
+        return new UiSurfaceStyle(text, secondaryText, disabledText, inputText, inputFill, inputBorder, fill, border,
+                headerFill, headerText, selectionFill, modalDim, tooltipFill, tooltipBorderTop, tooltipBorderBottom, tooltipText, loading);
+    }
+
+    /** 替换标题组。 */
+    public UiSurfaceStyle withHeader(int fill, int text) {
+        return new UiSurfaceStyle(this.text, secondaryText, disabledText, inputText, inputFill, inputBorder, panelFill, panelBorder,
+                fill, text, selectionFill, modalDim, tooltipFill, tooltipBorderTop, tooltipBorderBottom, tooltipText, loading);
+    }
+
+    /** 替换选择底色与模态遮罩组。 */
+    public UiSurfaceStyle withSelection(int fill, int dim) {
+        return new UiSurfaceStyle(text, secondaryText, disabledText, inputText, inputFill, inputBorder, panelFill, panelBorder,
+                headerFill, headerText, fill, dim, tooltipFill, tooltipBorderTop, tooltipBorderBottom, tooltipText, loading);
+    }
+
+    /** 替换提示组，普通提示和富内容外框共用。 */
+    public UiSurfaceStyle withTooltip(int fill, int top, int bottom, int text) {
+        return new UiSurfaceStyle(this.text, secondaryText, disabledText, inputText, inputFill, inputBorder, panelFill, panelBorder,
+                headerFill, headerText, selectionFill, modalDim, fill, top, bottom, text, loading);
+    }
 }

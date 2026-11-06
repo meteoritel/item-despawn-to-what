@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostSurface;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiSurfaceRole;
 import com.meteorite.itemdespawntowhat.client.ui.shared.PreviewResources;
 import com.meteorite.itemdespawntowhat.client.ui.shared.PreviewIcons;
 import org.lwjgl.glfw.GLFW;
@@ -31,7 +31,8 @@ import java.util.List;
 
 import net.minecraft.Util;
 import net.minecraft.client.gui.GuiGraphics;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiScreen;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiThemedScreen;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiThemePublication;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputScope;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
@@ -48,13 +49,13 @@ import net.minecraft.util.FormattedCharSequence;
  * {@link UiConditionTreeSummary}，界面任何位置都不出现可编辑 JSON 文本框。
  * <p>只有工作区处于 ACTIVE 时可编辑；APPLYING 冻结；工作区进入 FREE 时外壳登记关屏请求。
  */
-public final class RuleEditorScreen extends UiScreen implements UiLayoutSource {
+public final class RuleEditorScreen extends UiThemedScreen implements UiLayoutSource {
 
-    private UiThemeScheme themeScheme = UiThemeSelection.current();
-    private @Nullable UiThemeScheme pendingTheme;
-    private final UiHostThemeSet initialThemes = themeScheme.themes();
-    private final UiHostThemeContext THEME = new UiHostThemeContext(initialThemes.content());
-    private final UiHostThemeContext chromeTheme = new UiHostThemeContext(initialThemes.chrome());
+    private UiThemeScheme themeScheme;
+    private final UiHostThemeContext THEME;
+    private final UiHostThemeContext chromeTheme;
+    private final UiThemePublication<UiThemeScheme> themePublication =
+            new UiThemePublication<>(() -> themeScheme, this::publishTheme);
 
     // 布局常量（页自身的内边距由页声明）
     private static final int PAD = 4;
@@ -84,8 +85,25 @@ public final class RuleEditorScreen extends UiScreen implements UiLayoutSource {
     private @Nullable UiRect noticeRect;
     private @Nullable UiRect truncatedTitleRect;
 
+    /** 根据进程内记忆恢复外观，工作区继续拥有业务会话。 */
     public RuleEditorScreen(RuleEditClientWorkspace workspace) {
-        super(Component.translatable(UI + "title"));
+        this(workspace, UiThemeSelection.current());
+    }
+
+    private RuleEditorScreen(RuleEditClientWorkspace workspace, UiThemeScheme scheme) {
+        this(workspace, scheme, scheme.themes());
+    }
+
+    private RuleEditorScreen(RuleEditClientWorkspace workspace, UiThemeScheme scheme, UiHostThemeSet initial) {
+        this(workspace, scheme, new UiHostThemeContext(initial.content()), new UiHostThemeContext(initial.chrome()));
+    }
+
+    private RuleEditorScreen(RuleEditClientWorkspace workspace, UiThemeScheme scheme,
+                             UiHostThemeContext content, UiHostThemeContext chrome) {
+        super(Component.translatable(UI + "title"), content);
+        THEME = content;
+        chromeTheme = chrome;
+        themeScheme = scheme;
         BuiltinEditorDescriptors.bootstrap();
         RuleEditorModel model = new RuleEditorModel(workspace);
         // 屏幕构造期 this.font 尚未注入，外壳与页面直接取客户端字体实例
@@ -100,19 +118,16 @@ public final class RuleEditorScreen extends UiScreen implements UiLayoutSource {
 
     /** 记录完整方案选择；根在手势正常释放后的准备点发布。 */
     public void requestTheme(UiThemeScheme scheme) {
-        if (scheme == themeScheme && pendingTheme == null) return;
         UiThemeSelection.select(scheme);
-        pendingTheme = scheme == themeScheme ? null : scheme;
+        themePublication.request(scheme);
     }
 
     @Override
-    protected void prepareUi() {
-        if (pendingTheme == null) return;
-        UiInputScope active = inputRouter().active();
-        if (active != null && active.interaction().pointerTarget() != null) return;
-        UiHostThemeSet next = pendingTheme.themes();
-        themeScheme = pendingTheme;
-        pendingTheme = null;
+    protected void prepareUi() { themePublication.prepare(inputRouter().active()); }
+
+    private void publishTheme(UiThemeScheme scheme) {
+        UiHostThemeSet next = scheme.themes();
+        themeScheme = scheme;
         shell.themeButton().setLabel(themeLabel());
         THEME.setTheme(next.content());
         chromeTheme.setTheme(next.chrome());
@@ -205,15 +220,12 @@ public final class RuleEditorScreen extends UiScreen implements UiLayoutSource {
 
     // 绘制消费根准备阶段已提交的几何
     @Override
-    protected void renderUi(@NotNull GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    protected void renderThemedUi(@NotNull GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         PreviewIcons.beginFrame();
-        this.renderBackground(graphics, mouseX, mouseY, partialTick);
         EditorPage page = shell.activePage();
         UiTypePicker picker = page.overlay();
         boolean saving = shell.saving();
         int w = this.width;
-        int h = this.height;
-        THEME.drawWindow(graphics, new UiRect(0, 0, w, h));
         drawHeaderBand(graphics, w);
         drawHeaderText(graphics, page);
         UiPointer pointer = page.inputScope().pointer(mouseX, mouseY).resolve(page);
@@ -324,7 +336,7 @@ public final class RuleEditorScreen extends UiScreen implements UiLayoutSource {
                 THEME.drawSurface(graphics, stateArea, palette.status().warning(), palette.controls().controlBevelDark());
                 stateColor = palette.status().filledText();
             } else {
-                THEME.drawSurface(graphics, stateArea, UiHostSurface.CHIP);
+                THEME.drawSurface(graphics, stateArea, UiSurfaceRole.CHIP);
             }
         }
         int stateY = stateArea.y() + (stateArea.height() - stateLines.size() * font.lineHeight) / 2;
@@ -390,7 +402,7 @@ public final class RuleEditorScreen extends UiScreen implements UiLayoutSource {
     // 外部切屏或断线也会调用 removed：这条路径不走 onClose，未应用的修改必须在这里写盘。
     @Override
     protected void releaseUiResources() {
-        pendingTheme = null;
+        themePublication.discard();
         shell.flushDrafts();
         PreviewResources.screenClosed();
     }

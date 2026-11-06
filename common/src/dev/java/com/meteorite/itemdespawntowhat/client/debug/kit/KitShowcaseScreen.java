@@ -6,9 +6,9 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutSource;
 import net.minecraft.client.gui.GuiGraphics;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiStyleSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiThemeContext;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiMinecraftTheme;
 import org.lwjgl.glfw.GLFW;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiScreen;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiThemedScreen;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiThemePublication;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.NotNull;
 
@@ -19,19 +19,19 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.preview.PreviewScenes;
 import org.jetbrains.annotations.Nullable;
 
 /** 只依赖 kit 与原版类型的开发接入示例；导航回调由工作台提供。 */
-public final class KitShowcaseScreen extends UiScreen implements UiLayoutSource {
+public final class KitShowcaseScreen extends UiThemedScreen implements UiLayoutSource {
     private final Runnable returnTo;
-    private final UiThemeContext<UiStyleSource> theme = UiThemeContext.minecraft();
+    private final UiThemeContext<UiStyleSource> theme;
     private final List<UiStyleSource> themes;
     private final @Nullable Function<PreviewBudget, PreviewScenes> previewFactory;
     private int themeIndex;
-    private @Nullable UiStyleSource pendingTheme;
+    private final UiThemePublication<UiStyleSource> themePublication;
     private KitShowcaseContent content;
     private UiInputScope scope;
 
     /** 创建独立本地场景，不要求世界或编辑工作区。 */
     public KitShowcaseScreen(Runnable returnTo) {
-        this(returnTo, List.of(UiMinecraftTheme.INSTANCE));
+        this(returnTo, KitSkinSamples.themes());
     }
 
     /** 替换主题由工作台注入，独立内容仅接触 kit 契约。 */
@@ -42,7 +42,15 @@ public final class KitShowcaseScreen extends UiScreen implements UiLayoutSource 
     /** 已加载世界的宿主可注入 preview 工厂；场景所有者由展示内容关闭。 */
     public KitShowcaseScreen(Runnable returnTo, List<UiStyleSource> themes,
                              @Nullable Function<PreviewBudget, PreviewScenes> previewFactory) {
-        super(Component.translatable(KitShowcaseContent.UI + "kit_showcase"));
+        this(returnTo, themes, previewFactory, UiThemeContext.minecraft());
+    }
+
+    private KitShowcaseScreen(Runnable returnTo, List<UiStyleSource> themes,
+                              @Nullable Function<PreviewBudget, PreviewScenes> previewFactory,
+                              UiThemeContext<UiStyleSource> context) {
+        super(Component.translatable(KitShowcaseContent.UI + "kit_showcase"), context);
+        theme = context;
+        themePublication = new UiThemePublication<>(theme::current, theme::setTheme);
         this.returnTo = returnTo;
         this.previewFactory = previewFactory;
         this.themes = List.copyOf(themes);
@@ -63,8 +71,7 @@ public final class KitShowcaseScreen extends UiScreen implements UiLayoutSource 
     @Override protected void layoutUi() { content.layout(width, height); }
 
     @Override
-    protected void renderUi(@NotNull GuiGraphics graphics, int x, int y, float delta) {
-        renderBackground(graphics, x, y, delta);
+    protected void renderThemedUi(@NotNull GuiGraphics graphics, int x, int y, float delta) {
         content.render(graphics, scope.pointer(x, y).resolve(content));
     }
 
@@ -76,15 +83,9 @@ public final class KitShowcaseScreen extends UiScreen implements UiLayoutSource 
     private void nextTheme() { requestTheme(themes.get(themeIndex = (themeIndex + 1) % themes.size())); }
 
     /** 请求完整主题；根在手势正常完成后统一发布。 */
-    public void requestTheme(UiStyleSource next) { pendingTheme = next == theme.current() ? null : next; }
+    public void requestTheme(UiStyleSource next) { themePublication.request(next); }
 
-    @Override protected void prepareUi() {
-        if (pendingTheme == null) return;
-        UiInputScope active = inputRouter().active();
-        if (active != null && active.interaction().pointerTarget() != null) return;
-        theme.setTheme(pendingTheme);
-        pendingTheme = null;
-    }
+    @Override protected void prepareUi() { themePublication.prepare(inputRouter().active()); }
 
     @Override public boolean keyPressed(int key, int scan, int mods) {
         if (key == GLFW.GLFW_KEY_G && content.controlsVisible()) { content.changeGrid(); return true; }
@@ -95,7 +96,7 @@ public final class KitShowcaseScreen extends UiScreen implements UiLayoutSource 
 
     @Override protected UiInputScope inputScope() { return content.activeScope(scope); }
     @Override protected void invalidateUiResources() { content.invalidateResources(); }
-    @Override protected void releaseUiResources() { pendingTheme = null; content.releaseResources(); }
+    @Override protected void releaseUiResources() { themePublication.discard(); content.releaseResources(); }
     @Override public void onClose() { returnTo.run(); }
     @Override public boolean isPauseScreen() { return false; }
 }

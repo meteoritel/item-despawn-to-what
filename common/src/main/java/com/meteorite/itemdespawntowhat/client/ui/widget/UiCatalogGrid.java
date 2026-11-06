@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostSurface;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiSurfaceRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlStyle;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiFooterHost;
 
@@ -768,7 +768,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         if (enabled) {
             theme.drawChip(graphics, scopeRect, false, hovered);
         } else {
-            theme.drawSurface(graphics, scopeRect, UiHostSurface.SEGMENT, UiControlStyle.State.DISABLED);
+            theme.drawSurface(graphics, scopeRect, UiSurfaceRole.SEGMENT, UiControlStyle.State.DISABLED);
         }
         String label = scopeLabel(scope).getString();
         int labelWidth = font.width(label);
@@ -814,10 +814,10 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         boolean chosen = isSelected(entry.id());
         boolean unavailable = unavailableReason.apply(entry.id()) != null;
         int cellRight = cellX + columnWidth();
-        int fill = !enabled ? theme.palette().surfaces().inputBorder()
+        int fill = !enabled ? theme.palette().controls().listRowDisabled()
                 : chosen ? theme.palette().controls().controlSelected()
                 : hovered ? theme.palette().controls().controlHover()
-                : (row % 2 == 0 ? theme.palette().surfaces().inputBorder() : theme.palette().controls().listRowOdd());
+                : (row % 2 == 0 ? theme.palette().controls().listRowEven() : theme.palette().controls().listRowOdd());
         graphics.fill(cellX, cellY, cellRight, cellY + ROW_HEIGHT, fill);
 
         if (entry.icon() != null) {

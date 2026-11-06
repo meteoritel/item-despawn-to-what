@@ -1,0 +1,140 @@
+{
+  "name": "editor-theme-switch",
+  "description": "Production appearance button preserves list input, opens modal with shared theme and restores the choice on reopen",
+  "start": {
+    "kind": "editor"
+  },
+  "window": {
+    "width": 1280,
+    "height": 840,
+    "scale": 2
+  },
+  "steps": [
+    {
+      "capture": "choice",
+      "query": {
+        "source": "text",
+        "selector": {
+          "kind": "CONTROL",
+          "has_text": "Appearance: "
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "TEXT_INPUT",
+          "lang": "gui.itemdespawntowhat.edit.list.search"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "type",
+        "text": "skin-check"
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "has_text": "Appearance: "
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "外观按钮发布另一方案",
+        "kind": "value_changed",
+        "query": {
+          "source": "text",
+          "selector": {
+            "kind": "CONTROL",
+            "has_text": "Appearance: "
+          }
+        },
+        "capture": "choice"
+      }
+    },
+    {
+      "assert": {
+        "name": "换肤保留搜索原文",
+        "kind": "text_present",
+        "selector": {
+          "kind": "TEXT_INPUT",
+          "text": "skin-check"
+        }
+      }
+    },
+    {
+      "capture": "selected",
+      "query": {
+        "source": "text",
+        "selector": {
+          "kind": "CONTROL",
+          "has_text": "Appearance: "
+        }
+      }
+    },
+    {
+      "shot": "93-editor-theme.png"
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "lang": "gui.itemdespawntowhat.edit.button.new"
+        }
+      }
+    },
+    {
+      "shot": "93-editor-theme-modal.png"
+    },
+    {
+      "action": {
+        "kind": "key",
+        "code": 256
+      }
+    },
+    {
+      "action": {
+        "kind": "key",
+        "code": 297,
+        "modifiers": 2
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "lang": "gui.itemdespawntowhat.debug.workbench.back"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "重开恢复已选择外观",
+        "kind": "value_equals",
+        "query": {
+          "source": "text",
+          "selector": {
+            "kind": "CONTROL",
+            "has_text": "Appearance: "
+          }
+        },
+        "expected_capture": "selected"
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "has_text": "Appearance: "
+        }
+      }
+    }
+  ]
+}

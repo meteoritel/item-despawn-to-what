@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.theme;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiSurfaceRole;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiSurfaceSkin;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.PixelSliderPainter;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlStyle;
@@ -9,7 +11,6 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderSkin;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderStyle;
 import net.minecraft.client.gui.GuiGraphics;
 import java.util.EnumMap;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlSkin;
 
 /**
  * 扁平宿主主题：画布页的扁平外观（1 像素同色描边 + 灰阶层次，无立体凸凹与阴影），
@@ -127,63 +128,18 @@ public final class UiFlatTheme extends AbstractHostTheme {
         };
     }
 
-    @Override
-    public void drawDivider(GuiGraphics graphics, int x, int y, int width) {
-        if (width <= 0) {
-            return;
-        }
-        graphics.fill(x, y, x + width, y + 1, UiFlatPalette.PANEL_BORDER);
-    }
-
     // 扁平皮肤没有立体边：只在给定边上描 1 像素外框，不改动内部底色
     @Override
     public void drawBevel(GuiGraphics graphics, UiRect rect, int light, int dark) {
         UiFlatSkin.drawOutline(graphics, rect, dark);
     }
 
-    @Override
-    public void drawFocusOutline(GuiGraphics graphics, UiRect rect) {
-        UiFlatSkin.drawFocusOutline(graphics, rect);
-    }
-
-    @Override
-    public void drawSelection(GuiGraphics graphics, UiRect rect) {
-        if (rect.width() <= 0 || rect.height() <= 0) {
-            return;
-        }
-        graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), UiFlatPalette.PANEL_CONTROL_SELECTED);
-    }
-
     // 选中标记：与像素主题同一几何，颜色换成扁平正文色
-    @Override
-    public void drawSelectMarker(GuiGraphics graphics, UiRect rect) {
-        int x = rect.x() + 2;
-        int midY = rect.y() + rect.height() / 2;
-        int color = UiFlatPalette.PANEL_TEXT;
-        graphics.fill(x, midY, x + 1, midY + 1, color);
-        graphics.fill(x + 1, midY - 1, x + 2, midY + 2, color);
-        graphics.fill(x + 2, midY - 2, x + 3, midY + 3, color);
-    }
-
-    @Override
-    public void drawScrollTrack(GuiGraphics graphics, UiRect rect) {
-        if (rect.width() <= 0 || rect.height() <= 0) {
-            return;
-        }
-        graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), UiFlatPalette.PANEL_INSET_FILL);
-    }
 
     // 扁平皮肤没有立体边：滑块用控件常态色压在内凹轨道上，靠灰阶差区分
-    @Override
-    public void drawScrollThumb(GuiGraphics graphics, UiRect rect) {
-        if (rect.width() <= 0 || rect.height() <= 0) {
-            return;
-        }
-        graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), UiFlatPalette.PANEL_CONTROL_FILL);
-    }
 
     // 扁平卡片：画布页的卡片用同色描边面，不使用九宫格贴图
 
-    private final EnumMap<UiHostSurface, UiControlSkin> surfaceSkins = UiHostSurfaceSkins.create(palette, false, false);
-    @Override public UiControlSkin surfaceSkin(UiHostSurface role) { return surfaceSkins.get(role); }
+    private final EnumMap<UiSurfaceRole, UiSurfaceSkin> surfaceSkins = UiHostSurfaceSkins.flat(palette);
+    @Override public UiSurfaceSkin surfaceSkin(UiSurfaceRole role) { return surfaceSkins.get(role); }
 }

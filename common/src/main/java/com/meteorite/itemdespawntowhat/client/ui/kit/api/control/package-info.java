@@ -25,7 +25,8 @@
  *   <li>{@code UiModal}: host</li>
  *   <li>{@code UiModalStack}: host</li>
  *   <li>{@code UiFooterHost}: host</li>
- *   <li>{@code UiScreen}: host</li>
+ *   <li>{@code UiScreen}: library；用途：保留自绘屏幕的事件与生命周期桥；当前无直接生产引用</li>
+ *   <li>{@code UiThemedScreen}: host</li>
  *   <li>{@code UiButtonWidget}: host</li>
  * </ul>
  */

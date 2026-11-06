@@ -22,7 +22,7 @@ authority: common/client/ui/theme、common/client/ui/widget、common/client/ui/s
 
 | 子包 | 一句话职责 |
 |---|---|
-| `client/ui/theme` | 把灰色像素与扁平两套外观映射成 kit 的样式值，并以 `UiHostTheme` 作为唯一注入入口 |
+| `client/ui/theme` | 组合像素、扁平与 kit 原版视觉，`UiHostTheme` 扩展通用主题并提供业务配色与图标 |
 | `client/ui/widget` | 在 kit 基础上提供可直接使用的输入框、列表、树、弹窗、按钮变体与条件树控件；滚动控件使用 kit 的内容宽度与行命中度量，文本控件通过 `UiTextEditSession` 协调原版模型，区间宿主控件的公共外壳（`AbstractBarShell`）也收在这一层 |
 | `client/ui/shared` | `screen` 与 `screen/form` 共享的纯值与展示类型：目录图标分发、展示名称、字段到目录类型的映射、条件摘要、悬停说明的语义行模型 |
 | `client/ui/screen` | 编辑器外壳、三个编辑器页面、编辑分区组合、保存遮罩与页内输入分发 |
@@ -183,7 +183,7 @@ flowchart LR
 
 保存、分区和目标切换、返回、刷新及关闭进入 `RuleEditorEditPage.finish(reason)`。完成编辑先保留当前修订输入，再取消未释放预览、提交合法值并通知模型，最后卸载或重建；非法文本保留在会话并参与阻塞校验。快照身份变化前只保留输入；重绑后旧修订控件重新装载并退出该次提交。放弃草稿先释放旧页面再清除记录，关闭与 removed 共用外壳的一次释放标记。保存与应用不关闭编辑页：回执到达后页面留在原处，用户退出、工作区释放或外部切屏才关屏。
 
-`EditorInputRouter` 只按保存遮罩 → 顶层 modal → 类型选择器 → 活动页选取稳定的 `UiInputScope`，通用派发交给 kit `UiInputRouter`。`UiScreen` 通过 `layoutUi` 准备页头、内容与页脚，`renderUi` 消费同一布局结果，再解析一次 `UiPointer` 供绘制共用；复合控件的 `hitTest` 返回实际叶子与包装/核心归属。输入与 hover 使用同一个活动作用域，POINTER 捕获只保留所属分支反馈并关闭 tooltip，KEY/TEXT 会话保留普通 hover。左键命中合格候选自动转焦，标签和滚动条等操作区保焦，真实空白清焦；事件消费独立处理。F1–F12 保持放行，Ctrl+F8 在屏幕层按保存与模态状态进入开发工作台。关屏先取消未完成会话，再冲刷已提交草稿。
+`EditorInputRouter` 只按保存遮罩 → 顶层 modal → 类型选择器 → 活动页选取稳定的 `UiInputScope`，通用派发交给 kit `UiInputRouter`。`UiThemedScreen` 共享正文 Context 绘制原版背景与主题窗口，`layoutUi` 准备页头、内容与页脚，`renderThemedUi` 消费同一布局结果，再解析一次 `UiPointer` 供绘制共用；复合控件的 `hitTest` 返回实际叶子与包装/核心归属。输入与 hover 使用同一个活动作用域，POINTER 捕获只保留所属分支反馈并关闭 tooltip，KEY/TEXT 会话保留普通 hover。左键命中合格候选自动转焦，标签和滚动条等操作区保焦，真实空白清焦；事件消费独立处理。F1–F12 保持放行，Ctrl+F8 在屏幕层按保存与模态状态进入开发工作台。关屏先取消未完成会话，再冲刷已提交草稿。
 
 页面通过 `UiChildren` 持有实际成员，默认命中和焦点贡献从同一结构派生。普通文本与条件说明附在 `UiPointerHit`，屏幕和模态根统一呈现，表单逐层 `tooltipAt` 回查已退出。各页面、模态、选择器与保存遮罩独立拥有焦点和持续交互；作用域返回恢复合格的旧焦点。`EditorShell` 按滚动、名称播报、业务激活键政策组合焦点通知；编辑页用 `UiFocusFollow` 注入目标归属与内容坐标，模态用同一名称播报 adapter。展开组保留叶子归属与 Tab 锚点，内部编辑从组内位置续接。表单子树隐藏、禁用或卸载时结束本子树交互，数值取消恢复模型与文本快照。
 
@@ -238,15 +238,15 @@ resize 保留已有页面、文本控件与编辑会话，只重排几何；单�
 
 编辑器顶部栏提供「外观：当前风格 / 原版风格」按钮，管理、编辑和调试页共享同一实例。标题、状态标签与换肤按钮同处顶部栏：标题居左，状态标签与换肤按钮靠右，栏高取页声明的最小高度与控件高度中的较大值；窄窗口下先压缩状态标签宽度，标题再按剩余宽度截断，状态标签放不下时隐藏。页签与页内容都从顶部栏下方开始。按钮通过页面正常命中、焦点、Tab、Enter/Space 和旁白链激活，并导出真实布局快照；保存、模态和选择器沿现有作用域阻断背景操作。
 
-`RuleEditorScreen.requestTheme(UiThemeScheme)` 请求完整方案，`UiThemeSelection` 保存客户端运行期间的方案标识，首次默认当前风格，重开编辑器恢复选择。当前风格是像素正文与扁平画布组合；原版风格以组合方式复用 `UiMinecraftTheme`，宿主侧在其上覆盖半透明表面色与业务调色板，窗口、顶部栏、内凹列表与面板都透出原版背景，正文与画布 Context 同次发布。主题定义与按角色解析的 skin 保持不可变，业务色按 `UiHostPalette` 的表面、控件、状态、代码、画布和说明职责组合。语义表面同时封装颜色与 painter，像素圆角使用可染色掩码；`UiHostIcon` 表达业务用途，图集切片由 Adapter 解析。
+`RuleEditorScreen.requestTheme(UiThemeScheme)` 请求完整方案，`UiThemeSelection` 保存客户端运行期间的方案标识，首次默认当前风格，重开编辑器恢复选择。当前风格是像素正文与扁平画布组合；原版风格以组合方式复用 `UiMinecraftTheme`，通用外壳直接委托 kit，宿主组合业务调色板与图标，窗口、顶部栏、内凹列表与面板都透出原版背景，正文与画布 Context 同次发布。主题定义与按角色解析的 skin 保持不可变，业务色按 `UiHostPalette` 的表面、控件、状态、代码、画布和说明职责组合。语义表面同时封装颜色与 painter，像素圆角使用可染色掩码；`UiHostIcon` 表达业务用途，图集切片由 Adapter 解析。
 
-根在输入派发结束后的准备点应用最后一次主题请求，存在指针捕获时等待原手势正常结束；重复选择不发布版本。先替换完整方案，再刷新页面、模态和覆盖面布局并同步输入。表单、摘要、树与代码视图按 revision 更新度量或着色缓存；原控件保留文本原文、选区、局部历史、草稿、业务选择、折叠、焦点及有效滚动位置。
+根通过 `UiThemePublication` 在输入派发结束后的准备点应用最后一次主题请求，存在指针捕获时等待原手势正常结束；重复选择不发布版本。先替换完整方案，再刷新页面、模态和覆盖面布局并同步输入。表单、摘要、树与代码视图按 revision 更新度量或着色缓存；原控件保留文本原文、选区、局部历史、草稿、业务选择、折叠、焦点及有效滚动位置。
 
 普通 tooltip 与结构化说明共享 `UiTooltipSkin` 的外框、留白及 `UiTooltipPanel` 默认定位；内容的标签列、Tone 和行数策略由宿主说明面板维护。提示贡献沿 `UiPointerHit` 命中结果和活动作用域的 `allowsTooltip` 门禁呈现。缓存的目录预览通过 `UiIcon.Themed` 在绘制位置接收主题，占位与标签标记随所在区域配色，真实物品及事件图像保留自身语义。
 
 ### 调试工作台
 
-`DebugWorkbenchScreen` 位于 common dev 的 client/debug，目录显式装配组件展台、组合交互、独立 kit 展示、图标预览和测试规则草稿。NeoForge probe 客户端事件装配 Ctrl+F8；main 的 `DebugWorkbenchHooks` 只持有打开动作。草稿工具保留在编辑器，预览和本地场景由各自 Screen 持有状态与资源。独立 kit 展示使用 UiScreen、UiInputScope 和 UiModalStack，内容只依赖 kit、原版类型与本地模型；外围目录注入宿主主题。展示包含文本/数值/列表、嵌套滚动、文档 Frame、浮板、灯箱、连线、导航、双点阵和 Layers 空间页。Layers 在显式背景上以相反顺序混排 Sprite、文字与立体、平面、透明、附魔物品，有世界时通过外层注入的工厂增加旋转方块场景；本页支持前景/兄弟重叠开关、统一提示和布局节点。kit 预算展示以 B 轮换默认、小预算、几何过限、请求容量拒绝/恢复四种模式。F6 换肤，基础页 G 修改单个点阵配置、R 发起真实资源重载。图标预览继续提供独立入口。纯 kit 样例由 `common:compileUiKitSamples` 在排除产品 main 输出的 classpath 上编译，工作台只负责外层接入。场景使用 UiInputScope、UiInputRouter 和 UiModalStack；模态切换取消持续交互，返回编辑器时重建屏幕并复用有效工作区。
+`DebugWorkbenchScreen` 位于 common dev 的 client/debug，目录显式装配组件展台、组合交互、独立 kit 展示、图标预览和测试规则草稿。NeoForge probe 客户端事件装配 Ctrl+F8；main 的 `DebugWorkbenchHooks` 只持有打开动作。草稿工具保留在编辑器，预览和本地场景由各自 Screen 持有状态与资源。独立 kit 展示使用 UiThemedScreen、UiInputScope 和 UiModalStack，内容只依赖 kit、原版类型与本地模型；外围目录注入导航与可选预览工厂，`KitSkinSamples` 提供默认、改色、资源和 painter 主题。展示包含文本/数值/列表、嵌套滚动、文档 Frame、浮板、灯箱、连线、导航、双点阵和 Layers 空间页。Layers 在显式背景上以相反顺序混排 Sprite、文字与立体、平面、透明、附魔物品，有世界时通过外层注入的工厂增加旋转方块场景；本页支持前景/兄弟重叠开关、统一提示和布局节点。kit 预算展示以 B 轮换默认、小预算、几何过限、请求容量拒绝/恢复四种模式。F6 换肤，基础页 G 修改单个点阵配置、R 发起真实资源重载。图标预览继续提供独立入口。纯 kit 样例由 `common:compileUiKitSamples` 在排除产品 main 输出的 classpath 上编译，工作台只负责外层接入。场景使用 UiInputScope、UiInputRouter 和 UiModalStack；模态切换取消持续交互，返回编辑器时重建屏幕并复用有效工作区。
 
 `FormView.layoutNodes` 保留字段作用域；CardListControl 导出卡片及子控件，UiCatalogGrid 导出当前可见目录行，RuleNameInput 导出真实文本框。自动化定位使用实际层级和几何。工作台组件状态在同一页面可见、可滚动、可重置，详见 [GUI 探针](../guides/gui-probes.md)。
 

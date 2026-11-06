@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostSurface;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiSurfaceRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
@@ -925,7 +925,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
         int height = HELP_PADDING * 2 + lineCount * lineStep - HELP_LINE_GAP;
         int x = canvasRect.x() + Math.max(0, (canvasRect.width() - width) / 2);
         int y = canvasRect.y() + Math.max(0, (canvasRect.height() - height) / 2);
-        CHROME_THEME.drawSurface(graphics, new UiRect(x, y, width, height), UiHostSurface.HELP);
+        CHROME_THEME.drawSurface(graphics, new UiRect(x, y, width, height), UiSurfaceRole.HELP);
         int textY = y + HELP_PADDING;
         graphics.drawString(font, Component.translatable(UI + "help.title").getString(), x + HELP_PADDING, textY,
                 CHROME_THEME.palette().status().helpText(), false);

@@ -198,5 +198,19 @@
   "gui.itemdespawntowhat.debug.workbench.showcase.layers.content": "3D, flat, translucent, glint and scene samples",
   "gui.itemdespawntowhat.debug.workbench.showcase.layers.forward": "Sprite → Model → Text",
   "gui.itemdespawntowhat.debug.workbench.showcase.layers.reverse": "Text → Model → Sprite",
-  "gui.itemdespawntowhat.debug.workbench.showcase.layers.sample": "Mix"
+  "gui.itemdespawntowhat.debug.workbench.showcase.layers.sample": "Mix",
+  "gui.itemdespawntowhat.debug.workbench.showcase.skin.role.window": "Window",
+  "gui.itemdespawntowhat.debug.workbench.showcase.skin.role.inset": "Inset",
+  "gui.itemdespawntowhat.debug.workbench.showcase.skin.role.header": "Header",
+  "gui.itemdespawntowhat.debug.workbench.showcase.skin.role.panel": "Panel",
+  "gui.itemdespawntowhat.debug.workbench.showcase.skin.role.card": "Card",
+  "gui.itemdespawntowhat.debug.workbench.showcase.skin.role.segment": "Segment",
+  "gui.itemdespawntowhat.debug.workbench.showcase.skin.role.chip": "Chip",
+  "gui.itemdespawntowhat.debug.workbench.showcase.skin.role.help": "Help",
+  "gui.itemdespawntowhat.debug.workbench.showcase.skin.role.divider": "Divider",
+  "gui.itemdespawntowhat.debug.workbench.showcase.skin.role.scroll_track": "Track",
+  "gui.itemdespawntowhat.debug.workbench.showcase.skin.role.scroll_thumb": "Thumb",
+  "gui.itemdespawntowhat.debug.workbench.showcase.skin.role.selection": "Selection",
+  "gui.itemdespawntowhat.debug.workbench.showcase.skin.role.select_marker": "Marker",
+  "gui.itemdespawntowhat.debug.workbench.showcase.skin.role.focus": "Focus"
 }

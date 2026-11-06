@@ -6,10 +6,10 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderSkin;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderStyle;
 import net.minecraft.resources.ResourceLocation;
 
+import java.util.EnumMap;
+
 /** 复用原版 GUI sprites 的默认主题；资源包替换原版 sprites 后自然生效。 */
 public final class UiMinecraftTheme implements UiStyleSource {
-    /** 无宿主主题时直接复用的不可变实例。 */
-    public static final UiMinecraftTheme INSTANCE = new UiMinecraftTheme();
     private static final ResourceLocation BUTTON = sprite("button");
     private static final ResourceLocation DISABLED = sprite("button_disabled");
     private static final ResourceLocation HIGHLIGHTED = sprite("button_highlighted");
@@ -42,9 +42,45 @@ public final class UiMinecraftTheme implements UiStyleSource {
         if (frame.error()) graphics.renderOutline(frame.bounds().x(), frame.bounds().y(), frame.bounds().width(), frame.bounds().height(), frame.style().errorColor());
     });
 
+    private final EnumMap<UiSurfaceRole, UiSurfaceSkin> surfaceSkins = createSurfaces();
+    /** 开箱即用的控件、通用外壳、提示与度量。 */
+    public static final UiMinecraftTheme INSTANCE = new UiMinecraftTheme();
+
+    private static EnumMap<UiSurfaceRole, UiSurfaceSkin> createSurfaces() {
+        EnumMap<UiSurfaceRole, UiSurfaceSkin> skins = new EnumMap<>(UiSurfaceRole.class);
+        UiSurfaceStyle colors = UiSurfaceStyle.MINECRAFT;
+        for (UiSurfaceRole role : UiSurfaceRole.values()) {
+            skins.put(role, switch (role) {
+                case WINDOW -> UiSurfaceSkin.gradient(0x9C1A1D23, 0xA8121418, colors.panelBorder());
+                case HEADER -> UiSurfaceSkin.header(0xC0444E5F, colors.headerFill(), 0x80505C6E);
+                case INSET -> UiSurfaceSkin.inset(colors.inputFill(), colors.inputBorder(), 0x60000000, 0x12FFFFFF);
+                case PANEL -> UiSurfaceSkin.panel(colors.panelFill(), colors.panelBorder(), 0x14FFFFFF);
+                case CARD -> UiSurfaceSkin.flat(0xB43A4554, 0x8A5C6678);
+                case HELP -> UiSurfaceSkin.flat(0xD0343D4A, 0x8A5C6678);
+                case SEGMENT, CHIP -> UiSurfaceSkin.control(BUTTON_SKIN);
+                case DIVIDER -> UiSurfaceSkin.fill(0x8A4C5666);
+                case SCROLL_TRACK -> UiSurfaceSkin.fill(0x66000000);
+                case SCROLL_THUMB -> UiSurfaceSkin.fill(0x80A6B0BE);
+                case SELECTION -> UiSurfaceSkin.fill(colors.selectionFill());
+                case SELECT_MARKER -> UiSurfaceSkin.fill(colors.text()).withPainter((g, r, state, skin) -> {
+                    if (r.width() >= 3 && r.height() > 4)
+                        g.fill(r.x() + 1, r.y() + 2, r.x() + 3, r.bottom() - 2, skin.style().background(state));
+                });
+                case FOCUS -> UiSurfaceSkin.fill(CONTROL.focusOutline()).withPainter((g, r, state, skin) ->
+                        g.renderOutline(r.x(), r.y(), r.width(), r.height(), skin.style().background(state)));
+            });
+        }
+        return skins;
+    }
+
     private UiMinecraftTheme() { }
     private static ResourceLocation sprite(String name) { return ResourceLocation.withDefaultNamespace("widget/" + name); }
+    @Override public UiSurfaceSkin surfaceSkin(UiSurfaceRole role) { return surfaceSkins.get(role); }
     @Override public UiControlStyle controlStyle(UiControlRole role) { return role == UiControlRole.LABEL ? LABEL : CONTROL; }
     @Override public UiControlSkin controlSkin(UiControlRole role) { return role == UiControlRole.LABEL ? LABEL_SKIN : BUTTON_SKIN; }
+    @Override public int controlTextColor(UiControlRole role) {
+        UiControlSkin skin = controlSkin(role);
+        return role == UiControlRole.DISABLED ? skin.disabledTextColor() : skin.textColor();
+    }
     @Override public UiSliderSkin sliderSkin(UiSliderRole role) { return SLIDER_SKIN; }
 }

@@ -168,7 +168,8 @@ prelude 经 client adapter 按内容摘要和运行目录安装；握手校验�
 | 图标工具导航与转台 | workbench-previews |
 | 独立 kit 导航、动作和重置 | kit-showcase |
 | 嵌套纵向滚动与拖条 | kit-input-scroll |
-| 原版/宿主换肤、继续输入、撤销和预览取消 | kit-theme-switch |
+| 默认/自定义皮肤切换、继续输入、撤销、捕获等待和释放提交 | kit-theme-switch |
+| 生产外观按钮、搜索保留、模态外观和重开选择恢复 | editor-theme-switch |
 | 通用嵌套模态与作用域恢复 | kit-modal |
 | 文档 Frame 命中、浮板与灯箱 | kit-surfaces |
 | 双点阵配置、资源重载与重新进入 | kit-render-resources |

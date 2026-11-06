@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostSurface;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiSurfaceRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlStyle;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiButtonWidget;
 
@@ -314,7 +314,7 @@ public final class UiButton implements UiButtonWidget {
         UiRect rect = bounds();
         boolean hovered = control.isHittable() && pointer.contains(rect);
         if (control.isEnabled()) theme.drawChip(graphics, rect, isPressed(), hovered);
-        else theme.drawSurface(graphics, rect, UiHostSurface.SEGMENT, UiControlStyle.State.DISABLED);
+        else theme.drawSurface(graphics, rect, UiSurfaceRole.SEGMENT, UiControlStyle.State.DISABLED);
         int iconWidth = icon == null ? 0 : icon.width() + ICON_GAP;
         int arrowWidth = arrowReserve();
         int available = Math.max(0, rect.width() - CHIP_PADDING * 2);

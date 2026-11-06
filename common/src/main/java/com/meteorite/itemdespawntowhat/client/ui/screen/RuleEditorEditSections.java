@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostSurface;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiSurfaceRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusFollow;
@@ -359,7 +359,7 @@ final class RuleEditorEditSections implements UiInputTarget {
         graphics.enableScissor(lastArea.x(), lastArea.y(), lastArea.right(), lastArea.bottom());
         try {
             for (EditorSectionContent.PageCard card : content.cards) {
-                THEME.drawSurface(graphics, card.bounds(), UiHostSurface.CARD);
+                THEME.drawSurface(graphics, card.bounds(), UiSurfaceRole.CARD);
                 EditorSectionContent.CardHeader header = card.header();
                 if (header != null) {
                     EditorSectionContent.drawCardHeader(THEME, graphics, font, card.headerRect(), header.icon(), header.title());

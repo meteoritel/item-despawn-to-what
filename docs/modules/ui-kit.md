@@ -43,7 +43,7 @@ kit 是记录来源与差异的维护副本，按可独立发布的库 API 维�
 按调用方角色划分：
 
 - **屏幕与页面装配者**：`UiDocument` 与节点、`UiWidget`、`UiControl`/`UiControlGroup`/`UiScrollView`、布局与几何类型、`UiRenderLayers`/`UiPointer`、`UiFlatText`（无阴影文本与悬停提示）、`UiFloatingPanel`、`UiLightbox` 与预览轮播原语。
-- **主题实现者**：实现 `UiStyleSource`，按角色给出控件、滑块与 tooltip 完整皮肤；默认直接使用 `UiMinecraftTheme.INSTANCE`；运行时换肤共享 `UiThemeContext`，原版 sprites 随资源包生效。
+- **主题实现者**：直接使用 `UiMinecraftTheme.INSTANCE`、以 `UiThemes.builder` 组合差异，或实现 `UiStyleSource`；控件、表面、滑块和 tooltip 均按完整皮肤注入，运行时共享 `UiThemeContext`。
 - **控件实现者**：实现 `UiInputTarget`，需要键盘焦点时再实现 `UiFocusTarget`；指针、键盘重复与数值文本编辑登记到所属作用域的 `UiInteractionSession`，数值快照交给 `UiValueInteraction<V>`，标量、普通区间与有向周期区间使用各自不可变值和等价规则。
 - **树与数据适配方**：`UiTreeEditor.Adapter` 提供不可变节点的读取、替换与容量，`UiTreeCodec` 提供外部表示编解码，`UiTreeMoveInteraction` 把拖动绑定到捕获。
 - **数值字段装配方**：`UiNumberPolicy` + `UiSliderWindow` 描述合法域与显示窗口，`UiNumbers` 负责显示与解析，`UiValueTextBinding` 负责数值文本的双向同步；`UiNumberField` 组合标量核心与宿主提供的 `UiSingleLineEditor` 端口。
@@ -114,7 +114,9 @@ flowchart LR
 | `UiControl` / `UiControlGroup` | 控件聚合根 | 控件按角色取样式并解析交互状态；控件组按稳定 key 复用实例、按层序命中并给 tooltip | `UiStyleSource`、`UiFocusManager` |
 | `UiTextInput` / `UiTextArea` / `UiListView` | 通用控件 | 原版文本编辑、局部历史与泛型行列表；主题变化保留控件状态 | `UiTextEditSession`、`UiScrollView` |
 | `UiModal` / `UiModalStack` / `UiScreen` | 装配根 | 通用模态、顶层作用域、原版 Screen 事件桥和根资源释放 | `UiButtonWidget`、`UiInputRouter` |
-| `UiThemeContext` / `UiMinecraftTheme` | 主题来源 | 根发布版本，控件刷新解析结果；默认复用原版 sprites | `UiStyleSource`、宿主主题 adapter |
+| `UiThemeContext` / `UiMinecraftTheme` | 主题来源 | 根发布版本，控件刷新解析结果；默认完整皮肤复用原版 sprites | `UiStyleSource`、宿主主题 adapter |
+| `UiThemes` / `UiSkinImages` / `UiSurfaceSkin` | 皮肤组合 | 基底快照、角色、配色与资源画法 | 宿主主题、纯 kit 样例 |
+| `UiThemedScreen` / `UiThemePublication` | 根装配 | 共享 Context、默认背景和手势结束后的发布 | `UiScreen`、宿主屏幕 |
 | `UiInputTarget` / `UiInputContext` | 输入契约 | 指针、滚轮、键盘与字符输入都以“是否消费”返回；上下文是显式快照，坐标为 GUI 逻辑坐标 | 全部 kit 控件、宿主控件适配 |
 | `UiChildren` | 内容结构 | 一份实际成员驱动绘制遍历、命中、焦点贡献和普通输入；不持有第二份捕获 | 容器、页面、按钮栏 |
 | `UiOverlay` | 覆盖面外壳 | 统一遮罩、局部层与阻断作用域，内容保留自己的关闭语义 | 模态、灯箱、保存层、picker |
@@ -215,11 +217,23 @@ sequenceDiagram
 
 ### 样式注入到渲染
 
+完整默认覆盖窗口、标题带、内凹、面板、卡片及选择、焦点和滚动等语义表面。默认窗口是 kit 绘制的半透明渐变，按钮和滑块使用原版 sprites。
+
+`UiThemes.builder` 在配置期读取完整基底并复制角色表，生成后的主题是不可变快照；便利方法读取最终 skin 与 metrics。颜色组通过 `UiSurfaceStyle` 的分组派生方法表达，变化的输入、面板、标题、选择、控件文字与 tooltip 语义同步到对应皮肤，未变化的组保持原定义。角色级修改可进一步替换渐变端点、装饰与画法。调用顺序决定覆盖顺序，后一次编辑作用于当前已解析的值。
+
+`UiSkinImages` 集中解析状态资源回退，支持原版 sprite、自有九宫格及显式染色，同一资源描述可生成控件、表面或滑块皮肤。sprite 像素配色由资源和染色描述决定；表面 painter 从传入 skin 取颜色，控件与滑块 painter 从只读 Frame 取状态和几何。绘制实现负责恢复自己改变的渲染状态，资源生命周期沿用原版管理器与宿主所有者。
+
+`UiControl.setSkin` 覆盖完整结构、画法与主题文字，`setStyle` 保持纯色画法，独立文字覆盖继续优先；后调用的完整 skin 替换结构覆盖，换根主题保留显式覆盖。`clearSkinOverride` 恢复所属主题的结构和画法，文字覆盖独立保留。宿主可对区域注入单独 Context。
+
+`UiThemePublication` 收束最后请求优先、捕获等待和关屏丢弃；宿主提供当前值与发布动作，因此正文与画布外壳可在同一准备点更新。
+
 默认控件直接使用 `UiMinecraftTheme.INSTANCE`。`metrics()` 是基础度量源，便利方法从中派生；固定行、可见行与表单测量在布局阶段响应 revision。根创建 `UiThemeContext.minecraft()` 后将同一来源注入控件；换肤更新上下文，控件按 revision 刷新不可变皮肤和语义色。原版默认用 button/slider sprites，宿主皮肤可使用纯色或自有 painter。`UiTooltipSkin` 将背景 painter、通用文字色与 padding 配套提供；`UiFlatText` 与宿主结构化说明复用 `UiTooltipPanel` 的默认宽度、边距和定位。`UiIcon.Themed` 在真实绘制位置接收主题，缓存的图标内容不持有活动 Screen 或 Context。
 
 根在输入派发结束后的准备点发布主题；指针捕获期间保留最后一次请求，原手势正常结束后才应用。重复选择保持 revision，随后以新度量刷新布局并同步作用域。文本原文、选区、局部撤销、业务选择、焦点与有效滚动偏移由原控件保持；显式样式和颜色覆盖继续优先。
 
 ### Screen 与模态接入
+
+`UiThemedScreen` 提供默认原版背景与主题窗口，再调用内容 hook；无注入时创建 Minecraft Context，注入时直接共享宿主实例。控件绑定同一来源，背景通过 `renderThemedBackground` 覆写，内容布局仍归宿主。使用该入口的内容只绘制标题与业务区域，窗口底板由屏幕统一绘制。
 
 `UiScreen` 的 final `render` 依次同步资源、调用 `prepareUi` 和 `layoutUi`、刷新作用域，再进入子类 `renderUi`；指针与键盘事件前完成准备和布局，派发结束后再次准备待发布状态。子类的 `inputScope` 只返回当前页或顶层覆盖面的稳定作用域，kit 是唯一应用选择的入口。根通过资源 hook 使自己拥有的缓存失效或释放。
 
@@ -230,6 +244,8 @@ sequenceDiagram
 `UiModalStack` 持有通用模态与栈政策，`UiButtonWidget` 让默认按钮和宿主按钮共用 footer；宿主注入焦点播报与业务历史。编辑保存、草稿和 type picker 的优先级仍由宿主解释。可运行接入见开发工作台 `KitShowcaseScreen`、`KitInputsExample` 与 `KitSurfacesExample`。
 
 ### 纯样例与独立编译
+
+`KitSkinSamples` 展示默认、局部配色、sprite/九宫格与 painter 配方，以及单控件完整覆盖；展示屏幕以 F6 或 Theme 按钮轮换相同内容的主题。Surfaces 页展示通用角色，输入、模态和滚动页共用同一 Context。
 
 `common/src/dev/java/com/meteorite/itemdespawntowhat/client/debug/kit` 是公开面消费样例。`common:compileUiKitSamples` 只编译 kit 与该样例根，classpath 排除产品 main 输出；common 的 `check` 已依赖它。工作台运行同一份样例，外层注入导航、宿主主题和可选 preview 工厂。样例自己关闭拥有的场景与点阵，executor 归工厂宿主；样例不进入正式 main jar。
 

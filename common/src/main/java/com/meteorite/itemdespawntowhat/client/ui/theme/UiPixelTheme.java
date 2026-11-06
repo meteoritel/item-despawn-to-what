@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.theme;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiSurfaceRole;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiSurfaceSkin;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlStyle;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
@@ -88,40 +90,10 @@ public final class UiPixelTheme extends AbstractHostTheme {
     }
 
     @Override
-    public void drawDivider(GuiGraphics graphics, int x, int y, int width) {
-        UiTheme.drawDivider(graphics, x, y, width);
-    }
-
-    @Override
     public void drawBevel(GuiGraphics graphics, UiRect rect, int light, int dark) {
         UiTheme.drawBevel(graphics, rect, light, dark);
     }
 
-    @Override
-    public void drawFocusOutline(GuiGraphics graphics, UiRect rect) {
-        UiTheme.drawFocusOutline(graphics, rect);
-    }
-
-    @Override
-    public void drawSelection(GuiGraphics graphics, UiRect rect) {
-        UiTheme.drawSelection(graphics, rect);
-    }
-
-    @Override
-    public void drawSelectMarker(GuiGraphics graphics, UiRect rect) {
-        UiTheme.drawSelectMarker(graphics, rect);
-    }
-
-    @Override
-    public void drawScrollTrack(GuiGraphics graphics, UiRect rect) {
-        UiTheme.drawScrollTrack(graphics, rect);
-    }
-
-    @Override
-    public void drawScrollThumb(GuiGraphics graphics, UiRect rect) {
-        UiTheme.drawScrollThumb(graphics, rect);
-    }
-
-    private final EnumMap<UiHostSurface, UiControlSkin> surfaceSkins = UiHostSurfaceSkins.create(palette, true, false);
-    @Override public UiControlSkin surfaceSkin(UiHostSurface role) { return surfaceSkins.get(role); }
+    private final EnumMap<UiSurfaceRole, UiSurfaceSkin> surfaceSkins = UiHostSurfaceSkins.pixel(palette);
+    @Override public UiSurfaceSkin surfaceSkin(UiSurfaceRole role) { return surfaceSkins.get(role); }
 }

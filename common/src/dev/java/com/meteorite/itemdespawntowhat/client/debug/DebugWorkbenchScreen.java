@@ -4,7 +4,7 @@ import com.meteorite.itemdespawntowhat.client.debug.kit.KitShowcaseScreen;
 import com.meteorite.itemdespawntowhat.client.debug.kit.UiSliderExamples;
 import com.meteorite.itemdespawntowhat.client.debug.kit.WorkbenchLayout;
 import com.meteorite.itemdespawntowhat.client.ui.shared.PreviewIcons;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiMinecraftTheme;
+import com.meteorite.itemdespawntowhat.client.debug.kit.KitSkinSamples;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.net.RuleEditClientWorkspace;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
@@ -92,7 +92,7 @@ public class DebugWorkbenchScreen extends Screen {
             super(back);
             Runnable home = () -> Minecraft.getInstance().setScreen(new Directory(back));
             tools = List.of(
-                    new Tool("kit_showcase", () -> true, () -> Minecraft.getInstance().setScreen(new KitShowcaseScreen(home, List.of(UiMinecraftTheme.INSTANCE, theme, UiHostThemes.flatTheme()),
+                    new Tool("kit_showcase", () -> true, () -> Minecraft.getInstance().setScreen(new KitShowcaseScreen(home, KitSkinSamples.themes(),
                             Minecraft.getInstance().level == null ? null : PreviewIcons::createScenes))),
                     new Tool("gallery", () -> true, () -> Minecraft.getInstance().setScreen(new Gallery(home, false))),
                     new Tool("interactions", () -> true, () -> Minecraft.getInstance().setScreen(new Gallery(home, true))),

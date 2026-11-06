@@ -6,11 +6,12 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiSurfaceStyle;
 public record UiHostPalette(UiSurfaceStyle surfaces, Controls controls, Status status,
                             Code code, Canvas canvas, Description description) {
     /** 像素主题的语义色。 */
-    public static UiHostPalette pixelDefaults() { return defaults(); }
+    public static UiHostPalette pixelDefaults() { return businessDefaults(); }
     /** 扁平外壳与像素正文共用既有业务颜色。 */
-    public static UiHostPalette flatDefaults() { return defaults(); }
+    public static UiHostPalette flatDefaults() { return businessDefaults(); }
 
-    private static UiHostPalette defaults() {
+    /** 宿主业务默认值，主题直接组合，不互相构造。 */
+    static UiHostPalette businessDefaults() {
         return new UiHostPalette(
                 new UiSurfaceStyle(UiPalette.TEXT_PRIMARY, UiPalette.TEXT_SECONDARY, UiPalette.TEXT_DISABLED,
                         UiPalette.TEXT_ON_DARK, UiPalette.SLOT_INNER, UiPalette.SLOT_FILL, UiPalette.PANEL_FILL,
@@ -23,7 +24,7 @@ public record UiHostPalette(UiSurfaceStyle surfaces, Controls controls, Status s
                         UiPalette.CONTROL_BEVEL_DARK, UiPalette.ACCENT, UiPalette.ACCENT_HOVER,
                         UiPalette.ACCENT_PRESSED, UiPalette.DANGER, UiPalette.LIST_ROW_ODD, UiPalette.LINK,
                         UiPalette.SCROLL_TRACK, UiPalette.SCROLL_THUMB, UiFlatPalette.CHROME_DIVIDER,
-                        UiFlatPalette.PANEL_CONTROL_FILL),
+                        UiFlatPalette.PANEL_CONTROL_FILL, UiPalette.SLOT_FILL, UiPalette.SLOT_FILL),
                 new Status(UiPalette.WARNING, UiPalette.SUCCESS, UiFlatPalette.STATUS_TEXT,
                         UiFlatPalette.STATUS_TEXT_MUTED, UiFlatPalette.STATUS_TEXT_DANGER,
                         UiFlatPalette.STATUS_TEXT_WARNING, UiFlatPalette.HELP_TEXT, UiFlatPalette.HELP_TEXT_MUTED,
@@ -61,7 +62,7 @@ public record UiHostPalette(UiSurfaceStyle surfaces, Controls controls, Status s
     public record Controls(int textOnDark, int controlFill, int controlHover, int controlSelected,
             int controlDisabled, int controlBevelLight, int controlBevelDark, int accent, int accentHover,
             int accentPressed, int danger, int listRowOdd, int link, int scrollTrack, int scrollThumb,
-            int chromeDivider, int panelControlFill) { }
+            int chromeDivider, int panelControlFill, int listRowEven, int listRowDisabled) { }
 
     /** 业务状态与说明文字的配套颜色。 */
     public record Status(int warning, int success, int statusText, int statusTextMuted, int statusTextDanger,

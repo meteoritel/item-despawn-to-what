@@ -21,6 +21,8 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiOrthoLink;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiStyleSource;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiSurfaceRole;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlStyle;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextMeasurer;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -29,6 +31,7 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.function.Consumer;
 
 /** 文档、浮板与图片灯箱的本地装配；所有输入和诊断取自实际内容实例。 */
@@ -36,6 +39,10 @@ final class KitSurfacesExample implements UiWidget, UiLayoutSource {
     private static final int GUTTER = 12;
     private static final int STATE_LINES = 2;
     private static final int ACTION_COLUMNS = 4;
+    private static final UiSurfaceRole[] SURFACE_ROLES = UiSurfaceRole.values();
+    private static final UiControlStyle.State[] SURFACE_STATES = UiControlStyle.State.values();
+    private static final int SURFACE_COLUMNS = 7;
+    private final List<UiRect> surfaceCells = new ArrayList<>();
     private final Font font;
     private final UiStyleSource theme;
     private final UiDocument document;
@@ -132,7 +139,13 @@ final class KitSurfacesExample implements UiWidget, UiLayoutSource {
         for (int i = 0; i < actions.size(); i++) {
             actions.controls().get(i).setBounds(x + i % ACTION_COLUMNS * (actionCell + 4), y + capHeight + i / ACTION_COLUMNS * 24, actionCell, 20);
         }
-        int contentTop = y + capHeight + 2 * 24;
+        int surfaceTop = y + capHeight + 2 * 24;
+        surfaceCells.clear();
+        int surfaceWidth = Math.max(0, width / SURFACE_COLUMNS);
+        for (int i = 0; i < SURFACE_ROLES.length; i++) surfaceCells.add(new UiRect(
+                x + i % SURFACE_COLUMNS * surfaceWidth, surfaceTop + i / SURFACE_COLUMNS * 22,
+                Math.max(0, surfaceWidth - 2), 20));
+        int contentTop = surfaceTop + 48;
         int contentBottom = stateTop - WorkbenchLayout.GROUP_GAP;
         int contentHeight = Math.max(1, contentBottom - contentTop);
         int docWidth = Math.max(60, (width - GUTTER) / 2);
@@ -150,6 +163,13 @@ final class KitSurfacesExample implements UiWidget, UiLayoutSource {
         if (themeRevision != theme.revision()) { rebuildDocument(); themeRevision = theme.revision(); }
         graphics.drawString(font, label("surfaces.actions"), captionRect.x(), captionRect.y(), theme.surfaces().secondaryText(), false);
         actions.render(graphics, font, pointer);
+        for (int i = 0; i < SURFACE_ROLES.length; i++) {
+            UiRect cell = surfaceCells.get(i);
+            theme.drawSurface(graphics, cell, SURFACE_ROLES[i], SURFACE_STATES[i % SURFACE_STATES.length]);
+            Component name = label("skin.role." + SURFACE_ROLES[i].name().toLowerCase(Locale.ROOT));
+            graphics.drawString(font, WorkbenchLayout.ellipsize(font, name, Math.max(0, cell.width() - 4)),
+                    cell.x() + 2, cell.y() + 5, theme.textColor(true), false);
+        }
         theme.drawInset(graphics, documentCard);
         document.render(graphics, font, pointer);
         UiRect doc = document.viewport();

@@ -102,6 +102,7 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
         button("increment", () -> clicks++);
         button("disabled", () -> clicks++).setEnabled(false);
         button("reset", this::reset);
+        KitSkinSamples.customize(controls.controls().getFirst());
         controls.endUpdate();
         buttons = controls.controls();
         slider.setLabel(text("scalar"));
@@ -215,7 +216,7 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
     }
 
     void render(GuiGraphics graphics, UiPointer pointer) {
-        WorkbenchLayout.drawPage(graphics, font, theme, width, height, text("kit_showcase"));
+        WorkbenchLayout.drawPageHeading(graphics, font, theme, width, text("kit_showcase"));
         WorkbenchLayout.drawSubtitle(graphics, font, theme, width, text("kit_showcase.description"));
         navigation.render(graphics, font, pointer);
         if (page == Page.INPUTS) inputs.render(graphics, font, pointer);

@@ -198,5 +198,19 @@
   "gui.itemdespawntowhat.debug.workbench.showcase.layers.content": "立体、平面、透明、附魔与场景混排",
   "gui.itemdespawntowhat.debug.workbench.showcase.layers.forward": "Sprite → 模型 → 文字",
   "gui.itemdespawntowhat.debug.workbench.showcase.layers.reverse": "文字 → 模型 → Sprite",
-  "gui.itemdespawntowhat.debug.workbench.showcase.layers.sample": "叠放"
+  "gui.itemdespawntowhat.debug.workbench.showcase.layers.sample": "叠放",
+  "gui.itemdespawntowhat.debug.workbench.showcase.skin.role.window": "窗口",
+  "gui.itemdespawntowhat.debug.workbench.showcase.skin.role.inset": "内凹",
+  "gui.itemdespawntowhat.debug.workbench.showcase.skin.role.header": "标题",
+  "gui.itemdespawntowhat.debug.workbench.showcase.skin.role.panel": "面板",
+  "gui.itemdespawntowhat.debug.workbench.showcase.skin.role.card": "卡片",
+  "gui.itemdespawntowhat.debug.workbench.showcase.skin.role.segment": "分段",
+  "gui.itemdespawntowhat.debug.workbench.showcase.skin.role.chip": "标签",
+  "gui.itemdespawntowhat.debug.workbench.showcase.skin.role.help": "帮助",
+  "gui.itemdespawntowhat.debug.workbench.showcase.skin.role.divider": "分隔",
+  "gui.itemdespawntowhat.debug.workbench.showcase.skin.role.scroll_track": "轨道",
+  "gui.itemdespawntowhat.debug.workbench.showcase.skin.role.scroll_thumb": "滑块",
+  "gui.itemdespawntowhat.debug.workbench.showcase.skin.role.selection": "选择",
+  "gui.itemdespawntowhat.debug.workbench.showcase.skin.role.select_marker": "标记",
+  "gui.itemdespawntowhat.debug.workbench.showcase.skin.role.focus": "焦点"
 }

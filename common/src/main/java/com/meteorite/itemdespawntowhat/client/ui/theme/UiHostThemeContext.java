@@ -4,7 +4,6 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiThemeContext;
 import net.minecraft.client.gui.GuiGraphics;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlSkin;
 
 /** 根持有的宿主主题上下文；通用控件与业务外壳共享一次发布后的主题。 */
 public final class UiHostThemeContext extends UiThemeContext<UiHostTheme> implements UiHostTheme {
@@ -31,5 +30,4 @@ public final class UiHostThemeContext extends UiThemeContext<UiHostTheme> implem
     @Override public void drawSurface(GuiGraphics graphics, UiRect rect, int fill, int border) { current().drawSurface(graphics, rect, fill, border); }
     @Override public void drawBevel(GuiGraphics graphics, UiRect rect, int light, int dark) { current().drawBevel(graphics, rect, light, dark); }
 
-    @Override public UiControlSkin surfaceSkin(UiHostSurface role) { return current().surfaceSkin(role); }
 }

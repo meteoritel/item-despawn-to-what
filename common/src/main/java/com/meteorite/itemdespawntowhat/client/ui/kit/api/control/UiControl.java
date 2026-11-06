@@ -67,6 +67,7 @@ public final class UiControl implements UiButtonWidget, UiInteractionSession.Tar
     private UiControlSkin skin = UiMinecraftTheme.INSTANCE.controlSkin(UiControlRole.SECONDARY);
     private UiControlStyle style = skin.style();
     private boolean styleOverride;
+    private @Nullable UiControlSkin skinOverride;
     private boolean colorOverride;
     private boolean enabled = true;
     private boolean visible = true;
@@ -122,18 +123,17 @@ public final class UiControl implements UiButtonWidget, UiInteractionSession.Tar
         colorOverride = false;
     }
 
-    /** 绑定根主题；后续显式 setStyle 和带 color 的 configure 各自覆盖对应默认项。 */
+    /** 绑定根主题；显式皮肤、结构与文字覆盖继续有效。 */
     public void setTheme(UiStyleSource theme, UiControlRole role) {
         this.theme = Objects.requireNonNull(theme, "theme");
         this.role = Objects.requireNonNull(role, "role");
         themeRevision = -1;
-        styleOverride = false;
         refreshTheme();
     }
 
     private void refreshTheme() {
         if (themeRevision == theme.revision()) return;
-        skin = theme.controlSkin(role);
+        skin = skinOverride == null ? theme.controlSkin(role) : skinOverride;
         if (!styleOverride) style = skin.style();
         themeRevision = theme.revision();
     }
@@ -173,9 +173,27 @@ public final class UiControl implements UiButtonWidget, UiInteractionSession.Tar
         return bounds;
     }
 
+    /** 显式结构覆盖使用纯色画法；后调用的 setSkin 可替换完整皮肤。 */
     public void setStyle(UiControlStyle style) {
         this.style = Objects.requireNonNull(style);
         styleOverride = true;
+    }
+
+    /** 显式覆盖结构、画法与主题文字；独立文字色覆盖仍优先，换根主题保持本皮肤。 */
+    public void setSkin(UiControlSkin skin) {
+        skinOverride = Objects.requireNonNull(skin, "skin");
+        styleOverride = false;
+        themeRevision = -1;
+        refreshTheme();
+    }
+
+    /** 清除局部结构与完整皮肤覆盖，恢复所属主题；文字覆盖独立保留。 */
+    @SuppressWarnings("unused")
+    public void clearSkinOverride() {
+        skinOverride = null;
+        styleOverride = false;
+        themeRevision = -1;
+        refreshTheme();
     }
 
     public UiControlStyle style() {
