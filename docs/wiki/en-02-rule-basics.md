@@ -1,5 +1,7 @@
 # Rule Fields
 
+> Applies to **2.0.0** (Minecraft **1.21.1**).
+
 This page covers the top-level fields a rule accepts: what each field does, which values it takes, what it defaults to, and when you need to touch it.
 
 ## Field Overview
@@ -46,7 +48,7 @@ The fields `effects`, `outcomes`, `combination`, `source_cost`, and `catalyst_co
 {
   "id": "myrules:chicken_to_rotten_flesh",
   "display_name": "鸡肉腐化 / Chicken to Rotten Flesh",
-  "notes": "和内置示例同样 300 秒，但只在主世界生效。",
+  "notes": "A dropped chicken item becomes rotten flesh after 300 seconds.",
   "source": { "items": ["minecraft:chicken"] },
   "effects": [
     { "type": "idtw:spawn_entity", "variant": "item", "item": "minecraft:rotten_flesh", "count": 1 }

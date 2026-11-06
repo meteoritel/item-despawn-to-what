@@ -1,34 +1,64 @@
 # 更新日志 Change log
 
-## [2.0.0]（开发中）
-### 环境与依赖
-- **NeoForge 版本口径**：`gradle.properties` 的 `neoforge_version=21.1.218` 是构建依赖版本；`neoforge.mods.toml` 的 `[21.1.210,)` 是运行依赖的声明区间，下界为 21.1.210。声明区间不代表其中所有版本均经过运行验证。
+## [2.0.0]
 
-### 新增
-- **统一规则链路**：后端改为 `core/**` 单一规则链路——规则、有序效果与递归条件树经 DFU Codec 编解码，并按扁平 `type` 字段分发；规则来源分三层（内置数据包 / 世界数据包 / `config` 覆盖层），不同 id 叠加、同 id 按优先级覆盖合并。
-- **服务端配置**：模组级配置为 `config/itemdespawntowhat/server.json`，覆盖检查周期与退避、每 tick 工作量与预算、覆盖层目录、调试开关、新产物保护与转化冷却等参数。
-- **图形化规则编辑器**：`/idtw config edit` 在取得全局独占编辑会话与目标级编辑锁后打开，支持浏览 / 新建 / 复制 / 编辑 / 停用 / 删除 / 恢复规则、条件树画布页、按来源目录选 ID、草稿持久化与撤销重做。
-- **触发与结算**：新增消失方式触发（`triggers` 的 `natural` / `fire` / `lava` / `cactus`）；命中后按固定源成本整组结算，可用 `outcomes` 配合 `combination`（`round_robin` / `priority`）声明候选结果。
-- **运行时**：所有维度共享的公共 tick 预算调度器；催化剂门槛在运行投影中派生；实体生成统一为一种按 `variant`（`item` / `entity` / `experience`）分发的效果。
-- **命令**：`/idtw config reload|validate|list|edit|edit-lock` 与 `/idtw rule list|show`。
-- **产物汇总交付**：直接物品产物按候选结果、槽位与物品汇总装箱，同一槽位的多组产出合并交付并保留最晚的原定执行时刻，大批量产出不会逐组生成实体。
+### 破坏性更新
 
-### 移除
-- **旧配置链路退役**：按转化类型划分的旧配置模型与执行器、NeoForge 服务端 TOML 配置（`ModConfigValues` / `itemdespawntowhat-server.toml`）、旧网络同步与旧客户端编辑界面，由统一规则链路与规则编辑器取代。
-- **编辑器快捷键退役**：移除客户端按键绑定与快捷键处理，编辑器只保留 `/idtw config edit` 指令入口。
+**2.0.0 是一次破坏性更新。** 模组经过大规模重写，1.x 的规则配置和服务端配置已不兼容，升级后需要重新配置。
 
-### New Features
-- **Unified rule pipeline**: the backend now runs a single `core/**` rule path — rules, ordered effects and a recursive condition tree encoded through DFU codecs with flat `type` dispatch. Rules come from three layers (builtin datapack / world datapack / `config` overlay) and merge by id with priority.
-- **Server config**: module-level configuration lives in `config/itemdespawntowhat/server.json`, covering check interval and backoff, per-tick work and budgets, the overlay directory, debug switches, new-product protection and conversion cooldown.
-- **Graphical rule editor**: `/idtw config edit` takes a global exclusive edit session and a per-target lock, then offers browse / create / copy / edit / disable / delete / restore, a condition-tree canvas page, catalog-based id picking, draft persistence and undo/redo.
-- **Triggers and settlement**: new disappearance-kind triggers (`natural` / `fire` / `lava` / `cactus`); a hit settles a complete group at a fixed source cost, with `outcomes` plus `combination` (`round_robin` / `priority`) for candidate results.
-- **Runtime**: a shared server tick budget scheduler across all dimensions; catalyst thresholds derived in a runtime projection; entity spawn unified into one effect dispatched by `variant` (`item` / `entity` / `experience`).
-- **Commands**: `/idtw config reload|validate|list|edit|edit-lock` and `/idtw rule list|show`.
-- **Batched product delivery**: direct item products are boxed by candidate, slot and item, so groups that share a slot deliver together at the latest scheduled time instead of spawning one entity per group.
+### 升级与重新配置
 
-### Removals
-- **Legacy config path retired**: the per-conversion-type config model and executors, the NeoForge server TOML config (`ModConfigValues` / `itemdespawntowhat-server.toml`), the legacy network sync and the legacy client editor UI, replaced by the unified rule pipeline and the rule editor.
-- **Editor keybinding retired**: the client key mapping and shortcut handling are gone; `/idtw config edit` is the only way to open the editor.
+1. **升级前备份旧配置**，作为重新编写规则时的参考。旧文件无法通过复制或改名继续使用。
+2. 进入世界或加入服务器，在聊天栏执行 **`/idtw editor open`** 打开规则编辑 GUI，也可使用 `/idtw editor`。
+3. 在 GUI 中选择「新建规则」，参照旧配置重新设置输入物品、转化时机、条件和结果。
+4. 点击界面底部的「应用更改」，等待保存成功。规则会自动重载并生效。
+
+单人存档房主可直接打开编辑器；多人服务器需要 OP 权限（等级 ≥2），操作玩家的客户端也需安装本模组。
+
+### 文件存储位置
+
+以下为默认位置。`config/` 相对于单人游戏目录或服务器根目录；多人游戏中的规则保存在服务器端。
+
+| 内容 | 位置 | 用途 |
+| --- | --- | --- |
+| 自定义规则 | `config/itemdespawntowhat/rules/` | 存放规则 JSON，也是 GUI 保存规则的位置；可按子目录整理 |
+| 服务端运行配置 | `config/itemdespawntowhat/server.json` | 存放性能与运行参数，首次启动世界或服务器时自动生成 |
+| 世界数据包规则 | `<世界存档>/datapacks/<数据包>/data/<命名空间>/idtw/rules/` | 通过数据包提供规则 |
+
+规则目录可通过 `server.json` 中的 `overlay_directory` 调整为 `config/<overlay_directory>/rules/`；`server.json` 自身位置固定。
+
+手动修改规则 JSON 后，执行 `/idtw rule validate` 检查，再执行 **`/idtw rule reload`** 应用。修改 `server.json` 后，重启服务器；单人游戏退出并重新进入世界。
+
+使用说明：[首次使用](https://github.com/meteoritel/item-despawn-to-what/wiki/zh-01-getting-started) · [命令参考](https://github.com/meteoritel/item-despawn-to-what/wiki/zh-08-commands) · [服务端配置](https://github.com/meteoritel/item-despawn-to-what/wiki/zh-07-server-config)。
+
+### Breaking Update
+
+**2.0.0 is a breaking update.** The mod has been extensively rewritten. Rule files and server settings from 1.x are incompatible and must be recreated.
+
+### Upgrading and Recreating Your Configuration
+
+1. **Back up your old configuration before upgrading** so you can refer to it when rebuilding your rules. Copying or renaming old files will not make them compatible.
+2. Enter a world or join your server, then run **`/idtw editor open`** in chat to open the rule editor GUI. `/idtw editor` also works.
+3. Select **New rule** and recreate your input items, conversion timing, conditions, and results using the old configuration as a reference.
+4. Click **Apply changes** at the bottom and wait for a successful save. Rules reload and take effect automatically.
+
+Single-player world owners can open the editor directly. On multiplayer servers, you need OP permission level 2 or higher, and the player using the editor must also have the mod installed on their client.
+
+### File Locations
+
+These are the default locations. `config/` is relative to your single-player game directory or server root directory. Multiplayer rules are stored on the server.
+
+| Content | Location | Purpose |
+| --- | --- | --- |
+| Custom rules | `config/itemdespawntowhat/rules/` | Rule JSON files, including rules saved through the GUI; subfolders are allowed |
+| Server settings | `config/itemdespawntowhat/server.json` | Performance and runtime settings; generated when you first start a world or server |
+| World datapack rules | `<world save>/datapacks/<pack>/data/<namespace>/idtw/rules/` | Rules supplied through a datapack |
+
+The `overlay_directory` setting in `server.json` changes the rule directory to `config/<overlay_directory>/rules/`. The location of `server.json` stays fixed.
+
+After editing rule JSON files by hand, run `/idtw rule validate` to check them, then **`/idtw rule reload`** to apply them. After editing `server.json`, restart the server or leave and reopen your single-player world.
+
+Guides: [Getting started](https://github.com/meteoritel/item-despawn-to-what/wiki/en-01-getting-started) · [Command reference](https://github.com/meteoritel/item-despawn-to-what/wiki/en-08-commands) · [Server settings](https://github.com/meteoritel/item-despawn-to-what/wiki/en-07-server-config).
 
 ## [1.2.1]
 

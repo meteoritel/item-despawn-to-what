@@ -1,6 +1,66 @@
 # Getting Started
 
-This page walks you through writing your first rule, putting it in the right place, and confirming with commands that it takes effect.
+> Applies to **2.0.0** (Minecraft **1.21.1**).
+
+Create your first rule with the in-game GUI. Version 2.0.0 ships without a built-in rule datapack, and configurations from older versions need to be recreated.
+
+## Create Your First Rule with the GUI
+
+This example turns a dropped chicken item into rotten flesh after 10 seconds. The screenshots show the English interface and control locations; choose chicken and rotten flesh for this example.
+
+Install the mod and enter a world. In multiplayer, install it on the server and on the client of the player using the editor. Single-player world owners have access directly; other players need permission level 2 or higher. One player can edit at a time.
+
+### 1. Open the Editor
+
+Run this command in chat:
+
+```text
+/idtw editor open
+```
+
+The shorter command `/idtw editor` also works.
+
+![Entering the command that opens the editor](https://github.com/meteoritel/item-despawn-to-what/blob/1.21.1/docs/wiki-assets/2.0.0/editor-open-command.webp?raw=true)
+
+### 2. Create a Rule
+
+Click **New rule**, replace the name with `myrules:chicken_to_rotten_flesh`, and click **Confirm**. The rule ID identifies the rule. Use lowercase letters, numbers, and underscores; the part before the colon is the namespace.
+
+![The new rule dialog and name field](https://github.com/meteoritel/item-despawn-to-what/blob/1.21.1/docs/wiki-assets/2.0.0/editor-new-rule.webp?raw=true)
+
+### 3. Choose the Input Item
+
+On the **Input** tab, click **Add** under **Source items** and select Chicken (`minecraft:chicken`). Set its **Source item consumption** to `1` so that each conversion group consumes one chicken.
+
+![Source item selection and consumption on the Input tab](https://github.com/meteoritel/item-despawn-to-what/blob/1.21.1/docs/wiki-assets/2.0.0/editor-input.webp?raw=true)
+
+### 4. Set the Trigger Time
+
+Switch to **Trigger**, keep **Natural (item despawn)** selected, and set **Trigger time (seconds)** to `10`. Leave the conditions empty for this first rule.
+
+### 5. Set the Result
+
+Switch to **Results**, click `+` in the **Actions** panel on the left, and add the **Entities** action.
+
+![The add action button on the Results tab](https://github.com/meteoritel/item-despawn-to-what/blob/1.21.1/docs/wiki-assets/2.0.0/editor-add-action.webp?raw=true)
+
+On the right, set **Product** to **Items**, click **Add** next to **Item**, choose Rotten Flesh (`minecraft:rotten_flesh`), and set **Count** to `1`.
+
+![Item selection and output count in the Entities action](https://github.com/meteoritel/item-despawn-to-what/blob/1.21.1/docs/wiki-assets/2.0.0/editor-item-output.webp?raw=true)
+
+### 6. Apply and Try the Rule
+
+Click **Apply changes (1 rules)** at the bottom. Keep the screen open while saving and wait for a successful save. The GUI reloads rules automatically after a successful save.
+
+Return to the game, drop one chicken on the ground, and wait about 10 seconds. One rotten flesh item will appear at the same location. You can also run `/idtw rule list` to find the rule, or `/idtw rule show myrules:chicken_to_rotten_flesh` to read its summary.
+
+### Add Conditions When You Need Them
+
+To restrict the rule to specific weather, dimensions, or surroundings, open the condition tree on the **Trigger** tab. Click `+`, choose a condition type, and fill in its parameters. The screenshot shows where to select a weather condition. See [Conditions](en-03-conditions) for condition types and combinations.
+
+![Choosing a condition type in the condition tree](https://github.com/meteoritel/item-despawn-to-what/blob/1.21.1/docs/wiki-assets/2.0.0/editor-conditions.webp?raw=true)
+
+Click **Apply changes** again after editing. Hover over fields and buttons to read their tooltips.
 
 ## What This Mod Does
 
@@ -15,11 +75,11 @@ A **dropped item** is the single item stack that lands on the ground after you d
 | `lava` | The moment lava destroys the item | No |
 | `cactus` | The moment a cactus destroys the item | No |
 
-Here are a few results you can build with rules:
+Here are examples of results you can configure:
 
 | What the rule produces | Description |
 | --- | --- |
-| Item on expiry | A chicken turns into rotten flesh after 300 seconds (enabled by default, so you can watch it) |
+| Item on expiry | A dropped chicken item turns into rotten flesh after 300 seconds |
 | Mob on expiry | An egg hatches a baby chicken after 300 seconds outdoors in the Overworld |
 | Block placement | Places the sapling block that matches the source item |
 | Loot drop | Rolls a dungeon chest loot table and produces nothing 50% of the time |
@@ -30,20 +90,24 @@ After a rule matches, the mod settles the work in groups: one group consumes the
 
 ## Where Configuration Lives
 
-Rules come from two locations with different write access, and the mod merges them by ID when it loads them:
+Supply rules through config files or world datapacks. The mod merges them by ID. The paths below are on the server; single-player uses your local game directory and world save.
 
-| Location | Write access | Notes |
+| Location | How to edit | Notes |
 | --- | --- | --- |
-| `config/itemdespawntowhat/rules/**/*.json` | Writable (config overlay) | Write your own rules here; this is also where the editor and `/idtw editor` write |
-| `data/<namespace>/idtw/rules/**/*.json` | Read-only (datapack) | Supplied by datapacks, including the built-in samples; syncs through the vanilla datapack mechanism |
+| `config/itemdespawntowhat/rules/**/*.json` | GUI or manual JSON edits | The config overlay, where the GUI saves rule content |
+| `<world save>/datapacks/<pack>/data/<namespace>/idtw/rules/**/*.json` | Edit datapack files | World datapack rules, used as a read-only base in the GUI |
 
-A **source layer** is one of those locations. It decides which copy of a rule wins. Merge order, from lowest to highest, is builtin, world, then config overlay. When two layers hold the same ID, the higher layer replaces the lower one as a whole.
+A **source layer** decides which copy of a rule wins for the same ID. World datapacks load first, followed by the config overlay. For the same ID, the complete overlay rule replaces the datapack rule. Rules with different IDs are kept independently.
 
 On first start, the mod also creates `config/itemdespawntowhat/server.json`. That file holds only server performance and operations settings, such as check intervals, batch limits, and debug logging. It has nothing to do with rule content; for the full field list, see [Server Configuration](en-07-server-config). Its `overlay_directory` field is the name of the overlay folder and defaults to `itemdespawntowhat`, which is why the writable path above reads `config/itemdespawntowhat`. Leave it alone unless you have a specific reason to change it.
 
 You can put overlay rules in any subfolder of `rules/`, and the extension must be `.json`, for example `config/itemdespawntowhat/rules/myrules/chicken_to_rotten_flesh.json`. The subfolder only affects the derived rule ID; it does not affect loading.
 
-## Rule IDs and File Names
+## Optional: Write Rules as JSON
+
+Edit files directly when you want to manage rule files or create a world datapack. The JSON below produces the same result as the GUI example above.
+
+### Rule IDs and File Names
 
 Every rule needs an ID in the form `namespace:path`, for example `myrules:chicken_to_rotten_flesh`. You can supply it in two ways:
 
@@ -66,7 +130,7 @@ Key points:
 - When the file holds an array of several rules, every entry must declare `id`. Otherwise the mod rejects that entry at load.
 - IDs must be unique within one file. An invalid ID, such as one with uppercase letters or spaces, also rejects that entry.
 
-## A Minimal Working Rule
+### A Minimal Working Rule
 
 Save this content as `config/itemdespawntowhat/rules/myrules/chicken_to_rotten_flesh.json`:
 
@@ -103,7 +167,7 @@ The rule above omits two fields you can ignore for now: `enabled` (already `true
 
 **What happens next**: any `minecraft:chicken` dropped item disappears at second 10 and spawns one `minecraft:rotten_flesh` dropped item in the same place. Because the rule declares no source cost, the group consumes one source item by default, which is one chicken. Without such a rule, the chicken waits for its natural despawn and vanilla removes it.
 
-## Making a Rule Take Effect
+### Apply Manual File Changes
 
 The whole flow has three steps:
 
@@ -118,28 +182,11 @@ Two points to remember:
 
 The commands need you to own the singleplayer save, or to hold permission level 2 or higher. For the other commands, see [Command Reference](en-08-commands).
 
-To edit rules in the built-in editor instead, `/idtw editor` is an equivalent entry point. A player runs it, and the server opens the editor after taking the edit lock.
+## Inspect and manage your rules
 
-## Built-in Sample Rules
+Run `/idtw rule list` to browse published rules and hover to see their sources. `/idtw rule show <id>` displays a summary; `/idtw rule show <id> raw` reads the original JSON.
 
-The mod ships a set of sample rules in the builtin datapack. Some of them are enabled by default, so you can observe results right away:
-
-| Enabled | Rule ID | Effect |
-| --- | --- | --- |
-| Yes | `itemdespawntowhat:builtin_item_to_item` | A chicken becomes rotten flesh after 300 seconds |
-| Yes | `itemdespawntowhat:builtin_item_to_entity` | An egg hatches a baby chicken outdoors in the Overworld |
-| Yes | `itemdespawntowhat:builtin_catalyst_and_fluid` | Redstone becomes glowstone dust next to fluid and a catalyst |
-| Yes | `itemdespawntowhat:builtin_loot_and_chance` | A gold nugget rolls a loot table, 50% chance |
-| Yes | `itemdespawntowhat:builtin_multi_effect` | A diamond outside the height range grants experience and strikes lightning |
-| Yes | `itemdespawntowhat:builtin_thunder_condensation` | A wet sponge changes the weather in a thunderstorm at sufficient height and consumes water |
-| No | `itemdespawntowhat:builtin_item_to_block` | A sapling plants itself |
-| No | `itemdespawntowhat:builtin_arrow_rain` | Rain in the Overworld brings down a volley of arrows |
-| No | `itemdespawntowhat:builtin_biome_or_time` | An apple becomes a golden apple in a forest or in daytime |
-| No | `itemdespawntowhat:builtin_dark_blast` | Gunpowder explodes in the dark or in weather that is not clear |
-
-**How to inspect them**: run `/idtw rule list` to browse published names, IDs, and enable states by page. Hover for the source and use `rule show <id>` for priority and outcome structure. You can also open `data/itemdespawntowhat/idtw/rules/` in the datapack and read the samples.
-
-**How to change one**: builtin rules are read-only, so a change means writing a full rule with the same `id` in the config overlay and taking the rule over. To switch one off for now, run `/idtw rule disable <id>`, which applies to this save. For the syntax and the merge rules, see [Source Layers and Overrides](en-06-layers-and-overrides).
+Use `/idtw rule enable <id>` and `/idtw rule disable <id>` to switch rules on or off for the current save. To replace a world datapack rule, write a full rule with the same `id` in the config overlay. See [Source Layers and Overrides](en-06-layers-and-overrides).
 
 ## Rule Not Working? Check in Order
 

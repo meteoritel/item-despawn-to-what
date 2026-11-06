@@ -1,5 +1,7 @@
 # 规则基础字段
 
+> 适用版本：**2.0.0**（Minecraft **1.21.1**）。
+
 这一页说明一条规则顶层可以写哪些字段：每个字段的作用、取值、默认值，以及什么时候需要动它。
 
 ## 字段总览
@@ -46,7 +48,7 @@
 {
   "id": "myrules:chicken_to_rotten_flesh",
   "display_name": "鸡肉腐化 / Chicken to Rotten Flesh",
-  "notes": "和内置示例同样 300 秒，但只在主世界生效。",
+  "notes": "鸡肉掉落物存活 300 秒后转化为腐肉。",
   "source": { "items": ["minecraft:chicken"] },
   "effects": [
     { "type": "idtw:spawn_entity", "variant": "item", "item": "minecraft:rotten_flesh", "count": 1 }

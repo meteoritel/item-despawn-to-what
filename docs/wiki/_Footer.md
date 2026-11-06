@@ -1,3 +1,3 @@
-本 wiki 由仓库的 `docs/wiki` 目录发布，页面内容与仓库当前状态对应。  
+适用版本：**2.0.0**（Minecraft **1.21.1**）。内容源：[docs/wiki](https://github.com/meteoritel/item-despawn-to-what/tree/1.21.1/docs/wiki)。
 
-This wiki is published from the `docs/wiki` directory in the repository and describes the current state of the code.
+Applies to **2.0.0** (Minecraft **1.21.1**). Source: [docs/wiki](https://github.com/meteoritel/item-despawn-to-what/tree/1.21.1/docs/wiki).

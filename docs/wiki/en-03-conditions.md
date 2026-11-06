@@ -1,5 +1,7 @@
 # Conditions
 
+> Applies to **2.0.0** (Minecraft **1.21.1**).
+
 This page explains how to write the `conditions` field and when the mod checks it.
 
 For the other rule fields, see [Rule Fields](en-02-rule-basics). For effects and material costs, see [Effects](en-04-effects) and [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
@@ -406,7 +408,7 @@ The condition looks at the fluid at the drop's block position.
 }
 ```
 
-Typical uses: rules that convert while the drop sits in water. Combined with a catalyst condition, this builds recipes such as water plus bone meal. The built-in rule `idtw:builtin_catalyst_and_fluid` uses this combination.
+Typical use: convert a dropped item while it sits in water with bone meal nearby. Combine fluid-present and catalyst-present conditions.
 
 ### catalyst_present (Catalyst present)
 
@@ -510,7 +512,7 @@ Not in the Overworld, and indoors, which shows how to use inverting nodes:
 }
 ```
 
-Flowing water with bone meal nearby. The `conditions` field of the built-in rule `idtw:builtin_catalyst_and_fluid` is written exactly this way, so you can copy it:
+Flowing water with bone meal nearby: use the following as the rule's `conditions` field. Presence conditions only check the environment; configure the corresponding consumption fields if bone meal or fluid should be consumed.
 
 ```json
 {

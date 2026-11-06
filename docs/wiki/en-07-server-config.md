@@ -1,5 +1,7 @@
 # Server Configuration (server.json)
 
+> Applies to **2.0.0** (Minecraft **1.21.1**).
+
 This page explains what each setting in `server.json` does, which values it accepts, and when you need to change it.
 
 These settings control how the server runs: how often the mod checks, how much work it does per tick, and how it protects and cools down its products. They do not decide what a drop turns into. For that, see [Rule Fields](en-02-rule-basics).

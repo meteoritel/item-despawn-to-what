@@ -41,7 +41,7 @@ final class RuleNameInput implements UiWidget, UiFocusTarget, UiLayoutSource {
 
     private final Font font;
     private final UiTextInput input;
-    private final Component help = Component.translatable(TypeLabels.UI_PREFIX + "prompt.name_help");
+    private final Component help = Component.translatable(TypeLabels.UI_PREFIX + "prompt.name_help", TypeLabels.OWN_NAMESPACE);
     private @Nullable Component problem;
     private UiRect bounds = new UiRect(0, 0, 0, 0);
 

@@ -1,5 +1,7 @@
 # Outcome Candidates and Settlement
 
+> Applies to **2.0.0** (Minecraft **1.21.1**).
+
 This page explains what a rule produces, what each conversion group pays, and what happens to a whole stack of dropped items from settlement through output and return.
 
 An **outcome candidate** (an element of `outcomes`) is one possible output a conversion can pick. A **conversion group** is one unit of settlement: it picks one outcome candidate and pays the cost of that group.

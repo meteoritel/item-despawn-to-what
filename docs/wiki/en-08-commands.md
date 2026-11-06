@@ -1,5 +1,7 @@
 # Command Reference (/idtw)
 
+> Applies to **2.0.0** (Minecraft **1.21.1**).
+
 Run `/idtw` for the entry points available to your identity. Production commands are grouped into rule management and the editor; development environments also register `/idtw debug`.
 
 ## Commands

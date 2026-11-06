@@ -1,5 +1,7 @@
 # Effects (Actions)
 
+> Applies to **2.0.0** (Minecraft **1.21.1**).
+
 This page explains what a rule can do after it fires: which `type` each effect uses, which parameters it takes, and what players see in game.
 
 After a rule fires, the mod runs every effect object in the `effects` array in order: it hands out items, spawns entities, awards experience, places blocks, strikes lightning, or changes the weather. In JSON, **one effect is one object**, and `type` says which effect it is. You can write effects in the top-level `effects` array of a rule or in the `effects` array of a candidate. For conditions, see [Conditions](en-03-conditions); for costs and group settlement, see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
