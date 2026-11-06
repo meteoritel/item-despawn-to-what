@@ -37,7 +37,7 @@ authority: common/core/catalog、common/core/network、common/core/service、com
 ### 对外入口
 
 - 网络入口：两端从 `RuleEditChannels` 取得 C2S 处理器并调用 `RuleEditServerHandler`；后者无状态地完成就绪判定与请求转换，会话号、持有者与权限由 `EditAdmission` 统一判定，每次服务端的 `RuleEditTransport` 在 tick 交付业务完成事件和列表分片，并按活动刻回收会话与传输。
-- 命令入口：`RuleCommandTree.register()` 注册 `idtw` 根节点，`editor` 与 `rule` 子树常驻，根命令按身份显示帮助，`debug` 子树在开发环境挂载。
+- 命令入口：`RuleCommandTree.register()` 注册 `idtw` 根节点，`editor` 与 `rule` 子树常驻，根命令按身份显示帮助，`editor open` 与直接执行 `editor` 共用打开流程，`debug` 子树在开发环境挂载。
 - 服务端服务：`AuthoringHost` 随服务端生命周期创建和关闭编辑组件；`RuleEditService` 接收业务请求、产出语义应答；`EditSessionManager` 持有会话；`RuleOverlayStore` 唯一持有修订与文件工作，`RuleEditTransport` 负责载荷映射与发送。
 - 目录入口：`RuleCatalogService` 的分页查询与失效，数据来自 `RuleCatalogSources`。
 - 落盘入口：`RuleOverlayWriter.apply(...)`，由 `RuleSaveTask` 编排调用；启用状态入口：`RuleEnableApplyService`，保存与命令共用。
@@ -178,7 +178,7 @@ flowchart TB
 ### 4.5 命令权限口径
 
 - 根节点不统一鉴权：编辑锁状态查询对所有玩家开放，权限下放到各子分支，避免“查看”也被权限挡住。
-- 编辑与写操作沿用同一口径：单人存档房主直接放行，其余执行者按权限等级判定；权限来源统一为 `RuleEditPermissions.hasAccess`，`rule` 分支经 `requires` 接入，`editor` 打开操作在执行时判权以保留公开状态子命令，编辑权限谓词由 `AuthoringHost` 在装配时注入 `RuleEditService` 并交给 `EditAdmission`，开放局域网后的访客按权限等级判定。
+- 编辑与写操作沿用同一口径：单人存档房主直接放行，其余执行者按权限等级判定；权限来源统一为 `RuleEditPermissions.hasAccess`，`rule` 分支经 `requires` 接入，`editor open` 子命令按管理权限显示，直接执行 `editor` 时在打开操作内判权以保留公开状态子命令，编辑权限谓词由 `AuthoringHost` 在装配时注入 `RuleEditService` 并交给 `EditAdmission`，开放局域网后的访客按权限等级判定。
 - 编辑命令要求玩家实体：先判权限与当前连接的编辑通道能力再取锁；客户端缺少编辑通道时回复安装提示并保持会话空闲，取锁失败时回显持有者；强制释放需要编辑权限等级，原持有者在线时收到会话过期回执；会话处于在途保存时，改由保存收尾的终态回执携带。
 - 列表、普通详情和 ID 补全只读已发布加载结果，保存期间继续展示上一份发布视图；结果保留停用规则、同批原始来源与本服覆盖快照，随启动、重载、内容保存和纯启停发布一起替换。原始 JSON、校验、重载、启停与孤儿检查在保存进行中回“保存忙碌”。命令启停基于已发布来源重建索引并排队回扫；孤儿清理只更新存档记录。
 - 反馈统一走命令层的本地化出口：成功与失败都按语言 key 组装，并携带内置英文模板作为 fallback；已安装模组的客户端按自身语言渲染，原版客户端直接使用 fallback。英文模板由命令反馈构造器从语言资源一次加载；参数保留 Component 的本地化与交互。列表与校验问题分页，规则详情默认展示发布摘要，原始来源以 raw 显式请求并按 Unicode 片段分页；点击链接预填命令，点击原始片段复制文本。具体语法见[命令参考](../wiki/zh-08-commands.md)。

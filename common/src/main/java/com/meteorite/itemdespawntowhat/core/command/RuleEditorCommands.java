@@ -15,81 +15,94 @@ import net.minecraft.server.level.ServerPlayer;
 import java.util.Locale;
 import java.util.Objects;
 
-/** 编辑器入口与会话管理；打开界面前确认客户端能力并取得独占会话。 */
+// 公开状态查询与管理动作共用 editor 分支，打开界面前确认客户端能力并取得独占会话。
 final class RuleEditorCommands {
-    private static final String PREFIX = "itemdespawntowhat.command.editor.";
-
-    private RuleEditorCommands() { }
+    private RuleEditorCommands() {
+    }
 
     static LiteralArgumentBuilder<CommandSourceStack> build(RuleCommandContext context) {
         return Commands.literal("editor")
-                .executes(ctx -> open(ctx, context))
-                .then(Commands.literal("status").executes(ctx -> status(ctx, context)))
+                .executes(command -> open(command, context))
+                .then(Commands.literal("open").requires(RuleCommandTree::hasAccess)
+                        .executes(command -> open(command, context)))
+                .then(Commands.literal("status").executes(command -> status(command, context)))
                 .then(Commands.literal("release").requires(RuleEditPermissions::isAdmin)
-                        .executes(ctx -> release(ctx, context)));
+                        .executes(command -> release(command, context)));
     }
 
-    private static int open(CommandContext<CommandSourceStack> ctx, RuleCommandContext context) {
-        if (!RuleCommandTree.hasAccess(ctx.getSource())) {
-            return RuleCommandTree.replyFailure(ctx, RuleCommandText.of(PREFIX + "no_permission").build());
+    private static int open(CommandContext<CommandSourceStack> command, RuleCommandContext context) {
+        if (!RuleCommandTree.hasAccess(command.getSource())) {
+            return RuleCommandTree.replyFailure(command, RuleCommandText.message("editor.no_permission").build());
         }
-        if (!(ctx.getSource().getEntity() instanceof ServerPlayer player)) {
-            return RuleCommandTree.replyFailure(ctx, RuleCommandText.of(PREFIX + "player_only").build());
+        if (!(command.getSource().getEntity() instanceof ServerPlayer player)) {
+            return RuleCommandTree.replyFailure(command, RuleCommandText.message("editor.player_only").build());
         }
         RuleEditServerContext editContext = context.editContext();
         RuleEditService service = editContext.editService();
         var transport = editContext.transport();
-        if (!context.available() || service == null || transport == null) { return RuleCommandTree.notReady(ctx); }
-        if (!editContext.canReachClient(player)) {
-            return RuleCommandTree.replyFailure(ctx, RuleCommandText.of(PREFIX + "client_unavailable").build());
+        if (!context.available() || service == null || transport == null) {
+            return RuleCommandTree.notReady(command);
         }
-        var outcome = service.openEditor(player, ctx.getSource().getServer().getTickCount(), editContext.runtimeLimits());
+        if (!editContext.canReachClient(player)) {
+            return RuleCommandTree.replyFailure(command, RuleCommandText.message("editor.client_unavailable").build());
+        }
+        var outcome = service.openEditor(player, command.getSource().getServer().getTickCount(), editContext.runtimeLimits());
         transport.send(editContext, player, outcome.payload());
         if (!outcome.acquired()) {
-            return RuleCommandTree.replyFailure(ctx, RuleCommandText.of(PREFIX + "lock_busy")
+            return RuleCommandTree.replyFailure(command, RuleCommandText.message("editor.lock_busy")
                     .arg(outcome.holderName()).build());
         }
-        return RuleCommandTree.reply(ctx, RuleCommandText.of(PREFIX + "sent").build());
+        return RuleCommandTree.reply(command, RuleCommandText.message("editor.sent").build());
     }
 
-    private static int status(CommandContext<CommandSourceStack> ctx, RuleCommandContext context) {
+    private static int status(CommandContext<CommandSourceStack> command, RuleCommandContext context) {
         var service = context.editContext().editService();
-        if (service == null) { return RuleCommandTree.notReady(ctx); }
+        if (service == null) {
+            return RuleCommandTree.notReady(command);
+        }
         var sessions = service.sessions();
         var session = sessions.session();
         if (session == null) {
-            return RuleCommandTree.reply(ctx, RuleCommandText.of(PREFIX + "status.free").build());
+            return RuleCommandTree.reply(command, RuleCommandText.message("editor.status.free").build());
         }
-        var state = RuleCommandText.of(PREFIX + "state." + session.state().name().toLowerCase(Locale.ROOT)).build();
-        if (ctx.getSource().getEntity() instanceof ServerPlayer player && sessions.isOwner(player.getUUID())) {
-            return RuleCommandTree.reply(ctx, RuleCommandText.of(PREFIX + "status.self").arg(state).build());
+        var state = RuleCommandText.message("editor.state." + session.state().name().toLowerCase(Locale.ROOT)).build();
+        if (command.getSource().getEntity() instanceof ServerPlayer player && sessions.isOwner(player.getUUID())) {
+            return RuleCommandTree.reply(command, RuleCommandText.message("editor.status.self").arg(state).build());
         }
-        if (RuleCommandTree.hasAccess(ctx.getSource())) {
-            return RuleCommandTree.reply(ctx, RuleCommandText.of(PREFIX + "status.held_by")
+        if (RuleCommandTree.hasAccess(command.getSource())) {
+            return RuleCommandTree.reply(command, RuleCommandText.message("editor.status.held_by")
                     .arg(session.ownerName()).arg(state).build());
         }
-        return RuleCommandTree.reply(ctx, RuleCommandText.of(PREFIX + "status.locked").build());
+        return RuleCommandTree.reply(command, RuleCommandText.message("editor.status.locked").build());
     }
 
-    private static int release(CommandContext<CommandSourceStack> ctx, RuleCommandContext context) {
+    private static int release(CommandContext<CommandSourceStack> command, RuleCommandContext context) {
         var editContext = context.editContext();
         var service = editContext.editService();
-        if (service == null) { return RuleCommandTree.notReady(ctx); }
+        if (service == null) {
+            return RuleCommandTree.notReady(command);
+        }
         var released = service.forceRelease();
         if (released == null) {
-            return RuleCommandTree.reply(ctx, RuleCommandText.of(PREFIX + "release.idle").build());
+            return RuleCommandTree.reply(command, RuleCommandText.message("editor.release.idle").build());
         }
         if (released.state() == EditSessionManager.SessionState.APPLYING) {
-            return RuleCommandTree.reply(ctx, RuleCommandText.of(PREFIX + "release.pending").build());
+            return RuleCommandTree.reply(command, RuleCommandText.message("editor.release.pending").build());
         }
-        if (released.ownerUuid() != null) {
-            ServerPlayer owner = ctx.getSource().getServer().getPlayerList().getPlayer(released.ownerUuid());
-            if (owner != null) {
-                Objects.requireNonNull(editContext.transport()).send(editContext, owner,
-                        new RuleEditReply.SessionEvent(released.sessionId(), RuleSaveStatus.SESSION_EXPIRED));
-            }
-        }
-        return RuleCommandTree.reply(ctx, RuleCommandText.of(PREFIX + "release.released")
+        notifyReleasedOwner(command, editContext, released);
+        return RuleCommandTree.reply(command, RuleCommandText.message("editor.release.released")
                 .arg(released.ownerName()).build());
+    }
+
+    private static void notifyReleasedOwner(CommandContext<CommandSourceStack> command,
+                                            RuleEditServerContext context, EditSessionManager.SessionInfo released) {
+        if (released.ownerUuid() == null) {
+            return;
+        }
+        ServerPlayer owner = command.getSource().getServer().getPlayerList().getPlayer(released.ownerUuid());
+        if (owner != null) {
+            Objects.requireNonNull(context.transport()).send(context, owner,
+                    new RuleEditReply.SessionEvent(released.sessionId(), RuleSaveStatus.SESSION_EXPIRED));
+        }
     }
 }

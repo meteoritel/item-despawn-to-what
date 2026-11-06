@@ -7,7 +7,7 @@ Run `/idtw` for the entry points available to your identity. Production commands
 | Command | Purpose | Permission |
 | --- | --- | --- |
 | `/idtw` | Show help | Everyone |
-| `/idtw editor` | Acquire the exclusive editor session and open the GUI | An in-game player with management access and a compatible client editor channel |
+| `/idtw editor open` (or `/idtw editor`) | Acquire the exclusive editor session and open the GUI | An in-game player with management access and a compatible client editor channel |
 | `/idtw editor status` | Inspect the editor session | Everyone |
 | `/idtw editor release` | Force-release the editor session | Permission level ≥2 |
 | `/idtw rule list [page] [filter]` | Browse published rules by page | Management access |
@@ -81,7 +81,9 @@ Reloading prepares new rules before publishing them. Rescanning existing dropped
 
 ## Editor Sessions
 
-`editor` checks permission and the client channel, acquires the exclusive session, and sends the GUI opening request. When occupied, it names the holder and points to the status command.
+Run `/idtw editor open` to open the rule editor, or use `/idtw editor` directly. Tab lists `open`, `status`, and `release` according to your permissions.
+
+`editor open` checks permission and the client channel, acquires the exclusive session, and sends the GUI opening request. When occupied, it names the holder and points to the status command.
 
 `editor status` shows waiting to open, editing, or saving/rolling back. Owners can inspect their own session; other authorized sources see the holder's name. Ordinary guests see that the editor is occupied. Session timeouts use server activity ticks, so pausing preserves the remaining time.
 

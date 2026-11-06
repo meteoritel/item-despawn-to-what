@@ -1,43 +1,65 @@
 package com.meteorite.itemdespawntowhat.core.command;
 
 import com.meteorite.itemdespawntowhat.core.config.ServerConfig;
-import com.meteorite.itemdespawntowhat.core.load.RuleReloadOutcome;
 import com.meteorite.itemdespawntowhat.core.load.RuleLoadResult;
+import com.meteorite.itemdespawntowhat.core.load.RuleReloadOutcome;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerContext;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Map;
 
-/** 正式命令所需的宿主能力；运行时未启动时由就绪谓词和可空结果表达。 */
+/**
+ * 由宿主提供当前服务端的命令能力，命令在服务端线程按需读取。
+ * 发布结果与覆盖快照供只读查询，编辑服务负责修改和文件工作。
+ */
 public interface RuleCommandContext {
 
-    /** 当前运行时是否已启动。 */
+    /**
+     * @return 当前运行时是否已启动
+     */
     boolean available();
 
-    /** 当前已发布的完整加载结果，包含停用规则；尚未就绪时为空。 */
+    /**
+     * @return 当前已发布的完整加载结果，包含合法的停用规则；尚未就绪时为 null
+     */
     @Nullable RuleLoadResult<Rule> publishedRules();
 
-    /** 与已发布规则同批捕捉的本服覆盖；保存进行中保持上一份发布值。 */
+    /**
+     * @return 与已发布规则同批捕捉的本服覆盖快照，保存期间保持上一份发布值
+     */
     Map<ResourceLocation, Boolean> publishedOverrides();
 
-    /** 当前模组级配置，未启动时为空。 */
+    /**
+     * @return 当前模组级配置，宿主未启动时为 null
+     */
     @Nullable ServerConfig serverConfig();
 
-    /** 编辑会话、覆盖层目录与重载所需的能力。 */
+    /**
+     * @return 宿主的编辑能力；具体服务是否就绪由上下文中的可空结果表达
+     */
     RuleEditServerContext editContext();
 
-    /** 当前覆盖层版本；编辑宿主未就绪时为 -1。 */
+    /**
+     * @return 当前覆盖层版本，编辑宿主未就绪时为 -1
+     */
     int overlayVersion();
 
-    /** 当前保存或恢复隔离是否占用编辑目标。 */
+    /**
+     * @return 当前保存或恢复隔离是否占用编辑目标
+     */
     default boolean editingBusy() {
         var service = editContext().editService();
         return service != null && service.saving();
     }
 
-    /** 重载规则并重建运行时索引；运行时未启动时返回空，加载问题由结构化回执携带。 */
+    /**
+     * 读取当前来源并发布新索引；换入前失败时保留上一份运行状态。
+     *
+     * @param server 本次服务端
+     * @return 包含加载问题与应用状态的结果；运行时未启动时为 null
+     */
     @Nullable RuleReloadOutcome<Rule> reloadRules(MinecraftServer server);
 }

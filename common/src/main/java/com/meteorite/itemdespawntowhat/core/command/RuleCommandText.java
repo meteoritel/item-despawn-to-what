@@ -6,9 +6,10 @@ import com.meteorite.itemdespawntowhat.core.api.IssueSeverity;
 import com.meteorite.itemdespawntowhat.core.load.RuleLoadResult;
 import com.meteorite.itemdespawntowhat.core.load.RuleSourceLayer;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
+import com.meteorite.itemdespawntowhat.core.service.RuleLoadingService;
 import com.google.gson.JsonParser;
-import net.minecraft.network.chat.Component;
 import net.minecraft.ChatFormatting;
+import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
@@ -20,33 +21,46 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
- * 命令反馈组件构造器。
- * 输出带内置英文 fallback 的可翻译组件：已安装模组的客户端按玩家语言渲染，
- * 缺少语言资源的客户端使用随组件发送的英文模板。模板从语言资源读取并缓存。
- * 参数一律按追加顺序对应语言文件里的 {@code %1$s/%2$s...}，因此每个 key 的参数个数固定——
- * 条件分支的场景用空串占位，不做可变参数。禁止在命令实现里拼中文字面量。
+ * 为单条命令反馈构造可翻译组件，并保留参数中的样式与交互。
+ * 英文 fallback 随组件发送，供缺少模组语言资源的客户端显示；实例由调用线程独占。
  */
 public final class RuleCommandText {
 
+    private static final String PREFIX = Constants.MOD_ID + ".command.";
     private static final Map<String, String> DEFAULT_MESSAGES = loadDefaultMessages();
 
     private final String key;
-    private final List<Object> args = new ArrayList<>(4);
+    private final List<Object> arguments = new ArrayList<>();
 
     private RuleCommandText(String key) {
         this.key = key;
     }
 
-    /** 按语言资源中的完整 key 创建反馈，参数由 arg 按位置追加。 */
+    /**
+     * 使用完整本地化 key 创建反馈。
+     *
+     * @param key 与语言资源对应的完整 key
+     * @return 供本条反馈独占的构造器
+     */
     public static RuleCommandText of(String key) {
         return new RuleCommandText(key);
     }
 
-    /** 追加位置参数；保留 Component 的本地化、样式与交互，其余值转换为字符串。 */
-    public RuleCommandText arg(Object value) {
-        args.add(value instanceof Component ? value : value == null ? "" : String.valueOf(value));
+    static RuleCommandText message(String key) {
+        return of(PREFIX + key);
+    }
+
+    /**
+     * 按语言模板中的位置追加参数；Component 保留本地化、样式与交互。
+     *
+     * @param value 模板参数，null 显示为空文本
+     * @return 当前构造器
+     */
+    public RuleCommandText arg(@Nullable Object value) {
+        arguments.add(value instanceof Component ? value : Objects.toString(value, ""));
         return this;
     }
 
@@ -56,15 +70,53 @@ public final class RuleCommandText {
      * @return 带英文 fallback 的可翻译命令反馈
      */
     public Component build() {
-        return Component.translatableWithFallback(key, DEFAULT_MESSAGES.get(key), args.toArray());
+        return Component.translatableWithFallback(key, DEFAULT_MESSAGES.get(key), arguments.toArray());
     }
 
     static Component state(@Nullable Boolean value) {
-        return of("itemdespawntowhat.command.state." + (value == null ? "inherit" : value ? "on" : "off")).build();
+        if (value == null) {
+            return message("state.inherit").build();
+        }
+        return message(value ? "state.on" : "state.off").build();
     }
 
     static Component layer(RuleSourceLayer layer) {
-        return of("itemdespawntowhat.command.layer." + layer.id()).build();
+        return message("layer." + layer.id()).build();
+    }
+
+    /**
+     * 展示问题级别、内容与位置，错误标红，告警标黄。
+     *
+     * @param issue 本次加载的问题
+     * @return 保留原始诊断内容的反馈组件
+     */
+    public static Component issue(Issue issue) {
+        boolean error = issue.severity() == IssueSeverity.ERROR;
+        return message("issue")
+                .arg(message(error ? "severity.error" : "severity.warn").build())
+                .arg(issue.message())
+                .arg(locationOf(issue))
+                .build().copy().withStyle(error ? ChatFormatting.RED : ChatFormatting.YELLOW);
+    }
+
+    /**
+     * 汇总同次加载的有效规则、来源分布与问题数量。
+     *
+     * @param stage  命令阶段，对应 command.stage 下的本地化 key
+     * @param result 完整加载结果，包含合法的停用规则
+     * @return 加载统计组件
+     */
+    public static Component summary(String stage, RuleLoadResult<Rule> result) {
+        Map<RuleSourceLayer, Integer> layerCounts = RuleLoadingService.countByLayer(result);
+        return message("load.summary")
+                .arg(message("stage." + stage).build())
+                .arg(result.rules().size())
+                .arg(layerCounts.getOrDefault(RuleSourceLayer.BUILTIN, 0))
+                .arg(layerCounts.getOrDefault(RuleSourceLayer.WORLD, 0))
+                .arg(layerCounts.getOrDefault(RuleSourceLayer.OVERLAY, 0))
+                .arg(result.issues().errors().size())
+                .arg(result.issues().warnings().size())
+                .build();
     }
 
     private static Map<String, String> loadDefaultMessages() {
@@ -84,30 +136,6 @@ public final class RuleCommandText {
         }
     }
 
-    /** 把问题级别与位置展示为可读反馈；错误用红色，告警用黄色。 */
-    public static Component issue(Issue issue) {
-        return of("itemdespawntowhat.command.issue")
-                .arg(of("itemdespawntowhat.command.severity."
-                        + (issue.severity() == IssueSeverity.ERROR ? "error" : "warn")).build())
-                .arg(issue.message())
-                .arg(locationOf(issue))
-                .build().copy().withStyle(issue.severity() == IssueSeverity.ERROR ? ChatFormatting.RED : ChatFormatting.YELLOW);
-    }
-
-    /** 展示已校验规则的来源分布与同次加载的问题数量。 */
-    public static Component summary(String stage, RuleLoadResult<Rule> result) {
-        return of("itemdespawntowhat.command.load.summary")
-                .arg(of("itemdespawntowhat.command.stage." + stage).build())
-                .arg(result.rules().size())
-                .arg(countLayer(result, RuleSourceLayer.BUILTIN))
-                .arg(countLayer(result, RuleSourceLayer.WORLD))
-                .arg(countLayer(result, RuleSourceLayer.OVERLAY))
-                .arg(result.issues().errors().size())
-                .arg(result.issues().warnings().size())
-                .build();
-    }
-
-    // 问题的位置串："来源#字段"；两者都为空时返回空串
     private static String locationOf(Issue issue) {
         String origin = issue.origin() == null ? "" : issue.origin();
         String field = issue.fieldPath() == null ? "" : issue.fieldPath();
@@ -117,14 +145,4 @@ public final class RuleCommandText {
         return field.isEmpty() ? origin : origin + "#" + field;
     }
 
-    // 某个来源层的规则条数
-    private static int countLayer(RuleLoadResult<Rule> result, RuleSourceLayer layer) {
-        int count = 0;
-        for (var entry : result.rules()) {
-            if (entry.origin().layer() == layer) {
-                count++;
-            }
-        }
-        return count;
-    }
 }
