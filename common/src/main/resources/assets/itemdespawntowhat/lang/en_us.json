@@ -816,7 +816,7 @@
   "gui.itemdespawntowhat.edit.recipe.status.with_local": "%s %s",
   "gui.itemdespawntowhat.edit.recipe.no_output": "No output",
   "gui.itemdespawntowhat.edit.recipe.editor_title": "%s · %s",
-  "gui.itemdespawntowhat.edit.recipe.condition_tree": "Conditions (rule)",
+  "gui.itemdespawntowhat.edit.recipe.condition_tree": "Condition Tree",
   "gui.itemdespawntowhat.edit.recipe.condition_tree_more": "... Open the Trigger tab for more conditions",
   "gui.itemdespawntowhat.edit.recipe.input": "Input: %s",
   "gui.itemdespawntowhat.edit.recipe.catalyst": "Catalyst: %s",

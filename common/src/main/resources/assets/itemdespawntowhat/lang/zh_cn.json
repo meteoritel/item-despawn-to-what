@@ -816,7 +816,7 @@
   "gui.itemdespawntowhat.edit.recipe.status.with_local": "%s%s",
   "gui.itemdespawntowhat.edit.recipe.no_output": "无产出",
   "gui.itemdespawntowhat.edit.recipe.editor_title": "%s · %s",
-  "gui.itemdespawntowhat.edit.recipe.condition_tree": "条件树（规则级）",
+  "gui.itemdespawntowhat.edit.recipe.condition_tree": "条件树",
   "gui.itemdespawntowhat.edit.recipe.condition_tree_more": "... 更多条件请在触发页查看",
   "gui.itemdespawntowhat.edit.recipe.input": "输入：%s",
   "gui.itemdespawntowhat.edit.recipe.catalyst": "催化剂：%s",
