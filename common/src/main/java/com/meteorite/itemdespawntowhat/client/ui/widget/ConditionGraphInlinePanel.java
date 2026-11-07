@@ -99,7 +99,7 @@ final class ConditionGraphInlinePanel {
     }
 
     boolean isOpen() {
-        return form != null;
+        return form != null && !closing;
     }
 
     // 参数框内文本输入正在编辑：画布快捷键让位
@@ -137,7 +137,7 @@ final class ConditionGraphInlinePanel {
         close();
     }
 
-    private void updateBounds() {
+    void prepareUi() {
         tickAnimation();
         InlineEditor editor = form;
         if (editor == null) {
@@ -159,7 +159,6 @@ final class ConditionGraphInlinePanel {
     }
 
     void render(GuiGraphics graphics, Font renderFont, UiPointer pointer) {
-        updateBounds();
         InlineEditor editor = form;
         if (editor == null || !editor.isVisible()) {
             return;
@@ -183,16 +182,14 @@ final class ConditionGraphInlinePanel {
         if (form == null) {
             return false;
         }
-        updateBounds();
         InlineEditor editor = form;
-        if (editor == null || !editor.isVisible()) {
+        if (!editor.isVisible()) {
             return false;
         }
         return bounds.contains(screenX, screenY) && panelRect.contains(screenX, screenY);
     }
 
     UiPointerHit hitTest(double x, double y) {
-        updateBounds();
         return form != null && !closing && panelRect.contains(x, y) ? form.hitTest(x, y) : null;
     }
 

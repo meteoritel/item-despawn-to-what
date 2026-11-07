@@ -64,8 +64,6 @@ import org.lwjgl.glfw.GLFW;
  */
 public final class ConditionTreeOverlay implements UiShellWidget, UiLayoutSource {
 
-    // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
-    // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
     // 画布页外壳（功能栏/工具列/状态栏/帮助浮层）使用扁平宿主主题（仅显式取用生效）
     private final UiHostTheme CHROME_THEME;
 
@@ -177,7 +175,7 @@ public final class ConditionTreeOverlay implements UiShellWidget, UiLayoutSource
     // 宿主注入的撤销/重做入口；为空时退回本页直接调用会话台账
     private @Nullable Runnable undoAction;
     private @Nullable Runnable redoAction;
-    private long seenViewRevision = -1;
+    private boolean selectionPending = true;
     private boolean sourceView;
     private boolean helpOpen;
     private long revision;
@@ -239,11 +237,12 @@ public final class ConditionTreeOverlay implements UiShellWidget, UiLayoutSource
             reloadExpression();
             unmountParameters();
         });
-        editor.setListener(expression -> {
-            var change = editor.lastChange();
-            RuleValue next = editor.tree().encode(codec);
-            session.apply(editor.undoOpKey(), edits -> {
-                if (change != null) ConditionTreeNodes.remapInputs(session, change, scope);
+        editor.setOnViewChanged(() -> selectionPending = true);
+        editor.setListener(event -> {
+            var change = event.change();
+            RuleValue next = codec.encode(change.after());
+            session.apply(event.opKey(), edits -> {
+                ConditionTreeNodes.remapInputs(session, change, scope);
                 if (next == null) edits.removeAt(scope);
                 else edits.setAt(scope, next);
             });
@@ -275,10 +274,6 @@ public final class ConditionTreeOverlay implements UiShellWidget, UiLayoutSource
         wrapItem = addTool(UiHostIcon.WRAP_ALL, UI + "button.wrap", true, editor::beginWrapWithKind);
 
         reloadExpression();
-    }
-
-    public UiConditionGraphEditor editor() {
-        return editor;
     }
 
     public EditSession session() {
@@ -317,7 +312,7 @@ public final class ConditionTreeOverlay implements UiShellWidget, UiLayoutSource
     }
 
     private void reloadExpression() {
-        var result = editor.tree().decode(codec, session.valueAt(scope));
+        var result = codec.decode(session.valueAt(scope));
         decodeError = result.error();
         nextIssueIndex = 0;
         editor.setEnabled(result.succeeded());
@@ -351,7 +346,7 @@ public final class ConditionTreeOverlay implements UiShellWidget, UiLayoutSource
     }
 
     private void refreshSource() {
-        RuleValue raw = decodeError == null ? editor.tree().encode(codec) : session.valueAt(scope);
+        RuleValue raw = session.valueAt(scope);
         String text = raw == null || raw.isNull() ? "" : raw.toPrettyJson();
         if (!text.equals(source.text())) {
             source.setSections(text.isEmpty() ? List.of() : List.of(new UiCodeView.Section(null, null, text)));
@@ -365,7 +360,7 @@ public final class ConditionTreeOverlay implements UiShellWidget, UiLayoutSource
         finishParameters();
         reloadExpression();
         RuleValue.Sequence nodes = RuleValue.list();
-        for (var path : editor.selectedSubtrees()) {
+        for (var path : editor.toolState().selectedSubtrees()) {
             RuleValue raw = session.valueAt(ConditionTreeNodes.jsonPath(editor.expression().root(), path, scope));
             if (raw != null) nodes.add(raw.deepCopy());
         }
@@ -494,7 +489,7 @@ public final class ConditionTreeOverlay implements UiShellWidget, UiLayoutSource
                 && Objects.equals(selectedPath, next));
         // 同一选中且参数框状态一致时不重复重建表单
         if (Objects.equals(selectedPath, next) && (parameters != null) == editable) {
-            if (openLeaf && inlineEditor != null) editor.setInlineEditor(inlineEditor, editor.tree().selected());
+            if (openLeaf && inlineEditor != null) editor.setInlineEditor(inlineEditor);
             return;
         }
         finishParameters();
@@ -506,7 +501,7 @@ public final class ConditionTreeOverlay implements UiShellWidget, UiLayoutSource
             parameters = parameterFactory.create(parameterPath, leaf);
             // 参数框关联当前主选中节点；画布负责右侧吸附、滑入动画与裁剪。
             inlineEditor = new ConditionTreeChrome.Inline(parameters.panel(), parameters.form());
-            editor.setInlineEditor(inlineEditor, editor.tree().selected());
+            editor.setInlineEditor(inlineEditor);
         } else {
             // 容器节点没有参数、只读叶子与空选中都不展开
             editor.clearInlineEditor();
@@ -578,7 +573,7 @@ public final class ConditionTreeOverlay implements UiShellWidget, UiLayoutSource
             setFocusSlot(FocusSlot.CANVAS);
             return;
         }
-        ConditionNode node = editor.tree().query(treePath);
+        ConditionNode node = editor.nodeAt(treePath);
         if (node == null) {
             // 本树中已无该节点（结构已变化）：只打开正确的树，不选祖先或邻居
             setFocusSlot(FocusSlot.CANVAS);
@@ -618,9 +613,6 @@ public final class ConditionTreeOverlay implements UiShellWidget, UiLayoutSource
         return nodePath.replacePrefix(ConditionTreeContract.ROOT_PATH, scope).child(RuleFields.CONDITION);
     }
 
-    // 拆出「完整节点前缀 + 可选参数字段后缀」：结构语法不合法或节点后还有尾随字符时返回 null。
-    // 后缀以「.condition」开头时才是参数字段，其余未知后缀一律判不合法，避免截成祖先节点
-
     /** {@inheritDoc} */
     @Override
     public void setBounds(int x, int y, int width, int height) {
@@ -650,6 +642,9 @@ public final class ConditionTreeOverlay implements UiShellWidget, UiLayoutSource
         editor.setVisible(!sourceView);
         source.setVisible(sourceView);
 
+    }
+
+    private void updateTools() {
         UiHostIcon jsonRole = sourceView ? UiHostIcon.VIEW_TREE : UiHostIcon.VIEW_JSON;
         jsonItem.setIcon(CHROME_THEME.icon(jsonRole, false), CHROME_THEME.icon(jsonRole, true));
         undoItem.setEnabled(session.canUndo());
@@ -658,7 +653,7 @@ public final class ConditionTreeOverlay implements UiShellWidget, UiLayoutSource
 
         boolean treeView = !sourceView;
         boolean editorEnabled = editor.isEnabled();
-        boolean hasSelection = treeView && editorEnabled && !editor.tree().selection().isEmpty();
+        boolean hasSelection = treeView && editorEnabled && editor.toolState().selectionCount() > 0;
         for (UiIconStrip.Item item : toolItems) {
             item.setVisible(treeView);
         }
@@ -668,13 +663,13 @@ public final class ConditionTreeOverlay implements UiShellWidget, UiLayoutSource
         // 创建类工具只受编辑器可用性约束；移动类工具逐格判断当前节点能否移动
         addConditionItem.setEnabled(treeView && editorEnabled);
         branchItem.setEnabled(treeView && editorEnabled);
-        moveUpItem.setEnabled(treeView && editor.canMoveSelection(-1));
-        moveDownItem.setEnabled(treeView && editor.canMoveSelection(1));
+        moveUpItem.setEnabled(treeView && editor.toolState().canMoveUp());
+        moveDownItem.setEnabled(treeView && editor.toolState().canMoveDown());
         // 创建类工具的选中态取自各自弹出的浮层：类型列表 / 新建分支 ∧∨ / 包组 ∧∨
-        addConditionItem.setSelected(treeView && editor.isPickerOpen());
-        branchItem.setSelected(treeView && editor.isGroupKindMenuOpen());
-        removeItem.setSelected(treeView && editor.isDeleteConfirmOpen());
-        wrapItem.setSelected(treeView && editor.isWrapKindMenuOpen());
+        addConditionItem.setSelected(treeView && editor.toolState().addSelected());
+        branchItem.setSelected(treeView && editor.toolState().branchSelected());
+        removeItem.setSelected(treeView && editor.toolState().removeSelected());
+        wrapItem.setSelected(treeView && editor.toolState().wrapSelected());
     }
 
     /**
@@ -720,26 +715,34 @@ public final class ConditionTreeOverlay implements UiShellWidget, UiLayoutSource
                 right, rightWidth, Math.max(0, rightWidth), true, true, List.of()));
     }
 
-    // ---- 渲染 ----
-
-    /** {@inheritDoc} */
-    @Override
-    public void render(GuiGraphics graphics, Font renderFont, UiPointer incomingPointer) {
-        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
+    /** 在模态输入与布局前结算会话回填、表单和选择；绘制只消费已准备视图。 */
+    public void prepareUi() {
         if (parameters != null) {
             parameters.form().tick();
         }
         if (revision != session.revision()) {
+            editor.endInteractions(UiInteractionSession.EndReason.SCOPE_CHANGED);
             reloadExpression();
         }
         if (parameters != null && !editor.isInlineEditorOpen()) {
             finishParameters();
             unmountParameters();
         }
-        if (!sourceView && !editor.isDragging() && seenViewRevision != editor.viewRevision()) {
-            seenViewRevision = editor.viewRevision();
+        if (!sourceView && !editor.isDragging() && selectionPending) {
+            selectionPending = false;
             syncSelection();
         }
+        layout();
+        editor.prepareUi();
+        updateTools();
+    }
+
+    // ---- 渲染 ----
+
+    /** {@inheritDoc} */
+    @Override
+    public void render(GuiGraphics graphics, Font renderFont, UiPointer incomingPointer) {
+        UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
         drawShell(graphics);
         functionBar.render(graphics, renderFont, pointer);
         if (sourceView) {
@@ -1050,8 +1053,8 @@ public final class ConditionTreeOverlay implements UiShellWidget, UiLayoutSource
         if (status == null && sourceView && source.text().isEmpty()) {
             status = Component.translatable(UI + "source_empty");
         }
-        if (status == null && !sourceView && editor.tree().selection().size() > 1) {
-            status = Component.translatable(UI + "selection", editor.tree().selection().size());
+        if (status == null && !sourceView && editor.toolState().selectionCount() > 1) {
+            status = Component.translatable(UI + "selection", editor.toolState().selectionCount());
         }
         return status == null ? Component.translatable(UI + "counts", editor.nodeCount(), editor.leafCount(), editor.depth()) : status;
     }
@@ -1187,7 +1190,7 @@ public final class ConditionTreeOverlay implements UiShellWidget, UiLayoutSource
             return source.charTyped(codePoint, modifiers);
         }
         // 内联框打开时字符输入先经过画布，画布再转给内联框
-        if (editor.isVisible() && (editor.isInlineEditorOpen() || editor.isPickerOpen())) {
+        if (editor.isVisible() && (editor.isInlineEditorOpen() || editor.toolState().addSelected())) {
             return editor.charTyped(codePoint, modifiers);
         }
         return editor.isVisible() && editor.isFocused() && editor.charTyped(codePoint, modifiers);

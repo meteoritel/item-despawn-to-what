@@ -57,6 +57,11 @@ public final class UiTypePicker implements UiWidget, UiLayoutSource {
     private static final int CARET_WIDTH = 1;
     // 类型选择框状态
     private boolean open;
+    private Runnable onOpenChanged = () -> {};
+
+    void setOnOpenChanged(Runnable callback) {
+        onOpenChanged = callback;
+    }
     private int cursor;
     private final UiScrollView scroll = new UiScrollView();
     private final StringBuilder filterText = new StringBuilder();
@@ -148,6 +153,7 @@ public final class UiTypePicker implements UiWidget, UiLayoutSource {
         pointerKnown = false;
         refreshFilter();
         updateBounds();
+        onOpenChanged.run();
     }
 
     /**
@@ -215,6 +221,7 @@ public final class UiTypePicker implements UiWidget, UiLayoutSource {
      * 关闭面板并释放滚动条捕获；不提交类型。
      */
     public void close() {
+        boolean wasOpen = open;
         open = false;
         filterText.setLength(0);
         filteredOptions = List.of();
@@ -223,6 +230,7 @@ public final class UiTypePicker implements UiWidget, UiLayoutSource {
         scroll.endInteraction(UiInteractionSession.EndReason.CANCEL);
         panel.reset();
         pointerKnown = false;
+        if (wasOpen) onOpenChanged.run();
     }
 
     /**

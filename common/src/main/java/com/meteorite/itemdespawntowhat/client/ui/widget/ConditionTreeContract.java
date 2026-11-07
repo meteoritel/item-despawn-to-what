@@ -2,7 +2,6 @@ package com.meteorite.itemdespawntowhat.client.ui.widget;
 
 import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
-import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.ConditionNode;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -12,7 +11,7 @@ import org.jetbrains.annotations.Nullable;
  * 条件树控件家族共享的宿主注入契约与路径常量。
  * <p>两类使用方都在本包内：{@link UiConditionTreeSummary}（缩进只读摘要）与
  * {@link UiConditionGraphEditor}（画布编辑器）。摘要类不再承载这些类型；画布按契约注入条件类型选项、
- * 叶工厂与变更监听；两者都实现 {@link Navigation}，让宿主在两种渲染之间以同一组语义读写选中项。</p>
+ * 叶工厂，结构事件由画布自身发布；两者都实现 {@link Navigation}，让宿主在两种渲染之间以同一组语义读写选中项。</p>
  * <p>本类型只依赖条件树数据模型、{@link ResourceLocation} 与 {@link Component}，不依赖界面层其它子包。</p>
  */
 public final class ConditionTreeContract {
@@ -31,11 +30,6 @@ public final class ConditionTreeContract {
     @FunctionalInterface
     public interface LeafFactory {
         @Nullable ConditionNode create(ResourceLocation type);
-    }
-
-    /** 表达式变更监听：画布完成一次结构改动后回调新表达式，宿主据此同步草稿与展示。 */
-    public interface Listener {
-        void onExpressionChanged(ConditionExpression expression);
     }
 
     /**

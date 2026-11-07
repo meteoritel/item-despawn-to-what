@@ -214,6 +214,7 @@ final class EditorConditionForms {
         overlay.setHistoryActions(
                 () -> modals.requestHistory(UiHistoryShortcut.UNDO),
                 () -> modals.requestHistory(UiHistoryShortcut.REDO));
+        modal.onPrepare(overlay::prepareUi);
         modal.onClosed(() -> coordination.closeView(overlay));
         modal.onHistoryChanged(shortcut -> {
             String operation = shortcut == UiHistoryShortcut.UNDO

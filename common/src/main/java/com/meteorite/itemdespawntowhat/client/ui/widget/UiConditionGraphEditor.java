@@ -9,27 +9,27 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 
+import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphMenus.GroupKind;
+import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphMenus.KindMenuAction;
+import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphMenus.KindMenuEntry;
+import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphMenus.KindMenuPurpose;
+
 import java.util.Objects;
 
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.BORDER;
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.CARD_PADDING_X;
-import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.CARD_HEIGHT;
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.isContainer;
-import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphRenderer.drawBorder;
 
 import com.meteorite.itemdespawntowhat.client.edit.ConditionTreeNodes;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.OpaqueCondition;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiHistoryShortcut;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiRubberBand;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiTransform;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.tree.UiTreeEditor;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.tree.UiTreeMoveInteraction;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.tree.UiTreePath;
 import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine;
 import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine.Tone;
@@ -41,7 +41,6 @@ import com.meteorite.itemdespawntowhat.core.model.ConditionNode;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -52,7 +51,6 @@ import java.util.function.UnaryOperator;
 
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
@@ -67,7 +65,7 @@ import org.lwjgl.glfw.GLFW;
  * 共用 {@link ConditionGraphSidePanel} 的屏幕坐标、外观和动画。</p>
  *
  * <p>宿主通过 {@link ConditionTreeContract.Navigation} 同步路径，通过
- * {@link #setInlineEditor(InlineEditor, UiTreePath)} 装载条件叶参数；候选修改经绑定回调交回宿主，
+ * {@link #setInlineEditor(InlineEditor)} 装载条件叶参数；候选修改经绑定回调交回宿主，
  * 控件不持有正式保存入口。缩进摘要 {@link UiConditionTreeSummary} 共用条件数据与校验，保持只读。</p>
  */
 public final class UiConditionGraphEditor implements UiInteractionSession.Target, UiShellWidget, UiLayoutSource, ConditionTreeContract.Navigation {
@@ -75,21 +73,8 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
     // 视图定位与手势阈值使用 GUI 屏幕像素。
     private static final int FIT_PADDING = 12;
     private static final int RESET_TOP_MARGIN = 16;
-    private static final int REVEAL_MARGIN = 24;
-    private static final int DRAG_START_DISTANCE = 4;
-    private static final int DROP_EDGE_DIVISOR = 4;
     // 条件参数说明的行数较多，比动作说明的默认宽度更宽
     private static final int CONDITION_TOOLTIP_WIDTH = 300;
-
-    // ---- 分组方式小菜单 ----
-
-    // 菜单与锚点之间的屏幕像素间距
-    private static final int KIND_MENU_GAP = 4;
-    private static final int KIND_MENU_ROW_HEIGHT = 18;
-    // 菜单行文本左右内边距
-    private static final int KIND_MENU_PADDING = 4;
-    // 菜单最小宽度
-    private static final int KIND_MENU_MIN_WIDTH = 56;
 
     /**
      * 参数编辑框的内容契约：几何、绘制与输入坐标一律为 GUI 屏幕坐标，不随画布平移或缩放。
@@ -125,42 +110,13 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
         boolean capturesKeyboard();
     }
 
-    // 分组方式：∧ 全部满足 / ∨ 任一满足
-    private enum GroupKind {
-        ALL(TypeLabels.UI_PREFIX + "tree.operator.all", TypeLabels.UI_PREFIX + "tree.node.all"),
-        ANY(TypeLabels.UI_PREFIX + "tree.operator.any", TypeLabels.UI_PREFIX + "tree.node.any");
-
-        private final String operatorKey;
-        private final String labelKey;
-
-        GroupKind(String operatorKey, String labelKey) {
-            this.operatorKey = operatorKey;
-            this.labelKey = labelKey;
-        }
-
-        // 菜单行同时给出运算符与它展开后的说法，只看到单字「且 / 或」时也能判断含义
-        Component menuLabel() {
-            return Component.translatable(operatorKey).append(" ").append(Component.translatable(labelKey));
-        }
-    }
-
-    // 弹层确认后的动作：分组方式与删除范围共用同一套弹出菜单
-    private enum KindMenuAction {INSERT_ALL, INSERT_ANY, WRAP_ALL, WRAP_ANY, DELETE_KEEP_CHILDREN, DELETE_SUBTREE}
-
-    // 弹层的一行：显示文本与确认动作
-    private record KindMenuEntry(Component label, KindMenuAction action) {
-    }
-
-    // 弹层用途：决定锚点位置与工具栏选中态
-    private enum KindMenuPurpose {INSERT_GROUP, WRAP_SELECTION, DELETE_CONFIRM}
-
+    private final ConditionGraphMenus menus;
     private final Font font;
     private final UiTransform transform = UiTransform.ofScales(0.5, 1.0, 1.5, 2.0);
     private final ConditionGraphLayout graph;
     private final ConditionGraphRenderer renderer;
-    private final UiRubberBand rubberBand = new UiRubberBand();
     private final UiTreeEditor<ConditionNode> tree;
-    private final UiTreeMoveInteraction<ConditionNode> move;
+    private final ConditionGraphInteraction gestures;
 
     private ConditionExpression expression = ConditionExpression.EMPTY;
     private ConditionTreeViewModel viewModel = new ConditionTreeViewModel();
@@ -176,62 +132,27 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
     private List<ConditionTreeContract.TypeOption> typeOptions = List.of();
     private @Nullable ConditionTreeContract.LeafFactory leafFactory;
     private @Nullable Consumer<ConditionNode.Leaf> onEditLeaf;
-    private @Nullable ConditionTreeContract.Listener listener;
+    private @Nullable Consumer<StructureChange> listener;
+    private Runnable onViewChanged = () -> {
+    };
+    private @Nullable ToolState toolState;
     private @Nullable Runnable copyAction;
     private @Nullable Runnable pasteAction;
     private final Component emptyMessage = Component.translatable(TypeLabels.UI_PREFIX + "tree.add_placeholder");
 
-    private @Nullable UiTreeEditor.Change<ConditionNode> lastChange;
     private @Nullable Component operationError;
     private String lastOpKey = EditSession.OP_EDIT_CONDITIONS;
     private @Nullable FieldPath selectedPath;
-    private long viewRevision;
 
-    // 手势状态（世界坐标，缩放与平移无关）
-    private @Nullable UiTreePath armedDrag;
-    private @Nullable UiTreePath clickedLeafPath;
-    private boolean leafEditArmed;
-    private double pressScreenX;
-    private double pressScreenY;
-    private boolean collapseSelectionOnRelease;
-    private @Nullable String dragLabel;
-    private @Nullable ConditionNode dropTarget;
-    private boolean rubberActive;
-    private Set<UiTreePath> rubberBase = Set.of();
-    private boolean panning;
-    private @Nullable UiInteractionSession interaction;
-    private double panLastX;
-    private double panLastY;
-    // 空白区左键按下：释放时若没有产生位移，按空白点击处理（清空选择）
-    private boolean panPressedBlank;
-    private boolean panMoved;
-    private double panTravel;
-    private boolean spaceDown;
-    private @Nullable UiTreePath selectionAnchor;
-
-    private final UiTypePicker picker;
-    private boolean pickerAppend;
-    private @Nullable UiTreePath pickerParent;
-    private int pickerIndex;
     private final ConditionGraphInlinePanel inlinePanel;
     private final UiDescriptionTooltip tooltip;
-
-    private boolean kindMenuOpen;
-    private KindMenuPurpose kindMenuPurpose = KindMenuPurpose.INSERT_GROUP;
-    private List<KindMenuEntry> kindMenuEntries = List.of();
-    private @Nullable UiRect kindMenuAnchor;
-    private int kindMenuIndex;
-    // 指针位置：指针在列表内时高亮跟随鼠标，指针静止则不覆盖键盘选择
-    private boolean kindMenuPointerKnown;
-    private int kindMenuLastMouseX;
-    private int kindMenuLastMouseY;
-    private UiRect kindMenuRect = new UiRect(0, 0, 0, 0);
-    private UiRect kindMenuListRect = new UiRect(0, 0, 0, 0);
 
     // 注入的宿主主题
     private final UiHostTheme theme;
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public UiWidgetShell shell() {
         return shell;
@@ -241,24 +162,27 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
         endInteractions(reason);
     }
 
+    /**
+     * 装配画布的唯一树、私有交互和呈现协作，业务会话由宿主持有。
+     */
     public UiConditionGraphEditor(UiHostTheme theme, Font font) {
         this.theme = UiHostThemes.require(theme);
         this.font = font;
         graph = new ConditionGraphLayout(font);
         renderer = new ConditionGraphRenderer(this.theme, font, graph);
-        picker = new UiTypePicker(this.theme, font, Component.translatable(TypeLabels.UI_PREFIX + "picker.title"), this::confirmPicker);
+        menus = new ConditionGraphMenus(this.theme, font, this::confirmPicker, this::confirmKindMenu, this::viewChanged);
         inlinePanel = new ConditionGraphInlinePanel(this.theme, font, graph);
         tooltip = new UiDescriptionTooltip(this.theme, font).setMaxWidth(CONDITION_TOOLTIP_WIDTH);
         tree = new UiTreeEditor<>(ConditionTreeNodes.INSTANCE, () -> expression.root(), change -> {
-            lastChange = change;
             applyNode(change.after());
+            if (listener != null) listener.accept(new StructureChange(lastOpKey, change));
         }, ConditionTreeInspection::validateCandidate,
                 Component.translatable(TypeLabels.UI_PREFIX + "tree.invalid_path"),
                 Component.translatable(TypeLabels.UI_PREFIX + "tree.invalid_parent"));
         tree.setOnViewChanged(change -> {
             followPrimarySelection();
             inlinePanel.validateAnchor();
-            viewRevision++;
+            viewChanged();
         });
         tree.setMoveErrors(new UiTreeEditor.MoveErrors(
                 Component.translatable(TypeLabels.UI_PREFIX + "tree.move_cycle"),
@@ -266,17 +190,15 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
                 Component.translatable(TypeLabels.UI_PREFIX + "tree.move_leaf_parent"),
                 Component.translatable(TypeLabels.UI_PREFIX + "tree.move_full_parent"),
                 Component.translatable(TypeLabels.UI_PREFIX + "tree.move_stale")));
-        move = new UiTreeMoveInteraction<>(tree, result -> {
-            armedDrag = null;
-            dropTarget = null;
-            dragLabel = null;
-            accept(result);
-            if (result.changed() && tree.selected() != null) {
-                followPrimarySelection();
-                rebuild();
-                if (selectedPath != null) selectPath(selectedPath);
-            }
-        });
+        gestures = new ConditionGraphInteraction(tree, graph, transform,
+                new ConditionGraphInteraction.Actions(this::openPicker, this::editSelectedLeaf, this::showOperationError, result -> {
+                    accept(result);
+                    if (result.changed()) {
+                        followPrimarySelection();
+                        rebuild();
+                        if (selectedPath != null) selectPath(selectedPath);
+                    }
+                }));
     }
 
     // ---- 宿主注入面 ----
@@ -290,18 +212,56 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
     }
 
     /**
-     * 选择或表达式版本变化时递增，供宿主同步节点地址与参数面板。
+     * 一次完整结构事实；宿主在同一历史操作中迁移输入并提交整个条件作用域。
      */
-    public long viewRevision() {
-        return viewRevision;
+    public record StructureChange(String opKey, UiTreeEditor.Change<ConditionNode> change) {
     }
 
-    public UiTreeEditor<ConditionNode> tree() {
-        return tree;
+    /**
+     * 工具栏只读投影；集合冻结，静止状态复用同一份快照。
+     */
+    public record ToolState(int selectionCount, List<UiTreePath> selectedSubtrees,
+                            boolean canMoveUp, boolean canMoveDown, boolean addSelected,
+                            boolean branchSelected, boolean removeSelected, boolean wrapSelected) {
+        /**
+         * 冻结规范化选择，外部不能改变画布的多选状态。
+         */
+        public ToolState {
+            selectedSubtrees = List.copyOf(selectedSubtrees);
+        }
     }
 
+    /**
+     * 视图通知只请求宿主准备；树操作稳定后再装配参数表单。
+     */
+    public void setOnViewChanged(Runnable callback) {
+        onViewChanged = callback;
+    }
+
+    private void viewChanged() {
+        toolState = null;
+        onViewChanged.run();
+    }
+
+    /**
+     * 获取动作资格与选中态，不向宿主暴露菜单模式或可变树。
+     */
+    public ToolState toolState() {
+        if (toolState == null) {
+            toolState = new ToolState(tree.selection().size(), tree.normalizedSelection(),
+                    canMoveSelection(-1), canMoveSelection(1), menus.picker.isOpen(),
+                    menus.kindMenuOpen && menus.kindMenuPurpose == KindMenuPurpose.INSERT_GROUP,
+                    menus.kindMenuOpen && menus.kindMenuPurpose == KindMenuPurpose.DELETE_CONFIRM,
+                    menus.kindMenuOpen && menus.kindMenuPurpose == KindMenuPurpose.WRAP_SELECTION);
+        }
+        return toolState;
+    }
+
+    /**
+     * 移动、平移或框选仍在进行时延后宿主的选择装配。
+     */
     public boolean isDragging() {
-        return move.isActive() || panning || rubberActive;
+        return gestures.isActive();
     }
 
     /**
@@ -309,7 +269,7 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
      */
     public void setTypeOptions(List<ConditionTreeContract.TypeOption> options) {
         this.typeOptions = List.copyOf(options);
-        picker.setOptions(pickerOptions());
+        menus.picker.setOptions(pickerOptions());
         rebuild();
     }
 
@@ -343,11 +303,11 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
     }
 
     /**
-     * 注入表达式变更回调，宿主据此同步草稿与历史；控件本身不保存正式数据。
+     * 注入完整结构事件；opKey 与 Change 来自同一次树动作，宿主同步输入映射与草稿历史。
      *
      * @param newListener 变更回调，可为 {@code null} 取消注入
      */
-    public void setListener(@Nullable ConditionTreeContract.Listener newListener) {
+    public void setListener(@Nullable Consumer<StructureChange> newListener) {
         this.listener = newListener;
     }
 
@@ -367,27 +327,11 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
         if (reason == UiInteractionSession.EndReason.UNMOUNTED || reason == UiInteractionSession.EndReason.HOST_CLOSED) {
             renderer.releaseResources();
         }
-        if (interaction != null) interaction.end(this, reason);
-        armedDrag = null;
-        clickedLeafPath = null;
-        collapseSelectionOnRelease = false;
-        dragLabel = null;
-        dropTarget = null;
-        rubberActive = false;
-        rubberBand.clear();
-        clearPanState();
-        if (reason == UiInteractionSession.EndReason.HIDDEN
-                || reason == UiInteractionSession.EndReason.DISABLED
-                || reason == UiInteractionSession.EndReason.SCOPE_CHANGED
-                || reason == UiInteractionSession.EndReason.UNMOUNTED
-                || reason == UiInteractionSession.EndReason.HOST_CLOSED) {
-            spaceDown = false;
-        }
-        picker.cancelCapture();
-        move.end(reason);
+        gestures.end(this, reason);
+        menus.picker.cancelCapture();
         if (reason != UiInteractionSession.EndReason.RELEASE) {
             closePicker();
-            closeKindMenu();
+            menus.close();
         }
     }
 
@@ -399,21 +343,9 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
     @Override
     public void scopeExited(UiInteractionSession.EndReason reason) {
         if (reason == UiInteractionSession.EndReason.HOST_CLOSED) renderer.releaseResources();
-        spaceDown = false;
+        gestures.releaseSpace();
         closePicker();
-        closeKindMenu();
-    }
-
-    // 结束平移手势并清掉「空白点击」的待判状态
-    private void clearPanState() {
-        panning = false;
-        panPressedBlank = false;
-        panMoved = false;
-        panTravel = 0.0D;
-    }
-
-    public @Nullable UiTreeEditor.Change<ConditionNode> lastChange() {
-        return lastChange;
+        menus.close();
     }
 
     public @Nullable Component operationError() {
@@ -433,10 +365,6 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
         pasteAction = paste;
     }
 
-    public List<UiTreePath> selectedSubtrees() {
-        return tree.normalizedSelection();
-    }
-
     // ---- 数据 ----
 
     public ConditionExpression expression() {
@@ -444,16 +372,14 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
     }
 
     /**
-     * 外部设置表达式：不触发变更回调，避免与宿主形成回环。
+     * 同步表达式，不产生结构提交；宿主的历史或外部回填先结束旧交互，结构操作前同步保留当前捕获。
      */
     public void setExpression(ConditionExpression newExpression) {
-        endInteractions(UiInteractionSession.EndReason.UNMOUNTED);
-        ConditionExpression next = newExpression == null ? ConditionExpression.EMPTY : newExpression;
-        if (!this.expression.equals(next)) viewRevision++;
-        this.expression = next;
+        this.expression = newExpression == null ? ConditionExpression.EMPTY : newExpression;
         tree.setSelection(tree.selection(), tree.selected());
         followPrimarySelection();
         rebuild();
+        viewChanged();
     }
 
     public boolean isValid() {
@@ -477,13 +403,6 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
      */
     public List<ConditionTreeInspection.Issue> issues() {
         return graph.issues();
-    }
-
-    /**
-     * 最近一次改动的撤销操作 key。
-     */
-    public String undoOpKey() {
-        return lastOpKey;
     }
 
     @Override
@@ -522,10 +441,10 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
         } else {
             tree.select(treePath);
         }
-        selectionAnchor = treePath;
+        gestures.setSelectionAnchor(treePath);
         // 外部路径定位优先于首帧整树适配，避免预览跳转后视口又被重置。
         centerEmptyView = false;
-        revealNode(target);
+        gestures.revealNode(target);
     }
 
     // ---- 结构操作（工具栏与键盘共用） ----
@@ -538,16 +457,12 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
             return false;
         }
         openPicker(new Hotspot(null, 0, bounds()));
-        pickerAppend = true;
+        menus.pickerAppend = true;
         return true;
     }
 
-    public boolean isPickerOpen() {
-        return picker.isOpen();
-    }
-
     public boolean hasPopup() {
-        return picker.isOpen() || kindMenuOpen;
+        return menus.picker.isOpen() || menus.kindMenuOpen;
     }
 
     /**
@@ -558,27 +473,8 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
     }
 
     /**
-     * 「新建分支」的 ∧ / ∨ 菜单是否打开；为真时该工具格显示为选中。
+     * 进入新增分组操作；编辑器不可用时拒绝。
      */
-    public boolean isGroupKindMenuOpen() {
-        return kindMenuOpen && kindMenuPurpose == KindMenuPurpose.INSERT_GROUP;
-    }
-
-    /**
-     * 「包组」的 ∧ / ∨ 菜单是否打开。
-     */
-    public boolean isWrapKindMenuOpen() {
-        return kindMenuOpen && kindMenuPurpose == KindMenuPurpose.WRAP_SELECTION;
-    }
-
-    /**
-     * 删除确认菜单是否打开；为真时删除工具格显示为选中。
-     */
-    public boolean isDeleteConfirmOpen() {
-        return kindMenuOpen && kindMenuPurpose == KindMenuPurpose.DELETE_CONFIRM;
-    }
-
-    /** 进入新增分组操作；编辑器不可用时拒绝。 */
     public boolean beginAddGroup(boolean allOf) {
         if (!isEnabled()) {
             return false;
@@ -601,14 +497,10 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
         }
         endInteractions(UiInteractionSession.EndReason.CANCEL);
         closePicker();
-        closeKindMenu();
-        kindMenuPurpose = KindMenuPurpose.INSERT_GROUP;
-        kindMenuEntries = List.of(new KindMenuEntry(GroupKind.ALL.menuLabel(), KindMenuAction.INSERT_ALL),
-                new KindMenuEntry(GroupKind.ANY.menuLabel(), KindMenuAction.INSERT_ANY));
-        kindMenuAnchor = anchorScreen;
-        kindMenuIndex = 0;
-        kindMenuOpen = true;
-        updateKindMenuRect();
+        menus.close();
+        menus.open(KindMenuPurpose.INSERT_GROUP, List.of(new KindMenuEntry(GroupKind.ALL.menuLabel(), KindMenuAction.INSERT_ALL),
+                new KindMenuEntry(GroupKind.ANY.menuLabel(), KindMenuAction.INSERT_ANY)), anchorScreen);
+        prepareMenus();
     }
 
     /**
@@ -620,13 +512,9 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
         }
         endInteractions(UiInteractionSession.EndReason.CANCEL);
         closePicker();
-        kindMenuPurpose = KindMenuPurpose.WRAP_SELECTION;
-        kindMenuEntries = List.of(new KindMenuEntry(GroupKind.ALL.menuLabel(), KindMenuAction.WRAP_ALL),
-                new KindMenuEntry(GroupKind.ANY.menuLabel(), KindMenuAction.WRAP_ANY));
-        kindMenuAnchor = null;
-        kindMenuIndex = 0;
-        kindMenuOpen = true;
-        updateKindMenuRect();
+        menus.open(KindMenuPurpose.WRAP_SELECTION, List.of(new KindMenuEntry(GroupKind.ALL.menuLabel(), KindMenuAction.WRAP_ALL),
+                new KindMenuEntry(GroupKind.ANY.menuLabel(), KindMenuAction.WRAP_ANY)), null);
+        prepareMenus();
     }
 
     /**
@@ -674,17 +562,13 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
         }
         endInteractions(UiInteractionSession.EndReason.CANCEL);
         closePicker();
-        closeKindMenu();
-        kindMenuPurpose = KindMenuPurpose.DELETE_CONFIRM;
-        kindMenuEntries = List.of(
+        menus.close();
+        menus.open(KindMenuPurpose.DELETE_CONFIRM, List.of(
                 new KindMenuEntry(Component.translatable(TypeLabels.UI_PREFIX + "tree.delete.keep_children"),
                         KindMenuAction.DELETE_KEEP_CHILDREN),
                 new KindMenuEntry(Component.translatable(TypeLabels.UI_PREFIX + "tree.delete.subtree"),
-                        KindMenuAction.DELETE_SUBTREE));
-        kindMenuAnchor = anchorScreen;
-        kindMenuIndex = 0;
-        kindMenuOpen = true;
-        updateKindMenuRect();
+                        KindMenuAction.DELETE_SUBTREE)), anchorScreen);
+        prepareMenus();
         return true;
     }
 
@@ -761,7 +645,7 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
      *
      * <p>只做结构判断，不写入表达式，也不触发校验。</p>
      */
-    public boolean canMoveSelection(int delta) {
+    private boolean canMoveSelection(int delta) {
         if (!isEnabled() || delta == 0) {
             return false;
         }
@@ -870,7 +754,9 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
         return true;
     }
 
-    /** 把当前选择交给宿主复制入口；无选择或未装配入口时返回 false。 */
+    /**
+     * 把当前选择交给宿主复制入口；无选择或未装配入口时返回 false。
+     */
     public boolean copySelection() {
         if (!isEnabled() || tree.selection().isEmpty() || copyAction == null) {
             return false;
@@ -879,7 +765,9 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
         return true;
     }
 
-    /** 请求宿主粘贴当前剪贴板；编辑器不可用或未装配入口时返回 false。 */
+    /**
+     * 请求宿主粘贴当前剪贴板；编辑器不可用或未装配入口时返回 false。
+     */
     public boolean pasteSelection() {
         if (!isEnabled() || pasteAction == null) {
             return false;
@@ -982,12 +870,14 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
         return transform.scalePercent();
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void setBounds(int x, int y, int width, int height) {
         shell.setBounds(x, y, width, height);
         transform.setViewport(bounds().x(), bounds().y(), bounds().width(), bounds().height());
-        picker.setBounds(bounds());
+        menus.picker.setBounds(bounds());
         inlinePanel.setBounds(bounds());
     }
 
@@ -1024,8 +914,8 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
             nodes.add(new UiLayoutNode(UiLayoutNode.Kind.CONTROL, toScreenRect(hotspot), emptyMessage,
                     font.width(emptyMessage), titleBudget(hotspot), isEnabled(), true, List.of()));
         }
-        if (picker.isOpen()) {
-            nodes.addAll(picker.layoutNodes());
+        if (menus.picker.isOpen()) {
+            nodes.addAll(menus.picker.layoutNodes());
         }
         return nodes;
     }
@@ -1040,12 +930,18 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
                 Component.literal(title), titleWidth, titleBudget(content), isEnabled(), true, List.of()));
     }
 
-    /** 禁用时结束当前交互，复合控件同步子目标资格。 */
+    /**
+     * 禁用时结束当前交互，复合控件同步子目标资格。
+     */
     public void setEnabled(boolean nextEnabled) {
+        if (isEnabled() == nextEnabled) return;
         shell.setEnabled(nextEnabled);
+        viewChanged();
     }
 
-    /** 隐藏时结束当前交互并退出焦点序列，恢复显示保留内容。 */
+    /**
+     * 隐藏时结束当前交互并退出焦点序列，恢复显示保留内容。
+     */
     public UiConditionGraphEditor setVisible(boolean nextVisible) {
         shell.setVisible(nextVisible);
         return this;
@@ -1062,7 +958,7 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
         followPrimarySelection();
         inlinePanel.validateAnchor();
         if (!viewInitialized || root == null && previousRoot != null) {
-            // 视口尺寸在下一帧渲染时可用，届时适配完整源物品到结果链路。
+            // 首次准备拿到视口后适配完整源物品到结果链路。
             centerEmptyView = true;
         }
         viewInitialized = true;
@@ -1093,25 +989,49 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
      * 当前手势或默认快捷键提示，供宿主底部状态栏展示。
      */
     public Component hint() {
-        if (move.isActive()) {
-            UiTreeEditor.MovePreview<ConditionNode> preview = move.preview();
-            if (preview != null && preview.outcome().error() == null && dropTarget != null) {
+        if (gestures.isMoving()) {
+            UiTreeEditor.MovePreview<ConditionNode> preview = gestures.preview();
+            if (preview != null && preview.outcome().error() == null && gestures.dropTarget() != null) {
                 return Component.translatable(TypeLabels.UI_PREFIX + "tree.drop_"
-                        + preview.position().name().toLowerCase(Locale.ROOT), graph.titleLabel(dropTarget));
+                        + preview.position().name().toLowerCase(Locale.ROOT), graph.titleLabel(gestures.dropTarget()));
             }
             if (operationError != null) {
                 return operationError;
             }
         }
-        if (picker.isOpen()) {
+        if (menus.picker.isOpen()) {
             return Component.translatable(TypeLabels.UI_PREFIX + "picker.hint");
         }
         return Component.translatable(TypeLabels.UI_PREFIX + "tree.selection_hint");
     }
 
+    /**
+     * 先确定视口与侧面板几何，绘制、命中和布局导出消费同一份结果。
+     */
+    public void prepareUi() {
+        if (bounds().width() <= 0 || bounds().height() <= 0) return;
+        if (centerEmptyView) {
+            centerEmptyView = false;
+            fitToContent();
+        }
+        menus.picker.advanceAnimation();
+        menus.picker.setBounds(bounds());
+        inlinePanel.prepareUi();
+        prepareMenus();
+    }
+
+    /**
+     * 按结构地址读取节点；返回只读模型，不暴露 Kit 的编辑能力。
+     */
+    public @Nullable ConditionNode nodeAt(UiTreePath path) {
+        return graph.nodeAtPath(path);
+    }
+
     // ---- 渲染 ----
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void render(GuiGraphics graphics, Font renderFont, UiPointer incomingPointer) {
         UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
@@ -1120,20 +1040,15 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
         if (!isVisible() || bounds().width() <= 0 || bounds().height() <= 0) {
             return;
         }
-        transform.setViewport(bounds().x(), bounds().y(), bounds().width(), bounds().height());
-        if (centerEmptyView) {
-            centerEmptyView = false;
-            fitToContent();
-        }
         UiRect viewport = transform.viewport();
         boolean inside = pointer.contains(bounds());
         boolean emptyTree = expression.root() == null;
         double localX = transform.toLocalX(mouseX);
         double localY = transform.toLocalY(mouseY);
         boolean overPanel = pointer.allowed() && inlinePanel.contains(pointer.x(), pointer.y());
-        ConditionNode hoveredNode = !picker.isOpen() && !kindMenuOpen && !overPanel && inside ? graph.nodeAt(localX, localY) : null;
+        ConditionNode hoveredNode = !menus.picker.isOpen() && !menus.kindMenuOpen && !overPanel && inside ? graph.nodeAt(localX, localY) : null;
         // 空树空闲态也要亮出中央大 [+]，让人一眼看出这里可以点
-        Hotspot hoveredHotspot = !picker.isOpen() && !kindMenuOpen && !overPanel && inside
+        Hotspot hoveredHotspot = !menus.picker.isOpen() && !menus.kindMenuOpen && !overPanel && inside
                 ? graph.hotspotAt(localX, localY) : null;
 
         renderer.drawCanvasBackground(graphics, bounds());
@@ -1144,11 +1059,9 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
             renderer.drawLinks(graphics, tree.selection());
             renderer.drawCards(graphics, renderFont, tree.selection(), hoveredNode);
             renderer.drawHotspots(graphics, hoveredHotspot);
-            if (rubberActive) {
-                rubberBand.draw(graphics, theme.palette().canvas().canvasRubberFill(), theme.palette().canvas().canvasAccent());
-            }
-            if (move.isActive()) {
-                renderer.drawDropMarker(graphics, move.preview(), dropTarget);
+            gestures.drawRubberBand(graphics, theme.palette().canvas().canvasRubberFill(), theme.palette().canvas().canvasAccent());
+            if (gestures.isMoving()) {
+                renderer.drawDropMarker(graphics, gestures.preview(), gestures.dropTarget());
             }
         } finally {
             graphics.pose().popPose();
@@ -1157,24 +1070,20 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
         if (emptyTree) {
             renderer.drawEmptyMessage(graphics, renderFont, viewport, transform, emptyMessage);
         }
-        if (!picker.isOpen() && !kindMenuOpen) {
+        if (!menus.picker.isOpen() && !menus.kindMenuOpen) {
             shell.renderFocusOutline(graphics, bounds(), theme);
         }
-        if (move.isActive()) {
-            renderer.drawDragGhost(graphics, renderFont, bounds(), dragLabel, mouseX, mouseY);
+        if (gestures.isMoving()) {
+            renderer.drawDragGhost(graphics, renderFont, bounds(), gestures.dragLabel(), mouseX, mouseY);
         }
-        if (!picker.isOpen()) {
+        if (!menus.picker.isOpen()) {
             inlinePanel.render(graphics, renderFont, pointer);
         }
-        if (picker.isOpen()) {
-            picker.advanceAnimation();
-            picker.setBounds(bounds());
-            picker.render(graphics, renderFont, pointer);
+        if (menus.picker.isOpen()) {
+            menus.picker.render(graphics, renderFont, pointer);
         }
-        if (kindMenuOpen) {
-            updateKindMenuRect();
-            if (pointer.allowed()) updateKindMenuHover(mouseX, mouseY);
-            renderKindMenu(graphics, renderFont);
+        if (menus.kindMenuOpen) {
+            menus.render(graphics, renderFont, pointer);
         }
     }
 
@@ -1183,19 +1092,21 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
     /**
      * 装载条件叶参数表单；null 表单或路径表示收起面板。
      */
-    public void setInlineEditor(@Nullable InlineEditor editor, @Nullable UiTreePath anchorPath) {
-        inlinePanel.mount(editor, anchorPath);
+    public void setInlineEditor(@Nullable InlineEditor editor) {
+        inlinePanel.mount(editor, tree.selected());
+        viewChanged();
     }
 
     /**
-     * 向右收起参数面板，动画结束后释放表单。
+     * 结束参数编辑并向右收起面板；关闭动画期间只保留呈现。
      */
     public void clearInlineEditor() {
         inlinePanel.close();
+        viewChanged();
     }
 
     /**
-     * 是否已装载参数表单，含关闭动画期间。
+     * 参数面板是否仍接受编辑；关闭动画期间为 false。
      */
     public boolean isInlineEditorOpen() {
         return inlinePanel.isOpen();
@@ -1203,60 +1114,11 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
 
     // ---- 分组方式小菜单 ----
 
-    private void closeKindMenu() {
-        kindMenuOpen = false;
-        kindMenuAnchor = null;
-        kindMenuEntries = List.of();
-        kindMenuIndex = 0;
-        kindMenuPointerKnown = false;
-    }
-
-    // 菜单几何为屏幕坐标：优先放在锚点右侧，放不下改为左侧，并整体夹在画布内
-    private void updateKindMenuRect() {
-        if (!kindMenuOpen || bounds().width() <= 0 || bounds().height() <= 0) {
-            return;
-        }
-        UiRect anchor = kindMenuAnchorRect();
-        if (anchor == null) {
-            closeKindMenu();
-            kindMenuRect = new UiRect(0, 0, 0, 0);
-            return;
-        }
-        if (kindMenuEntries.isEmpty()) {
-            closeKindMenu();
-            kindMenuRect = new UiRect(0, 0, 0, 0);
-            return;
-        }
-        int rowCount = kindMenuEntries.size();
-        int width = KIND_MENU_MIN_WIDTH;
-        for (KindMenuEntry entry : kindMenuEntries) {
-            width = Math.max(width, font.width(entry.label().getString()) + KIND_MENU_PADDING * 2 + BORDER * 2);
-        }
-        int maxWidth = Math.max(1, bounds().width() - KIND_MENU_PADDING);
-        width = Math.min(width, maxWidth);
-        int height = Math.min(rowCount * KIND_MENU_ROW_HEIGHT + BORDER * 2, bounds().height());
-        int x = anchor.right() + KIND_MENU_GAP;
-        if (x + width > bounds().right()) {
-            x = anchor.x() - KIND_MENU_GAP - width;
-        }
-        x = Math.clamp(x, bounds().x(), Math.max(bounds().x(), bounds().right() - width));
-        int y = Math.clamp(anchor.y(), bounds().y(), Math.max(bounds().y(), bounds().bottom() - height));
-        kindMenuRect = new UiRect(x, y, width, height);
-        // 视口过矮时按可用高度裁掉列表区：行高不变，只显示画得下的行
-        int availableListHeight = height - BORDER * 2;
-        int listHeight = availableListHeight <= 0 ? 0
-                : Math.min(rowCount * KIND_MENU_ROW_HEIGHT, availableListHeight);
-        kindMenuListRect = new UiRect(x + BORDER, y + BORDER, Math.max(0, width - BORDER * 2), listHeight);
-    }
-
-    private @Nullable UiRect kindMenuAnchorRect() {
-        // 工具栏触发（新建分支、删除确认）贴着工具格弹出；包组与键盘删除贴着选区里树序最靠前的卡片弹出
-        if (kindMenuAnchor != null) {
-            return kindMenuAnchor;
-        }
+    private void prepareMenus() {
+        if (!menus.kindMenuOpen) return;
         ConditionNode first = firstSelectedInOrder();
         UiRect rect = first == null ? null : graph.rect(first);
-        return rect == null ? null : toScreenRect(rect);
+        menus.prepare(bounds(), rect == null ? null : toScreenRect(rect));
     }
 
     private UiRect toScreenRect(UiRect content) {
@@ -1278,88 +1140,8 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
         return null;
     }
 
-    private void renderKindMenu(GuiGraphics graphics, Font renderFont) {
-        if (!kindMenuOpen || kindMenuRect.width() <= 0 || kindMenuRect.height() <= 0) {
-            return;
-        }
-        graphics.fill(kindMenuRect.x(), kindMenuRect.y(), kindMenuRect.right(), kindMenuRect.bottom(),
-                theme.palette().canvas().canvasPickerFill());
-        drawBorder(graphics, kindMenuRect, theme.palette().canvas().canvasPickerBorder());
-        for (int index = 0; index < kindMenuEntries.size(); index++) {
-            int rowY = kindMenuRect.y() + BORDER + index * KIND_MENU_ROW_HEIGHT;
-            boolean current = index == Math.clamp(kindMenuIndex, 0, kindMenuEntries.size() - 1);
-            if (current) {
-                graphics.fill(kindMenuRect.x() + BORDER, rowY, kindMenuRect.right() - BORDER,
-                        rowY + KIND_MENU_ROW_HEIGHT, theme.palette().canvas().canvasPickerRowSelected());
-            }
-            graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont,
-                            kindMenuEntries.get(index).label().getString(),
-                            Math.max(0, kindMenuRect.width() - KIND_MENU_PADDING * 2)),
-                    kindMenuRect.x() + KIND_MENU_PADDING,
-                    rowY + (KIND_MENU_ROW_HEIGHT - renderFont.lineHeight) / 2,
-                    current ? theme.palette().canvas().canvasPickerText() : theme.palette().canvas().canvasPickerTextMuted(), false);
-        }
-    }
-
-    private void handleKindMenuClick(double mouseX, double mouseY) {
-        int index = kindMenuIndexAt(mouseX, mouseY);
-        if (index >= 0) {
-            kindMenuIndex = index;
-            confirmKindMenu();
-            return;
-        }
-        if (!kindMenuRect.contains(mouseX, mouseY)) {
-            closeKindMenu();
-        }
-    }
-
-    private int kindMenuIndexAt(double mouseX, double mouseY) {
-        if (!kindMenuListRect.contains(mouseX, mouseY)) {
-            return -1;
-        }
-        int row = (int) ((mouseY - kindMenuListRect.y()) / Math.max(1, KIND_MENU_ROW_HEIGHT));
-        return row >= 0 && row < kindMenuEntries.size() ? row : -1;
-    }
-
-    // 弹层高亮跟随指针：指针停在列表里时悬停行即时高亮，移出列表则保留键盘选中的行
-    private void updateKindMenuHover(int mouseX, int mouseY) {
-        boolean moved = !kindMenuPointerKnown || mouseX != kindMenuLastMouseX || mouseY != kindMenuLastMouseY;
-        kindMenuPointerKnown = true;
-        kindMenuLastMouseX = mouseX;
-        kindMenuLastMouseY = mouseY;
-        if (!moved) {
-            return;
-        }
-        int index = kindMenuIndexAt(mouseX, mouseY);
-        if (index >= 0) {
-            kindMenuIndex = index;
-        }
-    }
-
-    // 键盘：←/→ 或 ↑/↓ 切换，回车确认，Esc 取消
-    private void kindMenuKeyPressed(int keyCode) {
-        if (kindMenuEntries.isEmpty()) {
-            closeKindMenu();
-            return;
-        }
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
-            closeKindMenu();
-        } else if (keyCode == GLFW.GLFW_KEY_LEFT || keyCode == GLFW.GLFW_KEY_UP) {
-            kindMenuIndex = Math.max(0, kindMenuIndex - 1);
-        } else if (keyCode == GLFW.GLFW_KEY_RIGHT || keyCode == GLFW.GLFW_KEY_DOWN) {
-            kindMenuIndex = Math.min(kindMenuEntries.size() - 1, kindMenuIndex + 1);
-        } else if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
-            confirmKindMenu();
-        }
-    }
-
     // 确认弹层选项：分组方式插入分支或包住选区，删除确认决定删除范围
-    private void confirmKindMenu() {
-        if (!kindMenuOpen || kindMenuEntries.isEmpty()) {
-            return;
-        }
-        KindMenuAction action = kindMenuEntries.get(Math.clamp(kindMenuIndex, 0, kindMenuEntries.size() - 1)).action();
-        closeKindMenu();
+    private void confirmKindMenu(KindMenuAction action) {
         switch (action) {
             case WRAP_ALL -> wrapSelection(true);
             case WRAP_ANY -> wrapSelection(false);
@@ -1384,7 +1166,9 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
         openPicker(new Hotspot(groupPath, 0, bounds()));
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean mousePressed(UiInputContext context) {
         double mouseX = context.pointerX();
@@ -1393,12 +1177,12 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
         if (!isVisible() || !isEnabled()) {
             return false;
         }
-        if (picker.isOpen()) {
-            picker.mousePressed(context);
+        if (menus.picker.isOpen()) {
+            menus.picker.mousePressed(context);
             return true;
         }
-        if (kindMenuOpen) {
-            handleKindMenuClick(mouseX, mouseY);
+        if (menus.kindMenuOpen) {
+            menus.mousePressed(mouseX, mouseY);
             return true;
         }
         if (!bounds().contains(mouseX, mouseY)) return false;
@@ -1409,275 +1193,41 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
         }
         if (button != GLFW.GLFW_MOUSE_BUTTON_LEFT && button != GLFW.GLFW_MOUSE_BUTTON_MIDDLE) return false;
 
-        interaction = context.scope().interaction();
-        interaction.begin(this, UiInteractionSession.Source.POINTER, button);
-        // 中键与「空格 + 左键」是附加平移手势；空白区左键本身也能平移
-        if (button == GLFW.GLFW_MOUSE_BUTTON_MIDDLE || spaceDown) {
-            beginPan(mouseX, mouseY, false);
-            return true;
-        }
-        endGestureForNewPress();
-        double localX = transform.toLocalX(mouseX);
-        double localY = transform.toLocalY(mouseY);
-        // 每个容器卡片下方的 [+] 热区都是新增条件的入口，点它就弹类型列表
-        Hotspot hotspot = graph.hotspotAt(localX, localY);
-        if (hotspot != null) {
-            openPicker(hotspot);
-            return true;
-        }
-        ConditionNode node = graph.nodeAt(localX, localY);
-        if (node == null) {
-            // 空白区左键拖拽 = 平移；框选改到 Shift + 拖拽
-            if (Screen.hasShiftDown()) {
-                beginRubberBand(localX, localY);
-                return true;
-            }
-            beginPan(mouseX, mouseY, true);
-            return true;
-        }
-        UiTreePath clicked = graph.path(node);
-        if (clicked == null) {
-            return true;
-        }
-        boolean control = Screen.hasControlDown();
-        boolean shift = Screen.hasShiftDown();
-        boolean alreadySelected = tree.selection().size() == 1 && clicked.equals(tree.selected());
-        if (shift) {
-            selectRange(clicked, control);
-        } else if (control) {
-            tree.toggleSelection(clicked);
-            selectionAnchor = clicked;
-        } else if (tree.selection().contains(clicked)) {
-            collapseSelectionOnRelease = tree.selection().size() > 1;
-            tree.setSelection(tree.selection(), clicked);
-            selectionAnchor = clicked;
-        } else {
-            tree.select(clicked);
-            selectionAnchor = clicked;
-        }
-        followPrimarySelection();
-        if (!control && !shift && node instanceof ConditionNode.Leaf) {
-            clickedLeafPath = clicked;
-            leafEditArmed = alreadySelected;
-        }
-        pressScreenX = mouseX;
-        pressScreenY = mouseY;
-        // 根节点没有同级位置，不能拖动
-        if (!clicked.indices().isEmpty()) {
-            armedDrag = clicked;
-        }
+        gestures.mousePressed(context, this);
         return true;
     }
 
-    private void endGestureForNewPress() {
-        armedDrag = null;
-        clickedLeafPath = null;
-        leafEditArmed = false;
-        collapseSelectionOnRelease = false;
-        dragLabel = null;
-        dropTarget = null;
-        if (move.isActive()) {
-            move.end(UiInteractionSession.EndReason.CANCEL);
-        }
-    }
-
-    private void selectRange(UiTreePath clicked, boolean additive) {
-        ConditionNode anchorNode = selectionAnchor == null ? null : tree.query(selectionAnchor);
-        int anchorIndex = anchorNode == null ? -1 : graph.indexOfNode(anchorNode);
-        ConditionNode clickedNode = tree.query(clicked);
-        int clickedIndex = clickedNode == null ? -1 : graph.indexOfNode(clickedNode);
-        if (anchorIndex < 0 || clickedIndex < 0) {
-            tree.select(clicked);
-            selectionAnchor = clicked;
-            followPrimarySelection();
-            return;
-        }
-        Set<UiTreePath> selected = new LinkedHashSet<>(additive ? tree.selection() : Set.of());
-        for (int index = Math.min(anchorIndex, clickedIndex); index <= Math.max(anchorIndex, clickedIndex); index++) {
-            selected.add(graph.path(graph.nodes().get(index)));
-        }
-        selected.remove(null);
-        tree.setSelection(selected, clicked);
-    }
-
-    // 开始平移；blankCandidate 表示这次按下落在空白区，释放时没有位移就按点击处理
-    private void beginPan(double screenX, double screenY, boolean blankCandidate) {
-        panning = true;
-        panPressedBlank = blankCandidate;
-        panMoved = false;
-        panTravel = 0.0D;
-        panLastX = screenX;
-        panLastY = screenY;
-    }
-
-    private void beginRubberBand(double localX, double localY) {
-        boolean additive = Screen.hasControlDown();
-        rubberBase = additive ? tree.selection() : Set.of();
-        rubberActive = true;
-        rubberBand.begin(localX, localY);
-        if (!additive) {
-            tree.setSelection(List.of(), null);
-            followPrimarySelection();
-        }
-    }
-
-    private void finishRubberBand() {
-        if (rubberBand.active()) {
-            Set<UiTreePath> selected = new LinkedHashSet<>(rubberBase);
-            for (ConditionNode node : graph.nodes()) {
-                UiRect rect = graph.rect(node);
-                if (rect == null) {
-                    continue;
-                }
-                if (rubberBand.intersects(rect.x(), rect.y(), rect.width(), rect.height())) {
-                    selected.add(graph.path(node));
-                }
-            }
-            selected.remove(null);
-            tree.setSelection(selected, tree.selected());
-            followPrimarySelection();
-        }
-        rubberActive = false;
-        rubberBand.clear();
-    }
-
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean mouseDragged(UiInputContext context, double deltaX, double deltaY) {
-        double mouseX = context.pointerX();
         double mouseY = context.pointerY();
         int button = context.button();
         if (!isVisible() || !isEnabled()) {
             return false;
         }
-        if (picker.isOpen()) {
-            picker.mouseDragged(mouseY, button);
+        if (menus.picker.isOpen()) {
+            menus.picker.mouseDragged(mouseY, button);
             return true;
         }
-        if (panning) {
-            double stepX = mouseX - panLastX;
-            double stepY = mouseY - panLastY;
-            transform.panBy(stepX, stepY);
-            panLastX = mouseX;
-            panLastY = mouseY;
-            panTravel += Math.hypot(stepX, stepY);
-            if (panTravel >= DRAG_START_DISTANCE) {
-                panMoved = true;
-            }
-            return true;
-        }
-        double localX = transform.toLocalX(mouseX);
-        double localY = transform.toLocalY(mouseY);
-        if (rubberActive) {
-            rubberBand.update(localX, localY);
-            return true;
-        }
-        if (button != GLFW.GLFW_MOUSE_BUTTON_LEFT) {
-            return false;
-        }
-        UiTreePath source = armedDrag;
-        if (!move.isActive() && source != null
-                && Math.hypot(mouseX - pressScreenX, mouseY - pressScreenY) >= DRAG_START_DISTANCE) {
-            List<UiTreePath> sources = tree.normalizedSelection();
-            if (sources.isEmpty()) {
-                sources = List.of(source);
-            }
-            if (move.begin(sources)) {
-                collapseSelectionOnRelease = false;
-                ConditionNode node = tree.query(source);
-                dragLabel = sources.size() > 1
-                        ? Component.translatable(TypeLabels.UI_PREFIX + "tree.drag_many", sources.size()).getString()
-                        : node == null ? "" : graph.titleLabel(node).getString();
-            }
-        }
-        if (!move.isActive()) {
-            return source != null;
-        }
-        projectDrop(localX, localY);
-        return true;
-    }
-
-    // 落点判定：卡片上四分之一为 BEFORE、下四分之一为 AFTER，中间为 INSIDE；叶节点按上下半区择近。
-    private void projectDrop(double localX, double localY) {
-        ConditionNode target = graph.nodeAt(localX, localY);
-        if (target == null) {
-            dropTarget = null;
-            move.clearPreview();
-            operationError = null;
-            return;
-        }
-        UiRect rect = graph.rect(target);
-        UiTreePath targetPath = graph.path(target);
-        if (rect == null || targetPath == null) {
-            return;
-        }
-        double within = localY - rect.y();
-        int edge = Math.max(1, CARD_HEIGHT / DROP_EDGE_DIVISOR);
-        UiTreeEditor.DropPosition position;
-        if (isContainer(target) && ConditionTreeNodes.INSTANCE.children(target).isEmpty()) {
-            position = UiTreeEditor.DropPosition.INSIDE;
-        } else if (within < edge) {
-            position = UiTreeEditor.DropPosition.BEFORE;
-        } else if (within >= CARD_HEIGHT - edge) {
-            position = UiTreeEditor.DropPosition.AFTER;
-        } else if (ConditionTreeNodes.INSTANCE.childCapacity(target) > 0) {
-            position = UiTreeEditor.DropPosition.INSIDE;
-        } else {
-            position = within < CARD_HEIGHT / 2.0 ? UiTreeEditor.DropPosition.BEFORE : UiTreeEditor.DropPosition.AFTER;
-        }
-        dropTarget = target;
-        UiTreeEditor.MovePreview<ConditionNode> preview = move.preview(targetPath, position);
-        operationError = preview == null ? null : preview.outcome().error();
+        return gestures.mouseDragged(context);
     }
 
     @Override
     public boolean mouseReleased(UiInputContext context) {
-        double mouseX = context.pointerX();
-        double mouseY = context.pointerY();
         int button = context.button();
-        if (picker.isOpen()) {
-            picker.mouseReleased(button);
+        if (menus.picker.isOpen()) {
+            menus.picker.mouseReleased(button);
             return true;
         }
-        if (panning) {
-            // 空白区按下并拖动才算平移；没有位移时按空白点击处理：清空选择
-            boolean blankClick = panPressedBlank && !panMoved;
-            clearPanState();
-            if (blankClick) {
-                tree.setSelection(List.of(), null);
-                followPrimarySelection();
-            }
-            return true;
-        }
-        if (rubberActive) {
-            finishRubberBand();
-            return true;
-        }
-        boolean owned = armedDrag != null || clickedLeafPath != null || move.isActive();
-        boolean left = button == GLFW.GLFW_MOUSE_BUTTON_LEFT;
-        boolean editLeaf = left && leafEditArmed && !move.isActive() && clickedLeafPath != null
-                && Math.hypot(mouseX - pressScreenX, mouseY - pressScreenY) < DRAG_START_DISTANCE
-                && clickedLeafPath.equals(tree.selected())
-                && tree.query(clickedLeafPath) == graph.nodeAt(transform.toLocalX(mouseX), transform.toLocalY(mouseY));
-        if (!move.isActive() && collapseSelectionOnRelease && left) {
-            tree.select(tree.selected());
-            followPrimarySelection();
-        }
-        collapseSelectionOnRelease = false;
-        if (move.isActive() && left) {
-            projectDrop(transform.toLocalX(mouseX), transform.toLocalY(mouseY));
-            lastOpKey = EditSession.OP_MOVE_NODE;
-            move.end(UiInteractionSession.EndReason.RELEASE);
-        }
-        armedDrag = null;
-        clickedLeafPath = null;
-        leafEditArmed = false;
-        dropTarget = null;
-        if (editLeaf) editSelectedLeaf();
-        return owned;
+        lastOpKey = EditSession.OP_MOVE_NODE;
+        return gestures.mouseReleased(context);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
         double mouseX = context.pointerX();
@@ -1685,14 +1235,12 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
         if (!isVisible() || !isEnabled() || !bounds().contains(mouseX, mouseY) || scrollY == 0.0D) {
             return false;
         }
-        if (picker.isOpen()) {
-            picker.mouseScrolled(mouseX, mouseY, scrollY);
+        if (menus.picker.isOpen()) {
+            menus.picker.mouseScrolled(mouseX, mouseY, scrollY);
             return true;
         }
-        if (kindMenuOpen) {
-            if (!kindMenuEntries.isEmpty()) {
-                kindMenuIndex = Math.clamp(kindMenuIndex + (scrollY > 0.0D ? -1 : 1), 0, kindMenuEntries.size() - 1);
-            }
+        if (menus.kindMenuOpen) {
+            menus.scroll(scrollY);
             return true;
         }
         if (inlinePanel.contains(mouseX, mouseY)) {
@@ -1704,21 +1252,23 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
         return true;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         if (!isVisible() || !isEnabled()) {
             return false;
         }
-        if (picker.isOpen()) {
-            picker.keyPressed(keyCode);
+        if (menus.picker.isOpen()) {
+            menus.picker.keyPressed(keyCode);
             return true;
         }
-        if (kindMenuOpen) {
-            kindMenuKeyPressed(keyCode);
+        if (menus.kindMenuOpen) {
+            menus.keyPressed(keyCode);
             return true;
         }
-        if (move.isActive()) {
+        if (gestures.isMoving()) {
             if (UiHistoryShortcut.fromKey(keyCode, modifiers) != null || keyCode == GLFW.GLFW_KEY_ESCAPE) {
                 endInteractions(UiInteractionSession.EndReason.CANCEL);
                 return true;
@@ -1736,8 +1286,8 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
         boolean shift = (modifiers & GLFW.GLFW_MOD_SHIFT) != 0;
         boolean alt = (modifiers & GLFW.GLFW_MOD_ALT) != 0;
         if (control) {
-            if (shift && keyCode == GLFW.GLFW_KEY_UP) return extendSelection(-1);
-            if (shift && keyCode == GLFW.GLFW_KEY_DOWN) return extendSelection(1);
+            if (shift && keyCode == GLFW.GLFW_KEY_UP) return gestures.extendSelection(-1);
+            if (shift && keyCode == GLFW.GLFW_KEY_DOWN) return gestures.extendSelection(1);
             if (keyCode == GLFW.GLFW_KEY_A) return selectAll();
             if (keyCode == GLFW.GLFW_KEY_C) return copySelection();
             if (keyCode == GLFW.GLFW_KEY_V) return pasteSelection();
@@ -1768,7 +1318,7 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
             return true;
         }
         if (keyCode == GLFW.GLFW_KEY_SPACE) {
-            spaceDown = true;
+            gestures.pressSpace();
             return true;
         }
         if (graph.nodes().isEmpty()) {
@@ -1781,11 +1331,11 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
             }
             return false;
         }
-        if (keyCode == GLFW.GLFW_KEY_HOME) return selectSiblingEdge(false);
-        if (keyCode == GLFW.GLFW_KEY_END) return selectSiblingEdge(true);
+        if (keyCode == GLFW.GLFW_KEY_HOME) return gestures.selectSiblingEdge(false);
+        if (keyCode == GLFW.GLFW_KEY_END) return gestures.selectSiblingEdge(true);
         if (keyCode == GLFW.GLFW_KEY_UP || keyCode == GLFW.GLFW_KEY_DOWN
                 || keyCode == GLFW.GLFW_KEY_LEFT || keyCode == GLFW.GLFW_KEY_RIGHT) {
-            return navigate(keyCode);
+            return gestures.navigate(keyCode);
         }
         if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
             return activate();
@@ -1808,166 +1358,28 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
     @Override
     public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
         if (keyCode == GLFW.GLFW_KEY_SPACE) {
-            spaceDown = false;
+            gestures.releaseSpace();
             return true;
         }
         return false;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
         if (!isVisible() || !isEnabled()) {
             return false;
         }
-        if (picker.isOpen()) {
-            return picker.charTyped(codePoint);
+        if (menus.picker.isOpen()) {
+            return menus.picker.charTyped(codePoint);
         }
-        if (kindMenuOpen) {
+        if (menus.kindMenuOpen) {
             // 弹层只接受方向键与回车，不接受文本输入
             return false;
         }
         return inlinePanel.charTyped(codePoint, modifiers);
-    }
-
-    // ---- 键盘导航 ----
-
-    private boolean navigate(int keyCode) {
-        UiTreePath selected = tree.selected();
-        if (selected == null) {
-            if (graph.nodes().isEmpty()) {
-                return false;
-            }
-            return selectNode(graph.nodes().getFirst());
-        }
-        ConditionNode node = tree.query(selected);
-        if (node == null) {
-            return false;
-        }
-        UiTreePath next;
-        if (keyCode == GLFW.GLFW_KEY_UP) {
-            next = selected.indices().isEmpty() ? null : selected.parent();
-        } else if (keyCode == GLFW.GLFW_KEY_LEFT) {
-            next = siblingPath(selected, -1);
-        } else if (keyCode == GLFW.GLFW_KEY_RIGHT) {
-            next = siblingPath(selected, 1);
-        } else {
-            List<ConditionNode> children = ConditionTreeNodes.INSTANCE.children(node);
-            if (!children.isEmpty()) {
-                next = selected.child(0);
-            } else {
-                int index = graph.indexOfNode(node);
-                next = index >= 0 && index + 1 < graph.nodes().size() ? graph.path(graph.nodes().get(index + 1)) : null;
-            }
-        }
-        if (next == null || tree.query(next) == null) {
-            return true;
-        }
-        return selectNode(Objects.requireNonNull(tree.query(next)));
-    }
-
-    private @Nullable UiTreePath siblingPath(UiTreePath path, int delta) {
-        if (path.indices().isEmpty()) {
-            return null;
-        }
-        int index = path.indices().getLast() + delta;
-        if (index < 0) {
-            return null;
-        }
-        UiTreePath candidate = path.parent().child(index);
-        return tree.query(candidate) == null ? null : candidate;
-    }
-
-    // Home / End：跳到同父首尾；无选中时跳到全树首尾
-    private boolean selectSiblingEdge(boolean last) {
-        if (graph.nodes().isEmpty()) {
-            return false;
-        }
-        UiTreePath selected = tree.selected();
-        if (selected == null) {
-            return selectNode(graph.nodes().get(last ? graph.nodes().size() - 1 : 0));
-        }
-        if (selected.indices().isEmpty()) {
-            return false;
-        }
-        List<ConditionNode> terms = termsOf(tree.query(selected.parent()));
-        if (terms == null || terms.isEmpty()) {
-            return false;
-        }
-        return selectNode(terms.get(last ? terms.size() - 1 : 0));
-    }
-
-    // Ctrl+Shift+↑/↓：以锚点为起点，按树序扩展或收缩选区
-    private boolean extendSelection(int step) {
-        if (graph.nodes().isEmpty()) {
-            return false;
-        }
-        if (selectionAnchor == null) {
-            selectionAnchor = tree.selected();
-        }
-        if (selectionAnchor == null) {
-            return false;
-        }
-        ConditionNode anchorNode = tree.query(selectionAnchor);
-        if (anchorNode == null) {
-            return false;
-        }
-        UiTreePath focusedPath = tree.selected();
-        ConditionNode focusedNode = focusedPath == null ? anchorNode : tree.query(focusedPath);
-        int focusIndex = graph.indexOfNode(focusedNode == null ? anchorNode : focusedNode);
-        if (focusIndex < 0) {
-            return false;
-        }
-        int target = Math.clamp(focusIndex + step, 0, graph.nodes().size() - 1);
-        if (target == focusIndex) {
-            return true;
-        }
-        UiTreePath targetPath = graph.path(graph.nodes().get(target));
-        if (targetPath == null) {
-            return false;
-        }
-        selectRange(targetPath, true);
-        return true;
-    }
-
-    private boolean selectNode(ConditionNode node) {
-        UiTreePath path = graph.path(node);
-        if (path == null) {
-            return false;
-        }
-        tree.select(path);
-        selectionAnchor = path;
-        followPrimarySelection();
-        revealNode(node);
-        return true;
-    }
-
-    // 把卡片带进视口，保留 REVEAL_MARGIN 屏幕像素边距
-    private void revealNode(ConditionNode node) {
-        UiRect rect = graph.rect(node);
-        if (rect == null) {
-            return;
-        }
-        UiRect viewport = transform.viewport();
-        double left = transform.toScreenX(rect.x());
-        double top = transform.toScreenY(rect.y());
-        double right = transform.toScreenX(rect.right());
-        double bottom = transform.toScreenY(rect.bottom());
-        double panX = 0;
-        double panY = 0;
-        if (left < viewport.x() + REVEAL_MARGIN) {
-            panX = viewport.x() + REVEAL_MARGIN - left;
-        } else if (right > viewport.right() - REVEAL_MARGIN) {
-            panX = viewport.right() - REVEAL_MARGIN - right;
-        }
-        if (top < viewport.y() + REVEAL_MARGIN) {
-            panY = viewport.y() + REVEAL_MARGIN - top;
-        } else if (bottom > viewport.bottom() - REVEAL_MARGIN) {
-            panY = viewport.bottom() - REVEAL_MARGIN - bottom;
-        }
-        if (panX != 0 || panY != 0) {
-            transform.panBy(panX, panY);
-        }
     }
 
     // ---- 类型选择确认与树写入 ----
@@ -1977,22 +1389,20 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
     }
 
     private void openPicker(Hotspot hotspot) {
-        closeKindMenu();
-        pickerAppend = false;
-        pickerParent = hotspot.parent();
-        pickerIndex = hotspot.index();
-        picker.open(pickerOptions(), bounds());
+        menus.openPicker(hotspot, pickerOptions(), bounds());
     }
 
+    /**
+     * 取消类型选择，不提交条件。
+     */
     public void closePicker() {
-        picker.close();
-        pickerParent = null;
+        menus.closePicker();
     }
 
     private void confirmPicker(ResourceLocation type) {
-        UiTreePath parent = pickerParent;
-        int index = pickerIndex;
-        boolean append = pickerAppend;
+        UiTreePath parent = menus.pickerParent;
+        int index = menus.pickerIndex;
+        boolean append = menus.pickerAppend;
         closePicker();
         ConditionTreeContract.LeafFactory factory = leafFactory;
         if (factory == null) return;
@@ -2001,7 +1411,7 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
         lastOpKey = EditSession.OP_ADD_CONDITION;
         boolean inserted = append ? addNode(leaf) : insertNode(parent, index, leaf);
         if (inserted) {
-            revealNode(leaf);
+            gestures.revealNode(leaf);
             // 新条件尚无参数，直接打开参数框，省去再点一次叶卡片
             editSelectedLeaf();
         }
@@ -2011,11 +1421,8 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
 
     private void applyNode(@Nullable ConditionNode newRoot) {
         this.expression = new ConditionExpression(newRoot);
-        viewRevision++;
+        viewChanged();
         rebuild();
-        if (listener != null) {
-            listener.onExpressionChanged(this.expression);
-        }
     }
 
     private void followPrimarySelection() {
@@ -2100,7 +1507,7 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
     }
 
     // 取分组子项，非分组返回 null
-    private static @Nullable List<ConditionNode> termsOf(@Nullable ConditionNode node) {
+    static @Nullable List<ConditionNode> termsOf(@Nullable ConditionNode node) {
         if (node instanceof ConditionNode.AllOf(var allTerms)) {
             return allTerms;
         }
@@ -2122,7 +1529,9 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
         return ConditionTreeNodes.INSTANCE.withChildren(node, copy);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean activate() {
         if (!isEnabled()) {
@@ -2142,15 +1551,18 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
     public Component accessibleName() {
         return Component.translatable(TypeLabels.UI_PREFIX + "tree.accessible_name");
     }
-    /** 根据实际子控件解析当前命中。 */
+
+    /**
+     * 根据实际子控件解析当前命中。
+     */
     @Override
     public @Nullable UiPointerHit hitTest(double x, double y) {
         if (!isVisible() || !bounds().contains(x, y)) return null;
-        if (picker.isOpen()) {
-            UiPointerHit hit = picker.hitTest(x, y);
+        if (menus.picker.isOpen()) {
+            UiPointerHit hit = menus.picker.hitTest(x, y);
             return hit == null ? UiPointerHit.leaf(this, x, y).preservingFocus() : hit.within(this);
         }
-        if (kindMenuOpen) {
+        if (menus.kindMenuOpen) {
             return UiPointerHit.leaf(this, x, y).preservingFocus();
         }
         UiPointerHit hit = inlinePanel.hitTest(x, y);

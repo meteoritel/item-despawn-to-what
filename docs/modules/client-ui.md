@@ -40,7 +40,7 @@ authority: common/client/ui/theme、common/client/ui/widget、common/client/ui/s
 - **主题注入**：`RuleEditorScreen` 选择主主题与画布外壳主题，`EditorShell` 沿页面、分区、表单和弹层装配链传递；嵌套表单继承父主题。具体主题各自持有完整不可变 `UiHostPalette`，默认工厂保持当前配色；树与列表的行高取注入实例。独立 `FormView` 构造可自行选择默认主题。
 - **表单装配**：`FormView` + `FormControl` + `FormControlRegistry`，把类型描述符的字段列表渲染成可滚动的一列控件；`FormField#addAction` 向同一行追加行尾动作按钮，基本信息分区的本服开关与「恢复默认」由此挂到「默认启用」行。
 - **结果页字段层级**：效果参数的主区/高级区由动作顶层 `EditorField` 的层级决定，嵌套字段随所属顶层字段展示；高级折叠状态归结果分区持有。问题定位在表单装配时按所选动作路径下的首个字段确定展开状态，同一次重建完成表单、布局和焦点树更新。
-- **条件树界面**：`ConditionTreeOverlay`（画布页外壳）、`UiConditionGraphEditor`（画布编辑）、`UiConditionTreeSummary`（只读摘要兼入口）、`ConditionTreeContract`（宿主注入契约与选中路径同步）。
+- **条件树界面**：`ConditionTreeOverlay`（画布页外壳）、`UiConditionGraphEditor`（画布编辑）、`UiConditionTreeSummary`（只读摘要兼入口）、`ConditionTreeContract`（共享类型选项、叶工厂与选中路径同步）。
 - **控件与弹窗契约**：`api.control.UiWidget` 提供统一渲染与输入契约；`UiModalStack` 负责层次、遮罩和栈变化通知，每个模态拥有独立输入作用域。
 - **排版快照**：`RuleEditorScreen` 与承载控件的 widget、页面、按钮条实现 kit 的 `UiLayoutSource`，把已排版的控件矩形、文案与文本带宽导出为只读快照，供 GUI 探针断言布局不变量与真实文案；快照不参与绘制与命中，也不触发重排。
 
@@ -130,7 +130,7 @@ flowchart TD
 | `FormControl` / `FormControlRegistry` | 字段控件扩展点 | 一个字段一行，负责装载、纯候选值转换与本地校验；普通工厂接收主题、字体、字段与变更出口，复合控件由 `FormControl.create` 单独装配。枚举控件是单个轮询按钮：当前取值显示在按钮文字里，点击切到下一个候选，候选列表与写入路径只有一份 | 描述符引擎、`EditSession` |
 | `UiHostTheme` / `UiHostThemes` / `AbstractHostTheme` | 主题注入入口 | 调色板、度量、文本色、控件样式、滑块皮肤、结构绘制与图标行号；两套主题逐项相同的宿主度量与外壳原语收在 `AbstractHostTheme`，默认入口给出像素外观，扁平外观由调用方显式取用 | 全部控件与屏幕 |
 | `UiWidget` / `UiModalStack` | 控件与弹窗契约 | 控件共享 `UiInputTarget`；模态栈维护层次与关闭通知，宿主选择顶层模态作用域，历史回调注入该作用域 | `EditorLayers`、`UiInputScope` |
-| `ConditionTreeContract` / `UiConditionGraphEditor` / `UiConditionTreeSummary` / `ConditionTreeOverlay` | 条件树界面家族 | 同一份条件数据与校验的两种展示；契约提供类型选项、叶子工厂、变更监听与选中路径同步 | 条件模型、`FormView`、`ConditionTreeChrome` |
+| `ConditionTreeContract` / `UiConditionGraphEditor` / `UiConditionTreeSummary` / `ConditionTreeOverlay` | 条件树界面家族 | 同一份条件数据与校验的两种展示；共享契约提供类型选项、叶子工厂与定位，画布提供语义动作、只读工具状态与完整结构事件 | 条件模型、`FormView`、`ConditionTreeChrome` |
 | `ConditionTreeProjection` / `ConditionTreeViewModel` / `ConditionTreeLabels` | 条件展示快照 | 字段协调器复用结构与诊断版本；共享标签，画布布局生成几何；相对 JSON 地址由 `ConditionTreeNodes` 解释 | 摘要、画布、条件表单 |
 | `UiTreeView` / `UiTreeNode` | 管理树 | 节点仅承载数据，视图拥有投影及选择折叠；管理页用分类/规则业务 key 恢复重建状态 | kit 树投影、状态与导航 |
 | `PreviewResources` | 资源生命周期所有者 | 世界、语言与模型身份决定资源世代；客户端 tick 观察变化；关屏保留近期 READY 场景，超时或世代变化释放 | `PreviewIcons`、目录名称索引 |
@@ -177,6 +177,14 @@ flowchart LR
 ```
 
 作用域记录按下归属，拖动与持续交互释放直达会话目标；无会话配对释放沿原命中链派发。每个 `FormRow` 稳定持有 `FormRowInput`，字段、picker、action 按绘制顺序登记，命中按逆序选择唯一分支。滚动条在行之上，子树未消费滚轮时由当前表单视口滚动，再交给外层视口。基本信息分区的「默认启用」是这条链路里的普通内容字段；行尾的本服开关与「恢复默认」是动作按钮，不进撤销栈。
+
+### 条件画布与宿主协作
+
+`UiConditionGraphEditor` 拥有唯一 `UiTreeEditor`，工具栏与键盘共用结构动作；`ToolState` 缓存冻结的选择与动作资格，`StructureChange` 直接携带同次操作的 opKey 和完整 Change。`ConditionTreeOverlay` 在一次 `EditSession.apply` 中迁移输入路径并写入完整条件作用域，源码视图直接读取会话已接受原文。`ConditionTreeContract.Navigation` 供摘要与画布共同定位。
+
+包内 `ConditionGraphInteraction` 拥有按下候选、拖动、平移、框选与范围锚点；捕获仍登记在 `UiInteractionSession`，移动基准与预览由 `UiTreeMoveInteraction` 维护。`ConditionGraphMenus` 拥有类型插入目标、确认菜单及其几何。`ConditionGraphLayout`、`ConditionGraphRenderer` 和 `ConditionGraphInlinePanel` 分别负责布局、绘制和内联壳；实际参数表单由 overlay 装配。
+
+`EditorConditionForms` 通过 `UiModal.onPrepare` 接入 `ConditionTreeOverlay.prepareUi`，在输入与布局前处理表单、会话修订回填、选择结算、工具状态和几何。render、hitTest 与布局快照消费已准备结果。正常切换完成合法参数并保留非法原文；历史回填与外层作用域失效沿模态协调直接卸载旧视图。关闭动画只承担呈现与阻断，表单结束编辑后退出输入。
 
 ### 表单装配与页面收尾
 
@@ -299,7 +307,7 @@ resize 保留已有页面、文本控件与编辑会话，只重排几何；单�
 - 必填字段在标签右上角加 `*` 角标；缺值时用红色标签与控件下沿的红色警示线表达。
 - 结果分区的行为列表与右侧详情卡共用一条下界：下界取视口底、左栏整装四条胶囊（含加号）所需高、右卡内容高三者中的最大值，两栏底边始终对齐。列表按「全部条目所需高 + 列表视口内缩」收紧到该下界：条目装得下时不滚动，超出后列表滚动、加号停在列表底边下一按钮间距处且不越过下界内边距。添加入口是方形加号胶囊，图标复用工具列的加号，在列表列内水平居中。某个取值下不再生效的参数直接隐藏该行，不另加说明文字。
 - 条件树的结构与参数编辑只在画布页完成，缩进树保持只读并作为进入画布的入口（[ADR-0031](../adr/0031-condition-tree-single-editor-two-renders.md)）。条件编辑入口统一在触发分区，结果分区只编辑动作自身的参数与共用补充参数（概率、延迟），动作说明也不重复条件行。
-- 条件摘要与画布各自拥有选择和折叠；画布 `UiTreeEditor.ViewChange` 驱动选择展示和参数同步，功能栏、工具列与画布/JSON 区域用 `UiFocusManager` 决定 Tab 顺序。
+- 条件摘要与画布各自拥有选择和折叠；画布把 Kit 视图变化发布为准备通知，宿主在树动作结束后同步参数。功能栏、工具列与画布/JSON 区域用 `UiFocusManager` 决定 Tab 顺序。
 - 文本字段只创建实际使用的单行或多行控件；表单快照与回填依赖 `UiTextValue`。两种控件共用码点接纳与滚动条几何，分别保留原版编辑和历史适配。
 - 画布页与画布内联编辑框使用扁平外观，且只在调用方显式注入时生效（[ADR-0028](../adr/0028-canvas-page-and-flat-skin.md)）。
 - 上行载荷与传输通道收敛在 `client/net`；界面直接使用 `RuleEditClientWorkspace` 的会话、保存和资源值模型；目录、来源、快照与寿命查询走显式请求动作。
