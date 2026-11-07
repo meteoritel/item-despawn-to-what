@@ -20,6 +20,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiNumbers;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderWindow;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
@@ -29,6 +30,8 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiTextInput;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import java.util.function.Function;
 
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -61,6 +64,8 @@ final class NumberControl extends FormControl {
     private static final int GAP = 2;
     // 端点文案与轨道之间的留白：方向名在轨道上方单独成行
     private static final int ENDPOINT_LABEL_GAP = 1;
+    // 图标轮询按钮的胶囊内缩：18x18 实体预览要完整放进 20x20 的按钮
+    private static final int TOGGLE_CHIP_PADDING = 1;
     // 单位提示的本地化 key
     private static final String UNIT_SECONDS = TypeLabels.UI_PREFIX + "unit.seconds";
     private static final String UNIT_LEVEL = TypeLabels.UI_PREFIX + "unit.level";
@@ -70,6 +75,11 @@ final class NumberControl extends FormControl {
     private final UiNumberField numberField;
     private final UiTextInput input;
     private final List<UiButton> presetButtons = new ArrayList<>();
+    // 图标轮询按钮：启用后它单独占据预设按钮位，null 表示仍使用文字预设按钮
+    private @Nullable UiButton presetToggle;
+    private @Nullable Function<RuleValue, UiIcon> presetToggleIcon;
+    // 控件启用状态：装配可能晚于 FormView 的禁用切换
+    private boolean controlEnabled = true;
     private final boolean integerDomain;
     private final boolean percentField;
     private final boolean amplifierField;
@@ -135,10 +145,14 @@ final class NumberControl extends FormControl {
             return parsed == null ? null : parsed.asDecimal(0.0D);
         }, this::displayText, () -> {
             markEdited();
+            // 滑条拖动与精确输入都会走这里：图标跟着当前值走，年龄外观才不会停在旧档
+            refreshPresetToggleIcon(draftValue());
             onChanged.run();
         }, this::markEdited, field.required() ? null : neutralValue(),
                 !field.required() && field.nullable() ? () -> {
                     markEdited();
+                    // 清空取值的控件没有年龄可读，图标交给兜底档
+                    refreshPresetToggleIcon(null);
                     onChanged.run();
                 } : null, new UiNumberField.Metrics(GAP, MIN_SLIDER_WIDTH));
         for (EditorPreset preset : field.presets()) {
@@ -314,7 +328,7 @@ final class NumberControl extends FormControl {
         slider.setTheme(THEME, bodyHeight >= 18 ? UiSliderRole.ROOMY : UiSliderRole.COMPACT);
         int reserved = 0;
         for (UiButton button : presetButtons) {
-            reserved += buttonWidth(button) + GAP;
+            reserved += presetButtonWidth(button, rowHeight) + GAP;
         }
         Component unit = unitLabel();
         int unitWidth = unit.getString().isEmpty() ? 0 : font.width(unit) + GAP;
@@ -335,13 +349,17 @@ final class NumberControl extends FormControl {
             upperLabelBounds = new UiRect(trackLeft + slider.trackWidth() - upperWidth, y,
                     upperWidth, font.lineHeight);
         }
-        // 预设按钮保持默认高度，在轨道行里垂直居中，保证仍可点击
+        // 文字预设按钮保持默认高度、在轨道行里垂直居中；图标轮询按钮取整行高形成正方形
         int buttonY = bodyY + Math.max(0, (bodyHeight - defaultHeight()) / 2);
         int cursor = sliderX + available + GAP;
         for (UiButton button : presetButtons) {
-            int buttonWidth = buttonWidth(button);
-            button.setBounds(cursor, buttonY, buttonWidth, defaultHeight());
-            cursor += buttonWidth + GAP;
+            int extent = presetButtonWidth(button, rowHeight);
+            if (button == presetToggle) {
+                button.setBounds(cursor, bodyY + Math.max(0, (bodyHeight - extent) / 2), extent, extent);
+            } else {
+                button.setBounds(cursor, buttonY, extent, defaultHeight());
+            }
+            cursor += extent + GAP;
         }
     }
 
@@ -372,7 +390,11 @@ final class NumberControl extends FormControl {
         inputWidthOverride = Math.max(0, width);
     }
 
-    // 预设按钮宽度：文本宽度 + 内边距
+    // 预设按钮宽度：图标轮询按钮取行高，文字预设按钮取文本宽度 + 内边距
+    private int presetButtonWidth(UiButton button, int rowHeight) {
+        return button == presetToggle ? rowHeight : buttonWidth(button);
+    }
+
     private int buttonWidth(UiButton button) {
         return Math.max(16, font.width(button.label()) + 8);
     }
@@ -416,6 +438,7 @@ final class NumberControl extends FormControl {
 
     @Override
     void load(@Nullable RuleValue value) {
+        refreshPresetToggleIcon(value);
         numberField.acceptText();
         rememberLoaded(value);
         this.loaded = value == null || value.isNull() ? null : value.deepCopy();
@@ -517,6 +540,7 @@ final class NumberControl extends FormControl {
 
     @Override
     void setEnabled(boolean enabled) {
+        controlEnabled = enabled;
         // 禁用会经统一结束入口回退未提交的预览
         numberField.setEnabled(enabled, enabled && domainMin != domainMax);
         for (UiButton preset : presetButtons) {
@@ -559,6 +583,57 @@ final class NumberControl extends FormControl {
 
     // ---- 精确输入与预设 ----
 
+    /**
+     * 把文字预设按钮替换为一个图标轮询按钮。
+     *
+     * <p>按钮边长取布局行高，点击后按预设声明顺序前进一格：当前值与某个预设数值相同时切到
+     * 下一个（末尾回到首个），否则回到首个预设。图标由调用方按当前字段值返回，因此同一行
+     * 在不显示预设文案时也能读出取值差异。</p>
+     *
+     * @param icon           按当前字段值返回按钮图标；字段值为 null 时同样必须返回可绘制图标
+     * @param accessibleName 按钮的无障碍名称
+     * @param hint           鼠标悬停提示
+     */
+    void usePresetToggle(Function<RuleValue, UiIcon> icon, Component accessibleName, Component hint) {
+        presetToggleIcon = Objects.requireNonNull(icon, "icon");
+        presetButtons.clear();
+        presetToggle = new UiButton(THEME, font, Component.empty(), UiButtonVariant.SECONDARY, this::cyclePreset)
+                .setChipStyle(true)
+                .setChipPadding(TOGGLE_CHIP_PADDING)
+                .setAccessibleName(accessibleName)
+                .setTooltip(hint)
+                .setEnabled(controlEnabled);
+        presetButtons.add(presetToggle);
+        refreshPresetToggleIcon(draftValue());
+    }
+
+    // 图标轮询按钮：当前值命中第 i 个预设就取第 i+1 个（末尾回到首个），未命中取首个
+    private void cyclePreset() {
+        List<EditorPreset> presets = field.presets();
+        if (presets.isEmpty()) return;
+        RuleValue current = draftValue();
+        int next = 0;
+        for (int index = 0; index < presets.size(); index++) {
+            RuleValue presetValue = parseText(presets.get(index).value());
+            if (presetValue != null && sameNumber(presetValue, current)) {
+                next = (index + 1) % presets.size();
+                break;
+            }
+        }
+        applyPreset(presets.get(next).value());
+    }
+
+    private static boolean sameNumber(RuleValue presetValue, @Nullable RuleValue current) {
+        return current != null && current.isNumber() && presetValue.isNumber()
+                && Double.compare(presetValue.asDecimal(0.0D), current.asDecimal(0.0D)) == 0;
+    }
+
+    // 图标随字段值刷新：null 值同样交给调用方选择兜底图标
+    private void refreshPresetToggleIcon(@Nullable RuleValue value) {
+        if (presetToggle == null || presetToggleIcon == null) return;
+        presetToggle.setIcon(presetToggleIcon.apply(value));
+    }
+
     private void setInputValue(String text) {
         numberField.setText(text);
     }
@@ -567,6 +642,7 @@ final class NumberControl extends FormControl {
     private void applyPreset(String presetValue) {
         markEdited();
         if (parseText(presetValue) != null) numberField.commitText(presetValue);
+        refreshPresetToggleIcon(draftValue());
     }
     /** 根据实际子控件解析当前命中。 */
     @Override

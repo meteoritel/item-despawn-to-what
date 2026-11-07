@@ -473,7 +473,7 @@ public final class RuleRecipeView {
                 part.originFilled = fillOrigin;
                 yield part;
             }
-            default -> new ObjectPart(RuleNaming.effectTitle(effect, RuleDisplayLabels::label),
+            default -> new ObjectPart(RuleNaming.effectTitle(effect, RuleDisplayLabels.nameSource()),
                     RulePreviewIcons.action(effect), integer(effect, "count", 0));
         };
     }

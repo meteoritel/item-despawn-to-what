@@ -29,7 +29,7 @@ final class ActionDescription {
 
     static List<DescriptionLine> lines(RuleValue action) {
         List<DescriptionLine> lines = new ArrayList<>();
-        lines.add(DescriptionLine.title(RuleNaming.effectTitle(action, RuleDisplayLabels::label)));
+        lines.add(DescriptionLine.title(RuleNaming.effectTitle(action, RuleDisplayLabels.nameSource())));
         ResourceLocation type = ResourceLocation.tryParse(action.text(RuleFields.TYPE, ""));
         var descriptor = type == null ? null : EditorRegistries.EFFECTS.find(type);
         if (descriptor == null || descriptor.readOnly()) {

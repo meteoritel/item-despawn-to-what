@@ -96,7 +96,7 @@ flowchart TD
 
 `client/net` 通过 `EditorScreenHooks`/`EditorScreenOpener` 调用 `RuleEditorOpener`；客户端入口负责把 opener 注册进去。kit 与本层之间只有 kit 被依赖这一个方向。
 
-表单由 `FormRowLayout` 解释字段标签、说明行和数量配对，再用 `UiFormLayout` 测量相对几何。`NumberControl` 把轨道与精确文本的组合交给 `UiNumberField`，自身处理字段单位、空值、原始值、预设和草稿提交。
+表单由 `FormRowLayout` 解释字段标签、说明行和数量配对，再用 `UiFormLayout` 测量相对几何。`NumberControl` 把轨道与精确文本的组合交给 `UiNumberField`，自身处理字段单位、空值、原始值、预设和草稿提交。数值行可经 `FormField#presetToggle` 把文字预设合并成一个方形图标轮询按钮：边长取表单行高，图标随当前值刷新，点击按预设声明顺序前进一格，无可见文字时以无障碍名称与悬停提示表达行为。
 
 ## 3. 关键类地图
 
@@ -215,7 +215,7 @@ flowchart LR
 
 `ItemCountsControl` 的稳定数量条目持有 `UiLabelPresentation`，名称区域提供保焦命中，文字滚动读取同一 `UiPointer` 门禁。`AbstractBarShell` 的可用状态与焦点视图直接读取区间核心，标签、轨道和精确输入保留宿主布局；标量与区间的会话及取消恢复共用 kit 数值包内实现。
 
-`UiSegmentedControl` 只用于编辑分区的页签切换，导航位置与业务选中独立：整组占一个 Tab 位置，方向键、Home、End 移动组内位置，Enter/Space 激活后才切换分区。状态、来源、目录范围、组合模式和产物档位等循环取值入口是单个胶囊按钮（`UiButton#setCycleStyle`，标签右侧带前进箭头），点击即切到下一个取值，不参与焦点序列。鼠标与键盘共享唯一逻辑焦点，额外焦点轮廓仅键盘操作显示；文本光标与选区照常显示。
+`UiSegmentedControl` 只用于编辑分区的页签切换，导航位置与业务选中独立：整组占一个 Tab 位置，方向键、Home、End 移动组内位置，Enter/Space 激活后才切换分区。状态、来源、目录范围、组合模式和产物档位等循环取值入口是单个胶囊按钮（`UiButton#setCycleStyle`，标签右侧带前进箭头），点击即切到下一个取值，不参与焦点序列；产物档位按物品、生物、经验、其他实体循环。年龄行的两个年龄预设合并成一个 20×20 方形图标按钮，图标是当前实体在该年龄下的转台预览，引用是标签、缺失或未注册时回落到鸡，点击在幼年与成年之间切换。鼠标与键盘共享唯一逻辑焦点，额外焦点轮廓仅键盘操作显示；文本光标与选区照常显示。
 
 保存遮罩使用 kit `UiOverlay` 的遮罩、保焦背景与阻断作用域；保存中 Esc/背景关闭由业务策略拒绝，取消仅向 workspace 发信号，终态由业务移除。通用模态的正常关闭统一经 `UiModal.requestClose`，宿主销毁可强制移除。
 
@@ -286,6 +286,7 @@ resize 保留已有页面、文本控件与编辑会话，只重排几何；单�
 - **目录接收与提交**：`CatalogSelectionBinding` 表达本次单选／多选、不可变初始引用与完整快照确认出口。普通引用字段按 `EditorField.isMultiCatalog` 声明模式，卡片替换与集合编辑按操作声明。表单完成合法待提交输入后捕获固定修订、所属行与目标路径；目录只修改临时选择，确认时核对行、路径、草稿修订及活动会话。空快照表示清空可编辑选择，取消与 Esc 只关闭目录；未变化的选择保留原始值。字段、关联数量与存在条件继续沿同一 `FormCommit`／`EditSession` 回调写入，共享一条内容历史；外部组件可在确认出口转换结果并使用现有草稿入口。
 - **目录宿主**：`RuleEditorPanelFactory.CatalogPicker` 与 `SourceBlacklistPicker.Picker` 各自持有查询、页请求、完整临时选择与当前 `View`。搜索、翻页、范围与选择命令在返回前完成本地查询和发布，确认读取宿主最新选择。`CatalogDisplayQuery` 统一搜索和分页；平铺目录保留网络目录与标签合并，黑名单保留源标签组、空组和组内子页，当前页才展开条目与图标。宿主推进内容语义代次，选择或资格变化保持该代次。`UiCatalogGrid.applyView` 显式接纳快照，直接读取其中的条目、选择、导航和状态；搜索框原文、选区、光标、滚动、几何与绘制缓存仍由网格持有。同页内容更新按条目 id 恢复光标，页、范围或接受查询变化重置列表位置。`EditorShell.prepareUi` 通过模态栈在输入域与命中确定前接纳工作区、语言、资源及可编辑变化；首次打开先准备再布局与收集焦点。渲染、布局快照与旁白读取已发布视图，重试继续使用显式目录请求。
 - **目录名称与引用**：展示条目持有已解析的 `TaggedId`，图标、标签预览和策略直接消费引用值。目录 label 按类型解释，subLabel 为来源原文；已选内容复用同一名称策略，缺键使用资源路径可读名称，技术 id 保留给悬停与搜索。取舍见 [ADR-0059](../adr/0059-catalog-label-policy.md)。
+- **规则摘要的引用名**：效果标题与列表、画布摘要经 `RuleDisplayLabels.nameSource()` 取 `NameSource`，按字段声明的 `RuleCatalogType` 解析，避免同一个注册名在语义不符的注册表命中（例如实体字段取到物品名）；通用 `label(id)` 保留物品、方块、实体、描述符的旧顺序，未知种类与旧调用点回退到它；标签引用仍显示 `#命名空间:路径` 原文。
 - **新增界面标记图标**：标记图集是 `textures/gui/editor/marks.png`，由 `tools/image_generator/generate-editor-marks.py` 生成，字形为纯白、按调用方给定的主题色染色；在 `theme` 的 `UiMarkIcons.Mark` 登记行号与尺寸，用 `UiMarkIcons.icon(mark, color)` 取得图标后交给控件的 `setIcon` 或直接渲染。
 - **新增事件图标**：事件图集是 `textures/gui/editor/events.png`，单列五行、每格 32×32 彩色成品，按 16 像素槽位缩放绘制，不做主题染色；图集为手工美术，增改图标直接替换贴图并保持格子尺寸与行序；在 `theme` 的 `UiEventIcons.Event` 登记行号，动作到事件的判定收在 `shared/EventPreviewIcons`，新增天象类动作在那里补一支分支。
 - **新增目录类型或预览图标**：在 `CatalogTypePresentation` 为每种 `RuleCatalogType` 穷举登记名称／普通图标组合、标签能力与默认隐藏策略；标签能力集中 registry、成员说明及可选成员预览，动态 registry 随当前世界取得；字段目录类型由精确 registry 键映射。展示内容统一送入 `PreviewIcons`，物品场景身份由完整 `ItemStack` 主体缓存。场景资源由 kit `preview` 持有，`PreviewResources` 统一世代和关闭；名称解释由类型策略统一调用，流体名称与过滤实现留在 `FluidPreviewIcons`，标签展开与事件图集留在各宿主。实体 age、方块实体 NBT 与完整实体 NBT 参与场景身份。

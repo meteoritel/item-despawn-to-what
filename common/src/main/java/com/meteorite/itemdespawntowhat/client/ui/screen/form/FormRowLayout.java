@@ -41,10 +41,30 @@ final class FormRowLayout {
         return viewportY + row.contentY - scrollOffset;
     }
 
+    /** 标签列与控件之间的统一留白；页面把卡片外的行对齐到控件列时用它。 */
+    static int labelGap() {
+        return LABEL_GAP;
+    }
+
+    /**
+     * 表单行度量：行高、动作按钮与标签列共用同一组参数。
+     * <p>页面在卡片外另排一行（例如产物档位）时也必须用这份度量，否则标签列与行高会各算一套。
+     */
+    static UiFormLayout.Metrics metrics(int minimumControlHeight, int rowGap, UiHostTheme theme) {
+        return new UiFormLayout.Metrics(NARROW_WIDTH, LABEL_GAP, LABEL_LINE_HEIGHT,
+                32, 2, 16, 8, 64, Math.max(theme.rowHeight(), minimumControlHeight), rowGap);
+    }
+
+    /** 指定可用宽度下解析出的标签列宽；窄宽度返回 0，表示标签叠到控件上方。 */
+    static int labelColumnWidth(int availableWidth, int preferredLabelWidth, int minimumControlHeight,
+                                int rowGap, UiHostTheme theme) {
+        return UiFormLayout.labelWidth(availableWidth, preferredLabelWidth,
+                metrics(minimumControlHeight, rowGap, theme));
+    }
+
     static int layoutRows(List<FormRow> rows, int availableWidth, int labelWidth, int rowGap,
                           int minimumControlHeight, Font font, UiHostTheme theme) {
-        UiFormLayout.Metrics metrics = new UiFormLayout.Metrics(NARROW_WIDTH, LABEL_GAP, LABEL_LINE_HEIGHT,
-                32, 2, 16, 8, 64, Math.max(theme.rowHeight(), minimumControlHeight), rowGap);
+        UiFormLayout.Metrics metrics = metrics(minimumControlHeight, rowGap, theme);
         boolean narrow = availableWidth < NARROW_WIDTH;
         int column = UiFormLayout.labelWidth(availableWidth, labelWidth, metrics);
         List<FormRow> active = new ArrayList<>();

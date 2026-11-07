@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.shared;
 
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
+import com.meteorite.itemdespawntowhat.client.edit.RuleNaming;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.edit.EditorRegistries;
 import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
@@ -10,9 +11,27 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
-/** 客户端展示名称：直接读取已加载的注册表与语言，不触发目录请求。 */
+/**
+ * 客户端展示名称：直接读取已加载的注册表与语言，不触发目录请求。
+ * <p>同一个注册名可能同时存在于多个注册表（{@code minecraft:chicken} 既是物品也是实体），
+ * 只按固定顺序查找会把实体字段显示成物品名，因此规则摘要需要按字段声明的目录种类解析；
+ * 无法得知种类时仍退回通用顺序，保证既有调用行为不变。
+ */
 public final class RuleDisplayLabels {
     private static final String TAG_LABEL_KEY = TypeLabels.UI_PREFIX + "tag.label";
+
+    private static final RuleNaming.NameSource NAME_SOURCE = new RuleNaming.NameSource() {
+        @Override
+        public @Nullable Component label(ResourceLocation id) {
+            return RuleDisplayLabels.label(id);
+        }
+
+        @Override
+        public @Nullable Component label(RuleCatalogType type, ResourceLocation id) {
+            return CatalogTypePresentation.of(type).label(id);
+        }
+    };
+
     private RuleDisplayLabels() {
         throw new UnsupportedOperationException("Utility class");
     }
@@ -25,6 +44,15 @@ public final class RuleDisplayLabels {
      */
     public static Component tagLabel(TaggedId reference) {
         return Component.translatable(TAG_LABEL_KEY, new TaggedId(reference.id(), true).serialized());
+    }
+
+    /**
+     * 规则摘要使用的名称来源：按字段声明的目录种类解析，未知种类退回通用顺序。
+     *
+     * @return 绑定客户端注册表与语言文件的名称来源
+     */
+    public static RuleNaming.NameSource nameSource() {
+        return NAME_SOURCE;
     }
 
     /** 按目录类型查询已选引用的名称，复用目录名称策略与缺键回退。 */

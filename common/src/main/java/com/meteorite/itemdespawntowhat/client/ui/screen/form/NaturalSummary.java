@@ -36,7 +36,7 @@ public final class NaturalSummary {
 
     // 规则级摘要：显示名（或 id）：条件 → 效果
     public static Component rule(RuleValue rule) {
-        return Component.translatable(PREFIX + "rule", RuleNaming.ruleTitle(rule, RuleDisplayLabels::label),
+        return Component.translatable(PREFIX + "rule", RuleNaming.ruleTitle(rule, RuleDisplayLabels.nameSource()),
                 conditions(rule.child(RuleFields.CONDITIONS)), results(rule));
     }
 

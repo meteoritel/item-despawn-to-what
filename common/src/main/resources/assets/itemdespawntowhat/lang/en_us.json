@@ -515,6 +515,8 @@
   "gui.itemdespawntowhat.edit.pick.type_title": "Choose an action type",
   "gui.itemdespawntowhat.edit.picker.filter": "Filter",
   "gui.itemdespawntowhat.edit.preset.adult": "Adult",
+  "gui.itemdespawntowhat.edit.preset.age.toggle": "Baby / Adult",
+  "gui.itemdespawntowhat.edit.preset.age.toggle_hint": "Click to switch between baby and adult",
   "gui.itemdespawntowhat.edit.preset.baby": "Baby",
   "gui.itemdespawntowhat.edit.prompt.duplicate_title": "Duplicate rule as",
   "gui.itemdespawntowhat.edit.prompt.id_hint": "<namespace:path>",

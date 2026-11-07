@@ -5,6 +5,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
+import com.meteorite.itemdespawntowhat.core.catalog.RuleCatalogType;
 import com.meteorite.itemdespawntowhat.core.model.CombinationMode;
 import java.util.ArrayList;
 import java.util.List;
@@ -34,14 +35,40 @@ public final class RuleNaming {
 
     /**
      * 名称来源：由界面注入（客户端注册表/语言文件），未加载或缺失返回 null。
+     * <p>同一个注册名可能同时存在于多个注册表（{@code minecraft:chicken} 既是物品也是实体），
+     * 通用顺序查找会命中与字段语义不符的注册表，因此需要按字段声明的目录种类解析。
      */
     public interface NameSource {
 
-        // 解析资源显示名；不可用返回 null
+        /**
+         * 按通用优先级（物品 → 方块 → 实体 → 效果/条件描述符）解析显示名。
+         *
+         * @param id 资源 ID
+         * @return 显示名；不可用返回 null
+         */
         @Nullable Component label(ResourceLocation id);
 
-        // 空实现：全部回落到 id 文本
-        NameSource NONE = id -> null;
+        /**
+         * 按字段声明的目录种类解析显示名，避免命中同名但语义不符的注册表。
+         *
+         * @param type 字段声明的目录种类
+         * @param id 资源 ID
+         * @return 显示名；不可用返回 null
+         */
+        @Nullable Component label(RuleCatalogType type, ResourceLocation id);
+
+        /** 空实现：全部回落到 id 文本 */
+        NameSource NONE = new NameSource() {
+            @Override
+            public @Nullable Component label(ResourceLocation id) {
+                return null;
+            }
+
+            @Override
+            public @Nullable Component label(RuleCatalogType type, ResourceLocation id) {
+                return null;
+            }
+        };
     }
 
     /** 规则标题（传动态值对象）：值对象到 JSON 的转换收敛在本包内 */
@@ -81,7 +108,7 @@ public final class RuleNaming {
         if (entries.isEmpty()) {
             return Component.translatable(PREFIX + "unfinished_no_source");
         }
-        Component first = entryLabel(entries.getFirst(), source);
+        Component first = entryLabel(entries.getFirst(), source, RuleCatalogType.ITEM);
         int others = entries.size() - 1;
         if (others <= 0) {
             return first;
@@ -158,14 +185,14 @@ public final class RuleNaming {
         if (!TypeLabels.OWN_NAMESPACE.equals(type.getNamespace())) return TypeLabels.effectLabel(type);
         return switch (type.getPath()) {
             case "spawn_entity" -> switch (string(effect, "variant", "")) {
-                case "item" -> withLabel(PREFIX + "effect.spawn_item", effect, "item", source, type);
-                case "mob" -> withLabel(PREFIX + "effect.spawn_mob", effect, "entity", source, type);
+                case "item" -> withLabel(PREFIX + "effect.spawn_item", effect, "item", RuleCatalogType.ITEM, source, type);
+                case "mob" -> withLabel(PREFIX + "effect.spawn_mob", effect, "entity", RuleCatalogType.ENTITY, source, type);
                 case "experience" -> Component.translatable(PREFIX + "effect.spawn_xp");
-                default -> withLabel(PREFIX + "effect.spawn_entity", effect, "entity", source, type);
+                default -> withLabel(PREFIX + "effect.spawn_entity", effect, "entity", RuleCatalogType.ENTITY, source, type);
             };
             case "place_block" -> booleanOf(effect, "use_source_block")
                     ? Component.translatable(PREFIX + "effect.place_block_source")
-                    : withLabel(PREFIX + "effect.place_block", effect, "block", source, type);
+                    : withLabel(PREFIX + "effect.place_block", effect, "block", RuleCatalogType.BLOCK, source, type);
             case "loot_table" -> Component.translatable(PREFIX + "effect.loot_table");
             case "lightning" -> Component.translatable(PREFIX + "effect.lightning");
             case "arrow_rain" -> Component.translatable(PREFIX + "effect.arrow_rain");
@@ -195,8 +222,8 @@ public final class RuleNaming {
     }
 
     // 带资源名参数的效果短标题；资源名缺失时回落类型标签
-    private static Component withLabel(String key, JsonObject effect, String field, NameSource source, ResourceLocation type) {
-        Component label = entryLabel(effect.get(field), source);
+    private static Component withLabel(String key, JsonObject effect, String field, RuleCatalogType catalog, NameSource source, ResourceLocation type) {
+        Component label = entryLabel(effect.get(field), source, catalog);
         return label == null ? TypeLabels.effectLabel(type) : Component.translatable(key, label);
     }
 
@@ -216,8 +243,8 @@ public final class RuleNaming {
         return id == null ? "" : id.getPath();
     }
 
-    // 条目名解析：标签保留 # 前缀；目录名不可用时回落 namespace:path 文本
-    private static @Nullable Component entryLabel(@Nullable JsonElement element, NameSource source) {
+    // 条目名解析：按字段声明的目录种类取名；标签保留 # 前缀；目录名不可用时回落 namespace:path 文本
+    private static @Nullable Component entryLabel(@Nullable JsonElement element, NameSource source, RuleCatalogType catalog) {
         if (element == null || !element.isJsonPrimitive() || !element.getAsJsonPrimitive().isString()) {
             return null;
         }
@@ -230,7 +257,7 @@ public final class RuleNaming {
         if (id == null) {
             return Component.literal(raw);
         }
-        Component label = source == null || parsed.tag() ? null : source.label(id);
+        Component label = source == null || parsed.tag() ? null : source.label(catalog, id);
         if (label != null) {
             return label;
         }

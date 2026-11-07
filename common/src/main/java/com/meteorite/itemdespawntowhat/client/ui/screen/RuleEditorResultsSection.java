@@ -5,6 +5,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
+import com.meteorite.itemdespawntowhat.client.ui.shared.PreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.shared.RuleDisplayLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiScrollView;
 import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDefaults;
@@ -44,6 +45,7 @@ import com.meteorite.itemdespawntowhat.core.model.CombinationMode;
 import com.meteorite.itemdespawntowhat.core.model.ConditionLimits;
 import com.meteorite.itemdespawntowhat.core.model.OutcomeCandidate;
 import com.meteorite.itemdespawntowhat.core.api.param.ParamTier;
+import com.meteorite.itemdespawntowhat.core.type.effect.EntityProduct;
 import com.meteorite.itemdespawntowhat.core.type.effect.PlaceBlockEffect;
 import com.meteorite.itemdespawntowhat.core.type.effect.WeatherEffect;
 
@@ -57,6 +59,7 @@ import java.util.Set;
 
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -70,7 +73,7 @@ final class RuleEditorResultsSection {
 
     private final UiScrollView scroll;
     private boolean selectingEffect;
-    private final RuleNaming.NameSource nameSource = RuleDisplayLabels::label;
+    private final RuleNaming.NameSource nameSource = RuleDisplayLabels.nameSource();
     final EditorSectionContent content;
     private final EditorShell shell;
     private final Font font;
@@ -137,6 +140,8 @@ final class RuleEditorResultsSection {
     // 动作参数表的标签列宽：产物行复用同一列宽，轮询按钮才能与下面的表单控件左右对齐。
     // 取值与表单默认标签列宽一致，较长的英文字段标签（如「Duration (ticks)」）不必退化成省略号
     private static final int DETAIL_LABEL_WIDTH = 88;
+    // 年龄图标在引用无法解析时的回落实体：鸡的幼年与成年预览差异最直观，且原版一定存在
+    private static final String AGE_PREVIEW_FALLBACK = "minecraft:chicken";
     private static final int DETAIL_ICON_SIZE = 18;
     private static final int DETAIL_PADDING = 8;
     private static final int EMPTY_MESSAGE_GAP = 8;
@@ -959,12 +964,44 @@ final class RuleEditorResultsSection {
         return entity.isList() ? entity.textItems() : List.of(entity.asText(""));
     }
 
+    /**
+     * 年龄轮询按钮的图标：当前选中实体在给定年龄下的预览。
+     * <p>实体预览按 age 装载数据，幼年与成年因此是两张可区分的图；引用是标签、缺失或未注册时
+     * 回落鸡，保证按钮在任何草稿状态下都能读出年龄差异。
+     *
+     * @param actionPath 动作在草稿中的路径
+     * @param age        草稿里的年龄值；缺失或非数值按成年处理
+     * @return 实体预览图标
+     */
+    private UiIcon ageToggleIcon(FieldPath actionPath, @Nullable RuleValue age) {
+        int ticks = age == null || !age.isNumber()
+                ? EntityProduct.Mob.ADULT_AGE : age.asInteger(EntityProduct.Mob.ADULT_AGE);
+        return PreviewIcons.entity(agePreviewEntity(actionPath), ticks);
+    }
+
+    // 只有单个已注册实体适合做预览：标签成员可能混含不同年龄表现，回落到确定性更强的鸡
+    private String agePreviewEntity(FieldPath actionPath) {
+        for (String reference : entitySelection(actionPath)) {
+            TaggedId parsed = TaggedId.tryParse(reference);
+            if (parsed != null && !parsed.tag() && BuiltInRegistries.ENTITY_TYPE.containsKey(parsed.id())) {
+                return parsed.id().toString();
+            }
+        }
+        return AGE_PREVIEW_FALLBACK;
+    }
+
     // 实体选择变化后决定年龄行是否出现；不再需要年龄时在同一条撤销里清掉该字段
     private void bindEntityProductUi(FormView form, FieldPath actionPath) {
         FieldPath entityPath = actionPath.child("entity");
         FieldPath agePath = actionPath.child("age");
-        if (productStop == EntityProductStop.MOB)
+        if (productStop == EntityProductStop.MOB) {
             form.field("age").visibleWhen(() -> selectedEntityHasAge(actionPath));
+            // 年龄的两个预设合并成方形轮询按钮：图标直接给出幼年与成年的外观差异，
+            // 比并排两个文字按钮省位，也不与右侧的目录「添加」按钮抢视觉权重
+            form.field("age").presetToggle(age -> ageToggleIcon(actionPath, age),
+                    Component.translatable(RuleEditorPageSupport.UI + "preset.age.toggle"),
+                    Component.translatable(RuleEditorPageSupport.UI + "preset.age.toggle_hint"));
+        }
         form.field("entity").catalogFilter(this::catalogEntryAllowed);
         form.addFieldWritten((draft, path, previous) -> {
             if (!entityPath.equals(path)) return;
@@ -1168,12 +1205,25 @@ final class RuleEditorResultsSection {
         boolean empty = effectList == null || effectList.size() == 0;
         if (!empty) {
             if (productButton != null) {
-                // 产物行与下面的表单同列：标题占标签列，轮询按钮铺满控件列，名称直接写在按钮上
-                int buttonX = contentX + DETAIL_LABEL_WIDTH + RuleEditorPageSupport.PAD;
-                productLabelRect = new UiRect(contentX, y + (TOOLBAR_HEIGHT - font.lineHeight) / 2,
-                        DETAIL_LABEL_WIDTH, font.lineHeight);
-                productButton.setBounds(buttonX, y, Math.max(0, contentX + contentWidth - buttonX), TOOLBAR_HEIGHT);
-                y += TOOLBAR_HEIGHT + RuleEditorPageSupport.PAD;
+                // 产物行与下面的表单共用同一个标签列宽与行高：按固定像素另算一套，
+                // 轮询按钮会相对实体、数量、年龄各行左右偏移，高度也高出一截
+                int labelWidth = effectForm == null ? DETAIL_LABEL_WIDTH : effectForm.labelColumnWidth(contentWidth);
+                int labelGap = effectForm == null ? RuleEditorPageSupport.PAD : effectForm.labelGap();
+                int rowHeight = effectForm == null ? TOOLBAR_HEIGHT : effectForm.rowControlHeight();
+                // 行间距跟随表单：产物行就是参数表的第一行，走另一套间距会与下面各行浮开
+                int rowGap = effectForm == null ? RuleEditorPageSupport.PAD : effectForm.rowGap();
+                if (labelWidth == 0) {
+                    // 窄宽度下标签与表单一致地叠到控件上方，标签占一整行
+                    productLabelRect = new UiRect(contentX, y, contentWidth, font.lineHeight);
+                    y += font.lineHeight;
+                    productButton.setBounds(contentX, y, contentWidth, rowHeight);
+                } else {
+                    productLabelRect = new UiRect(contentX, y + (rowHeight - font.lineHeight) / 2,
+                            labelWidth, font.lineHeight);
+                    productButton.setBounds(contentX + labelWidth + labelGap, y,
+                            Math.max(0, contentWidth - labelWidth - labelGap), rowHeight);
+                }
+                y += rowHeight + rowGap;
             }
             if (readonlyEffectNote(shell.editingValue()) != null) {
                 effectNoteRect = new UiRect(contentX, y, contentWidth, RuleEditorPageSupport.LINE_H);

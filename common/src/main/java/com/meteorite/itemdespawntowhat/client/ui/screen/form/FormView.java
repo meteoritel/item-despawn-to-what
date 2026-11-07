@@ -524,6 +524,47 @@ public final class FormView implements UiWidget, UiLayoutSource {
         invalidateMeasure();
     }
 
+    /**
+     * 指定可用宽度下解析出的统一标签列宽。
+     * <p>卡片外的行（例如产物档位）要和表单控件列左右对齐，必须读同一份解析结果，
+     * 各自按固定像素推算会随可用宽度产生偏差。窄宽度返回 0，表示标签叠到控件上方。
+     *
+     * @param availableWidth 表单可用宽度
+     * @return 标签列宽
+     */
+    public int labelColumnWidth(int availableWidth) {
+        return FormRowLayout.labelColumnWidth(availableWidth, labelWidth, minimumControlHeight, rowGap, THEME);
+    }
+
+    /**
+     * 标签列与控件之间的统一留白，与 {@link #labelColumnWidth(int)} 配套使用。
+     *
+     * @return 留白像素
+     */
+    public int labelGap() {
+        return FormRowLayout.labelGap();
+    }
+
+    /**
+     * 卡片密度下表单行的实际行高。
+     * <p>卡片外的行按同一高度摆放，上下缘才能与表单行对齐。
+     *
+     * @return 行高像素
+     */
+    public int rowControlHeight() {
+        return Math.max(THEME.rowHeight(), minimumControlHeight);
+    }
+
+    /**
+     * 相邻表单行之间的间距，与 {@link #rowControlHeight()} 配套使用。
+     * <p>卡片外的行插在表单之前，间距取同一值，才能在纵向节奏上与表单行连成一体。
+     *
+     * @return 行间距像素
+     */
+    public int rowGap() {
+        return rowGap;
+    }
+
     public void setOnChanged(Runnable listener) {
         this.changeListener = listener;
     }

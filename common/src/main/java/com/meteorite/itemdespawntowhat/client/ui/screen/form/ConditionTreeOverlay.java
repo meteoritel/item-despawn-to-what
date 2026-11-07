@@ -328,7 +328,7 @@ public final class ConditionTreeOverlay implements UiShellWidget, UiLayoutSource
         RuleValue items = sourceValue != null && sourceValue.isMapping()
                 ? sourceValue.child(RuleFields.SOURCE_ITEMS) : null;
         Component sourceSummary = items != null && items.isList() && !items.items().isEmpty()
-                ? RuleNaming.sourceTitle(rule, RuleDisplayLabels::label) : Component.empty();
+                ? RuleNaming.sourceTitle(rule, RuleDisplayLabels.nameSource()) : Component.empty();
         FieldPath ownerPath = scope.parent();
         RuleValue owner = ownerPath.isRoot() ? rule : session.valueAt(ownerPath);
         Component resultSummary = Component.empty();
@@ -337,7 +337,7 @@ public final class ConditionTreeOverlay implements UiShellWidget, UiLayoutSource
             RuleValue outcomes = owner.child(RuleFields.OUTCOMES);
             if (effects != null && effects.isList() && !effects.items().isEmpty()
                     || outcomes != null && outcomes.isList() && !outcomes.items().isEmpty()) {
-                resultSummary = RuleNaming.resultTitle(owner, RuleDisplayLabels::label);
+                resultSummary = RuleNaming.resultTitle(owner, RuleDisplayLabels.nameSource());
             } else if (owner.child(RuleFields.TYPE) != null) {
                 resultSummary = NaturalSummary.effect(owner);
             }

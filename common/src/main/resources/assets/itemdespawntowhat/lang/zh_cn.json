@@ -515,6 +515,8 @@
   "gui.itemdespawntowhat.edit.pick.type_title": "选择行为类型",
   "gui.itemdespawntowhat.edit.picker.filter": "筛选",
   "gui.itemdespawntowhat.edit.preset.adult": "成年",
+  "gui.itemdespawntowhat.edit.preset.age.toggle": "幼年 / 成年",
+  "gui.itemdespawntowhat.edit.preset.age.toggle_hint": "点击切换幼年与成年",
   "gui.itemdespawntowhat.edit.preset.baby": "幼年",
   "gui.itemdespawntowhat.edit.prompt.duplicate_title": "复制规则为",
   "gui.itemdespawntowhat.edit.prompt.id_hint": "<命名空间:路径>",

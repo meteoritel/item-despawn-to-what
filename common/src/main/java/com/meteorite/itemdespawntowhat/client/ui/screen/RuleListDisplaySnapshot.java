@@ -82,7 +82,7 @@ final class RuleListDisplaySnapshot {
      * @return 列表与页头共用的标题文本
      */
     static String titleOf(String id, @Nullable RuleValue body) {
-        String label = body == null ? "" : RuleNaming.ruleTitle(body, RuleDisplayLabels::label).getString();
+        String label = body == null ? "" : RuleNaming.ruleTitle(body, RuleDisplayLabels.nameSource()).getString();
         return label.isBlank() || label.equals(id) ? Component.translatable(UNNAMED_KEY).getString() : label;
     }
 

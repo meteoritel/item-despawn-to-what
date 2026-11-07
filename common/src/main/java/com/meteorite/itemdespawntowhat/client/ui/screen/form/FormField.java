@@ -3,11 +3,14 @@ package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import java.util.List;
 import java.util.function.BooleanSupplier;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
+import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -62,6 +65,23 @@ public final class FormField {
         requireAttached();
         if (!(row.control instanceof NumberControl number)) throw new IllegalArgumentException("Not numeric: " + path());
         number.setWindow(min, max);
+    }
+
+    /**
+     * 把数值行的文字预设按钮合并成一个图标轮询按钮。
+     *
+     * <p>按钮按当前字段值取图标，点击在预设之间循环；图标由调用方按自己的业务状态返回，
+     * 行内因此不再显示预设文案。</p>
+     *
+     * @param icon           按当前字段值返回按钮图标；值为 null 时也必须返回可展示的图标
+     * @param accessibleName 按钮的无障碍名称
+     * @param hint           鼠标悬停提示
+     */
+    public void presetToggle(Function<RuleValue, UiIcon> icon, Component accessibleName, Component hint) {
+        requireAttached();
+        if (!(row.control instanceof NumberControl number)) throw new IllegalArgumentException("Not numeric: " + path());
+        number.usePresetToggle(icon, accessibleName, hint);
+        owner.invalidateMeasure();
     }
 
     /** 设置数量行当前引用身份。 */

@@ -71,6 +71,8 @@ public final class UiButton implements UiButtonWidget, UiShellWidget {
     private boolean cycleStyle;
     private static final int CHIP_PADDING = 4;
     private static final int ICON_GAP = 3;
+    // 胶囊左右内缩：图标按钮收紧内缩才能把内容画满矩形，文字按钮沿用宽松值
+    private int chipPadding = CHIP_PADDING;
 
     // 注入的宿主主题
     private final UiHostTheme theme;
@@ -125,6 +127,20 @@ public final class UiButton implements UiButtonWidget, UiShellWidget {
             return this;
         }
         this.chipStyle = chipStyle;
+        return this;
+    }
+
+    /**
+     * 调整胶囊底图的左右内缩像素。
+     *
+     * <p>无文字图标按钮需要把图标画进整块矩形，默认的 4 像素内缩会把 18x18 预览裁掉；
+     * 非胶囊按钮忽略该值。</p>
+     *
+     * @param padding 左右内缩像素，负数按 0 处理
+     * @return 当前按钮
+     */
+    public UiButton setChipPadding(int padding) {
+        this.chipPadding = Math.max(0, padding);
         return this;
     }
 
@@ -235,7 +251,7 @@ public final class UiButton implements UiButtonWidget, UiShellWidget {
         if (!isVisible() || rect.width() <= 0 || rect.height() <= 0) {
             return List.of();
         }
-        int budget = capsule() ? Math.max(0, rect.width() - CHIP_PADDING * 2 - arrowReserve()) : rect.width();
+        int budget = capsule() ? Math.max(0, rect.width() - chipPadding * 2 - arrowReserve()) : rect.width();
         Component snapshotLabel = label.text();
         Component accessible = accessibleName();
         if (label.text().getString().isEmpty() && accessible != null) { snapshotLabel = accessible; }
@@ -277,7 +293,7 @@ public final class UiButton implements UiButtonWidget, UiShellWidget {
         else theme.drawSurface(graphics, rect, UiSurfaceRole.SEGMENT, UiControlStyle.State.DISABLED);
         int iconWidth = icon == null ? 0 : icon.width() + ICON_GAP;
         int arrowWidth = arrowReserve();
-        int available = Math.max(0, rect.width() - CHIP_PADDING * 2);
+        int available = Math.max(0, rect.width() - chipPadding * 2);
         int contentWidth = Math.min(available, label.width(font) + iconWidth + arrowWidth);
         int x = rect.x() + (rect.width() - contentWidth) / 2;
         // 胶囊按钮在窄布局中仍须把图标与文字裁剪到自身范围。
