@@ -33,7 +33,6 @@ public final class UiRangeSlider extends AbstractRangeCore<UiRangeValue> {
     private UiRangeValue value;
     private boolean backfillInvalid;
     private double pageStep;
-    private boolean dragFineAnchor;
 
     // 用完整数值域作窗口，两端初始为域的两端
     public UiRangeSlider(UiNumberPolicy policy) {
@@ -148,7 +147,6 @@ public final class UiRangeSlider extends AbstractRangeCore<UiRangeValue> {
         return true;
     }
 
-
     /**
      * 判断区间是否仍在预览，供宿主延后提交关联输入。
      *
@@ -180,40 +178,30 @@ public final class UiRangeSlider extends AbstractRangeCore<UiRangeValue> {
         return this.policy.snap(this.window.valueAt(fraction), fine);
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean mousePressed(UiInputContext context) {
-        if (!this.beginPress(context)) {
-            return false;
-        }
-        this.dragAnchorValue = this.value.value(this.selectedEnd);
-        this.dragFineAnchor = context.shiftDown();
-        this.previewSelected(this.valueAtPointer(context.pointerX(), this.dragFineAnchor), this.dragFineAnchor);
-        // 点击轨道先移动端点，后续拖动从该位置继续，避免跳回点击前的数值。
-        this.dragAnchorValue = this.value.value(this.selectedEnd);
+        if (!beginPress(context)) return false;
+        boolean fine = context.shiftDown();
+        previewSelected(valueAtPointer(context.pointerX(), fine), fine);
+        interaction.anchor(context.pointerX(), selectedValue(), fine);
         return true;
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
-        if (!this.canDrag()) {
-            return false;
-        }
-        if (context.shiftDown() != this.dragFineAnchor) {
-            // Shift 状态改变时重设锚点，值保持不变
-            this.dragFineAnchor = context.shiftDown();
-            this.dragAnchorPointer = context.pointerX();
-            this.dragAnchorValue = this.value.value(this.selectedEnd);
-            return true;
-        }
-        double perPixel = this.policy.dragValuePerPixel(this.trackWidth(), this.window.span(), this.dragFineAnchor);
-        double raw = this.dragAnchorValue + (context.pointerX() - this.dragAnchorPointer) * perPixel;
-        this.previewSelected(raw, this.dragFineAnchor);
+        if (!isDragging()) return false;
+        if (interaction.reanchor(context.pointerX(), selectedValue(), context.shiftDown())) return true;
+        double perPixel = policy.dragValuePerPixel(trackWidth(), window.span(), interaction.isFine());
+        previewSelected(interaction.dragValue(context.pointerX(), perPixel), interaction.isFine());
         return true;
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (!this.acceptsKey()) {
+        if (!canFocus() || !isFocused()) {
             return false;
         }
         boolean fine = (modifiers & GLFW.GLFW_MOD_SHIFT) != 0;
@@ -237,21 +225,7 @@ public final class UiRangeSlider extends AbstractRangeCore<UiRangeValue> {
      * @return 调用是否被接受（端点不存在或禁用时 false）
      */
     public boolean setSelectedValue(double raw, boolean fine) {
-        if (!this.enabled || !this.value.isPresent(this.selectedEnd) || isDragging()) {
-            return false;
-        }
-        if (this.interaction.isActive()) {
-            this.endInteraction(UiInteractionSession.EndReason.RELEASE);
-        }
-        double bounded = this.boundEnd(this.selectedEnd, this.policy.snap(raw, fine));
-        UiRangeValue candidate = this.value.withValue(this.selectedEnd, bounded);
-        if (candidate.equals(this.value)) {
-            return true;
-        }
-        this.beginOperation();
-        this.previewValue(candidate);
-        this.endInteraction(UiInteractionSession.EndReason.RELEASE);
-        return true;
+        return isEnabled() && oneShotSelected(raw, fine);
     }
 
     /**
@@ -263,9 +237,9 @@ public final class UiRangeSlider extends AbstractRangeCore<UiRangeValue> {
      * @return 控件是否接受输入
      */
     public boolean setSelectedValueOrPresent(double raw, boolean fine) {
-        if (!Double.isFinite(raw) || !enabled || isDragging()) return false;
+        if (!Double.isFinite(raw) || !isEnabled() || isDragging()) return false;
         if (value.isPresent(selectedEnd)) return setSelectedValue(raw, fine);
-        if (interaction.isActive()) endInteraction(UiInteractionSession.EndReason.RELEASE);
+        interaction.finishBeforeDiscreteChange();
         UiRangeValue candidate = value.withValue(selectedEnd, boundEnd(selectedEnd, policy.clamp(raw)));
         beginOperation();
         previewValue(candidate);
@@ -311,25 +285,15 @@ public final class UiRangeSlider extends AbstractRangeCore<UiRangeValue> {
     }
 
     private boolean adjustByKey(int keyCode, double direction, boolean fine) {
-        if (!this.value.isPresent(this.selectedEnd)) {
-            return false;
-        }
-        this.capture = Objects.requireNonNull(focusState.scope(), "Focused input requires a mounted scope").interaction();
-        this.capture.begin(this, UiInteractionSession.Source.KEY, keyCode);
-        if (!this.interaction.isActive()) {
-            this.beginOperation();
-        }
-        this.previewSelected(this.selectedValue() + direction * this.policy.step(fine), fine);
+        if (!value.isPresent(selectedEnd)) return false;
+        interaction.beginKey(focusState(), keyCode);
+        previewSelected(selectedValue() + direction * policy.step(fine), fine);
         return true;
     }
 
     private boolean oneShotSelected(double raw, boolean fine) {
-        if (!this.value.isPresent(this.selectedEnd) || isDragging()) {
-            return false;
-        }
-        if (this.interaction.isActive()) {
-            this.endInteraction(UiInteractionSession.EndReason.RELEASE);
-        }
+        if (!value.isPresent(selectedEnd) || isDragging()) return false;
+        interaction.finishBeforeDiscreteChange();
         double bounded = this.boundEnd(this.selectedEnd, this.policy.snap(raw, fine));
         UiRangeValue candidate = this.value.withValue(this.selectedEnd, bounded);
         if (!candidate.equals(this.value)) {

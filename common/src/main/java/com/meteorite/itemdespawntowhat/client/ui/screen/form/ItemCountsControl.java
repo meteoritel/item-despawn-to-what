@@ -14,6 +14,7 @@ import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.UiLabelPresentation;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
@@ -159,7 +160,7 @@ final class ItemCountsControl extends FormControl {
         // 配对上行还要容纳两道滑条的含义文案，避免文案被名称列宽度截断
         int nameWidth = 0;
         for (Entry entry : entries.values()) {
-            nameWidth = Math.max(nameWidth, Math.clamp(font.width(entry.name), 0, NAME_MAX_WIDTH));
+            nameWidth = Math.max(nameWidth, Math.clamp(entry.name.width(font), 0, NAME_MAX_WIDTH));
         }
         if (pairRole != PairRole.NONE) {
             nameWidth = Math.max(nameWidth, Math.clamp(font.width(label()), 0, NAME_MAX_WIDTH));
@@ -185,7 +186,7 @@ final class ItemCountsControl extends FormControl {
     private static final class Entry {
         private final String reference;
         private final NumberControl control;
-        private final Component name;
+        private final UiLabelPresentation name = new UiLabelPresentation();
         private final @Nullable UiIcon icon;
         // 滑条行与图标/名称行可能分开：配对上行把物品名放在两条滑条上方
         private int rowY;
@@ -195,13 +196,11 @@ final class ItemCountsControl extends FormControl {
         private int nameX;
         private int nameY;
         private int nameWidth;
-        // 名称滚动计时：只在悬停名称列时推进，移开后归零回到起点
-        private int scrollTicks;
 
         private Entry(String reference, NumberControl control, Component name, @Nullable UiIcon icon) {
             this.reference = reference;
             this.control = control;
-            this.name = name;
+            this.name.setText(name);
             this.icon = icon;
         }
 
@@ -370,10 +369,9 @@ final class ItemCountsControl extends FormControl {
                 // 配对上行时名称行固定高度；独立字段沿用滑条行高，保持原有居中
                 int nameRowHeight = pairRole == PairRole.UPPER ? HEADER_HEIGHT : lastRowHeight;
                 // 名称超宽时只有悬停才平移：起点与终点各停顿一次后往返，移开即回到起点
-                boolean hovered = entry.nameHit(mouseX, mouseY, nameRowHeight);
-                entry.scrollTicks = hovered ? entry.scrollTicks + 1 : 0;
-                TextScroll.draw(graphics, renderFont, entry.name.getString(), entry.nameX, entry.nameY,
-                        entry.nameWidth, THEME.palette().surfaces().secondaryText(), hovered, entry.scrollTicks, false);
+                boolean hovered = pointer.allowed() && entry.nameHit(mouseX, mouseY, nameRowHeight);
+                entry.name.render(graphics, renderFont, new UiRect(entry.nameX, entry.nameY, entry.nameWidth, renderFont.lineHeight),
+                        THEME.palette().surfaces().secondaryText(), hovered);
             }
             if (pairRole == PairRole.UPPER) {
                 // 两条滑条各配一行含义文案：与各自滑条同一垂直中线，避免上下滑条含义混淆
@@ -435,7 +433,6 @@ final class ItemCountsControl extends FormControl {
         return false;
     }
 
-
     @Override
     public boolean keyPressed(int key, int scan, int modifiers) {
         for (Entry entry : entries.values()) if (entry.control.keyPressed(key, scan, modifiers)) return true;
@@ -491,8 +488,11 @@ final class ItemCountsControl extends FormControl {
             UiPointerHit hit = entry.control.hitTest(x, y);
             if (hit != null) return hit.within(this);
             int rowHeight = pairRole == PairRole.UPPER ? HEADER_HEIGHT : lastRowHeight;
+            if (pairRole != PairRole.LOWER && entry.nameHit(x, y, rowHeight)) {
+                return UiPointerHit.leaf(this, x, y).preservingFocus();
+            }
             if (pairRole != PairRole.LOWER && entry.iconHit(x, y, rowHeight)) {
-                Component text = Component.translatable(QUANTITY_ROW_KEY, entry.name, label()).copy()
+                Component text = Component.translatable(QUANTITY_ROW_KEY, entry.name.text(), label()).copy()
                         .append(Component.literal(String.valueOf((char) 10))).append(entry.reference);
                 return UiPointerHit.leaf(this, x, y).preservingFocus()
                         .withTextTooltip(List.of(text), new UiRect(entry.iconX, entry.nameRowY, ICON_COLUMN, rowHeight));

@@ -3,14 +3,13 @@ package com.meteorite.itemdespawntowhat.client.ui.kit.api.control;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.UiSingleLineEditor;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.UiTextEditSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiHistoryShortcut;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputScope;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiRenderLayers;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiStyleSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiMinecraftTheme;
@@ -34,7 +33,7 @@ import org.lwjgl.glfw.GLFW;
  * 支持占位提示、长度限制、输入过滤、提交（Enter）与取消（Esc）。
  * <p>点击输入框可定位光标并拖动选择；焦点顺序由宿主的 {@code UiFocusManager} 统一维护。
  */
-public final class UiTextInput implements UiSingleLineEditor, UiLayoutSource, UiInteractionSession.Target {
+public final class UiTextInput implements UiSingleLineEditor, UiShellWidget, UiLayoutSource, UiInteractionSession.Target {
 
     // 左右内边距
     private static final int PADDING_X = TextInputSupport.PADDING_X;
@@ -45,11 +44,10 @@ public final class UiTextInput implements UiSingleLineEditor, UiLayoutSource, Ui
 
     // 原版输入框
     private final TrackedEditBox editBox;
-    private final UiFocusState focusState = new UiFocusState();
     private final UiTextEditSession editSession;
     private final Font font;
     // 控件矩形
-    private UiRect bounds = new UiRect(0, 0, 0, 0);
+    private final UiWidgetShell shell = new UiWidgetShell(this, this::endInteraction);
     // 提交回调（Enter）
     private Consumer<String> onCommit;
     // 取消回调（Esc）
@@ -57,7 +55,6 @@ public final class UiTextInput implements UiSingleLineEditor, UiLayoutSource, Ui
     private @Nullable Consumer<UiInteractionSession.EndReason> onInteractionEnd;
     // 无障碍名称
     private Component accessibleName;
-    private boolean visible = true;
     // 是否可编辑（原版 EditBox 未暴露读取方法，这里自行记录）
     private boolean editable = true;
 
@@ -65,6 +62,12 @@ public final class UiTextInput implements UiSingleLineEditor, UiLayoutSource, Ui
     private final UiStyleSource theme;
     private long themeRevision = -1;
     private Component hint;
+
+    /** {@inheritDoc} */
+    @Override
+    public UiWidgetShell shell() {
+        return shell;
+    }
 
     /** 使用原版默认主题创建单行输入。 */
     public UiTextInput(Font font, Component hint) { this(UiMinecraftTheme.INSTANCE, font, hint); }
@@ -184,8 +187,9 @@ public final class UiTextInput implements UiSingleLineEditor, UiLayoutSource, Ui
     @Override
     public UiTextInput setOnValueChanged(@Nullable Runnable onValueChanged) {
         editSession.acceptance().setOnChanged(() -> {
-            if (onInteractionEnd != null && isFocused() && focusState.scope() != null) {
-                focusState.scope().interaction().begin(this, UiInteractionSession.Source.TEXT, 0);
+            UiInputScope scope = focusState().scope();
+            if (onInteractionEnd != null && isFocused() && scope != null) {
+                scope.interaction().begin(this, UiInteractionSession.Source.TEXT, 0);
             }
             if (onValueChanged != null) onValueChanged.run();
         });
@@ -252,11 +256,11 @@ public final class UiTextInput implements UiSingleLineEditor, UiLayoutSource, Ui
         return this;
     }
 
-    public UiTextInput setVisible(boolean visible) {
-        if (!visible) endInteraction(UiInteractionSession.EndReason.HIDDEN);
-        editSession.setVisible(visible);
-        this.visible = visible;
-        editBox.setVisible(visible);
+    /** 隐藏时结束当前交互并退出焦点序列，恢复显示保留内容。 */
+    public UiTextInput setVisible(boolean nextVisible) {
+        shell.setVisible(nextVisible);
+        editSession.setVisible(nextVisible);
+        editBox.setVisible(nextVisible);
         return this;
     }
 
@@ -284,20 +288,15 @@ public final class UiTextInput implements UiSingleLineEditor, UiLayoutSource, Ui
         return this;
     }
 
-    @Override
-    public UiRect bounds() {
-        return bounds;
-    }
-
     /**
      * 更新布局；文本宽度变化时重算水平视口，保留光标与选择锚点。
      */
     @Override
     public void setBounds(int x, int y, int width, int height) {
-        this.bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
-        editBox.setX(bounds.x() + PADDING_X);
-        editBox.setY(bounds.y() + Math.max(PADDING_Y, (bounds.height() - font.lineHeight) / 2));
-        int textWidth = Math.max(1, bounds.width() - PADDING_X * 2);
+        shell.setBounds(x, y, width, height);
+        editBox.setX(bounds().x() + PADDING_X);
+        editBox.setY(bounds().y() + Math.max(PADDING_Y, (bounds().height() - font.lineHeight) / 2));
+        int textWidth = Math.max(1, bounds().width() - PADDING_X * 2);
         if (textWidth != editBox.getWidth()) {
             int cursor = editBox.getCursorPosition();
             int anchor = editBox.anchor();
@@ -307,12 +306,7 @@ public final class UiTextInput implements UiSingleLineEditor, UiLayoutSource, Ui
             editBox.setCursorPosition(cursor);
             editBox.setHighlightPos(anchor);
         }
-        editBox.setHeight(Math.max(1, bounds.height() - PADDING_Y * 2));
-    }
-
-    @Override
-    public boolean isVisible() {
-        return visible;
+        editBox.setHeight(Math.max(1, bounds().height() - PADDING_Y * 2));
     }
 
     /**
@@ -323,13 +317,13 @@ public final class UiTextInput implements UiSingleLineEditor, UiLayoutSource, Ui
      */
     @Override
     public List<UiLayoutNode> layoutNodes() {
-        if (!visible || bounds.width() <= 0 || bounds.height() <= 0) {
+        if (!isVisible() || bounds().width() <= 0 || bounds().height() <= 0) {
             return List.of();
         }
         String text = value();
         Component content = text.isEmpty() ? accessibleName : Component.literal(text);
-        int budget = Math.max(0, bounds.width() - PADDING_X * 2);
-        return List.of(new UiLayoutNode(UiLayoutNode.Kind.TEXT_INPUT, bounds, content, font.width(content),
+        int budget = Math.max(0, bounds().width() - PADDING_X * 2);
+        return List.of(new UiLayoutNode(UiLayoutNode.Kind.TEXT_INPUT, bounds(), content, font.width(content),
                 budget, editable, true, List.of()));
     }
 
@@ -345,20 +339,19 @@ public final class UiTextInput implements UiSingleLineEditor, UiLayoutSource, Ui
         UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
         int mouseX = (int) pointer.x();
         int mouseY = (int) pointer.y();
-        if (!visible) {
+        if (!isVisible()) {
             return;
         }
-        TextInputSupport.drawBackground(graphics, bounds, theme);
+        TextInputSupport.drawBackground(graphics, bounds(), theme);
         UiRenderLayers.draw(graphics, UiRenderLayers.FOREGROUND,
                 () -> editBox.renderWidget(graphics, mouseX, mouseY, 0.0F));
-        if (isFocusVisible()) {
-            theme.drawFocusOutline(graphics, bounds);
-        }
+        shell.renderFocusOutline(graphics, bounds(), theme);
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean mousePressed(UiInputContext context) {
-        return editSession.beginSelection(context, bounds, canFocus());
+        return editSession.beginSelection(context, bounds(), canFocus());
     }
 
     @Override
@@ -377,9 +370,9 @@ public final class UiTextInput implements UiSingleLineEditor, UiLayoutSource, Ui
     @Override
     public void endInteraction(UiInteractionSession.EndReason reason) {
         editSession.endInteraction(reason);
-        if (focusState.scope() != null) focusState.scope().interaction().end(this, reason);
+        UiInputScope scope = focusState().scope();
+        if (scope != null) scope.interaction().end(this, reason);
     }
-
 
     private void seekCursor(double mouseX, double mouseY) {
         editBox.onClick(mouseX, mouseY);
@@ -393,10 +386,11 @@ public final class UiTextInput implements UiSingleLineEditor, UiLayoutSource, Ui
         }
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         editSession.endInteraction(UiInteractionSession.EndReason.RELEASE);
-        if (!visible || !editBox.isFocused()) {
+        if (!isVisible() || !editBox.isFocused()) {
             return false;
         }
         UiHistoryShortcut shortcut = UiHistoryShortcut.fromKey(keyCode, modifiers);
@@ -405,7 +399,8 @@ public final class UiTextInput implements UiSingleLineEditor, UiLayoutSource, Ui
             return true;
         }
         if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
-            if (focusState.scope() == null || !focusState.scope().interaction().end(this, UiInteractionSession.EndReason.RELEASE)) {
+            UiInputScope scope = focusState().scope();
+            if (scope == null || !scope.interaction().end(this, UiInteractionSession.EndReason.RELEASE)) {
                 if (onCommit != null) onCommit.accept(editBox.getValue());
             }
             return true;
@@ -420,23 +415,20 @@ public final class UiTextInput implements UiSingleLineEditor, UiLayoutSource, Ui
         return editSession.edit(() -> editBox.keyPressed(keyCode, scanCode, modifiers));
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
         editSession.endInteraction(UiInteractionSession.EndReason.RELEASE);
-        if (!visible) {
+        if (!isVisible()) {
             return false;
         }
         return editSession.edit(() -> editBox.charTyped(codePoint, modifiers));
     }
 
-    @Override
-    public UiFocusState focusState() {
-        return focusState;
-    }
-
+    /** {@inheritDoc} */
     @Override
     public boolean canFocus() {
-        return visible && editable;
+        return isVisible() && editable;
     }
 
     @Override
@@ -444,14 +436,10 @@ public final class UiTextInput implements UiSingleLineEditor, UiLayoutSource, Ui
         editBox.setFocused(focused);
     }
 
-    @Override
-    public boolean isFocused() {
-        return editBox.isFocused();
-    }
-
+    /** {@inheritDoc} */
     @Override
     public boolean activate() {
-        if (!visible || onCommit == null) {
+        if (!isVisible() || onCommit == null) {
             return false;
         }
         onCommit.accept(editBox.getValue());

@@ -8,6 +8,7 @@ import java.util.Objects;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidgetShell;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
@@ -62,8 +63,7 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
     private int measuredWidth = -1;
     private int contentHeight = CHIP_HEIGHT;
     private int selected = -1;
-    private boolean enabled = true;
-    private final UiFocusState focusState = new UiFocusState();
+    private final UiWidgetShell shell = new UiWidgetShell(this, this::invalidateInteraction);
 
     /**
      * 完整保留既有元素，格式错误的条目不会因其它编辑而丢失。
@@ -138,15 +138,15 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
                 if (chip.bottom() <= scroll.offset() || chip.y() >= scroll.offset() + layoutHeight()) continue;
                 Selection entry = values.get(i);
                 boolean chosen = isFocused() && i == selected;
-                THEME.drawChip(graphics, chip, chosen, enabled && i == hovered);
+                THEME.drawChip(graphics, chip, chosen, shell.isEnabled() && i == hovered);
                 if (entry.icon() != null) entry.icon().render(graphics, chip.x() + 4, chip.y() + 4, THEME);
                 int textOffset = entry.icon() == null ? TEXT_PADDING : ICON_TEXT_OFFSET;
                 graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont, entry.name().getString(),
                                 Math.max(0, chip.width() - textOffset - REMOVE_AREA_WIDTH)),
                         chip.x() + textOffset, chip.y() + (CHIP_HEIGHT - renderFont.lineHeight) / 2,
-                        !enabled ? THEME.palette().surfaces().disabledText() : chosen ? THEME.palette().controls().textOnDark() : THEME.palette().surfaces().text(), false);
+                        !shell.isEnabled() ? THEME.palette().surfaces().disabledText() : chosen ? THEME.palette().controls().textOnDark() : THEME.palette().surfaces().text(), false);
                 // 叉号统一用次要文本灰：与行为卡片的叉号同色，悬停才转危险色；选中卡的浅蓝底上白叉号几乎看不见。
-                int color = enabled && i == hovered ? THEME.palette().controls().danger() : THEME.palette().surfaces().secondaryText();
+                int color = shell.isEnabled() && i == hovered ? THEME.palette().controls().danger() : THEME.palette().surfaces().secondaryText();
                 UiIcon close = UiMarkIcons.icon(Mark.CLOSE, color);
                 close.render(graphics, chip.right() - REMOVE_HIT_WIDTH + (REMOVE_HIT_WIDTH - close.width()) / 2,
                         chip.y() + (CHIP_HEIGHT - close.height()) / 2);
@@ -228,12 +228,13 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
         return -1;
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean mousePressed(UiInputContext context) {
         double x = context.pointerX();
         double y = context.pointerY();
         int button = context.button();
-        if (!enabled || button != 0) return false;
+        if (!shell.isEnabled() || button != 0) return false;
         if (scroll.mousePressed(context)) return true;
         int index = indexAt(x, y);
         if (index < 0) return false;
@@ -259,24 +260,27 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
         return dragging;
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean mouseDragged(UiInputContext context, double dx, double dy) {
         double y = context.pointerY();
-        if (!enabled || !scroll.isDragging()) return false;
+        if (!shell.isEnabled() || !scroll.isDragging()) return false;
         scroll.mouseDragged(y);
         return true;
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean mouseScrolled(UiInputContext context, double dx, double dy) {
         double x = context.pointerX();
         double y = context.pointerY();
-        return enabled && scroll.contains(x, y) && scroll.scrollBy(dy);
+        return shell.isEnabled() && scroll.contains(x, y) && scroll.scrollBy(dy);
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (!enabled || values.isEmpty()) return false;
+        if (!shell.isEnabled() || values.isEmpty()) return false;
         if (keyCode == GLFW.GLFW_KEY_DELETE && selected >= 0) {
             remove(selected);
             return true;
@@ -312,13 +316,13 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
         return true;
     }
 
+    private void invalidateInteraction(UiInteractionSession.EndReason reason) {
+        scroll.endInteraction(reason);
+    }
+
     @Override
     void setEnabled(boolean next) {
-        enabled = next;
-        if (!next) {
-            focusState.clear();
-            scroll.endInteraction(UiInteractionSession.EndReason.CANCEL);
-        }
+        shell.setEnabled(next);
     }
 
     @Override
@@ -326,25 +330,22 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
         targets.accept(this);
     }
 
+    /** {@inheritDoc} */
     @Override
     public UiFocusState focusState() {
-        return focusState;
+        return shell.focusState();
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean canFocus() {
-        return enabled;
+        return shell.canFocus();
     }
 
     @Override
     public void focusChanged(boolean next) {
         if (next && selected < 0 && !values.isEmpty()) selected = 0;
         if (!next) scroll.endInteraction(UiInteractionSession.EndReason.CANCEL);
-    }
-
-    @Override
-    public boolean isFocused() {
-        return focusState.isFocused();
     }
 
     @Override
@@ -365,7 +366,7 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
     /** 按实际子控件解析指针，保留组合层的归属。 */
     @Override
     public @Nullable UiPointerHit hitTest(double x, double y) {
-        if (!enabled || !bounds().contains(x, y)) return null;
+        if (!shell.isEnabled() || !bounds().contains(x, y)) return null;
         UiPointerHit hit = scroll.hitTest(x, y);
         return hit == null ? UiPointerHit.leaf(this, x, y) : hit.within(this);
     }

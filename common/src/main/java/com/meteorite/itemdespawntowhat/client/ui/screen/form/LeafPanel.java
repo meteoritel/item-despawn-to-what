@@ -1,9 +1,10 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiShellWidget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidgetShell;
 import org.jetbrains.annotations.Nullable;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
@@ -30,7 +31,7 @@ import net.minecraft.network.chat.Component;
  * <p>面板自身是模态内容控件，因此它负责把指针/键盘/字符事件转发给子控件，并在内部维护
  * Tab / Shift+Tab 的焦点顺序（附加控件 -> 目录按钮 -> 表单字段）。
  */
-public final class LeafPanel implements UiWidget, UiFocusTarget {
+public final class LeafPanel implements UiShellWidget {
 
     // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
     private final UiHostTheme THEME;
@@ -60,9 +61,13 @@ public final class LeafPanel implements UiWidget, UiFocusTarget {
     private final List<UiRect> noteRects = new ArrayList<>();
     // 说明行行高：比正文字高多 1 像素，避免与表单末行贴死
     private final int noteLineHeight;
-    private UiRect bounds = new UiRect(0, 0, 0, 0);
-    private final UiFocusState focusState = new UiFocusState();
-    private boolean enabled = true;
+    private final UiWidgetShell shell = new UiWidgetShell(this);
+
+    /** {@inheritDoc} */
+    @Override
+    public UiWidgetShell shell() {
+        return shell;
+    }
 
     public LeafPanel(Font font, FormView form, List<UiWidget> extras, List<UiButton> buttons, List<Runnable> reloadValues) {
         this.font = font;
@@ -106,21 +111,17 @@ public final class LeafPanel implements UiWidget, UiFocusTarget {
         return widget instanceof UiCyclicTimeBar ? CYCLIC_HEIGHT : RANGE_HEIGHT;
     }
 
-    @Override
-    public UiRect bounds() {
-        return bounds;
-    }
-
+    /** {@inheritDoc} */
     @Override
     public void setBounds(int x, int y, int width, int height) {
-        this.bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
+        shell.setBounds(x, y, width, height);
         layout();
     }
 
     private void layout() {
-        int x = bounds.x();
-        int width = bounds.width();
-        int cursorY = bounds.y();
+        int x = bounds().x();
+        int width = bounds().width();
+        int cursorY = bounds().y();
         for (UiWidget extra : extras) {
             int extraHeight = extraHeight(extra);
             extra.setBounds(x, cursorY, width, extraHeight);
@@ -128,10 +129,10 @@ public final class LeafPanel implements UiWidget, UiFocusTarget {
         }
         cursorY = layoutButtons(cursorY);
         int notesHeight = notes.size() * noteLineHeight;
-        form.setBounds(x, cursorY, width, Math.max(12, bounds.bottom() - cursorY - notesHeight));
+        form.setBounds(x, cursorY, width, Math.max(12, bounds().bottom() - cursorY - notesHeight));
         // 说明行固定排在表单下方，供应者返回 null 时仅留白不画字
         noteRects.clear();
-        int noteY = cursorY + Math.max(12, bounds.bottom() - cursorY - notesHeight);
+        int noteY = cursorY + Math.max(12, bounds().bottom() - cursorY - notesHeight);
         for (int index = 0; index < notes.size(); index++) {
             noteRects.add(new UiRect(x, noteY, width, noteLineHeight));
             noteY += noteLineHeight;
@@ -142,8 +143,8 @@ public final class LeafPanel implements UiWidget, UiFocusTarget {
         if (buttons.isEmpty()) {
             return cursorY;
         }
-        int x = bounds.x();
-        int limit = bounds.width();
+        int x = bounds().x();
+        int limit = bounds().width();
         int[] widths = new int[buttons.size()];
         for (int index = 0; index < buttons.size(); index++) {
             widths[index] = fitWidth(buttons.get(index).preferredWidth(4), limit);
@@ -157,7 +158,6 @@ public final class LeafPanel implements UiWidget, UiFocusTarget {
         return cursorY + flow.height() + BUTTON_GAP;
     }
 
-
     public void unmount() {
         for (UiWidget extra : extras) {
             if (extra instanceof UiRangeBar bar) {
@@ -169,20 +169,20 @@ public final class LeafPanel implements UiWidget, UiFocusTarget {
         form.unmount();
     }
 
-
-    public void setEnabled(boolean enabled) {
-        this.enabled = enabled;
+    /** 禁用时结束当前交互，复合控件同步子目标资格。 */
+    public void setEnabled(boolean nextEnabled) {
+        shell.setEnabled(nextEnabled);
         for (UiWidget extra : extras) {
             if (extra instanceof UiRangeBar bar) {
-                bar.setEnabled(enabled);
+                bar.setEnabled(nextEnabled);
             } else if (extra instanceof UiCyclicTimeBar bar) {
-                bar.setEnabled(enabled);
+                bar.setEnabled(nextEnabled);
             }
         }
         for (UiButton button : buttons) {
-            button.setEnabled(enabled);
+            button.setEnabled(nextEnabled);
         }
-        form.setEnabled(enabled);
+        form.setEnabled(nextEnabled);
     }
 
     // 面板内部焦点顺序：附加控件 -> 目录按钮 -> 表单字段
@@ -220,11 +220,12 @@ public final class LeafPanel implements UiWidget, UiFocusTarget {
         }
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean mousePressed(UiInputContext context) {
         double mouseX = context.pointerX();
         double mouseY = context.pointerY();
-        if (!enabled || !bounds.contains(mouseX, mouseY)) {
+        if (!isEnabled() || !bounds().contains(mouseX, mouseY)) {
             return false;
         }
 
@@ -316,20 +317,10 @@ public final class LeafPanel implements UiWidget, UiFocusTarget {
         if (target != null) target.focusState().request();
     }
 
-
-    @Override
-    public boolean canFocus() {
-        return enabled;
-    }
-
-    @Override
-    public UiFocusState focusState() {
-        return focusState;
-    }
-
+    /** {@inheritDoc} */
     @Override
     public boolean isFocused() {
-        return focusState.containsFocus();
+        return focusState().containsFocus();
     }
 
     @Override

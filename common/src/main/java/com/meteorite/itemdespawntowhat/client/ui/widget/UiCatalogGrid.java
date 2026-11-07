@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiShellWidget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidgetShell;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiSurfaceRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlStyle;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiFooterHost;
@@ -8,16 +10,13 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiTextInput;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiScrollView;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiRowMetrics;
 import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogSelectionBinding.Mode;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
@@ -63,7 +62,7 @@ import org.lwjgl.glfw.GLFW;
  * 技术性条目与空/流动流体；范围值由宿主视图提供，切换只发出意图回调，
  * 因此页码、总数与可见条目始终一致。宿主每次提供一份 {@link View}，网格从同一快照读取条目和状态。</p>
  */
-public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHost, UiLayoutSource {
+public final class UiCatalogGrid implements UiShellWidget, UiFooterHost, UiLayoutSource {
 
     /**
      * 交互意图回调：页面只上报意图、不直接改宿主数据，默认实现全部留空，宿主按需覆写。
@@ -210,7 +209,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
     private Function<String, Component> tooltipSuffix = ignored -> null;
     private Function<String, @Nullable Component> unavailableReason = ignored -> null;
 
-    private UiRect bounds = new UiRect(0, 0, 0, 0);
+    private final UiWidgetShell shell = new UiWidgetShell(this, this::invalidateInteraction);
     private UiRect toolbarRect = new UiRect(0, 0, 0, 0);
     private UiRect searchRect = new UiRect(0, 0, 0, 0);
     private UiRect scopeRect = new UiRect(0, 0, 0, 0);
@@ -269,9 +268,6 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
     // 焦点格矩形按值复用：静止帧不重复分配
     private UiRect focusedCellRect = new UiRect(0, 0, 0, 0);
 
-    private boolean enabled = true;
-    private boolean visible = true;
-    private final UiFocusState focusState = new UiFocusState();
     private boolean explicitLoading;
     private @Nullable Component error;
     private @Nullable Component statusNote;
@@ -298,6 +294,16 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
 
     // 注入的宿主主题
     private final UiHostTheme theme;
+
+    /** {@inheritDoc} */
+    @Override
+    public UiWidgetShell shell() {
+        return shell;
+    }
+
+    private void invalidateInteraction(UiInteractionSession.EndReason reason) {
+        scroll.endInteraction(reason);
+    }
 
     /** 装配目录交互；selectionMode 由结果接收端按本次操作声明，打开后保持固定。 */
     public UiCatalogGrid(UiHostTheme theme, Font font, Mode selectionMode, Texts texts, Listener listener) {
@@ -338,7 +344,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         unavailableReason = Objects.requireNonNull(reason, "reason");
         sourceCache = null;
         syncView();
-        layout(bounds.x(), bounds.y(), bounds.width(), bounds.height());
+        layout(bounds().x(), bounds().y(), bounds().width(), bounds().height());
     }
 
     // 条目列表（当前已同步的视图）
@@ -409,7 +415,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         if (!nextPageNumber.equals(pageNumber)) {
             pageNumber = nextPageNumber;
             // 页码宽度参与底栏布局：页码真正变化时显式重排一次，不再依赖每帧重排兜底
-            layout(bounds.x(), bounds.y(), bounds.width(), bounds.height());
+            layout(bounds().x(), bounds().y(), bounds().width(), bounds().height());
         }
     }
 
@@ -419,31 +425,19 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         this.canNext = canNext;
     }
 
-    private void setEnabled(boolean enabled) {
-        this.enabled = enabled;
-        if (!enabled) {
-            scroll.endInteraction(UiInteractionSession.EndReason.DISABLED);
-            if (searchActive) {
-                searchActive = false;
-                search.focusState().clear();
-            }
+    private void setEnabled(boolean nextEnabled) {
+        shell.setEnabled(nextEnabled);
+        if (!nextEnabled && searchActive) {
+            searchActive = false;
+            search.focusState().clear();
         }
     }
 
-    public boolean isEnabled() {
-        return enabled;
-    }
-
-    public UiCatalogGrid setVisible(boolean visible) {
-        if (!visible) scroll.endInteraction(UiInteractionSession.EndReason.HIDDEN);
-        search.setVisible(visible);
-        this.visible = visible;
+    /** 隐藏时结束当前交互并退出焦点序列，恢复显示保留内容。 */
+    public UiCatalogGrid setVisible(boolean nextVisible) {
+        shell.setVisible(nextVisible);
+        search.setVisible(nextVisible);
         return this;
-    }
-
-    @Override
-    public UiRect bounds() {
-        return bounds;
     }
 
     @Override
@@ -451,7 +445,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         layout(x, y, width, height);
     }
 
-    // 弹窗按钮行托管底部内容：按按钮实际占用的右侧宽度与行高重新布局，不为此多占一行
+    /** 弹窗按钮行托管底部内容：按按钮实际占用的右侧宽度与行高重新布局，不为此多占一行 */
     @Override
     public void setFooterReserved(int right, int height) {
         if (right == footerReservedRight && height == footerReservedHeight) {
@@ -459,7 +453,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         }
         footerReservedRight = right;
         footerReservedHeight = height;
-        layout(bounds.x(), bounds.y(), bounds.width(), bounds.height());
+        layout(bounds().x(), bounds().y(), bounds().width(), bounds().height());
     }
 
     // 统一布局：工具栏、列表内凹面板、底部状态下标与翻页按钮都在这里定位。
@@ -476,9 +470,9 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
                 && layoutLanguage == language) {
             return;
         }
-        this.bounds = new UiRect(x, y, nextWidth, nextHeight);
-        int w = bounds.width();
-        int h = bounds.height();
+        shell.setBounds(x, y, nextWidth, nextHeight);
+        int w = bounds().width();
+        int h = bounds().height();
         int toolbarHeight = Math.min(TOOLBAR_HEIGHT, h);
         this.toolbarRect = new UiRect(x, y, w, toolbarHeight);
         int scopeWidth = scoped() ? scopeButtonWidth() : 0;
@@ -569,11 +563,6 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
                 Math.max(font.width(scopeLabel(Scope.TAG).getString()),
                         font.width(scopeLabel(Scope.BOTH).getString())));
         return widest + SCOPE_SIDE_PADDING * 2 + Mark.NEXT.width() + SCOPE_ARROW_GAP;
-    }
-
-    @Override
-    public boolean isVisible() {
-        return visible;
     }
 
     private void syncView() {
@@ -709,7 +698,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
     /** 导出搜索和当前页可见目录行，几何复用绘制的列宽与滚动行。 */
     @Override
     public List<UiLayoutNode> layoutNodes() {
-        if (!visible) { return List.of(); }
+        if (!isVisible()) { return List.of(); }
         List<UiLayoutNode> nodes = new ArrayList<>(search.layoutNodes());
         int columns = columns();
         int last = Math.min(rowCount(), firstVisibleRow() + visibleRows());
@@ -721,7 +710,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
                 UiRect rect = new UiRect(cellsRect.x() + column * columnWidth(),
                         cellsRect.y() + (row - firstVisibleRow()) * ROW_HEIGHT, columnWidth(), ROW_HEIGHT);
                 nodes.add(new UiLayoutNode(UiLayoutNode.Kind.ROW, rect, label, font.width(label), rect.width(),
-                        enabled && !explicitLoading, true, List.of()));
+                        isEnabled() && !explicitLoading, true, List.of()));
             }
         }
         return List.copyOf(nodes);
@@ -751,8 +740,6 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         }
     }
 
-
-
     private void drawToolbar(GuiGraphics graphics, UiPointer pointer) {
         search.render(graphics, font, pointer);
         drawScopeButton(graphics, pointer);
@@ -764,8 +751,8 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         if (policy == null || !policy.scoped() || scopeRect.width() <= 0) {
             return;
         }
-        boolean hovered = enabled && pointer.contains(scopeRect);
-        if (enabled) {
+        boolean hovered = isEnabled() && pointer.contains(scopeRect);
+        if (isEnabled()) {
             theme.drawChip(graphics, scopeRect, false, hovered);
         } else {
             theme.drawSurface(graphics, scopeRect, UiSurfaceRole.SEGMENT, UiControlStyle.State.DISABLED);
@@ -777,9 +764,9 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         int x = scopeRect.x() + Math.max(0, (scopeRect.width() - contentWidth) / 2);
         graphics.drawString(font, label, x,
                 scopeRect.y() + Math.max(0, (scopeRect.height() - font.lineHeight) / 2),
-                enabled ? theme.palette().surfaces().text() : theme.palette().surfaces().disabledText(), false);
+                isEnabled() ? theme.palette().surfaces().text() : theme.palette().surfaces().disabledText(), false);
         UiIcon arrow = UiMarkIcons.icon(Mark.NEXT,
-                enabled ? theme.palette().surfaces().secondaryText() : theme.palette().surfaces().disabledText());
+                isEnabled() ? theme.palette().surfaces().secondaryText() : theme.palette().surfaces().disabledText());
         arrow.render(graphics, x + labelWidth + SCOPE_ARROW_GAP,
                 scopeRect.y() + Math.max(0, (scopeRect.height() - arrow.height()) / 2));
     }
@@ -814,7 +801,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         boolean chosen = isSelected(entry.id());
         boolean unavailable = unavailableReason.apply(entry.id()) != null;
         int cellRight = cellX + columnWidth();
-        int fill = !enabled ? theme.palette().controls().listRowDisabled()
+        int fill = !isEnabled() ? theme.palette().controls().listRowDisabled()
                 : chosen ? theme.palette().controls().controlSelected()
                 : hovered ? theme.palette().controls().controlHover()
                 : (row % 2 == 0 ? theme.palette().controls().listRowEven() : theme.palette().controls().listRowOdd());
@@ -826,17 +813,17 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         int textX = cellX + PADDING_X + ICON_BOX + ICON_GAP;
         int textWidth = Math.max(0, cellRight - MARK_WIDTH - textX);
         String label = rowLabelText(entry);
-        int color = enabled && !unavailable ? theme.palette().surfaces().text() : theme.palette().surfaces().disabledText();
+        int color = isEnabled() && !unavailable ? theme.palette().surfaces().text() : theme.palette().surfaces().disabledText();
         int textY = cellY + Math.max(0, (ROW_HEIGHT - font.lineHeight) / 2);
         TextScroll.draw(graphics, font, label, textX, textY,
-                textWidth, color, enabled && hovered, hovered ? hoverScrollTicks : 0, false);
+                textWidth, color, isEnabled() && hovered, hovered ? hoverScrollTicks : 0, false);
         if (unavailable) {
             drawRowMark(graphics, Mark.UNAVAILABLE, theme.palette().status().warning(), cellRight, cellY);
         } else if (chosen) {
             drawRowMark(graphics, Mark.CHECK, theme.palette().controls().accentPressed(), cellRight, cellY);
         }
         if (cursorAt) {
-            theme.drawFocusOutline(graphics, focusRect(cellX, cellY));
+            shell.renderFocusOutline(graphics, focusRect(cellX, cellY), theme);
         }
     }
 
@@ -897,7 +884,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         if (footerRect.height() <= 0) {
             return;
         }
-        theme.drawDivider(graphics, bounds.x(), footerRect.y() - 1, bounds.width());
+        theme.drawDivider(graphics, bounds().x(), footerRect.y() - 1, bounds().width());
         Component status = statusText();
         boolean busy = explicitLoading && error == null;
         if (busy) {
@@ -918,8 +905,8 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
             graphics.fill(clearRect.x(), clearY + font.lineHeight - 1, clearRect.x() + font.width(link),
                     clearY + font.lineHeight, color);
         }
-        drawPagerButton(graphics, prevRect, Mark.PREVIOUS, canPrev && enabled, pointer);
-        drawPagerButton(graphics, nextRect, Mark.NEXT, canNext && enabled, pointer);
+        drawPagerButton(graphics, prevRect, Mark.PREVIOUS, canPrev && isEnabled(), pointer);
+        drawPagerButton(graphics, nextRect, Mark.NEXT, canNext && isEnabled(), pointer);
         String pages = trimmedPage(Math.max(1, pageRect.width()));
         graphics.drawString(font, pages,
                 pageRect.x() + Math.max(0, (pageRect.width() - font.width(pages)) / 2),
@@ -931,7 +918,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         if (rect.width() <= 0 || rect.height() <= 0) {
             return;
         }
-        boolean hovered = enabled && allowed && pointer.contains(rect);
+        boolean hovered = isEnabled() && allowed && pointer.contains(rect);
         graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(),
                 !allowed ? theme.palette().controls().controlDisabled() : (hovered ? theme.palette().controls().controlHover() : theme.palette().controls().controlFill()));
         theme.drawBevel(graphics, rect, theme.palette().controls().controlBevelLight(), theme.palette().controls().controlBevelDark());
@@ -1044,18 +1031,17 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
     }
 
     private boolean canClear() {
-        return enabled && !selection.isEmpty();
+        return isEnabled() && !selection.isEmpty();
     }
 
-    // ---- 输入 ----
-
+    /** {@inheritDoc} */
     @Override
     public boolean mousePressed(UiInputContext context) {
 
         double mouseX = context.pointerX();
         double mouseY = context.pointerY();
         int button = context.button();
-        if (!visible || !enabled || button != GLFW.GLFW_MOUSE_BUTTON_LEFT) {
+        if (!isVisible() || !isEnabled() || button != GLFW.GLFW_MOUSE_BUTTON_LEFT) {
             return false;
         }
         if (error != null && statusRect.contains(mouseX, mouseY) && onRetry != null) {
@@ -1064,7 +1050,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         }
         if (searchRect.contains(mouseX, mouseY)) {
             searchActive = true;
-            focusState.focusWithin(search);
+            focusState().focusWithin(search);
             if (search.mousePressed(context)) {
                 return true;
             }
@@ -1108,7 +1094,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
             toggle(entries.get(hit).id());
             return true;
         }
-        return bounds.contains(mouseX, mouseY);
+        return bounds().contains(mouseX, mouseY);
     }
 
     @Override
@@ -1122,20 +1108,22 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
                 || search.isFocused() && search.mouseDragged(context, dragX, dragY);
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
         double mouseX = context.pointerX();
         double mouseY = context.pointerY();
-        if (!visible || !enabled || !bounds.contains(mouseX, mouseY)) {
+        if (!isVisible() || !isEnabled() || !bounds().contains(mouseX, mouseY)) {
             return false;
         }
         scroll.scrollBy(scrollY);
         return true;
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (!visible || !enabled || !isFocused()) {
+        if (!isVisible() || !isEnabled() || !isFocused()) {
             return false;
         }
         if (searchActive) {
@@ -1171,14 +1159,15 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         return searchActive && search.keyReleased(keyCode, scanCode, modifiers);
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
-        if (!visible || !enabled || !isFocused()) {
+        if (!isVisible() || !isEnabled() || !isFocused()) {
             return false;
         }
         if (!searchActive) {
             searchActive = true;
-            focusState.focusWithin(search);
+            focusState().focusWithin(search);
             search.clear();
         }
         return search.charTyped(codePoint, modifiers);
@@ -1241,19 +1230,16 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         listener.onSelectionChanged(selection());
     }
 
-    @Override
-    public UiFocusState focusState() {
-        return focusState;
-    }
-
+    /** {@inheritDoc} */
     @Override
     public boolean isFocused() {
-        return focusState.containsFocus();
+        return focusState().containsFocus();
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean activate() {
-        if (!enabled || cursor < 0 || cursor >= entries.size()) {
+        if (!isEnabled() || cursor < 0 || cursor >= entries.size()) {
             return false;
         }
         activateCursor();
@@ -1270,10 +1256,10 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         if (policy != null && policy.scoped() && scopeRect.contains(mouseX, mouseY)) {
             return List.of(scopeText(scope));
         }
-        if (enabled && canPrev && prevRect.contains(mouseX, mouseY)) {
+        if (isEnabled() && canPrev && prevRect.contains(mouseX, mouseY)) {
             return List.of(texts.prevPage());
         }
-        if (enabled && canNext && nextRect.contains(mouseX, mouseY)) {
+        if (isEnabled() && canNext && nextRect.contains(mouseX, mouseY)) {
             return List.of(texts.nextPage());
         }
         if (canClear() && clearRect.contains(mouseX, mouseY)) {
@@ -1297,10 +1283,10 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
     /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
     @Override
     public @Nullable UiPointerHit hitTest(double x, double y) {
-        if (!visible || !enabled) return null;
+        if (!isVisible() || !isEnabled()) return null;
         UiPointerHit scrollbar = scroll.hitTest(x, y);
         if (scrollbar != null) return scrollbar.within(this);
-        if (!bounds.contains(x, y)) return null;
+        if (!bounds().contains(x, y)) return null;
         if (searchRect.contains(x, y)) {
             UiPointerHit hit = search.hitTest(x, y);
             if (hit != null) return hit.within(this).preservingFocus();
@@ -1313,7 +1299,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
                     cellsRect.y() + (index / columns - firstVisibleRow()) * ROW_HEIGHT, columnWidth(), ROW_HEIGHT);
             hit = hit.withRow(this, index, entries.get(index).id(), cell);
         }
-        hit = hit.withTextTooltip(tooltipLines(index, x, y), bounds);
+        hit = hit.withTextTooltip(tooltipLines(index, x, y), bounds());
         return scopeRect.contains(x, y) ? hit.preservingFocus() : hit;
     }
 

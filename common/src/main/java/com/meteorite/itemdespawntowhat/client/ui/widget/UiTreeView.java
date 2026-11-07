@@ -1,11 +1,11 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiShellWidget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidgetShell;
 import org.jetbrains.annotations.Nullable;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.tree.UiTreePath;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.tree.UiTreeProjection;
@@ -18,7 +18,6 @@ import java.util.HashSet;
 import java.util.Set;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiFlatText;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
@@ -48,7 +47,7 @@ import org.lwjgl.glfw.GLFW;
  * </ul>
  * 行内容和高度由调用方决定；缩进与展开三角由本控件绘制，渲染和命中共用累计行高。
  */
-public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSource {
+public final class UiTreeView<T> implements UiShellWidget, UiLayoutSource {
 
     /**
      * 树行渲染回调：缩进与展开三角由控件绘制，{@code row} 已扣除展开标记与缩进，可直接绘制节点文本。
@@ -98,7 +97,7 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
     // 展平后的可见行
     private final List<VisibleRow<T>> visibleRows = new ArrayList<>();
     // 控件矩形
-    private UiRect bounds = new UiRect(0, 0, 0, 0);
+    private final UiWidgetShell shell = new UiWidgetShell(this, this::invalidateInteraction);
     // 行高
     private int rowHeight;
     private boolean rowHeightPinned;
@@ -114,8 +113,6 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
     private Consumer<UiTreeNode<T>> onSelectionChanged;
     // 激活回调
     private Consumer<UiTreeNode<T>> onActivate;
-    private final UiFocusState focusState = new UiFocusState();
-    private boolean visible = true;
     // 按节点身份判定双击，展开后行下标变化不会误激活其它节点。
     private long lastClickTime;
     private UiTreeNode<T> lastClickNode;
@@ -124,6 +121,16 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
     private final UiHostTheme theme;
     // 行文本测量字体：渲染时宿主传同一实例，快照导出靠它量文案宽度
     private final Font font;
+
+    /** {@inheritDoc} */
+    @Override
+    public UiWidgetShell shell() {
+        return shell;
+    }
+
+    private void invalidateInteraction(UiInteractionSession.EndReason reason) {
+        scrollView.endInteraction(reason);
+    }
 
     /**
      * 使用注入主题的实例度量初始化行布局。
@@ -210,8 +217,9 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
         return this;
     }
 
-    public UiTreeView<T> setVisible(boolean visible) {
-        this.visible = visible;
+    /** 隐藏时结束当前交互并退出焦点序列，恢复显示保留内容。 */
+    public UiTreeView<T> setVisible(boolean nextVisible) {
+        shell.setVisible(nextVisible);
         return this;
     }
 
@@ -276,7 +284,7 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
      */
     @Override
     public List<UiLayoutNode> layoutNodes() {
-        if (!visible || bounds.width() <= 0 || bounds.height() <= 0) {
+        if (!isVisible() || bounds().width() <= 0 || bounds().height() <= 0) {
             return List.of();
         }
         UiRect viewport = scrollView.viewport();
@@ -296,19 +304,14 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
                     new UiRect(viewport.x() + text.x(), viewport.y() + row.top - offset, text.width(), text.height()),
                     label, font.width(label), text.width(), true, true, List.of()));
         }
-        return List.of(new UiLayoutNode(UiLayoutNode.Kind.TREE, bounds, Component.empty(), 0, 0,
+        return List.of(new UiLayoutNode(UiLayoutNode.Kind.TREE, bounds(), Component.empty(), 0, 0,
                 true, true, List.copyOf(rows)));
     }
 
     // ---- 布局 ----
 
-    @Override
-    public UiRect bounds() {
-        return bounds;
-    }
-
     // 几何不变时不再重设视口：宿主布局每帧对齐控件矩形，重复设置会逐帧分配矩形。
-    // 行数或行高变化由 rebuild() 同步滚动范围，因此早退不会漏掉内容变化。
+    /** 行数或行高变化由 rebuild() 同步滚动范围，因此早退不会漏掉内容变化。 */
     @Override
     public void setBounds(int x, int y, int width, int height) {
         if (themeRevision != theme.revision()) {
@@ -319,10 +322,10 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
         }
         int nextWidth = Math.max(0, width);
         int nextHeight = Math.max(0, height);
-        if (bounds.x() == x && bounds.y() == y && bounds.width() == nextWidth && bounds.height() == nextHeight) {
+        if (bounds().x() == x && bounds().y() == y && bounds().width() == nextWidth && bounds().height() == nextHeight) {
             return;
         }
-        this.bounds = new UiRect(x, y, nextWidth, nextHeight);
+        shell.setBounds(x, y, nextWidth, nextHeight);
         scrollView.setViewport(x + 1, y + 1, Math.max(0, nextWidth - 2), Math.max(0, nextHeight - 2));
         scrollView.setStep(Math.max(1, rowHeight * 2));
         syncScrollRange();
@@ -369,7 +372,6 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
     }
 
     // 递归展平
-
 
     // 屏幕坐标换算为内容坐标下的可见行下标；行高是否等高由 indexAtContentY 的二分决定
     private int indexAt(double mouseX, double mouseY) {
@@ -444,19 +446,14 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
 
     // ---- 渲染 ----
 
-    @Override
-    public boolean isVisible() {
-        return visible;
-    }
-
     /** {@inheritDoc} */
     @Override
     public void render(GuiGraphics graphics, Font font, UiPointer incomingPointer) {
         UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
-        if (!visible) {
+        if (!isVisible()) {
             return;
         }
-        theme.drawInset(graphics, bounds);
+        theme.drawInset(graphics, bounds());
         UiRect viewport = scrollView.viewport();
         if (visibleRows.isEmpty()) {
             UiFlatText.drawCentered(graphics, font, emptyMessage, viewport.x() + viewport.width() / 2,
@@ -486,9 +483,7 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
             nodeRenderer.renderNode(graphics, font, visibleRow.node, textRow, visibleRow.depth, selected, i == hoveredIndex, isFocused());
         }
         scrollView.pop(graphics);
-        if (isFocusVisible()) {
-            theme.drawFocusOutline(graphics, bounds);
-        }
+        shell.renderFocusOutline(graphics, bounds(), theme);
         scrollView.renderScrollbar(graphics, theme);
     }
 
@@ -499,13 +494,14 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
         UiTreeRowMarker.draw(graphics, x, centerY, expanded, theme.palette().surfaces().text());
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean mousePressed(UiInputContext context) {
 
         double mouseX = context.pointerX();
         double mouseY = context.pointerY();
         int button = context.button();
-        if (!visible || !bounds.contains(mouseX, mouseY) || button != GLFW.GLFW_MOUSE_BUTTON_LEFT) {
+        if (!isVisible() || !bounds().contains(mouseX, mouseY) || button != GLFW.GLFW_MOUSE_BUTTON_LEFT) {
             return false;
         }
         if (scrollView.mousePressed(context)) {
@@ -551,19 +547,21 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
         return false;
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
         double mouseX = context.pointerX();
         double mouseY = context.pointerY();
-        if (!visible || !bounds.contains(mouseX, mouseY) || scrollY == 0.0D) {
+        if (!isVisible() || !bounds().contains(mouseX, mouseY) || scrollY == 0.0D) {
             return false;
         }
         return scrollView.scrollBy(scrollY);
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (!visible || visibleRows.isEmpty()) return false;
+        if (!isVisible() || visibleRows.isEmpty()) return false;
         UiTreeNavigation.Intent intent = UiTreeNavigation.fromKey(keyCode);
         if (intent != null) {
             int page = Math.max(1, scrollView.viewport().height() / Math.max(1, rowHeight));
@@ -591,22 +589,11 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSou
         ensureVisibleFor(node);
     }
 
-    // ---- 焦点 ----
-
-    @Override
-    public UiFocusState focusState() {
-        return focusState;
-    }
-
-    @Override
-    public boolean isFocused() {
-        return focusState.isFocused();
-    }
-
+    /** {@inheritDoc} */
     @Override
     public boolean activate() {
         UiTreeNode<T> selected = selectedNode();
-        if (!visible || selected == null) {
+        if (!isVisible() || selected == null) {
             return false;
         }
         if (!selected.isLeaf()) {

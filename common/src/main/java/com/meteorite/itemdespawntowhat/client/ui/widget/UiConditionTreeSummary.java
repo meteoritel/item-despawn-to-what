@@ -1,11 +1,11 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiShellWidget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidgetShell;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiRowMetrics;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.ConditionTreeNodes;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.tree.UiTreePath;
@@ -15,7 +15,6 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.tree.UiTreeNavigation;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.tree.UiTreeRowMarker;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiScrollView;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
@@ -53,7 +52,7 @@ import org.lwjgl.glfw.GLFW;
  *       PgUp/PgDn/Home/End 快速移动。</li>
  * </ul>
  */
-public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, ConditionTreeContract.Navigation {
+public final class UiConditionTreeSummary implements UiShellWidget, ConditionTreeContract.Navigation {
 
     private static final int INDENT_WIDTH = 10;
     private static final int MARKER_WIDTH = 9;
@@ -70,7 +69,7 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
     private final UiHostTheme theme;
     private final UiScrollView scrollView = new UiScrollView();
     private ConditionExpression expression = ConditionExpression.EMPTY;
-    private UiRect bounds = new UiRect(0, 0, 0, 0);
+    private final UiWidgetShell shell = new UiWidgetShell(this, this::invalidateInteraction);
     private final List<Row> rows = new ArrayList<>();
     // 与可见行分开维护：折叠只影响 rows，不改变节点计数与违规标记
     private final Map<String, Row> allNodes = new HashMap<>();
@@ -108,10 +107,17 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
     private @Nullable Function<ConditionNode.Leaf, Component> leafDetail;
     // 参数为节点的树路径
     private @Nullable Consumer<String> onOpenCanvas;
-    private final UiFocusState focusState = new UiFocusState();
-    private boolean visible = true;
     // 禁用时拒绝导航与进入画布
-    private boolean enabled = true;
+
+    /** {@inheritDoc} */
+    @Override
+    public UiWidgetShell shell() {
+        return shell;
+    }
+
+    private void invalidateInteraction(UiInteractionSession.EndReason reason) {
+        scrollView.endInteraction(reason);
+    }
 
     /**
      * 创建条件树摘要控件。
@@ -242,23 +248,19 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
     /**
      * 设置是否可交互。禁用时立即释放焦点。
      *
-     * @param next false 表示只读且不接收键盘操作
+     * @param nextEnabled false 表示只读且不接收键盘操作
      */
-    public void setEnabled(boolean next) {
-        enabled = next;
-        if (!next) {
-
-            focusState.clear();
-        }
+    public void setEnabled(boolean nextEnabled) {
+        shell.setEnabled(nextEnabled);
     }
 
     /**
      * 设置是否可见。
      *
-     * @param newVisible false 时不渲染、不接收输入
+     * @param nextVisible false 时不渲染、不接收输入
      */
-    public UiConditionTreeSummary setVisible(boolean newVisible) {
-        this.visible = newVisible;
+    public UiConditionTreeSummary setVisible(boolean nextVisible) {
+        shell.setVisible(nextVisible);
         return this;
     }
 
@@ -329,11 +331,7 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         ensureVisible(indexOfPath(selectedPath()));
     }
 
-    @Override
-    public UiRect bounds() {
-        return bounds;
-    }
-
+    /** {@inheritDoc} */
     @Override
     public void setBounds(int x, int y, int width, int height) {
         if (themeRevision != theme.revision()) {
@@ -345,10 +343,10 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         int nextHeight = Math.max(0, height);
         // 几何是「视图」而不是内容：不变时仅保留现有可见行，不整树展平；
         // 内容变化统一走 rebuild()，所以早退不会漏掉行数或表达式变更。
-        if (bounds.x() == x && bounds.y() == y && bounds.width() == nextWidth && bounds.height() == nextHeight) {
+        if (bounds().x() == x && bounds().y() == y && bounds().width() == nextWidth && bounds().height() == nextHeight) {
             return;
         }
-        this.bounds = new UiRect(x, y, nextWidth, nextHeight);
+        shell.setBounds(x, y, nextWidth, nextHeight);
         scrollView.setViewport(x + 1, y + 1, Math.max(0, nextWidth - 2), Math.max(0, nextHeight - 2));
         scrollView.setStep(Math.max(1, rowHeight * 2));
         updateScrollRange();
@@ -472,19 +470,14 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
 
     // ---- 渲染 ----
 
-    @Override
-    public boolean isVisible() {
-        return visible;
-    }
-
     /** {@inheritDoc} */
     @Override
     public void render(GuiGraphics graphics, Font renderFont, UiPointer incomingPointer) {
         UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
-        if (!visible || bounds.width() <= 0 || bounds.height() <= 0) {
+        if (!isVisible() || bounds().width() <= 0 || bounds().height() <= 0) {
             return;
         }
-        theme.drawInset(graphics, bounds);
+        theme.drawInset(graphics, bounds());
         UiRect viewport = scrollView.viewport();
         hoveredIndex = pointer.allowed() && pointer.hit() != null ? pointer.hit().rowIndex(this) : -1;
         if (rows.isEmpty()) {
@@ -503,9 +496,7 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
             }
             scrollView.pop(graphics);
         }
-        if (isFocusVisible()) {
-            theme.drawFocusOutline(graphics, bounds);
-        }
+        shell.renderFocusOutline(graphics, bounds(), theme);
         scrollView.renderScrollbar(graphics, theme);
     }
 
@@ -631,12 +622,13 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         }
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean mousePressed(UiInputContext context) {
 
         double mouseX = context.pointerX();
         double mouseY = context.pointerY();
-        if (!visible || !enabled || !bounds.contains(mouseX, mouseY)) {
+        if (!isVisible() || !isEnabled() || !bounds().contains(mouseX, mouseY)) {
             return false;
         }
         if (scrollView.mousePressed(context)) {
@@ -674,30 +666,33 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         return false;
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean mouseReleased(UiInputContext context) {
         double mouseX = context.pointerX();
         double mouseY = context.pointerY();
-        if (!visible) {
+        if (!isVisible()) {
             return false;
         }
         scrollView.endInteraction(UiInteractionSession.EndReason.CANCEL);
-        return bounds.contains(mouseX, mouseY);
+        return bounds().contains(mouseX, mouseY);
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
         double mouseX = context.pointerX();
         double mouseY = context.pointerY();
-        if (!visible || !bounds.contains(mouseX, mouseY) || scrollY == 0.0D) {
+        if (!isVisible() || !bounds().contains(mouseX, mouseY) || scrollY == 0.0D) {
             return false;
         }
         return scrollView.scrollBy(scrollY);
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (!visible || rows.isEmpty()) return false;
+        if (!isVisible() || rows.isEmpty()) return false;
         UiTreeNavigation.Intent intent = UiTreeNavigation.fromKey(keyCode);
         if (intent != null) {
             view = UiTreeNavigation.navigate(navigationRows, view, intent, visibleRowCount());
@@ -708,19 +703,10 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         return (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER || keyCode == GLFW.GLFW_KEY_SPACE) && activate();
     }
 
-    @Override
-    public UiFocusState focusState() {
-        return focusState;
-    }
-
-    @Override
-    public boolean isFocused() {
-        return focusState.isFocused();
-    }
-
+    /** {@inheritDoc} */
     @Override
     public boolean activate() {
-        if (!enabled) {
+        if (!isEnabled()) {
             return false;
         }
         openCanvas(selectedPath() == null ? ConditionTreeContract.ROOT_PATH : selectedPath());
@@ -743,11 +729,7 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         UiRect rowBounds = new UiRect(scrollView.viewport().x(), scrollView.toScreenY(index * rowHeight),
                 scrollView.contentWidth(), rowHeight);
         return leaf.withRow(this, index, rows.get(index), rowBounds)
-                .withTextTooltip(List.of(rowLabel(rows.get(index))), bounds);
+                .withTextTooltip(List.of(rowLabel(rows.get(index))), bounds());
     }
-
-    /** 当前输入可用状态。 */
-    @Override
-    public boolean isEnabled() { return enabled; }
 
 }

@@ -214,7 +214,7 @@ public final class UiRangeBar extends AbstractBarShell<UiRangeSlider> {
     public void render(GuiGraphics graphics, Font renderFont, UiPointer incomingPointer) {
         refreshTheme();
         UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
-        if (!visible) {
+        if (!isVisible()) {
             return;
         }
         UiRangeValue value = core.value();
@@ -248,7 +248,7 @@ public final class UiRangeBar extends AbstractBarShell<UiRangeSlider> {
             drawInlineHint(graphics, labelEnd, valueX, hintText(value));
         }
         graphics.drawString(font, valueText, valueX, bounds.y(),
-                enabled ? theme.palette().surfaces().text() : theme.palette().surfaces().disabledText(), false);
+                isEnabled() ? theme.palette().surfaces().text() : theme.palette().surfaces().disabledText(), false);
     }
 
     // 聚焦时的按键提示：两端齐全提示精确输入，缺端时提示回车补端
@@ -272,9 +272,9 @@ public final class UiRangeBar extends AbstractBarShell<UiRangeSlider> {
                 Double.isFinite(selected) ? core.thumbWidth() : 0,
                 Math.max(1, trackRow.height()));
         UiRect textSlot = new UiRect(0, 0, 0, 0);
-        boolean hovered = enabled && pointer.contains(bounds);
+        boolean hovered = isEnabled() && pointer.contains(bounds);
         painter.paint(graphics, new UiSliderPainter.Frame(bounds, track, filled, thumb, textSlot, style,
-                enabled, hovered, core.isDragging(), isFocusVisible(), core.isDragging(), false, false, false));
+                isEnabled(), hovered, core.isDragging(), isFocusVisible(), core.isDragging(), false, false, false));
         UiRangeEnd other = core.selectedEnd().other();
         if (value.isPresent(other)) {
             UiRect otherThumb = new UiRect(core.xOf(value.value(other)) - core.thumbWidth() / 2,
@@ -282,7 +282,7 @@ public final class UiRangeBar extends AbstractBarShell<UiRangeSlider> {
             UiRect empty = new UiRect(0, 0, 0, 0);
             // 第二个手柄复用主题绘制，不重复覆盖轨道或当前手柄的焦点框。
             painter.paint(graphics, new UiSliderPainter.Frame(empty, empty, empty, otherThumb, empty, style,
-                    enabled, enabled && pointer.contains(otherThumb), false, false, false,
+                    isEnabled(), isEnabled() && pointer.contains(otherThumb), false, false, false,
                     false, false, false));
         }
         // 端点缺失时给出文字提示：颜色不是唯一线索
@@ -325,7 +325,6 @@ public final class UiRangeBar extends AbstractBarShell<UiRangeSlider> {
 
     // ---- 焦点与生命周期 ----
 
-
     @Override
     public Component accessibleName() {
         Component label = core.label() == null ? Component.empty() : core.label().copy().append(" ");
@@ -340,6 +339,5 @@ public final class UiRangeBar extends AbstractBarShell<UiRangeSlider> {
     }
 
     // ---- kit 核心适配 ----
-
 
 }

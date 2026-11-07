@@ -36,7 +36,7 @@ kit 是记录来源与差异的维护副本，按可独立发布的库 API 维�
 
 公开入口位于 `client/ui/kit/api`：input 持有作用域、交互与焦点，geometry 持有坐标变换，render 持有通用绘制，control 组合控件与容器，style 提供原版默认主题并接收宿主主题；number、text、layout、tree 分别持有对应契约与算法，preview 拥有场景及资源。包级入口见 [api/package-info.java](../../common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/api/package-info.java)。
 
-公开具体类直接承载状态与算法。输入和焦点的包内协作、实现 `UiRangeControl` 的区间滑块内核 `AbstractRangeCore`、preview 的句柄与场景引擎保留在各自能力包中，由 Java 可见性保护。跨能力共用的 pose 裁剪实现位于 `internal/render`，由文本绘制与视口变换调用；宿主导入统一面向 api。
+公开具体类直接承载状态与算法。输入和焦点的包内协作、数值包内的 `SliderInteraction`、`SliderTrack` 与区间内核 `AbstractRangeCore`、preview 的句柄与场景引擎保留在各自能力包中，由 Java 可见性保护。跨能力共用的 pose 裁剪实现位于 `internal/render`，由文本绘制与视口变换调用；宿主导入统一面向 api。
 
 ### 对外入口
 
@@ -112,6 +112,8 @@ flowchart LR
 | `UiControlStyle` / `UiControlRole` / `UiSliderSkin` / `UiSliderRole` | 注入值 | 角色只表达语义（如主要、次要、危险等操作语义，以及紧凑、宽松两档几何尺度）；交互状态由样式按 `State` 解析，不属于角色；皮肤把“样式 + 画法”配成一对，使两者来自同一套主题 | 主题实现、控件渲染 |
 | `UiDocument` / `UiNode` | 只读排版聚合根 | 把文档内容块排成几何并缓存；渲染、提示和命中查询共用几何，命中数据由宿主解释 | 布局类型、`UiPointerHit`、`UiRenderLayers` |
 | `UiControl` / `UiControlGroup` | 控件聚合根 | 控件按角色取样式并解析交互状态；控件组按稳定 key 复用实例、按层序命中并给 tooltip | `UiStyleSource`、`UiFocusManager` |
+| `UiWidgetShell` / `UiShellWidget` | 可组合控件状态 | 本地矩形、资格、焦点视图、显式名称及失效收尾；Widget 通过可选默认方法复用状态，包装与核心共享实例 | `UiFocusTarget`、`UiControl`、宿主控件 |
+| `UiLabelPresentation` | 实例标签呈现 | 语义内容、视觉文本、按字体与语言失效的测量，以及悬停滚动计时 | `TextScroll`、按钮、数量行 |
 | `UiTextInput` / `UiTextArea` / `UiListView` | 通用控件 | 原版文本编辑、局部历史与泛型行列表；主题变化保留控件状态 | `UiTextEditSession`、`UiScrollView` |
 | `UiModal` / `UiModalStack` / `UiScreen` | 装配根 | 通用模态、顶层作用域、原版 Screen 事件桥和根资源释放 | `UiButtonWidget`、`UiInputRouter` |
 | `UiThemeContext` / `UiMinecraftTheme` | 主题来源 | 根发布版本，控件刷新解析结果；默认完整皮肤复用原版 sprites | `UiStyleSource`、宿主主题 adapter |
@@ -182,6 +184,16 @@ sequenceDiagram
 `UiValueTextBinding` 分别保存文本与数值快照。合法文本完成后提交，非法或未完成文本允许 Tab 离开、保留原文和错误、回退数值预览；合法空端点按 `UiRangeValue` 的缺席语义提交。程序回填保持静默，无净变化操作也会收束快照。
 
 键盘与字符沿内容树的实际焦点路径派发一次；文本局部 Undo/Redo 优先，内容未消费的历史快捷键交给作用域注入的宿主历史。Tab 先完成会话再转焦，Esc 先取消活动会话，其余内容未消费的 Enter/Space 才进入焦点激活。
+
+### 控件壳与标签呈现
+
+`UiWidgetShell` 组合控件的本地状态，实际控件绑定自身身份；`UiShellWidget` 为普通 Widget 提供几何、资格和焦点视图的默认委托。包装与核心返回同一个壳，实际逻辑焦点与持续交互仍由 `UiInputScope` 持有。使用独立几何来源的表单或专用核心可以只组合需要的能力，布局派生数据由各自所有者维护。
+
+隐藏或禁用先更新本地资格，再按对应原因结束本目标交互，最后清焦点。自定义失效回调负责文本选择、滚动条或画布等实际目标的收尾；回调重新启用控件时保留新焦点。普通焦点框使用当前主题和实际焦点矩形；按钮的显式样式覆盖与分段组的导航标记由各自画法呈现。
+
+`UiControl` 与宿主按钮共享同一个 `UiLabelPresentation`，数量名称行由稳定条目持有标签实例。内容改变、字体或当前 `Language` 实例变化时重测量并重置滚动；相同内容重配保持计时。绘制前的 hover 包含 `UiPointer` 门禁与实际文本几何，滚动算法和裁剪继续由 `TextScroll` 承担。主题皮肤与视图布局分别消费 revision，行高、投影和滚动范围在命中前同步。
+
+`UiScalarSlider` 与区间内核组合包内 `SliderInteraction<V>`，共用会话开始、来源与按键匹配、释放、取消恢复和拖动锚点；值快照继续由 `UiValueInteraction<V>` 按模型自己的有效性与等价规则管理。结束先摘除会话关联，取消先恢复模型再通知监听器。轨道几何由 `SliderTrack` 使用真实手柄宽度计算；端点缺席、对端约束、周期方向、环绕和最后刻度由具体模型解释。`UiNumberField` 的并排文本与宿主区间壳的按需精确输入都经 `UiValueTextBinding` 消费同一操作生命周期。
 
 ### 焦点与激活
 
@@ -270,7 +282,7 @@ sequenceDiagram
 ### 扩展点
 
 - **新增 kit 公开原语**：按职责放入 `api` 能力包，在同目录 `package-info.java` 登记用途及 host/library/example 消费角色；共享内部实现按真实协作放入 `internal` 或保留包内可见。随后运行边界脚本。
-- **新增控件**：实现 `UiInputTarget`（必要时加 `UiFocusTarget`）；输入交给 `UiInputRouter` 路由，持续交互登记到作用域的 `UiInteractionSession`，值快照由控件模型保存。
+- **新增控件**：实现 `UiInputTarget`（必要时加 `UiFocusTarget`）；普通可聚焦 Widget 可通过 `UiShellWidget` 组合 `UiWidgetShell`，标签呈现可独立组合 `UiLabelPresentation`；输入交给 `UiInputRouter` 路由，持续交互登记到作用域的 `UiInteractionSession`，值快照由控件模型保存。
 - **新增主题或皮肤**：实现 `UiStyleSource`，同一角色重复调用返回稳定值，根上下文发布变化版本；滑块务必以 `UiSliderSkin` 成对给出样式与画法，使 `UiSliderPainter.Frame` 携带的样式与轨道用色同源。宿主侧的落点见 [client-ui](client-ui.md)。
 - **新增数值字段**：`UiNumberPolicy` 描述合法域、粗细步长与整数策略，`UiSliderWindow` 描述这一段域映射到轨道的哪一截，`UiNumbers` 负责显示与解析，精确输入用 `UiValueTextBinding` 绑定。窗口只影响几何，超出窗口但仍在合法域内的值继续精确显示与编辑。
 - **新增树或树操作**：提供 `UiTreeEditor.Adapter`（不可变节点、容量、可接受子节点）与 `UiTreeCodec`；结构操作统一走 `UiTreeEditor`，拖动走 `UiTreeMoveInteraction`，一次拖动只提交一次。

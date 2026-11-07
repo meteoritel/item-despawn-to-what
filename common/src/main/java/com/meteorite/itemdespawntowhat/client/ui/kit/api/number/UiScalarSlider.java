@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.number;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidgetShell;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
@@ -58,9 +59,10 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInt
     /** 标签与数值之间保留的最小间距。 */
     private static final int TEXT_GAP = 4;
 
-    private UiInteractionSession capture;
-    private final UiValueInteraction<Double> interaction = new UiValueInteraction<>(
-            Double::isFinite, (first, second) -> first.doubleValue() == second.doubleValue());
+    private final UiWidgetShell shell = new UiWidgetShell(this, this::endInteraction);
+    private final SliderInteraction<Double> interaction = new SliderInteraction<>(this,
+            Double::isFinite, (first, second) -> first.doubleValue() == second.doubleValue(),
+            this::value, restored -> this.value = restored, this::interactionListener);
 
     private UiNumberPolicy policy;
     private UiSliderWindow window;
@@ -77,15 +79,8 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInt
     private Component label = Component.empty();
     private @Nullable Function<Double, Component> formatter;
     private @Nullable UiValueInteraction.Listener<Double> interactionListener;
-    private UiRect bounds = new UiRect(0, 0, 0, 0);
-    private boolean enabled = true;
-    private boolean visible = true;
-    private final UiFocusState focusState = new UiFocusState();
     private boolean hovered;
     private boolean error;
-    private double dragAnchorPointer;
-    private double dragAnchorValue;
-    private boolean dragFineAnchor;
     /** 上一帧标签是否被可用宽度截断；命中时据此附带完整标签提示。 */
     private boolean labelTrimmed;
     private UiRect labelBounds = new UiRect(0, 0, 0, 0);
@@ -235,25 +230,25 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInt
         return this;
     }
 
+    /** 当前可用性由共享状态壳持有。 */
     public boolean isEnabled() {
-        return enabled;
+        return shell.isEnabled();
     }
 
-    // 禁用时立即结束进行中的交互并回退预览
+    /** 禁用时立即结束进行中的交互并回退预览 */
     public UiScalarSlider setEnabled(boolean next) {
-        if (!next && enabled) endInteraction(UiInteractionSession.EndReason.DISABLED);
-        enabled = next;
+        shell.setEnabled(next);
         return this;
     }
 
+    /** 当前可见性由共享状态壳持有。 */
     public boolean isVisible() {
-        return visible;
+        return shell.isVisible();
     }
 
-    // 隐藏时立即结束进行中的交互并回退预览
+    /** 隐藏时立即结束进行中的交互并回退预览 */
     public UiScalarSlider setVisible(boolean next) {
-        if (!next && visible) endInteraction(UiInteractionSession.EndReason.HIDDEN);
-        visible = next;
+        shell.setVisible(next);
         return this;
     }
 
@@ -270,8 +265,9 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInt
         return interaction.isActive();
     }
 
+    /** 是否持有本目标的指针拖动会话。 */
     public boolean isDragging() {
-        return capture != null && capture.owns(this) && capture.matches(UiInteractionSession.Source.POINTER, 0);
+        return interaction.isDragging();
     }
 
     // 当前值的显示文本：整数直出、否则定点小数；规则集中在 UiNumbers，避免与宿主各写一份
@@ -285,26 +281,33 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInt
         return Component.literal(UiNumbers.plain(value, VALUE_DECIMALS));
     }
 
+    /** {@inheritDoc} */
     @Override
     public UiRect bounds() {
-        return bounds;
+        return shell.bounds();
     }
 
+    /** 更新 GUI 逻辑矩形；负宽高按零处理，同步当前布局几何。 */
     public void setBounds(int x, int y, int width, int height) {
-        this.bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
+        shell.setBounds(x, y, width, height);
     }
 
+    /** 手柄中心可移动的轨道左端，使用当前皮肤宽度。 */
     public int trackLeft() {
         refreshTheme();
-        return bounds.x() + style.thumbWidth();
+        return SliderTrack.left(bounds(), style.thumbWidth());
     }
 
+    /** 手柄中心可移动的轨道右端，使用当前皮肤宽度。 */
     public int trackRight() {
-        return Math.max(trackLeft() + 1, bounds.right() - style.thumbWidth());
+        refreshTheme();
+        return SliderTrack.right(bounds(), style.thumbWidth());
     }
 
+    /** 轨道至少保留一个 GUI 逻辑像素，供绘制与指针换算共用。 */
     public int trackWidth() {
-        return Math.max(1, trackRight() - trackLeft());
+        refreshTheme();
+        return SliderTrack.width(bounds(), style.thumbWidth());
     }
 
     /**
@@ -322,34 +325,34 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInt
         return policy.snap(window.valueAt(fraction), fine);
     }
 
-    // 绘制一帧；hovered 只在可见时更新
+    /** 绘制一帧；hovered 只在可见时更新 */
     public void render(GuiGraphics graphics, Font font, UiPointer incomingPointer) {
         refreshTheme();
         UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
-        if (!visible) {
+        if (!isVisible()) {
             return;
         }
-        hovered = enabled && pointer.forTarget(this).contains(bounds);
+        hovered = isEnabled() && pointer.forTarget(this).contains(bounds());
         painter.paint(graphics, buildFrame(font));
         int textY = textRowY(font);
         String valueText = trimmedValue(font);
         int valueWidth = font.width(valueText);
         // 数值优先完整可见：标签按剩余宽度截断，悬停时用提示补全
-        int labelMax = Math.max(0, bounds.width() - valueWidth - TEXT_GAP);
+        int labelMax = Math.max(0, bounds().width() - valueWidth - TEXT_GAP);
         String labelText = TextScroll.trimToWidth(font, label.getString(), labelMax);
         labelTrimmed = labelMax > 0 && font.width(label.getString()) > labelMax;
-        labelBounds = new UiRect(bounds.x(), textY, Math.min(font.width(labelText), labelMax), font.lineHeight);
+        labelBounds = new UiRect(bounds().x(), textY, Math.min(font.width(labelText), labelMax), font.lineHeight);
         if (!labelText.isEmpty()) {
-            graphics.drawString(font, labelText, bounds.x(), textY, style.resolveLabelText(enabled, error), false);
+            graphics.drawString(font, labelText, bounds().x(), textY, style.resolveLabelText(isEnabled(), error), false);
         }
-        int valueX = Math.max(bounds.x(), bounds.right() - valueWidth);
-        graphics.drawString(font, valueText, valueX, textY, style.resolveValueText(enabled, error), false);
+        int valueX = Math.max(bounds().x(), bounds().right() - valueWidth);
+        graphics.drawString(font, valueText, valueX, textY, style.resolveValueText(isEnabled(), error), false);
     }
 
-    // 标签被截断时把完整标签挂到命中上，由宿主现有的提示出口绘制
+    /** 标签被截断时把完整标签挂到命中上，由宿主现有的提示出口绘制 */
     @Override
     public @Nullable UiPointerHit hitTest(double x, double y) {
-        if (!canFocus() || !bounds.contains(x, y)) {
+        if (!canFocus() || !bounds().contains(x, y)) {
             return null;
         }
         UiPointerHit hit = UiPointerHit.leaf(this, x, y);
@@ -361,24 +364,24 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInt
     // 无标签的数值行保持原有居中画法，避免数值上移后与宿主行标签的基线错位。
     private boolean splitTextRow(Font font) {
         return !label.getString().isEmpty()
-                && bounds.height() - (font.lineHeight + style.trackHeight() + style.thumbOverhang() * 2) >= TRACK_GAP;
+                && bounds().height() - (font.lineHeight + style.trackHeight() + style.thumbOverhang() * 2) >= TRACK_GAP;
     }
 
     private int textRowY(Font font) {
         return splitTextRow(font)
-                ? bounds.y()
-                : bounds.y() + Math.max(0, (bounds.height() - font.lineHeight) / 2);
+                ? bounds().y()
+                : bounds().y() + Math.max(0, (bounds().height() - font.lineHeight) / 2);
     }
 
     private int trackTop(Font font) {
         return splitTextRow(font)
-                ? bounds.bottom() - style.trackHeight() - style.thumbOverhang()
-                : bounds.y() + Math.max(0, (bounds.height() - style.trackHeight()) / 2);
+                ? bounds().bottom() - style.trackHeight() - style.thumbOverhang()
+                : bounds().y() + Math.max(0, (bounds().height() - style.trackHeight()) / 2);
     }
 
     // 数值文本按控件宽度收口，避免超长值压住标签或越出右边界
     private String trimmedValue(Font font) {
-        return TextScroll.trimToWidth(font, formatValue().getString(), Math.max(0, bounds.width() - TEXT_GAP));
+        return TextScroll.trimToWidth(font, formatValue().getString(), Math.max(0, bounds().width() - TEXT_GAP));
     }
 
     private UiSliderPainter.Frame buildFrame(Font font) {
@@ -392,76 +395,52 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInt
         UiRect filled = new UiRect(left, trackY, Math.max(0, filledRight - left), trackHeight);
         int thumbWidth = style.thumbWidth();
         int thumbX = left + (int) Math.round(fraction * width) - thumbWidth / 2;
-        int maxThumbX = Math.max(bounds.x(), bounds.right() - thumbWidth);
-        thumbX = Math.clamp(thumbX, bounds.x(), maxThumbX);
+        int maxThumbX = Math.max(bounds().x(), bounds().right() - thumbWidth);
+        thumbX = Math.clamp(thumbX, bounds().x(), maxThumbX);
         int overhang = style.thumbOverhang();
         UiRect thumb = new UiRect(thumbX, trackY - overhang, thumbWidth, trackHeight + overhang * 2);
         String valueText = trimmedValue(font);
-        int valueWidth = Math.min(font.width(valueText), bounds.width());
+        int valueWidth = Math.min(font.width(valueText), bounds().width());
         int textY = textRowY(font);
-        UiRect textSlot = new UiRect(Math.max(bounds.x(), bounds.right() - valueWidth), textY,
+        UiRect textSlot = new UiRect(Math.max(bounds().x(), bounds().right() - valueWidth), textY,
                 Math.max(0, valueWidth), font.lineHeight);
         boolean overflowBelow = value < window.min();
         boolean overflowAbove = value > window.max();
-        return new UiSliderPainter.Frame(bounds, track, filled, thumb, textSlot, style,
-                enabled, hovered, isDragging(), isFocusVisible(), isDragging(), error, overflowBelow, overflowAbove);
+        return new UiSliderPainter.Frame(bounds(), track, filled, thumb, textSlot, style,
+                isEnabled(), hovered, isDragging(), isFocusVisible(), isDragging(), error, overflowBelow, overflowAbove);
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean mousePressed(UiInputContext context) {
-        if (!visible || !enabled || context.button() != 0
-                || !bounds.contains(context.pointerX(), context.pointerY())) {
-            return false;
-        }
-
-        capture = context.scope().interaction();
-        capture.begin(this, UiInteractionSession.Source.POINTER, context.button());
-
+        if (!shell.isInteractive() || context.button() != GLFW.GLFW_MOUSE_BUTTON_LEFT
+                || !bounds().contains(context.pointerX(), context.pointerY())) return false;
         boolean fine = context.shiftDown();
-        if (interaction.begin(value, interactionListener)) {
-            preview(valueAtPointer(context.pointerX(), fine));
-        }
-        // 点击定位后以当前位置为拖动锚点，避免拖动时再次跳变
-        dragAnchorPointer = context.pointerX();
-        dragAnchorValue = value;
-        dragFineAnchor = fine;
+        if (interaction.beginPointer(context)) preview(valueAtPointer(context.pointerX(), fine));
+        interaction.anchor(context.pointerX(), value, fine);
         return true;
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
-        if (!isDragging()) {
-            return false;
-        }
-        if (context.shiftDown() != dragFineAnchor) {
-            // 拖动中按或松 Shift：先重设锚点，当前值保持不变
-            dragFineAnchor = context.shiftDown();
-            dragAnchorPointer = context.pointerX();
-            dragAnchorValue = value;
-        }
-        double perPixel = policy.dragValuePerPixel(trackWidth(), window.span(), dragFineAnchor);
-        double raw = dragAnchorValue + (context.pointerX() - dragAnchorPointer) * perPixel;
-        preview(policy.snap(raw, dragFineAnchor));
+        if (!isDragging()) return false;
+        if (interaction.reanchor(context.pointerX(), value, context.shiftDown())) return true;
+        double perPixel = policy.dragValuePerPixel(trackWidth(), window.span(), interaction.isFine());
+        preview(policy.snap(interaction.dragValue(context.pointerX(), perPixel), interaction.isFine()));
         return true;
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean mouseReleased(UiInputContext context) {
-        if (!isDragging()) {
-            return false;
-        }
-
-        if ((capture != null && capture.owns(this))) {
-            capture.end(this, UiInteractionSession.EndReason.RELEASE);
-        } else {
-            finishInteraction(UiInteractionSession.EndReason.RELEASE);
-        }
-        return true;
+        return interaction.releasePointer(context.button());
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (!visible || !enabled || !isFocused()) {
+        if (!isVisible() || !isEnabled() || !isFocused()) {
             return false;
         }
         boolean fine = (modifiers & GLFW.GLFW_MOD_SHIFT) != 0;
@@ -498,48 +477,31 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInt
         };
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
-        if (capture == null || !capture.owns(this) || !capture.matches(UiInteractionSession.Source.KEY, keyCode))
-            return false;
-        endInteraction(UiInteractionSession.EndReason.RELEASE);
-        return true;
+        return interaction.releaseKey(keyCode);
     }
 
     // 方向键重复：同一次按键重复在 key-up 才提交，换键前先结清上一次
     private void adjustByKey(int keyCode, double direction, boolean fine) {
-        capture = Objects.requireNonNull(focusState.scope(), "Focused input requires a mounted scope").interaction();
-        capture.begin(this, UiInteractionSession.Source.KEY, keyCode);
-        if (!interaction.isActive()) interaction.begin(value, interactionListener);
+        interaction.beginKey(focusState(), keyCode);
         preview(policy.snap(value + direction * policy.step(fine), fine));
     }
 
     // 一次性用户操作：Home/End、启用后的 PageUp/PageDown
     private void oneShot(double target, boolean fine) {
-        if (isDragging()) {
-            return;
-        }
-        if (interaction.isActive()) {
-            endInteraction(UiInteractionSession.EndReason.RELEASE);
-        }
+        if (isDragging()) return;
+        interaction.finishBeforeDiscreteChange();
         double next = policy.snap(target, fine);
-        if (next == value) {
-            return;
-        }
-        if (!interaction.begin(value, interactionListener)) {
-            return;
-        }
+        if (next == value || !interaction.beginOperation()) return;
         preview(next);
-        interaction.commit();
+        interaction.end(UiInteractionSession.EndReason.RELEASE);
     }
 
     // Esc：只回退进行中的交互；没有交互时返回 false 交给宿主关闭页面
     private boolean cancelInteraction() {
-        if (!interaction.isActive() && !(capture != null && capture.owns(this))) {
-            return false;
-        }
-        endInteraction(UiInteractionSession.EndReason.CANCEL);
-        return true;
+        return interaction.cancel();
     }
 
     // 预览新值；同值不回调，保证无变化不产生历史。用户操作一律先收进显示窗口，提交仍用精确值
@@ -579,47 +541,25 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInt
      * 正常释放与同域焦点转移完成有效预览，取消原因回退到本次操作起点值。
      */
     public void endInteraction(UiInteractionSession.EndReason reason) {
-        Objects.requireNonNull(reason, "End reason");
-        if (capture != null && capture.end(this, reason)) {
-            return;
-        }
-        finishInteraction(reason);
+        interaction.end(reason);
     }
 
-
+    /** {@inheritDoc} */
     @Override
     public void interactionEnded(UiInteractionSession.EndReason reason) {
-        finishInteraction(reason);
+        interaction.finish(reason);
     }
 
-    private void finishInteraction(UiInteractionSession.EndReason reason) {
-
-
-        if (!interaction.isActive()) {
-            return;
-        }
-        if (reason.cancels()) {
-            value = interaction.startValue();
-            interaction.cancel();
-        } else {
-            interaction.commit();
-        }
-    }
-
+    /** {@inheritDoc} */
     @Override
     public UiFocusState focusState() {
-        return focusState;
+        return shell.focusState();
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean canFocus() {
-        return visible && enabled;
-    }
-
-
-    @Override
-    public boolean isFocused() {
-        return focusState.isFocused();
+        return shell.canFocus();
     }
 
     @Override

@@ -1,10 +1,10 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiShellWidget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidgetShell;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 
@@ -20,7 +20,6 @@ import com.meteorite.itemdespawntowhat.client.edit.ConditionTreeNodes;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.OpaqueCondition;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiHistoryShortcut;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
@@ -70,7 +69,7 @@ import org.lwjgl.glfw.GLFW;
  * {@link #setInlineEditor(InlineEditor, UiTreePath)} 装载条件叶参数；候选修改经绑定回调交回宿主，
  * 控件不持有正式保存入口。缩进摘要 {@link UiConditionTreeSummary} 共用条件数据与校验，保持只读。</p>
  */
-public final class UiConditionGraphEditor implements UiInteractionSession.Target, UiWidget, UiFocusTarget, UiLayoutSource, ConditionTreeContract.Navigation {
+public final class UiConditionGraphEditor implements UiInteractionSession.Target, UiShellWidget, UiLayoutSource, ConditionTreeContract.Navigation {
 
     // 视图定位与手势阈值使用 GUI 屏幕像素。
     private static final int FIT_PADDING = 12;
@@ -164,10 +163,7 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
 
     private ConditionExpression expression = ConditionExpression.EMPTY;
     private ConditionTreeViewModel viewModel = new ConditionTreeViewModel();
-    private UiRect bounds = new UiRect(0, 0, 0, 0);
-    private boolean visible = true;
-    private boolean enabled = true;
-    private final UiFocusState focusState = new UiFocusState();
+    private final UiWidgetShell shell = new UiWidgetShell(this, this::invalidateInteraction);
     private boolean viewInitialized;
     private boolean centerEmptyView;
     private @Nullable ConditionNode laidOutRoot;
@@ -233,6 +229,16 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
 
     // 注入的宿主主题
     private final UiHostTheme theme;
+
+    /** {@inheritDoc} */
+    @Override
+    public UiWidgetShell shell() {
+        return shell;
+    }
+
+    private void invalidateInteraction(UiInteractionSession.EndReason reason) {
+        endInteractions(reason);
+    }
 
     public UiConditionGraphEditor(UiHostTheme theme, Font font) {
         this.theme = UiHostThemes.require(theme);
@@ -527,10 +533,10 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
      * 直接打开类型列表，确认后追加到当前容器或在根外包一层全部满足。
      */
     public boolean beginAddCondition() {
-        if (!enabled) {
+        if (!isEnabled()) {
             return false;
         }
-        openPicker(new Hotspot(null, 0, bounds));
+        openPicker(new Hotspot(null, 0, bounds()));
         pickerAppend = true;
         return true;
     }
@@ -571,8 +577,9 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
         return kindMenuOpen && kindMenuPurpose == KindMenuPurpose.DELETE_CONFIRM;
     }
 
+    /** 进入新增分组操作；编辑器不可用时拒绝。 */
     public boolean beginAddGroup(boolean allOf) {
-        if (!enabled) {
+        if (!isEnabled()) {
             return false;
         }
         endInteractions(UiInteractionSession.EndReason.CANCEL);
@@ -588,7 +595,7 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
      * @param anchorScreen 按钮在 GUI 屏幕坐标下的矩形，菜单贴着它弹出
      */
     public void beginAddGroupWithKind(UiRect anchorScreen) {
-        if (!enabled) {
+        if (!isEnabled()) {
             return;
         }
         endInteractions(UiInteractionSession.EndReason.CANCEL);
@@ -607,7 +614,7 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
      * 对当前选中的同父连续节点弹出「全部满足 / 任一满足」包组菜单；无选中时不弹出。
      */
     public void beginWrapWithKind() {
-        if (!enabled || tree.selection().isEmpty()) {
+        if (!isEnabled() || tree.selection().isEmpty()) {
             return;
         }
         endInteractions(UiInteractionSession.EndReason.CANCEL);
@@ -625,7 +632,7 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
      * 把选中节点包一层 NOT；多选时包成「NOT（ALL 选中项）」。
      */
     public boolean invertSelection() {
-        if (!enabled || tree.selection().isEmpty()) {
+        if (!isEnabled() || tree.selection().isEmpty()) {
             return false;
         }
         List<UiTreePath> selected = tree.normalizedSelection();
@@ -657,7 +664,7 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
      * @param anchorScreen 触发删除的工具格屏幕矩形；为 {@code null}（键盘删除）时贴着选区卡片弹出
      */
     public boolean removeSelection(@Nullable UiRect anchorScreen) {
-        if (!enabled || tree.selection().isEmpty()) {
+        if (!isEnabled() || tree.selection().isEmpty()) {
             return false;
         }
         List<UiTreePath> selected = tree.normalizedSelection();
@@ -754,7 +761,7 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
      * <p>只做结构判断，不写入表达式，也不触发校验。</p>
      */
     public boolean canMoveSelection(int delta) {
-        if (!enabled || delta == 0) {
+        if (!isEnabled() || delta == 0) {
             return false;
         }
         if (tree.normalizedSelection().size() > 1) {
@@ -774,7 +781,7 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
 
     // 把选中的连续同级节点包成 ALL 或 ANY 分组；写入失败时 operationError 已携带原因
     private void wrapSelection(boolean all) {
-        if (!enabled) {
+        if (!isEnabled()) {
             return;
         }
         endInteractions(UiInteractionSession.EndReason.CANCEL);
@@ -790,7 +797,7 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
 
     // Ctrl+D：把选中子树复制为同级后继；根节点没有同级位置，父节点满时整体拒绝
     private boolean duplicateSelection() {
-        if (!enabled || tree.selection().isEmpty()) {
+        if (!isEnabled() || tree.selection().isEmpty()) {
             return false;
         }
         List<UiTreePath> selected = tree.normalizedSelection();
@@ -862,16 +869,18 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
         return true;
     }
 
+    /** 把当前选择交给宿主复制入口；无选择或未装配入口时返回 false。 */
     public boolean copySelection() {
-        if (!enabled || tree.selection().isEmpty() || copyAction == null) {
+        if (!isEnabled() || tree.selection().isEmpty() || copyAction == null) {
             return false;
         }
         copyAction.run();
         return true;
     }
 
+    /** 请求宿主粘贴当前剪贴板；编辑器不可用或未装配入口时返回 false。 */
     public boolean pasteSelection() {
-        if (!enabled || pasteAction == null) {
+        if (!isEnabled() || pasteAction == null) {
             return false;
         }
         pasteAction.run();
@@ -882,7 +891,7 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
      * 粘贴子树：优先作为选中容器的子项，其次作为选中节点的同级后继。
      */
     public void pasteNodes(List<ConditionNode> nodes) {
-        if (!enabled || nodes.isEmpty()) {
+        if (!isEnabled() || nodes.isEmpty()) {
             return;
         }
         UiTreePath parent;
@@ -920,7 +929,7 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
      * 编辑选中叶节点的参数。
      */
     public boolean editSelectedLeaf() {
-        if (!enabled || !canEditSelectedLeaf()) {
+        if (!isEnabled() || !canEditSelectedLeaf()) {
             return false;
         }
         ConditionNode node = selectedNode();
@@ -972,19 +981,13 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
         return transform.scalePercent();
     }
 
-    // ---- 布局 ----
-
-    @Override
-    public UiRect bounds() {
-        return bounds;
-    }
-
+    /** {@inheritDoc} */
     @Override
     public void setBounds(int x, int y, int width, int height) {
-        this.bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
-        transform.setViewport(bounds.x(), bounds.y(), bounds.width(), bounds.height());
-        picker.setBounds(bounds);
-        inlinePanel.setBounds(bounds);
+        shell.setBounds(x, y, width, height);
+        transform.setViewport(bounds().x(), bounds().y(), bounds().width(), bounds().height());
+        picker.setBounds(bounds());
+        inlinePanel.setBounds(bounds());
     }
 
     /**
@@ -998,7 +1001,7 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
      */
     @Override
     public List<UiLayoutNode> layoutNodes() {
-        if (!visible || bounds.width() <= 0 || bounds.height() <= 0) {
+        if (!isVisible() || bounds().width() <= 0 || bounds().height() <= 0) {
             return List.of();
         }
         graph.ensureText();
@@ -1013,12 +1016,12 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
             ConditionGraphLayout.CardText text = graph.cardText(node);
             nodes.add(new UiLayoutNode(UiLayoutNode.Kind.CONTROL, toScreenRect(rect),
                     Component.literal(text.title()), text.titleWidth(), titleBudget(rect),
-                    enabled, true, List.of()));
+                    isEnabled(), true, List.of()));
         }
         if (graph.root() == null && !graph.hotspots().isEmpty()) {
             UiRect hotspot = graph.hotspots().getFirst().rect();
             nodes.add(new UiLayoutNode(UiLayoutNode.Kind.CONTROL, toScreenRect(hotspot), emptyMessage,
-                    font.width(emptyMessage), titleBudget(hotspot), enabled, true, List.of()));
+                    font.width(emptyMessage), titleBudget(hotspot), isEnabled(), true, List.of()));
         }
         if (picker.isOpen()) {
             nodes.addAll(picker.layoutNodes());
@@ -1033,36 +1036,17 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
 
     private void addEndpoint(List<UiLayoutNode> nodes, UiRect content, String title, int titleWidth) {
         nodes.add(new UiLayoutNode(UiLayoutNode.Kind.CONTROL, toScreenRect(content),
-                Component.literal(title), titleWidth, titleBudget(content), enabled, true, List.of()));
+                Component.literal(title), titleWidth, titleBudget(content), isEnabled(), true, List.of()));
     }
 
-    @Override
-    public boolean isVisible() {
-        return visible;
+    /** 禁用时结束当前交互，复合控件同步子目标资格。 */
+    public void setEnabled(boolean nextEnabled) {
+        shell.setEnabled(nextEnabled);
     }
 
-    /**
-     * 编辑器是否可编辑；宿主据此统一使能工具列，而不是从某次点击的返回值反推。
-     */
-    public boolean isEnabled() {
-        return enabled;
-    }
-
-    public void setEnabled(boolean next) {
-        enabled = next;
-        if (!next) {
-            endInteractions(UiInteractionSession.EndReason.DISABLED);
-
-            focusState.clear();
-            closePicker();
-        }
-    }
-
-    public UiConditionGraphEditor setVisible(boolean next) {
-        if (!next) {
-            endInteractions(UiInteractionSession.EndReason.HIDDEN);
-        }
-        this.visible = next;
+    /** 隐藏时结束当前交互并退出焦点序列，恢复显示保留内容。 */
+    public UiConditionGraphEditor setVisible(boolean nextVisible) {
+        shell.setVisible(nextVisible);
         return this;
     }
 
@@ -1132,16 +1116,16 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
         UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
         int mouseX = (int) pointer.x();
         int mouseY = (int) pointer.y();
-        if (!visible || bounds.width() <= 0 || bounds.height() <= 0) {
+        if (!isVisible() || bounds().width() <= 0 || bounds().height() <= 0) {
             return;
         }
-        transform.setViewport(bounds.x(), bounds.y(), bounds.width(), bounds.height());
+        transform.setViewport(bounds().x(), bounds().y(), bounds().width(), bounds().height());
         if (centerEmptyView) {
             centerEmptyView = false;
             fitToContent();
         }
         UiRect viewport = transform.viewport();
-        boolean inside = pointer.contains(bounds);
+        boolean inside = pointer.contains(bounds());
         boolean emptyTree = expression.root() == null;
         double localX = transform.toLocalX(mouseX);
         double localY = transform.toLocalY(mouseY);
@@ -1151,7 +1135,7 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
         Hotspot hoveredHotspot = !picker.isOpen() && !kindMenuOpen && !overPanel && inside
                 ? graph.hotspotAt(localX, localY) : null;
 
-        renderer.drawCanvasBackground(graphics, bounds);
+        renderer.drawCanvasBackground(graphics, bounds());
         transform.enableScissor(graphics);
         renderer.drawDotGrid(graphics, transform, viewport);
         transform.push(graphics);
@@ -1172,11 +1156,11 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
         if (emptyTree) {
             renderer.drawEmptyMessage(graphics, renderFont, viewport, transform, emptyMessage);
         }
-        if (isFocusVisible() && !picker.isOpen() && !kindMenuOpen) {
-            theme.drawFocusOutline(graphics, bounds);
+        if (!picker.isOpen() && !kindMenuOpen) {
+            shell.renderFocusOutline(graphics, bounds(), theme);
         }
         if (move.isActive()) {
-            renderer.drawDragGhost(graphics, renderFont, bounds, dragLabel, mouseX, mouseY);
+            renderer.drawDragGhost(graphics, renderFont, bounds(), dragLabel, mouseX, mouseY);
         }
         if (!picker.isOpen()) {
             inlinePanel.render(graphics, renderFont, pointer);
@@ -1226,7 +1210,7 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
 
     // 菜单几何为屏幕坐标：优先放在锚点右侧，放不下改为左侧，并整体夹在画布内
     private void updateKindMenuRect() {
-        if (!kindMenuOpen || bounds.width() <= 0 || bounds.height() <= 0) {
+        if (!kindMenuOpen || bounds().width() <= 0 || bounds().height() <= 0) {
             return;
         }
         UiRect anchor = kindMenuAnchorRect();
@@ -1245,15 +1229,15 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
         for (KindMenuEntry entry : kindMenuEntries) {
             width = Math.max(width, font.width(entry.label().getString()) + KIND_MENU_PADDING * 2 + BORDER * 2);
         }
-        int maxWidth = Math.max(1, bounds.width() - KIND_MENU_PADDING);
+        int maxWidth = Math.max(1, bounds().width() - KIND_MENU_PADDING);
         width = Math.min(width, maxWidth);
-        int height = Math.min(rowCount * KIND_MENU_ROW_HEIGHT + BORDER * 2, bounds.height());
+        int height = Math.min(rowCount * KIND_MENU_ROW_HEIGHT + BORDER * 2, bounds().height());
         int x = anchor.right() + KIND_MENU_GAP;
-        if (x + width > bounds.right()) {
+        if (x + width > bounds().right()) {
             x = anchor.x() - KIND_MENU_GAP - width;
         }
-        x = Math.clamp(x, bounds.x(), Math.max(bounds.x(), bounds.right() - width));
-        int y = Math.clamp(anchor.y(), bounds.y(), Math.max(bounds.y(), bounds.bottom() - height));
+        x = Math.clamp(x, bounds().x(), Math.max(bounds().x(), bounds().right() - width));
+        int y = Math.clamp(anchor.y(), bounds().y(), Math.max(bounds().y(), bounds().bottom() - height));
         kindMenuRect = new UiRect(x, y, width, height);
         // 视口过矮时按可用高度裁掉列表区：行高不变，只显示画得下的行
         int availableListHeight = height - BORDER * 2;
@@ -1394,17 +1378,16 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
         if (groupPath == null) {
             return;
         }
-        openPicker(new Hotspot(groupPath, 0, bounds));
+        openPicker(new Hotspot(groupPath, 0, bounds()));
     }
 
-    // ---- 输入 ----
-
+    /** {@inheritDoc} */
     @Override
     public boolean mousePressed(UiInputContext context) {
         double mouseX = context.pointerX();
         double mouseY = context.pointerY();
         int button = context.button();
-        if (!visible || !enabled) {
+        if (!isVisible() || !isEnabled()) {
             return false;
         }
         if (picker.isOpen()) {
@@ -1415,7 +1398,7 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
             handleKindMenuClick(mouseX, mouseY);
             return true;
         }
-        if (!bounds.contains(mouseX, mouseY)) return false;
+        if (!bounds().contains(mouseX, mouseY)) return false;
         // 右侧面板优先接收输入；关闭动画期间只阻止点穿，不再编辑字段。
         if (inlinePanel.contains(mouseX, mouseY)) {
             inlinePanel.mousePressed(context);
@@ -1555,12 +1538,13 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
         rubberBand.clear();
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean mouseDragged(UiInputContext context, double deltaX, double deltaY) {
         double mouseX = context.pointerX();
         double mouseY = context.pointerY();
         int button = context.button();
-        if (!visible || !enabled) {
+        if (!isVisible() || !isEnabled()) {
             return false;
         }
         if (picker.isOpen()) {
@@ -1690,11 +1674,12 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
         return owned;
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
         double mouseX = context.pointerX();
         double mouseY = context.pointerY();
-        if (!visible || !enabled || !bounds.contains(mouseX, mouseY) || scrollY == 0.0D) {
+        if (!isVisible() || !isEnabled() || !bounds().contains(mouseX, mouseY) || scrollY == 0.0D) {
             return false;
         }
         if (picker.isOpen()) {
@@ -1716,9 +1701,10 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
         return true;
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (!visible || !enabled) {
+        if (!isVisible() || !isEnabled()) {
             return false;
         }
         if (picker.isOpen()) {
@@ -1825,9 +1811,10 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
         return false;
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
-        if (!visible || !enabled) {
+        if (!isVisible() || !isEnabled()) {
             return false;
         }
         if (picker.isOpen()) {
@@ -1991,7 +1978,7 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
         pickerAppend = false;
         pickerParent = hotspot.parent();
         pickerIndex = hotspot.index();
-        picker.open(pickerOptions(), bounds);
+        picker.open(pickerOptions(), bounds());
     }
 
     public void closePicker() {
@@ -2132,27 +2119,10 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
         return ConditionTreeNodes.INSTANCE.withChildren(node, copy);
     }
 
-    // ---- 焦点 ----
-
-    @Override
-    public UiFocusState focusState() {
-        return focusState;
-    }
-
-    @Override
-    public boolean canFocus() {
-        return visible && enabled;
-    }
-
-
-    @Override
-    public boolean isFocused() {
-        return focusState.isFocused();
-    }
-
+    /** {@inheritDoc} */
     @Override
     public boolean activate() {
-        if (!enabled) {
+        if (!isEnabled()) {
             return false;
         }
         ConditionNode node = selectedNode();
@@ -2172,7 +2142,7 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
     /** 根据实际子控件解析当前命中。 */
     @Override
     public @Nullable UiPointerHit hitTest(double x, double y) {
-        if (!visible || !bounds.contains(x, y)) return null;
+        if (!isVisible() || !bounds().contains(x, y)) return null;
         if (picker.isOpen()) {
             UiPointerHit hit = picker.hitTest(x, y);
             return hit == null ? UiPointerHit.leaf(this, x, y).preservingFocus() : hit.within(this);
@@ -2186,6 +2156,6 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
         if (isDragging() || inlinePanel.contains(x, y)) return leaf;
         ConditionNode node = graph.nodeAt(transform.toLocalX(x), transform.toLocalY(y));
         return node == null ? leaf : leaf.withPresentation((graphics, ignoredFont, mx, my) ->
-                tooltip.render(graphics, bounds, nodeTooltip(node), mx, my));
+                tooltip.render(graphics, bounds(), nodeTooltip(node), mx, my));
     }
 }

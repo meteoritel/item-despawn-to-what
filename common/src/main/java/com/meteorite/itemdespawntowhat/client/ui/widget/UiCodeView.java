@@ -1,14 +1,13 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiShellWidget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidgetShell;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiScrollView;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.UiJsonText;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
@@ -34,7 +33,7 @@ import org.lwjgl.glfw.GLFW;
  * <p>行号按代码块重新计数；超宽的行按可用宽度折行，续行不再重复行号，与常见 IDE 的软换行一致。
  * 视图不承载编辑：只响应滚轮与方向键滚动、获得焦点时绘制焦点轮廓。</p>
  */
-public final class UiCodeView implements UiWidget, UiFocusTarget {
+public final class UiCodeView implements UiShellWidget {
 
     /**
      * 一个代码块。
@@ -107,12 +106,20 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
     // 无障碍名称
     private @Nullable Component accessibleName;
     // 控件矩形
-    private UiRect bounds = new UiRect(0, 0, 0, 0);
+    private final UiWidgetShell shell = new UiWidgetShell(this, this::invalidateInteraction);
     // 垂直滚动偏移（像素）
     private final UiScrollView scroll = new UiScrollView();
     private boolean lineNumbers = true;
-    private boolean visible = true;
-    private final UiFocusState focusState = new UiFocusState();
+
+    /** {@inheritDoc} */
+    @Override
+    public UiWidgetShell shell() {
+        return shell;
+    }
+
+    private void invalidateInteraction(UiInteractionSession.EndReason reason) {
+        scroll.endInteraction(reason);
+    }
 
     /**
      * 创建只读代码视图。
@@ -173,9 +180,9 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
         return this;
     }
 
-    public UiCodeView setVisible(boolean visible) {
-        this.visible = visible;
-        if (!visible) scroll.endInteraction(UiInteractionSession.EndReason.HIDDEN);
+    /** 隐藏时结束当前交互并退出焦点序列，恢复显示保留内容。 */
+    public UiCodeView setVisible(boolean nextVisible) {
+        shell.setVisible(nextVisible);
         return this;
     }
 
@@ -193,23 +200,12 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
         return text.toString();
     }
 
-    // ---- 布局 ----
-
-    @Override
-    public UiRect bounds() {
-        return bounds;
-    }
-
+    /** {@inheritDoc} */
     @Override
     public void setBounds(int x, int y, int width, int height) {
-        this.bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
+        shell.setBounds(x, y, width, height);
         ensureRows(Math.max(1, innerWidth() - gutterWidth()));
         clampScroll();
-    }
-
-    @Override
-    public boolean isVisible() {
-        return visible;
     }
 
     // 行号栏宽度：按最长的行号宽度加间距
@@ -316,14 +312,14 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
     @Override
     public void render(GuiGraphics graphics, Font renderFont, UiPointer incomingPointer) {
         refreshTheme();
-        if (!visible) {
+        if (!isVisible()) {
             return;
         }
-        theme.drawInset(graphics, bounds);
-        graphics.fill(bounds.x() + 1, bounds.y() + 1, bounds.right() - 1, bounds.bottom() - 1,
+        theme.drawInset(graphics, bounds());
+        graphics.fill(bounds().x() + 1, bounds().y() + 1, bounds().right() - 1, bounds().bottom() - 1,
                 theme.palette().surfaces().inputFill());
-        int innerX = bounds.x() + PADDING_X;
-        int innerY = bounds.y() + PADDING_Y;
+        int innerX = bounds().x() + PADDING_X;
+        int innerY = bounds().y() + PADDING_Y;
         int innerWidth = innerWidth();
         int innerHeight = innerHeight();
         int gutter = gutterWidth();
@@ -346,9 +342,7 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
             scroll.pop(graphics);
         }
         scroll.renderScrollbar(graphics, theme);
-        if (isFocusVisible()) {
-            theme.drawFocusOutline(graphics, bounds);
-        }
+        shell.renderFocusOutline(graphics, bounds(), theme);
     }
 
     // 只绘制可视区内的行
@@ -387,24 +381,24 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
         }
     }
 
-    // ---- 输入 ----
-
+    /** {@inheritDoc} */
     @Override
     public boolean mousePressed(UiInputContext context) {
         double mouseX = context.pointerX();
         double mouseY = context.pointerY();
-        if (!visible || !bounds.contains(mouseX, mouseY)) {
+        if (!isVisible() || !bounds().contains(mouseX, mouseY)) {
             return false;
         }
         scroll.mousePressed(context);
         return true;
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
         double mouseX = context.pointerX();
         double mouseY = context.pointerY();
-        if (!visible || !bounds.contains(mouseX, mouseY)) {
+        if (!isVisible() || !bounds().contains(mouseX, mouseY)) {
             return false;
         }
         int maxScroll = maxScroll();
@@ -414,9 +408,10 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
         return scroll.scrollByPixels(scrollY * font.lineHeight * WHEEL_ROWS);
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (!visible || !isFocused()) {
+        if (!isVisible() || !isFocused()) {
             return false;
         }
         int maxScroll = maxScroll();
@@ -439,22 +434,12 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
     /** 滚动条保持现有焦点，正文使用默认焦点候选。 */
     @Override
     public @Nullable UiPointerHit hitTest(double x, double y) {
-        if (!visible) return null;
+        if (!isVisible()) return null;
         UiPointerHit hit = scroll.hitTest(x, y);
-        return hit == null ? UiWidget.super.hitTest(x, y) : hit.within(this);
+        return hit == null ? UiShellWidget.super.hitTest(x, y) : hit.within(this);
     }
 
     // ---- 焦点 ----
-
-    @Override
-    public UiFocusState focusState() {
-        return focusState;
-    }
-
-    @Override
-    public boolean isFocused() {
-        return focusState.isFocused();
-    }
 
     @Override
     public boolean activate() {
@@ -475,12 +460,12 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
 
     // 文本可用宽度（右侧预留滚动条）
     private int innerWidth() {
-        return Math.max(8, bounds.width() - PADDING_X * 2 - SCROLLBAR_WIDTH);
+        return Math.max(8, bounds().width() - PADDING_X * 2 - SCROLLBAR_WIDTH);
     }
 
     // 文本可视高度
     private int innerHeight() {
-        return Math.max(1, bounds.height() - PADDING_Y * 2);
+        return Math.max(1, bounds().height() - PADDING_Y * 2);
     }
 
     // 全部行的总高度
@@ -493,8 +478,8 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
     }
 
     private void clampScroll() {
-        scroll.setViewport(bounds.x() + PADDING_X, bounds.y() + PADDING_Y,
-                Math.max(0, bounds.width() - PADDING_X - 1), innerHeight());
+        scroll.setViewport(bounds().x() + PADDING_X, bounds().y() + PADDING_Y,
+                Math.max(0, bounds().width() - PADDING_X - 1), innerHeight());
         scroll.setContentHeight(totalHeight());
         scroll.setScrollbarVisible(scroll.maxOffset() > 0);
     }

@@ -1,10 +1,12 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiShellWidget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidgetShell;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiSurfaceRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputScope;
 import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionTreeViewModel;
 import com.meteorite.itemdespawntowhat.client.edit.ConditionTreeClipboard;
 import com.meteorite.itemdespawntowhat.client.edit.ConditionTreeJsonCodec;
@@ -32,7 +34,6 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionTreeContract;
 import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionTreeInspection;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiConditionGraphEditor;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCodeView;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.ConditionNode;
@@ -60,7 +61,7 @@ import org.lwjgl.glfw.GLFW;
  * 以及 {@link #historyChanged()} / {@link #discardView()} / {@link #unmount()} / {@link #reveal(String)}
  * 都由 {@code RuleEditorEditSections} 原样调用。参数编辑以共享草稿路径为准，未完成的输入留在会话。</p>
  */
-public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLayoutSource {
+public final class ConditionTreeOverlay implements UiShellWidget, UiLayoutSource {
 
     // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
     // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
@@ -159,9 +160,9 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
     private final UiIconStrip.Item moveDownItem;
     private final UiIconStrip.Item wrapItem;
 
-    private UiRect bounds = new UiRect(0, 0, 0, 0);
-    private UiRect canvasRect = bounds;
-    private UiRect statusRect = bounds;
+    private final UiWidgetShell shell = new UiWidgetShell(this);
+    private UiRect canvasRect = bounds();
+    private UiRect statusRect = bounds();
     private UiRect copyJsonRect = new UiRect(0, 0, 0, 0);
     private @Nullable Parameters parameters;
     // 当前注入画布的内联参数框；与 parameters 同生命周期
@@ -178,8 +179,13 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
     private long seenViewRevision = -1;
     private boolean sourceView;
     private boolean helpOpen;
-    private final UiFocusState focusState = new UiFocusState();
     private long revision;
+
+    /** {@inheritDoc} */
+    @Override
+    public UiWidgetShell shell() {
+        return shell;
+    }
 
     /**
      * 创建条件画布叠加视图。
@@ -540,7 +546,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
         editor.endInteractions(UiInteractionSession.EndReason.UNMOUNTED);
         unmountParameters();
         editor.closePicker();
-        focusState.clear();
+        focusState().clear();
     }
 
     /**
@@ -615,32 +621,25 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
     // 拆出「完整节点前缀 + 可选参数字段后缀」：结构语法不合法或节点后还有尾随字符时返回 null。
     // 后缀以「.condition」开头时才是参数字段，其余未知后缀一律判不合法，避免截成祖先节点
 
-
-    // ---- 布局 ----
-
-    @Override
-    public UiRect bounds() {
-        return bounds;
-    }
-
+    /** {@inheritDoc} */
     @Override
     public void setBounds(int x, int y, int width, int height) {
-        bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
+        shell.setBounds(x, y, width, height);
         layout();
     }
 
     private void layout() {
-        int statusHeight = Math.min(STATUS_BAR_HEIGHT, bounds.height());
-        int barHeight = Math.clamp(bounds.height() - statusHeight, 0, FUNCTION_BAR_HEIGHT);
-        int toolWidth = Math.min(TOOL_COLUMN_WIDTH, bounds.width());
-        functionBar.setBounds(bounds.x(), bounds.y(), bounds.width(), barHeight);
+        int statusHeight = Math.min(STATUS_BAR_HEIGHT, bounds().height());
+        int barHeight = Math.clamp(bounds().height() - statusHeight, 0, FUNCTION_BAR_HEIGHT);
+        int toolWidth = Math.min(TOOL_COLUMN_WIDTH, bounds().width());
+        functionBar.setBounds(bounds().x(), bounds().y(), bounds().width(), barHeight);
         // 分区紧贴：功能栏、工具列、状态栏与画布之间不留缝隙，区域边界由 1 像素分隔线表达
-        int bodyY = bounds.y() + barHeight;
-        int bodyHeight = Math.max(0, bounds.height() - barHeight - statusHeight);
-        toolColumn.setBounds(bounds.x(), bodyY, toolWidth, bodyHeight);
-        int canvasWidth = Math.max(0, bounds.width() - toolWidth);
-        canvasRect = new UiRect(bounds.x() + toolWidth, bodyY, canvasWidth, bodyHeight);
-        statusRect = new UiRect(bounds.x(), bounds.y() + bounds.height() - statusHeight, bounds.width(), statusHeight);
+        int bodyY = bounds().y() + barHeight;
+        int bodyHeight = Math.max(0, bounds().height() - barHeight - statusHeight);
+        toolColumn.setBounds(bounds().x(), bodyY, toolWidth, bodyHeight);
+        int canvasWidth = Math.max(0, bounds().width() - toolWidth);
+        canvasRect = new UiRect(bounds().x() + toolWidth, bodyY, canvasWidth, bodyHeight);
+        statusRect = new UiRect(bounds().x(), bounds().y() + bounds().height() - statusHeight, bounds().width(), statusHeight);
         copyJsonRect = sourceView
                 ? new UiRect(Math.max(canvasRect.x(), canvasRect.right() - COPY_BUTTON_WIDTH - 2), canvasRect.y() + 2,
                 Math.min(COPY_BUTTON_WIDTH, canvasRect.width()), COPY_BUTTON_HEIGHT)
@@ -688,7 +687,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
      */
     @Override
     public List<UiLayoutNode> layoutNodes() {
-        if (bounds.width() <= 0 || bounds.height() <= 0) {
+        if (bounds().width() <= 0 || bounds().height() <= 0) {
             return List.of();
         }
         List<UiLayoutNode> nodes = new ArrayList<>();
@@ -779,10 +778,10 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
     // 外壳不再各自画一圈独立边框，功能栏底板收窄后，右侧空白直接露出画布底色。
     private void drawShell(GuiGraphics graphics) {
         var palette = CHROME_THEME.palette();
-        graphics.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), palette.canvas().canvasFill());
+        graphics.fill(bounds().x(), bounds().y(), bounds().right(), bounds().bottom(), palette.canvas().canvasFill());
         int plateWidth = functionBarPlateWidth();
         if (plateWidth > 0) {
-            graphics.fill(bounds.x(), bounds.y(), bounds.x() + plateWidth, functionBar.bounds().bottom(), palette.surfaces().panelFill());
+            graphics.fill(bounds().x(), bounds().y(), bounds().x() + plateWidth, functionBar.bounds().bottom(), palette.surfaces().panelFill());
         }
         if (toolColumn.bounds().width() > 0 && toolColumn.bounds().height() > 0) {
             graphics.fill(toolColumn.bounds().x(), toolColumn.bounds().y(), toolColumn.bounds().right(),
@@ -800,18 +799,18 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
     // 收窄的只是底板绘制范围，格子命中仍按格子矩形判定。
     private void drawShellLines(GuiGraphics graphics) {
         int color = CHROME_THEME.palette().canvas().canvasBorder();
-        graphics.renderOutline(bounds.x(), bounds.y(), bounds.width(), bounds.height(), color);
+        graphics.renderOutline(bounds().x(), bounds().y(), bounds().width(), bounds().height(), color);
         int plateWidth = functionBarPlateWidth();
         if (plateWidth > 0) {
-            graphics.fill(bounds.x() + plateWidth - SHELL_LINE, bounds.y(), bounds.x() + plateWidth,
+            graphics.fill(bounds().x() + plateWidth - SHELL_LINE, bounds().y(), bounds().x() + plateWidth,
                     functionBar.bounds().bottom(), color);
         }
-        int toolWidth = Math.min(TOOL_COLUMN_WIDTH, bounds.width());
+        int toolWidth = Math.min(TOOL_COLUMN_WIDTH, bounds().width());
         int bodyY = toolColumn.bounds().y();
-        if (toolWidth > 0 && bodyY > bounds.y() && bodyY < bounds.bottom()) {
-            graphics.fill(bounds.x(), bodyY, bounds.x() + toolWidth, bodyY + SHELL_LINE, color);
-            if (statusRect.height() > 0 && statusRect.y() > bounds.y()) {
-                graphics.fill(bounds.x(), statusRect.y() - SHELL_LINE, bounds.x() + toolWidth, statusRect.y(), color);
+        if (toolWidth > 0 && bodyY > bounds().y() && bodyY < bounds().bottom()) {
+            graphics.fill(bounds().x(), bodyY, bounds().x() + toolWidth, bodyY + SHELL_LINE, color);
+            if (statusRect.height() > 0 && statusRect.y() > bounds().y()) {
+                graphics.fill(bounds().x(), statusRect.y() - SHELL_LINE, bounds().x() + toolWidth, statusRect.y(), color);
             }
         }
     }
@@ -1070,8 +1069,6 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
         return editor.issues().isEmpty() ? CHROME_THEME.palette().status().statusText() : CHROME_THEME.palette().status().statusTextWarning();
     }
 
-
-
     // ---- 输入 ----
 
     /**
@@ -1086,7 +1083,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
             helpOpen = false;
             return true;
         }
-        if (!bounds.contains(mouseX, mouseY)) {
+        if (!bounds().contains(mouseX, mouseY)) {
             return false;
         }
         if (!sourceView && editor.hasPopup()) {
@@ -1196,21 +1193,10 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
         return editor.isVisible() && editor.isFocused() && editor.charTyped(codePoint, modifiers);
     }
 
-    // ---- 焦点 ----
-
-    @Override
-    public boolean canFocus() {
-        return true;
-    }
-
+    /** {@inheritDoc} */
     @Override
     public boolean isFocused() {
-        return focusState.containsFocus();
-    }
-
-    @Override
-    public UiFocusState focusState() {
-        return focusState;
+        return focusState().containsFocus();
     }
 
     @Override
@@ -1229,9 +1215,10 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
     }
 
     private void setFocusSlot(FocusSlot slot) {
-        if (focusState.scope() == null) return;
-        focusState.scope().invalidateFocus();
-        focusState.scope().refreshFocus();
+        UiInputScope scope = focusState().scope();
+        if (scope == null) return;
+        scope.invalidateFocus();
+        scope.refreshFocus();
         UiFocusTarget preferred = switch (slot) {
             case FUNCTION_BAR -> functionBar;
             case TOOL_COLUMN -> toolColumn;
@@ -1254,11 +1241,10 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLa
         return targets;
     }
 
-
     /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
     @Override
     public @Nullable UiPointerHit hitTest(double x, double y) {
-        if (!bounds.contains(x, y)) return null;
+        if (!bounds().contains(x, y)) return null;
         if (helpOpen || statusRect.contains(x, y)) return UiPointerHit.leaf(this, x, y).preservingFocus();
         if (sourceView && copyJsonRect.contains(x, y)) return UiPointerHit.leaf(this, x, y).preservingFocus()
                 .withTextTooltip(List.of(Component.translatable(UI + "button.copy_json")), copyJsonRect);

@@ -4,11 +4,9 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiRowMetrics;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiFlatText;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiStyleSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiMinecraftTheme;
@@ -34,7 +32,7 @@ import org.jetbrains.annotations.Nullable;
  * 行内容由调用方通过 {@link RowRenderer} 决定，控件只负责背景、选中标记与命中判定。
  * <p>单击选中、双击激活；键盘 {@code Enter} 同样触发激活。
  */
-public final class UiListView<T> implements UiWidget, UiFocusTarget {
+public final class UiListView<T> implements UiShellWidget {
 
     /**
      * 行渲染回调：背景、选中/悬停/焦点标记与命中由控件处理，行内容由调用方绘制；{@code row} 已为左侧选中标记预留空间。
@@ -58,7 +56,7 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
     // 数据源
     private final List<T> items = new ArrayList<>();
     // 控件矩形
-    private UiRect bounds = new UiRect(0, 0, 0, 0);
+    private final UiWidgetShell shell = new UiWidgetShell(this, this::invalidateInteraction);
     // 行高
     private int rowHeight;
     private boolean rowHeightOverride;
@@ -78,14 +76,22 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
     private boolean activateOnSingleClick;
     private boolean selectionMarkerVisible = true;
     private boolean chipRows;
-    private final UiFocusState focusState = new UiFocusState();
-    private boolean visible = true;
     // 上次点击时间与下标（双击判定）
     private long lastClickTime;
     private int lastClickIndex = -1;
 
     // 绘字字体由 render 接收，主题提供结构与行度量。
     private final UiStyleSource theme;
+
+    /** {@inheritDoc} */
+    @Override
+    public UiWidgetShell shell() {
+        return shell;
+    }
+
+    private void invalidateInteraction(UiInteractionSession.EndReason reason) {
+        scrollView.endInteraction(reason);
+    }
 
     /** 使用原版主题装配泛型行列表。 */
     public UiListView(RowRenderer<T> rowRenderer) { this(UiMinecraftTheme.INSTANCE, rowRenderer); }
@@ -202,8 +208,9 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
         return this;
     }
 
-    public UiListView<T> setVisible(boolean visible) {
-        this.visible = visible;
+    /** 隐藏时结束当前交互并退出焦点序列，恢复显示保留内容。 */
+    public UiListView<T> setVisible(boolean nextVisible) {
+        shell.setVisible(nextVisible);
         return this;
     }
 
@@ -215,17 +222,11 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
         scrollView.ensureVisible(new UiRect(0, index * rowHeight, Math.max(0, scrollView.viewport().width()), rowContentHeight()));
     }
 
-    // ---- 布局 ----
-
-    @Override
-    public UiRect bounds() {
-        return bounds;
-    }
-
+    /** {@inheritDoc} */
     @Override
     public void setBounds(int x, int y, int width, int height) {
         refreshTheme();
-        this.bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
+        shell.setBounds(x, y, width, height);
         scrollView.setViewport(x + VIEWPORT_INSET / 2, y + VIEWPORT_INSET / 2,
                 Math.max(0, width - VIEWPORT_INSET), Math.max(0, height - VIEWPORT_INSET));
         scrollView.setStep(Math.max(1, rowHeight * 2));
@@ -330,20 +331,15 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
 
     // ---- 渲染 ----
 
-    @Override
-    public boolean isVisible() {
-        return visible;
-    }
-
     /** {@inheritDoc} */
     @Override
     public void render(GuiGraphics graphics, Font font, UiPointer incomingPointer) {
         refreshTheme();
         UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
-        if (!visible) {
+        if (!isVisible()) {
             return;
         }
-        if (!chipRows) theme.drawInset(graphics, bounds);
+        if (!chipRows) theme.drawInset(graphics, bounds());
         UiRect viewport = scrollView.viewport();
         if (items.isEmpty()) {
             // 空文案用主要文本色：在内凹底 SLOT_FILL 上 textSecondary 的对比度不足
@@ -375,20 +371,19 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
         }
         scrollView.pop(graphics);
         if (isFocusVisible()) {
-            UiRect focusBounds = chipRows ? visibleRowBounds(selectedIndex) : bounds;
-            if (focusBounds != null) theme.drawFocusOutline(graphics, focusBounds);
+            UiRect focusBounds = chipRows ? visibleRowBounds(selectedIndex) : bounds();
+            if (focusBounds != null) shell.renderFocusOutline(graphics, focusBounds, theme);
         }
         scrollView.renderScrollbar(graphics, theme);
     }
 
-    // ---- 输入 ----
-
+    /** {@inheritDoc} */
     @Override
     public boolean mousePressed(UiInputContext context) {
 
         double mouseX = context.pointerX();
         double mouseY = context.pointerY();
-        if (!visible || !bounds.contains(mouseX, mouseY)) {
+        if (!isVisible() || !bounds().contains(mouseX, mouseY)) {
             return false;
         }
         if (scrollView.mousePressed(context)) {
@@ -425,19 +420,21 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
         return false;
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
         double mouseX = context.pointerX();
         double mouseY = context.pointerY();
-        if (!visible || !bounds.contains(mouseX, mouseY) || scrollY == 0.0D) {
+        if (!isVisible() || !bounds().contains(mouseX, mouseY) || scrollY == 0.0D) {
             return false;
         }
         return scrollView.scrollBy(scrollY);
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (!visible || items.isEmpty()) {
+        if (!isVisible() || items.isEmpty()) {
             return false;
         }
         if (keyCode == GLFW.GLFW_KEY_UP) {
@@ -479,26 +476,17 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
     // ---- 焦点 ----
 
     @Override
-    public UiFocusState focusState() {
-        return focusState;
-    }
-
-    @Override
     public void focusChanged(boolean focused) {
         if (onFocusChanged != null) {
             onFocusChanged.accept(focused);
         }
     }
 
-    @Override
-    public boolean isFocused() {
-        return focusState.isFocused();
-    }
-
+    /** {@inheritDoc} */
     @Override
     public boolean activate() {
         T item = selectedItem();
-        if (!visible || item == null || onActivate == null) {
+        if (!isVisible() || item == null || onActivate == null) {
             return false;
         }
         onActivate.accept(item);

@@ -2,7 +2,6 @@ package com.meteorite.itemdespawntowhat.client.ui.kit.api.control;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiFlatText;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.UiTextValue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.UiTextEditSession;
@@ -36,7 +35,7 @@ import org.lwjgl.glfw.GLFW;
  * <p>与 {@link UiTextInput} 的分工：单行短文本仍走原版 {@code EditBox}；需要同时看到多行或允许换行的字段用本控件。
  * <p>长度上限按 Unicode 码点计数，超限的这一次输入整体回退，不会把半个代理对或超过上限的整段文本写进草稿。
  */
-public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
+public final class UiTextArea implements UiShellWidget, UiTextValue, UiLayoutSource {
 
     // 左右内边距
     private static final int PADDING_X = TextInputSupport.PADDING_X;
@@ -56,7 +55,7 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
     private AccessibleTextField textField;
     private final UiTextEditSession editSession;
     // 控件矩形
-    private UiRect bounds;
+    private final UiWidgetShell shell = new UiWidgetShell(this, this::endInteraction);
     // 已同步到文本模型的换行宽度
     private int textWidth = -1;
     private @Nullable String displayedText;
@@ -72,15 +71,19 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
     private @Nullable Runnable onCancel;
     // 无障碍名称
     private @Nullable Component accessibleName;
-    private boolean visible = true;
     private boolean editable = true;
     private boolean selectableWhenReadOnly;
-    private final UiFocusState focusState = new UiFocusState();
     // 获得焦点的时刻，用于光标闪烁
     private long focusedTime;
 
     // 注入的宿主主题
     private final UiStyleSource theme;
+
+    /** {@inheritDoc} */
+    @Override
+    public UiWidgetShell shell() {
+        return shell;
+    }
 
     /** 使用原版默认主题创建多行输入。 */
     public UiTextArea(Font font, @Nullable Component hint) { this(UiMinecraftTheme.INSTANCE, font, hint); }
@@ -93,7 +96,7 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
         this.hint = hint;
         this.accessibleName = hint;
         this.textField = createField(MIN_WIDTH - PADDING_X * 2 - SCROLLBAR_WIDTH);
-        this.bounds = new UiRect(0, 0, MIN_WIDTH, height());
+        shell.setBounds(0, 0, MIN_WIDTH, height());
         editSession = new UiTextEditSession(new UiTextEditSession.Model() {
             @Override
             public String value() {
@@ -245,10 +248,10 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
         this.accessibleName = accessibleName;
     }
 
-    public void setVisible(boolean visible) {
-        editSession.setVisible(visible);
-        this.visible = visible;
-        if (!visible) scroll.endInteraction(UiInteractionSession.EndReason.HIDDEN);
+    /** 隐藏时结束当前交互并退出焦点序列，恢复显示保留内容。 */
+    public void setVisible(boolean nextVisible) {
+        shell.setVisible(nextVisible);
+        editSession.setVisible(nextVisible);
     }
 
     // 回填后把光标与垂直滚动复位到开头；编辑期间不调用，避免抢走用户光标
@@ -269,21 +272,12 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
         return rows * font.lineHeight + PADDING_Y * 2;
     }
 
-    @Override
-    public UiRect bounds() {
-        return bounds;
-    }
-
+    /** {@inheritDoc} */
     @Override
     public void setBounds(int x, int y, int width, int height) {
-        this.bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
+        shell.setBounds(x, y, width, height);
         ensureTextWidth();
         clampScroll();
-    }
-
-    @Override
-    public boolean isVisible() {
-        return visible;
     }
 
     /**
@@ -294,28 +288,28 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
      */
     @Override
     public List<UiLayoutNode> layoutNodes() {
-        if (!visible || bounds.width() <= 0 || bounds.height() <= 0) {
+        if (!isVisible() || bounds().width() <= 0 || bounds().height() <= 0) {
             return List.of();
         }
         String text = value();
         String firstLine = text.isEmpty() ? "" : text.split("\n", 2)[0];
         Component content = firstLine.isEmpty() && hint != null ? hint : Component.literal(firstLine);
-        int budget = Math.max(0, bounds.width() - PADDING_X * 2);
-        return List.of(new UiLayoutNode(UiLayoutNode.Kind.TEXT_INPUT, bounds, content, font.width(content),
+        int budget = Math.max(0, bounds().width() - PADDING_X * 2);
+        return List.of(new UiLayoutNode(UiLayoutNode.Kind.TEXT_INPUT, bounds(), content, font.width(content),
                 budget, editable, true, List.of()));
     }
 
     /** {@inheritDoc} */
     @Override
     public void render(GuiGraphics graphics, Font renderFont, UiPointer incomingPointer) {
-        if (!visible) {
+        if (!isVisible()) {
             return;
         }
         ensureTextWidth();
         syncBounds();
-        TextInputSupport.drawBackground(graphics, bounds, theme);
-        int innerX = bounds.x() + PADDING_X;
-        int innerY = bounds.y() + PADDING_Y;
+        TextInputSupport.drawBackground(graphics, bounds(), theme);
+        int innerX = bounds().x() + PADDING_X;
+        int innerY = bounds().y() + PADDING_Y;
         int innerWidth = innerWidth();
         int innerHeight = innerHeight();
         scroll.push(graphics, new UiRect(innerX, innerY, innerWidth + SCROLLBAR_WIDTH, innerHeight));
@@ -329,9 +323,7 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
             scroll.pop(graphics);
         }
         scroll.renderScrollbar(graphics, theme);
-        if (isFocusVisible()) {
-            theme.drawFocusOutline(graphics, bounds);
-        }
+        shell.renderFocusOutline(graphics, bounds(), theme);
     }
 
     // 逐行绘制文本、选中高亮与光标；行高必须与原版文本模型一致（9 像素）
@@ -398,10 +390,11 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
         return displayedLines;
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean mousePressed(UiInputContext context) {
-        if (visible && scroll.mousePressed(context)) return true;
-        return editSession.beginSelection(context, bounds, canFocus());
+        if (isVisible() && scroll.mousePressed(context)) return true;
+        return editSession.beginSelection(context, bounds(), canFocus());
     }
 
     @Override
@@ -423,12 +416,12 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
         editSession.endInteraction(reason);
     }
 
-
+    /** {@inheritDoc} */
     @Override
     public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
         double mouseX = context.pointerX();
         double mouseY = context.pointerY();
-        if (!visible || !bounds.contains(mouseX, mouseY)) {
+        if (!isVisible() || !bounds().contains(mouseX, mouseY)) {
             return false;
         }
         int maxScroll = maxScroll();
@@ -438,10 +431,11 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
         return scroll.scrollByPixels(scrollY * font.lineHeight * 2);
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         endInteraction(UiInteractionSession.EndReason.RELEASE);
-        if (!visible || !isFocused() || (!editable && !selectableWhenReadOnly)) {
+        if (!isVisible() || !isFocused() || (!editable && !selectableWhenReadOnly)) {
             return false;
         }
         UiHistoryShortcut shortcut = UiHistoryShortcut.fromKey(keyCode, modifiers);
@@ -465,10 +459,11 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
         return handled;
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
         endInteraction(UiInteractionSession.EndReason.RELEASE);
-        if (!visible || !editable || !isFocused()) {
+        if (!isVisible() || !editable || !isFocused()) {
             return false;
         }
         if (!StringUtil.isAllowedChatCharacter(codePoint)) {
@@ -480,14 +475,10 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
         });
     }
 
-    @Override
-    public UiFocusState focusState() {
-        return focusState;
-    }
-
+    /** {@inheritDoc} */
     @Override
     public boolean canFocus() {
-        return visible && (editable || selectableWhenReadOnly);
+        return isVisible() && (editable || selectableWhenReadOnly);
     }
 
     private static boolean isReadOnlyNavigation(int keyCode, int modifiers) {
@@ -506,11 +497,6 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
         if (focused) {
             this.focusedTime = Util.getMillis();
         }
-    }
-
-    @Override
-    public boolean isFocused() {
-        return focusState.isFocused();
     }
 
     @Override
@@ -544,7 +530,7 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
 
     // 按点击位置定位光标
     private void seekCursor(double mouseX, double mouseY) {
-        textField.seekCursorToPoint(mouseX - (bounds.x() + PADDING_X), mouseY - (bounds.y() + PADDING_Y) + scroll.offset());
+        textField.seekCursorToPoint(mouseX - (bounds().x() + PADDING_X), mouseY - (bounds().y() + PADDING_Y) + scroll.offset());
         scrollToCursor();
     }
 
@@ -575,17 +561,17 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
 
     // 文本可用宽度（右侧预留滚动条）
     private int innerWidth() {
-        return Math.max(8, bounds.width() - PADDING_X * 2 - SCROLLBAR_WIDTH);
+        return Math.max(8, bounds().width() - PADDING_X * 2 - SCROLLBAR_WIDTH);
     }
 
     // 文本可视高度
     private int innerHeight() {
-        return Math.max(1, bounds.height() - PADDING_Y * 2);
+        return Math.max(1, bounds().height() - PADDING_Y * 2);
     }
 
     private void clampScroll() {
-        scroll.setViewport(bounds.x() + PADDING_X, bounds.y() + PADDING_Y,
-                Math.max(0, bounds.width() - PADDING_X - 1), innerHeight());
+        scroll.setViewport(bounds().x() + PADDING_X, bounds().y() + PADDING_Y,
+                Math.max(0, bounds().width() - PADDING_X - 1), innerHeight());
         scroll.setContentHeight(textField.getLineCount() * font.lineHeight);
         scroll.setScrollbarVisible(scroll.maxOffset() > 0);
     }
@@ -596,11 +582,11 @@ public final class UiTextArea implements UiWidget, UiTextValue, UiLayoutSource {
     /** 文本选择器与可见输入框共用指针归属。 */
     @Override
     public @Nullable UiPointerHit hitTest(double x, double y) {
-        if (visible) {
+        if (isVisible()) {
             UiPointerHit scrollHit = scroll.hitTest(x, y);
             if (scrollHit != null) return scrollHit.within(this);
         }
-        UiPointerHit hit = UiWidget.super.hitTest(x, y);
+        UiPointerHit hit = UiShellWidget.super.hitTest(x, y);
         return hit == null ? null : editSession.includeSelectionOwner(hit);
     }
 }

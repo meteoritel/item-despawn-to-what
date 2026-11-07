@@ -135,7 +135,7 @@ flowchart TD
 | `StructurePreviewResources` | 资源读取 | 枚举 assets 结构，异步有界 NBT 解码并保留资源诊断 | 资源管理器、`PreviewStructure` |
 | `PreviewExamplesScreen`（common dev） | 工作台工具 | 枚举结构与载荷示例，展示多个尺寸和预算 | 正式 `PreviewIcons` 入口 |
 | `UiFlatText` | 文本绘制原语 | 无阴影的居中、折行文本与悬停提示面板；GUI 不使用字体阴影与加粗，标题只靠颜色、缩进与分区间距区分层次 | kit 的 `UiRenderLayers`、各控件与页面 |
-| `UiSlider` / `UiRangeBar` / kit `UiTextInput` | 控件适配 | 原版输入模型由 kit 文本控件适配，数值宿主外壳委托 kit 核心；提交时机由宿主回调决定 | kit 数值/文本契约、主题 |
+| `NumberControl` / `UiRangeBar` / kit `UiTextInput` | 控件适配 | 原版输入模型由 kit 文本控件适配，数值宿主外壳委托 kit 核心；提交时机由宿主回调决定 | kit 数值/文本契约、主题 |
 
 ## 4. 关键流程
 
@@ -188,6 +188,10 @@ flowchart LR
 页面通过 `UiChildren` 持有实际成员，默认命中和焦点贡献从同一结构派生。普通文本与条件说明附在 `UiPointerHit`，屏幕和模态根统一呈现，表单逐层 `tooltipAt` 回查已退出。各页面、模态、选择器与保存遮罩独立拥有焦点和持续交互；作用域返回恢复合格的旧焦点。`EditorShell` 按滚动、名称播报、业务激活键政策组合焦点通知；编辑页用 `UiFocusFollow` 注入目标归属与内容坐标，模态用同一名称播报 adapter。展开组保留叶子归属与 Tab 锚点，内部编辑从组内位置续接。表单子树隐藏、禁用或卸载时结束本子树交互，数值取消恢复模型与文本快照。
 
 目录网格用 `UiScrollView` 唯一持有偏移、范围、轨道和拖动会话，行命中复用 `UiRowMetrics`。网格配置整行对齐、滚轮三行、按下居中、抓取外扩与固定轨道留宽；筛选、翻页、键盘和 resize 共用偏移入口。绘制、预热和布局快照读取同一行列几何；hover、选择与 tooltip 复用带行身份的命中快照。轨道统一经 `UiScrollView.renderScrollbar` 读取主题。
+
+宿主按钮、复选框、树与数据视图、列表编辑、分段组、条件画布及参数面板组合 kit 的 `UiWidgetShell`，普通 Widget 使用 `UiShellWidget` 默认能力。复合控件保留实际子命中、行身份、内部焦点与专用收尾。`UiButton` 的普通与胶囊路径共享核心壳及标签呈现；`UiCheckBox` 点击方框立即切换，标签点击沿整行焦点政策处理，键盘焦点框画在方框上，Enter/Space 通过通用焦点路由激活。
+
+`ItemCountsControl` 的稳定数量条目持有 `UiLabelPresentation`，名称区域提供保焦命中，文字滚动读取同一 `UiPointer` 门禁。`AbstractBarShell` 的可用状态与焦点视图直接读取区间核心，标签、轨道和精确输入保留宿主布局；标量与区间的会话及取消恢复共用 kit 数值包内实现。
 
 `UiSegmentedControl` 只用于编辑分区的页签切换，导航位置与业务选中独立：整组占一个 Tab 位置，方向键、Home、End 移动组内位置，Enter/Space 激活后才切换分区。状态、来源、目录范围、组合模式和产物档位等循环取值入口是单个胶囊按钮（`UiButton#setCycleStyle`，标签右侧带前进箭头），点击即切到下一个取值，不参与焦点序列。鼠标与键盘共享唯一逻辑焦点，额外焦点轮廓仅键盘操作显示；文本光标与选区照常显示。
 
@@ -267,7 +271,7 @@ resize 保留已有页面、文本控件与编辑会话，只重排几何；单�
 - **新增编辑分区或结果分区动作**：在 `RuleEditorEditSections.EditSection` 增加常量并实现对应分区；面板装配放 `RuleEditorPanelFactory`。页面共享的布局常量（页内留白、行高、表单与对话框的按钮高度）、`UI` 文案前缀与 2 个存在条件叶类型 id 收在 `RuleEditorPageSupport`，3 个页描述符 id 由 `BuiltinEditorDescriptors` 提供；`RuleEditorPageSupport` 不持有界面状态、不装配控件；同一层的业务助手按关注点分开：`PresenceLeaves` 管存在条件叶的构造、扫描与增删，`CatalystQuantities` 管催化剂数量表对账，`EditorQuantityBindings` 管共享数量与存在条件写回；规则结构与严格值读取由 `client/edit` 的 `ResultStructure`、`RuleValue` 提供。
 - **新增行尾动作**：`UiButton` 配 `FormField#addAction` 挂到某个字段行；动作按钮不进入表单字段，读写模型而非草稿 JSON，需要参与保存时在变更集组装处接线。
 - **新增主题**：实现 `UiHostTheme`（它本身就是 kit `UiStyleSource` 的宿主侧入口），在 `UiHostThemes` 暴露取用入口；控件经注入取色，新增皮肤集中修改主题实现；可选完整方案由 `UiThemeScheme` 解析，发布沿屏幕统一请求入口。
-- **新增宿主控件**：实现 `UiWidget`，沿所属作用域的内容树派发输入；需要模态行为时放进 `UiModalStack`，焦点由 `UiInputTarget.addFocusTargets` 贡献，作用域自动收集；普通容器使用 `UiChildren`，独立结构变更使焦点索引失效。
+- **新增宿主控件**：实现 `UiWidget`，普通可聚焦控件用 `UiShellWidget` 组合 `UiWidgetShell`，独立名称行组合 `UiLabelPresentation`；沿所属作用域的内容树派发输入；需要模态行为时放进 `UiModalStack`，焦点由 `UiInputTarget.addFocusTargets` 贡献，作用域自动收集；普通容器使用 `UiChildren`，独立结构变更使焦点索引失效。
 - **新增调试能力**：测试规则的身份前缀、分类归属与规则体在 `DebugTestRules` 统一约定，调试页只负责批量填充与按前缀删除。
 
 ### 约束

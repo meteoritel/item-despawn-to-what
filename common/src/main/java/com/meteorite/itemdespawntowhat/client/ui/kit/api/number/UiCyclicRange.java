@@ -156,7 +156,6 @@ public final class UiCyclicRange extends AbstractRangeCore<UiCyclicRangeValue> {
         return this.selectedEnd == UiRangeEnd.LOW ? this.from : this.to;
     }
 
-
     // 刻度在轨道上的比例；刻度已折返，因此总在 [0,1)
     public double fractionOf(double tick) {
         return this.wrap(tick) / this.period;
@@ -175,37 +174,32 @@ public final class UiCyclicRange extends AbstractRangeCore<UiCyclicRangeValue> {
         return Math.min(snapped, this.endTick());
     }
 
-    // 当前端是否被按下（供宿主渲染）
+    /** 当前端是否被按下（供宿主渲染） */
     public boolean isPressed() {
-        return capture != null && capture.owns(this);
+        return interaction.isCaptured();
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean mousePressed(UiInputContext context) {
-        if (!this.beginPress(context)) {
-            return false;
-        }
-        this.dragAnchorValue = this.selectedTick();
-        this.previewSelected(this.tickAtPointer(context.pointerX()));
-        // 点击轨道后从预览位置继续拖动，避免回跳到点击前的端点。
-        this.dragAnchorValue = this.selectedTick();
+        if (!beginPress(context)) return false;
+        previewSelected(tickAtPointer(context.pointerX()));
+        interaction.anchor(context.pointerX(), selectedTick(), false);
         return true;
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
-        if (!this.canDrag()) {
-            return false;
-        }
-        double perPixel = this.trackWidth() <= 0 ? 0.0D : this.period / this.trackWidth();
-        double raw = this.dragAnchorValue + (context.pointerX() - this.dragAnchorPointer) * perPixel;
-        this.previewSelected(raw);
+        if (!isDragging()) return false;
+        previewSelected(interaction.dragValue(context.pointerX(), period / trackWidth()));
         return true;
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (!this.acceptsKey()) {
+        if (!canFocus() || !isFocused()) {
             return false;
         }
         return switch (keyCode) {
@@ -222,13 +216,7 @@ public final class UiCyclicRange extends AbstractRangeCore<UiCyclicRangeValue> {
      * 精确设置当前端刻度；一次调用恰好一条操作。
      */
     public boolean setSelectedTick(double raw) {
-        if (!this.enabled || isDragging()) {
-            return false;
-        }
-        if (this.interaction.isActive()) {
-            this.endInteraction(UiInteractionSession.EndReason.RELEASE);
-        }
-        return this.oneShotSelected(raw);
+        return isEnabled() && oneShotSelected(raw);
     }
 
     // 命中端点；两端重叠（区分不出）时返回 null，由调用方切换当前端
@@ -248,22 +236,14 @@ public final class UiCyclicRange extends AbstractRangeCore<UiCyclicRangeValue> {
     }
 
     private boolean adjustByKey(int keyCode, double direction) {
-        this.capture = Objects.requireNonNull(focusState.scope(), "Focused input requires a mounted scope").interaction();
-        this.capture.begin(this, UiInteractionSession.Source.KEY, keyCode);
-        if (!this.interaction.isActive()) {
-            this.beginOperation();
-        }
-        this.previewSelected(this.selectedTick() + direction * this.tickStep);
+        interaction.beginKey(focusState(), keyCode);
+        previewSelected(selectedTick() + direction * tickStep);
         return true;
     }
 
     private boolean oneShotSelected(double raw) {
-        if (isDragging()) {
-            return false;
-        }
-        if (this.interaction.isActive()) {
-            this.endInteraction(UiInteractionSession.EndReason.RELEASE);
-        }
+        if (isDragging()) return false;
+        interaction.finishBeforeDiscreteChange();
         double next = this.snapTick(raw);
         if (next == this.selectedTick()) {
             return true;

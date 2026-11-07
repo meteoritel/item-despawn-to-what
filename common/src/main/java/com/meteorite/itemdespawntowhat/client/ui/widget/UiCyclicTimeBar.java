@@ -179,7 +179,7 @@ public final class UiCyclicTimeBar extends AbstractBarShell<UiCyclicRange> {
     @Override
     public void render(GuiGraphics graphics, Font renderFont, UiPointer incomingPointer) {
         UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
-        if (!visible) {
+        if (!isVisible()) {
             return;
         }
         // 没有独立提示行时，聚焦提示挤进标签行的空白处，避免压住预设按钮
@@ -198,7 +198,7 @@ public final class UiCyclicTimeBar extends AbstractBarShell<UiCyclicRange> {
         String left = label == null ? "" : label.getString();
         String trimmed = TextScroll.trimToWidth(font, left, Math.max(1, bounds.width() / 2));
         graphics.drawString(font, trimmed, bounds.x(), bounds.y(),
-                enabled ? theme.palette().surfaces().secondaryText() : theme.palette().surfaces().disabledText(), false);
+                isEnabled() ? theme.palette().surfaces().secondaryText() : theme.palette().surfaces().disabledText(), false);
         String range = tickText(core.from()) + " -> " + tickText(core.to());
         String state = core.isSinglePoint() ? texts.singlePoint().getString()
                 : (core.crossesPeriod() ? texts.wrapHint().getString() : "");
@@ -209,7 +209,7 @@ public final class UiCyclicTimeBar extends AbstractBarShell<UiCyclicRange> {
             drawInlineHint(graphics, bounds.x() + font.width(trimmed), rightX, texts.preciseHint());
         }
         graphics.drawString(font, right, rightX, bounds.y(),
-                enabled ? theme.palette().surfaces().text() : theme.palette().surfaces().disabledText(), false);
+                isEnabled() ? theme.palette().surfaces().text() : theme.palette().surfaces().disabledText(), false);
     }
 
     private void drawTrack(GuiGraphics graphics) {
@@ -220,10 +220,10 @@ public final class UiCyclicTimeBar extends AbstractBarShell<UiCyclicRange> {
         int left = core.trackLeft();
         int right = core.trackRight();
         graphics.fill(left, trackY, right, trackY + TRACK_COLOR_HEIGHT,
-                enabled ? theme.palette().controls().scrollTrack() : theme.palette().controls().controlDisabled());
+                isEnabled() ? theme.palette().controls().scrollTrack() : theme.palette().controls().controlDisabled());
         int fromX = core.xOf(core.from());
         int toX = core.xOf(core.to());
-        int highlight = enabled ? theme.palette().controls().accent() : theme.palette().controls().controlDisabled();
+        int highlight = isEnabled() ? theme.palette().controls().accent() : theme.palette().controls().controlDisabled();
         if (core.isSinglePoint()) {
             graphics.fill(Math.max(left, fromX - 1), trackY - 1, Math.min(right, fromX + 1),
                     trackY + TRACK_COLOR_HEIGHT + 1, highlight);
@@ -253,7 +253,7 @@ public final class UiCyclicTimeBar extends AbstractBarShell<UiCyclicRange> {
     private void drawThumb(GuiGraphics graphics, int x, int color) {
         int width = core.thumbWidth();
         graphics.fill(x - width / 2, trackRow.y(), x - width / 2 + width, trackRow.bottom(),
-                enabled ? color : theme.palette().controls().controlDisabled());
+                isEnabled() ? color : theme.palette().controls().controlDisabled());
     }
 
     private void drawPresets(GuiGraphics graphics, UiPointer pointer) {
@@ -269,7 +269,7 @@ public final class UiCyclicTimeBar extends AbstractBarShell<UiCyclicRange> {
             UiRect rect = new UiRect(x, presetRow.y(), width, presetRow.height());
             boolean activePreset = Math.abs(preset.fromTick() - core.from()) < 0.5D
                     && Math.abs(preset.toTick() - core.to()) < 0.5D;
-            boolean hovered = enabled && pointer.contains(rect);
+            boolean hovered = isEnabled() && pointer.contains(rect);
             int fill = activePreset ? theme.palette().controls().controlSelected()
                     : (hovered ? theme.palette().controls().controlHover() : theme.palette().controls().controlFill());
             graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), fill);
@@ -277,7 +277,7 @@ public final class UiCyclicTimeBar extends AbstractBarShell<UiCyclicRange> {
             String text = TextScroll.trimToWidth(font, preset.label().getString(), Math.max(1, width - 4));
             graphics.drawString(font, text, rect.x() + Math.max(0, (width - font.width(text)) / 2),
                     rect.y() + Math.max(0, (rect.height() - 8) / 2),
-                    enabled ? theme.palette().surfaces().text() : theme.palette().surfaces().disabledText(), false);
+                    isEnabled() ? theme.palette().surfaces().text() : theme.palette().surfaces().disabledText(), false);
             x += width + 2;
         }
     }
@@ -360,6 +360,5 @@ public final class UiCyclicTimeBar extends AbstractBarShell<UiCyclicRange> {
     }
 
     // ---- kit 核心适配 ----
-
 
 }

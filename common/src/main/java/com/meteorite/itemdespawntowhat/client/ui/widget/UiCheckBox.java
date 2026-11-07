@@ -1,11 +1,10 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiShellWidget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidgetShell;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
@@ -17,38 +16,41 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
-import org.lwjgl.glfw.GLFW;
 
 /**
  * 复选框：左侧像素勾选框，右侧标签文本（颜色状态一律辅以文字，不只靠颜色区分）。
  * <p>鼠标交互点限制在左侧方框内（{@link UiRect#centeredSquare}）：点击标签文字或行内空白不会切换，
  * 避免整行命中带来的误触；键盘焦点与回车、空格切换不受此限制。
- * <p>选中标记当前用 ASCII 字符占位（美术资源 TODO）。
+ * <p>方框内用高对比度的 X 标记选中，键盘导航时在方框上绘制焦点轮廓。
  */
-public final class UiCheckBox implements UiWidget, UiFocusTarget {
+public final class UiCheckBox implements UiShellWidget {
 
     // 勾选框边长
     public static final int BOX_SIZE = 9;
     // 勾选框与标签的水平间距
     public static final int LABEL_GAP = 3;
 
+    private final UiWidgetShell shell = new UiWidgetShell(this);
     private final Font font;
-    private UiRect bounds = new UiRect(0, 0, 0, 0);
     private Component label;
     private boolean checked;
-    private boolean enabled = true;
-    private boolean visible = true;
-    private final UiFocusState focusState = new UiFocusState();
     private @Nullable Consumer<Boolean> onChanged;
 
     // 注入的宿主主题
     private final UiHostTheme theme;
 
+    /** 创建方框按下切换、键盘通过通用焦点路由激活的复选框。 */
     public UiCheckBox(UiHostTheme theme, Font font, Component label, boolean checked) {
         this.theme = UiHostThemes.require(theme);
         this.font = Objects.requireNonNull(font, "font");
         this.label = label == null ? Component.empty() : label;
         this.checked = checked;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public UiWidgetShell shell() {
+        return shell;
     }
 
     // 附带内边距的首选宽度
@@ -69,15 +71,15 @@ public final class UiCheckBox implements UiWidget, UiFocusTarget {
         return checked;
     }
 
-    // 直接设置状态，不触发回调（用于服务器快照回填）
+    /** 静默回填选中状态，供服务器快照同步使用。 */
     public UiCheckBox setChecked(boolean next) {
         this.checked = next;
         return this;
     }
 
-    // 用户触发的切换：改变状态并回调
+    /** 用户触发的切换：改变状态并回调 */
     public boolean toggle() {
-        if (!enabled) {
+        if (!shell.isInteractive()) {
             return false;
         }
         checked = !checked;
@@ -92,91 +94,55 @@ public final class UiCheckBox implements UiWidget, UiFocusTarget {
         return this;
     }
 
+    /** 禁用时结束当前交互，复合控件同步子目标资格。 */
     public UiCheckBox setEnabled(boolean next) {
-        this.enabled = next;
+        shell.setEnabled(next);
         return this;
     }
 
-    public boolean isEnabled() {
-        return enabled;
-    }
-
+    /** 隐藏时结束当前交互并退出焦点序列，恢复显示保留内容。 */
     public UiCheckBox setVisible(boolean next) {
-        this.visible = next;
+        shell.setVisible(next);
         return this;
-    }
-
-    @Override
-    public boolean isVisible() {
-        return visible;
-    }
-
-    @Override
-    public UiRect bounds() {
-        return bounds;
-    }
-
-    @Override
-    public void setBounds(int x, int y, int width, int height) {
-        this.bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
     }
 
     /** {@inheritDoc} */
     @Override
     public void render(GuiGraphics graphics, Font renderFont, UiPointer incomingPointer) {
         UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
-        if (!visible) {
+        if (!isVisible()) {
             return;
         }
         // 绘制与命中共用同一份方框几何：只有方框本身响应悬停
-        UiRect box = bounds.centeredSquare(BOX_SIZE);
-        boolean hovered = enabled && pointer.contains(box);
+        UiRect box = bounds().centeredSquare(BOX_SIZE);
+        boolean hovered = isEnabled() && pointer.contains(box);
         theme.drawInset(graphics, box);
         if (checked) {
             graphics.fill(box.x() + 2, box.y() + 2, box.right() - 2, box.bottom() - 2,
-                    enabled ? theme.palette().controls().accent() : theme.palette().controls().controlDisabled());
+                    isEnabled() ? theme.palette().controls().accent() : theme.palette().controls().controlDisabled());
 
             graphics.drawString(renderFont, "X", box.x() + 2, box.y() + 1, theme.palette().controls().textOnDark(), false);
         }
         int textX = box.right() + LABEL_GAP;
-        int maxWidth = Math.max(0, bounds.right() - textX);
+        int maxWidth = Math.max(0, bounds().right() - textX);
         String text = TextScroll.trimToWidth(renderFont, label.getString(), maxWidth);
-        int color = !enabled ? theme.palette().surfaces().disabledText() : (hovered ? theme.palette().surfaces().text() : theme.textColor(true));
-        int textY = bounds.y() + Math.max(0, (bounds.height() - renderFont.lineHeight) / 2);
+        int color = !isEnabled() ? theme.palette().surfaces().disabledText() : (hovered ? theme.palette().surfaces().text() : theme.textColor(true));
+        int textY = bounds().y() + Math.max(0, (bounds().height() - renderFont.lineHeight) / 2);
         graphics.drawString(renderFont, text, textX, textY, color, false);
+        shell.renderFocusOutline(graphics, box, theme);
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean mousePressed(UiInputContext context) {
         double mouseX = context.pointerX();
         double mouseY = context.pointerY();
         int button = context.button();
-        if (!visible || !enabled || button != 0 || !bounds.centeredSquare(BOX_SIZE).contains(mouseX, mouseY)) {
+        if (!isVisible() || !isEnabled() || button != 0 || !bounds().centeredSquare(BOX_SIZE).contains(mouseX, mouseY)) {
             return false;
         }
 
         return toggle();
-    }
-
-    @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (!visible || !enabled) {
-            return false;
-        }
-        if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER || keyCode == GLFW.GLFW_KEY_SPACE) {
-            return toggle();
-        }
-        return false;
-    }
-
-    @Override
-    public UiFocusState focusState() {
-        return focusState;
-    }
-
-    @Override
-    public boolean isFocused() {
-        return focusState.isFocused();
     }
 
     @Override

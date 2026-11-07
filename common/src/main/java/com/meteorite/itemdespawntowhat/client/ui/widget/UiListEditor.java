@@ -1,16 +1,15 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiShellWidget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidgetShell;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiTextInput;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
@@ -31,7 +30,7 @@ import org.lwjgl.glfw.GLFW;
  * <p>Enter 把输入内容追加为新条目（或覆盖当前选中项），Delete 删除选中项，Alt+上下移动顺序。
  * <p>条目唯一，重复输入会被拒绝；ID / TAG 模式下只允许资源 ID 字符集。
  */
-public final class UiListEditor implements UiWidget, UiFocusTarget {
+public final class UiListEditor implements UiShellWidget {
 
     /**
      * 条目文本模式：{@code ID} 与 {@code TAG} 只允许资源 ID 字符集，{@code TAG} 额外接受 #标签；{@code TEXT} 接受任意文本。
@@ -61,14 +60,17 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
     // 只有显式进入编辑才覆盖；普通输入始终追加。
     private int editingIndex = -1;
     private int offset;
-    private UiRect bounds = new UiRect(0, 0, 0, 0);
-    private boolean enabled = true;
-    private boolean visible = true;
-    private final UiFocusState focusState = new UiFocusState();
+    private final UiWidgetShell shell = new UiWidgetShell(this);
     private @Nullable Consumer<List<String>> onChanged;
 
     // 注入的宿主主题
     private final UiHostTheme theme;
+
+    /** {@inheritDoc} */
+    @Override
+    public UiWidgetShell shell() {
+        return shell;
+    }
 
     public UiListEditor(UiHostTheme theme, Font font, Mode mode) {
         this.theme = UiHostThemes.require(theme);
@@ -80,10 +82,10 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
         this.input.setOnCommit(text -> commitInput());
     }
 
-    // 建议高度：rows 行列表 + 输入行 + 边框
+    /** 建议高度：rows 行列表 + 输入行 + 边框 */
     public static int preferredHeight(int rows) {
-        int visible = Math.clamp(rows, 1, VISIBLE_ROWS);
-        return visible * ROW_HEIGHT + INPUT_HEIGHT + 2;
+        int visibleRows = Math.clamp(rows, 1, VISIBLE_ROWS);
+        return visibleRows * ROW_HEIGHT + INPUT_HEIGHT + 2;
     }
 
     public Mode mode() {
@@ -138,18 +140,16 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
         this.onChanged = listener;
     }
 
-    public void setEnabled(boolean next) {
-        this.enabled = next;
-        input.setEditable(next);
+    /** 禁用时结束当前交互，复合控件同步子目标资格。 */
+    public void setEnabled(boolean nextEnabled) {
+        shell.setEnabled(nextEnabled);
+        input.setEditable(nextEnabled);
     }
 
-    public boolean isEnabled() {
-        return enabled;
-    }
-
-    public void setVisible(boolean next) {
-        this.visible = next;
-        this.input.setVisible(next);
+    /** 隐藏时结束当前交互并退出焦点序列，恢复显示保留内容。 */
+    public void setVisible(boolean nextVisible) {
+        shell.setVisible(nextVisible);
+        input.setVisible(nextVisible);
     }
 
     public boolean removeSelected() {
@@ -182,9 +182,9 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
         return true;
     }
 
-    // 页面切换前使用同一提交入口保留正在输入的条目。
+    /** 页面切换前使用同一提交入口保留正在输入的条目。 */
     public void commitPendingInput() {
-        if (enabled) {
+        if (isEnabled()) {
             commitInput();
         }
     }
@@ -251,28 +251,19 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
         return true;
     }
 
-    @Override
-    public boolean isVisible() {
-        return visible;
-    }
-
-    @Override
-    public UiRect bounds() {
-        return bounds;
-    }
-
+    /** {@inheritDoc} */
     @Override
     public void setBounds(int x, int y, int width, int height) {
-        this.bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
-        int inputHeight = Math.min(INPUT_HEIGHT, bounds.height());
-        this.input.setBounds(bounds.x() + 1, Math.max(bounds.y(), bounds.bottom() - inputHeight - 1),
-                Math.max(0, bounds.width() - 2), Math.max(0, inputHeight));
+        shell.setBounds(x, y, width, height);
+        int inputHeight = Math.min(INPUT_HEIGHT, bounds().height());
+        this.input.setBounds(bounds().x() + 1, Math.max(bounds().y(), bounds().bottom() - inputHeight - 1),
+                Math.max(0, bounds().width() - 2), Math.max(0, inputHeight));
     }
 
     // 列表区矩形（去掉内嵌输入行）
     private UiRect listArea() {
-        int height = Math.max(0, bounds.height() - Math.min(INPUT_HEIGHT, bounds.height()) - 2);
-        return new UiRect(bounds.x() + 1, bounds.y() + 1, Math.max(0, bounds.width() - 2), height);
+        int height = Math.max(0, bounds().height() - Math.min(INPUT_HEIGHT, bounds().height()) - 2);
+        return new UiRect(bounds().x() + 1, bounds().y() + 1, Math.max(0, bounds().width() - 2), height);
     }
 
     private int visibleRowCount() {
@@ -296,10 +287,10 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
     @Override
     public void render(GuiGraphics graphics, Font renderFont, UiPointer incomingPointer) {
         UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
-        if (!visible) {
+        if (!isVisible()) {
             return;
         }
-        theme.drawInset(graphics, bounds);
+        theme.drawInset(graphics, bounds());
         UiRect area = listArea();
         int visibleRows = visibleRowCount();
         if (items.isEmpty()) {
@@ -315,7 +306,7 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
                 }
                 UiRect rowRect = new UiRect(area.x(), area.y() + row * ROW_HEIGHT, area.width(), ROW_HEIGHT);
                 boolean isSelected = index == selected;
-                boolean hovered = enabled && pointer.contains(rowRect);
+                boolean hovered = isEnabled() && pointer.contains(rowRect);
                 if (isSelected) {
                     theme.drawSelection(graphics, rowRect);
                     theme.drawSelectMarker(graphics, rowRect);
@@ -326,23 +317,22 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
                 String text = TextScroll.trimToWidth(renderFont, items.get(index),
                         Math.max(0, rowRect.right() - textX - 2));
                 graphics.drawString(renderFont, text, textX, rowRect.y() + 2,
-                        enabled ? theme.palette().surfaces().text() : theme.palette().surfaces().disabledText(), false);
+                        isEnabled() ? theme.palette().surfaces().text() : theme.palette().surfaces().disabledText(), false);
             }
         }
-        if (enabled) {
+        if (isEnabled()) {
             input.render(graphics, renderFont, pointer);
         }
-        if (isFocusVisible()) {
-            theme.drawFocusOutline(graphics, bounds);
-        }
+        shell.renderFocusOutline(graphics, bounds(), theme);
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean mousePressed(UiInputContext context) {
         double mouseX = context.pointerX();
         double mouseY = context.pointerY();
         int button = context.button();
-        if (!visible || !enabled || button != 0) {
+        if (!isVisible() || !isEnabled() || button != 0) {
             return false;
         }
         if (input.bounds().contains(mouseX, mouseY)) {
@@ -374,9 +364,10 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
         return input.mouseDragged(context, dragX, dragY);
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (!visible || !enabled) {
+        if (!isVisible() || !isEnabled()) {
             return false;
         }
         if (input.isFocused()) {
@@ -442,22 +433,13 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
         return true;
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
-        if (!visible || !enabled) {
+        if (!isVisible() || !isEnabled()) {
             return false;
         }
         return input.charTyped(codePoint, modifiers);
-    }
-
-    @Override
-    public UiFocusState focusState() {
-        return focusState;
-    }
-
-    @Override
-    public boolean canFocus() {
-        return visible && enabled;
     }
 
     @Override
@@ -467,9 +449,10 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
         }
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean isFocused() {
-        return focusState.isFocused() || input.isFocused();
+        return focusState().isFocused() || input.isFocused();
     }
 
     @Override
@@ -492,7 +475,7 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
     /** 按实际子控件解析指针，保留组合层的归属。 */
     @Override
     public @Nullable UiPointerHit hitTest(double x, double y) {
-        if (!visible || !enabled || !bounds.contains(x, y)) return null;
+        if (!isVisible() || !isEnabled() || !bounds().contains(x, y)) return null;
         UiPointerHit hit = input.hitTest(x, y);
         return hit == null ? UiPointerHit.leaf(this, x, y) : hit.within(this);
     }

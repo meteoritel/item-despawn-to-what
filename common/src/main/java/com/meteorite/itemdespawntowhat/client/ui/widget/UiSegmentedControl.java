@@ -1,13 +1,12 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiShellWidget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidgetShell;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlStyle;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiSurfaceRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
@@ -30,7 +29,7 @@ import org.lwjgl.glfw.GLFW;
  * <p>选中段用主题的 selected 九宫格（中心色为 {@code CONTROL_SELECTED}）绘制，未选中段用 control 九宫格，
  * 两者底图不同；段内文字统一用 {@code TEXT_PRIMARY}，避免浅蓝选中底上的白字对比度不足。
  */
-public final class UiSegmentedControl implements UiWidget, UiFocusTarget, UiLayoutSource {
+public final class UiSegmentedControl implements UiShellWidget, UiLayoutSource {
 
     // 最外侧左右各留的缩进（像素）
     private static final int EDGE_INSET = 1;
@@ -59,14 +58,17 @@ public final class UiSegmentedControl implements UiWidget, UiFocusTarget, UiLayo
     private List<Option> options = List.of();
     private int navigationIndex = -1;
     private String selected = "";
-    private UiRect bounds = new UiRect(0, 0, 0, 0);
-    private boolean enabled = true;
-    private boolean visible = true;
-    private final UiFocusState focusState = new UiFocusState();
+    private final UiWidgetShell shell = new UiWidgetShell(this);
     private @Nullable Consumer<String> onChanged;
 
     // 注入的宿主主题
     private final UiHostTheme theme;
+
+    /** {@inheritDoc} */
+    @Override
+    public UiWidgetShell shell() {
+        return shell;
+    }
 
     public UiSegmentedControl(UiHostTheme theme, Font font, List<Option> options) {
         this.theme = UiHostThemes.require(theme);
@@ -136,17 +138,15 @@ public final class UiSegmentedControl implements UiWidget, UiFocusTarget, UiLayo
         return this;
     }
 
-    public UiSegmentedControl setEnabled(boolean next) {
-        this.enabled = next;
+    /** 禁用时结束当前交互，复合控件同步子目标资格。 */
+    public UiSegmentedControl setEnabled(boolean nextEnabled) {
+        shell.setEnabled(nextEnabled);
         return this;
     }
 
-    public boolean isEnabled() {
-        return enabled;
-    }
-
-    public UiSegmentedControl setVisible(boolean next) {
-        this.visible = next;
+    /** 隐藏时结束当前交互并退出焦点序列，恢复显示保留内容。 */
+    public UiSegmentedControl setVisible(boolean nextVisible) {
+        shell.setVisible(nextVisible);
         return this;
     }
 
@@ -158,35 +158,26 @@ public final class UiSegmentedControl implements UiWidget, UiFocusTarget, UiLayo
         return total;
     }
 
-    @Override
-    public boolean isVisible() {
-        return visible;
-    }
-
-    @Override
-    public UiRect bounds() {
-        return bounds;
-    }
-
+    /** {@inheritDoc} */
     @Override
     public void setBounds(int x, int y, int width, int height) {
-        this.bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
+        shell.setBounds(x, y, width, height);
     }
 
     // 第 index 段的矩形：按控件宽度均分，各段宽度相差不超过 1 像素（整数像素无法整除时的最小偏差）
     private UiRect segmentRect(int index) {
         int count = options.size();
         if (count == 0) {
-            return new UiRect(bounds.x(), bounds.y(), 0, 0);
+            return new UiRect(bounds().x(), bounds().y(), 0, 0);
         }
-        int left = bounds.x() + (int) ((long) bounds.width() * index / count);
-        int right = bounds.x() + (int) ((long) bounds.width() * (index + 1) / count);
-        return new UiRect(left, bounds.y(), Math.max(0, right - left), bounds.height());
+        int left = bounds().x() + (int) ((long) bounds().width() * index / count);
+        int right = bounds().x() + (int) ((long) bounds().width() * (index + 1) / count);
+        return new UiRect(left, bounds().y(), Math.max(0, right - left), bounds().height());
     }
 
     // 鼠标位置落在哪一段，未命中返回 -1
     private int indexAt(double mouseX, double mouseY) {
-        if (options.isEmpty() || !bounds.contains(mouseX, mouseY)) {
+        if (options.isEmpty() || !bounds().contains(mouseX, mouseY)) {
             return -1;
         }
         for (int i = 0; i < options.size(); i++) {
@@ -206,7 +197,7 @@ public final class UiSegmentedControl implements UiWidget, UiFocusTarget, UiLayo
      */
     @Override
     public List<UiLayoutNode> layoutNodes() {
-        if (!visible || options.isEmpty()) {
+        if (!isVisible() || options.isEmpty()) {
             return List.of();
         }
         List<UiLayoutNode> nodes = new ArrayList<>(options.size());
@@ -214,7 +205,7 @@ public final class UiSegmentedControl implements UiWidget, UiFocusTarget, UiLayo
             UiRect segment = segmentRect(i);
             Component label = options.get(i).label();
             nodes.add(new UiLayoutNode(UiLayoutNode.Kind.CONTROL, segment, label, font.width(label),
-                    Math.max(0, segment.width() - LABEL_INSET), enabled, true, List.of()));
+                    Math.max(0, segment.width() - LABEL_INSET), isEnabled(), true, List.of()));
         }
         return nodes;
     }
@@ -225,20 +216,20 @@ public final class UiSegmentedControl implements UiWidget, UiFocusTarget, UiLayo
         UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
         int mouseX = (int) pointer.x();
         int mouseY = (int) pointer.y();
-        if (!visible || options.isEmpty()) {
+        if (!isVisible() || options.isEmpty()) {
             return;
         }
-        int hovered = enabled && pointer.allowed() ? indexAt(mouseX, mouseY) : -1;
+        int hovered = isEnabled() && pointer.allowed() ? indexAt(mouseX, mouseY) : -1;
         int chosen = selectedIndex();
         for (int i = 0; i < options.size(); i++) {
             UiRect segment = segmentRect(i);
             // 底图矩形左右各缩进 EDGE_INSET：最外两侧各留 1 像素，相邻两段之间合计 SEGMENT_GAP 像素
             UiRect surface = new UiRect(segment.x() + EDGE_INSET, segment.y(),
                     Math.max(0, segment.width() - SEGMENT_GAP), segment.height());
-            theme.drawSurface(graphics, surface, UiSurfaceRole.SEGMENT, !enabled ? UiControlStyle.State.DISABLED
+            theme.drawSurface(graphics, surface, UiSurfaceRole.SEGMENT, !isEnabled() ? UiControlStyle.State.DISABLED
                     : i == chosen ? UiControlStyle.State.SELECTED : i == hovered ? UiControlStyle.State.HOVER : UiControlStyle.State.NORMAL);
             // 选中态只由底图区分：浅蓝选中底上的白字对比度不足，故两态段内文字统一用主要文本色
-            int color = enabled ? theme.palette().surfaces().text() : theme.palette().surfaces().disabledText();
+            int color = isEnabled() ? theme.palette().surfaces().text() : theme.palette().surfaces().disabledText();
             String label = TextScroll.trimToWidth(renderFont, options.get(i).label().getString(),
                     Math.max(0, segment.width() - LABEL_INSET));
             graphics.drawString(renderFont, label, segment.x() + Math.max(0, (segment.width() - renderFont.width(label)) / 2),
@@ -271,12 +262,13 @@ public final class UiSegmentedControl implements UiWidget, UiFocusTarget, UiLayo
         return true;
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean mousePressed(UiInputContext context) {
         double mouseX = context.pointerX();
         double mouseY = context.pointerY();
         int button = context.button();
-        if (!visible || !enabled || button != 0) {
+        if (!isVisible() || !isEnabled() || button != 0) {
             return false;
         }
         int index = indexAt(mouseX, mouseY);
@@ -303,14 +295,10 @@ public final class UiSegmentedControl implements UiWidget, UiFocusTarget, UiLayo
         return true;
     }
 
-    @Override
-    public UiFocusState focusState() {
-        return focusState;
-    }
-
+    /** {@inheritDoc} */
     @Override
     public boolean canFocus() {
-        return visible && enabled && !options.isEmpty();
+        return isVisible() && isEnabled() && !options.isEmpty();
     }
 
     @Override
@@ -319,15 +307,10 @@ public final class UiSegmentedControl implements UiWidget, UiFocusTarget, UiLayo
             navigationIndex = Math.max(0, selectedIndex());
     }
 
-    @Override
-    public boolean isFocused() {
-        return focusState.isFocused();
-    }
-
-    // 激活当前导航项，导航本身不改变业务选中。
+    /** 激活当前导航项，导航本身不改变业务选中。 */
     @Override
     public boolean activate() {
-        if (!visible || !enabled || options.isEmpty()) {
+        if (!isVisible() || !isEnabled() || options.isEmpty()) {
             return false;
         }
         int current = Math.max(0, selectedIndex());

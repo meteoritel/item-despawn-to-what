@@ -58,11 +58,10 @@ public final class UiIconStrip implements UiInteractionSession.Target, UiFocusTa
     private UiStyleSource theme = UiMinecraftTheme.INSTANCE;
     private UiControlStyle style = theme.controlStyle(UiControlRole.SECONDARY);
     private boolean styleOverride;
-    private UiRect bounds = new UiRect(0, 0, 0, 0);
+    private final UiWidgetShell shell = new UiWidgetShell(this);
     private int focusedIndex = -1;
     private int pressedIndex = -1;
     private @Nullable UiInteractionSession session;
-    private final UiFocusState focusState = new UiFocusState();
 
     public UiIconStrip(Font font, Orientation orientation) {
         this.font = Objects.requireNonNull(font);
@@ -109,14 +108,16 @@ public final class UiIconStrip implements UiInteractionSession.Target, UiFocusTa
         for (Item item : cells) item.control.setStyle(style);
     }
 
+    /** 更新 GUI 逻辑矩形；负宽高按零处理，同步当前布局几何。 */
     public void setBounds(int x, int y, int width, int height) {
-        bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
+        shell.setBounds(x, y, width, height);
         relayout();
     }
 
+    /** {@inheritDoc} */
     @Override
     public UiRect bounds() {
-        return bounds;
+        return shell.bounds();
     }
 
     /**
@@ -206,7 +207,7 @@ public final class UiIconStrip implements UiInteractionSession.Target, UiFocusTa
         if (!control.isHittable()) return false;
 
         session = context.scope().interaction();
-        session.begin(this, UiInteractionSession.Source.POINTER, context.button());
+        session.begin(this, UiInteractionSession.Source.POINTER, 0);
         clearPress();
         control.setPressed(true);
         pressedIndex = index;
@@ -251,11 +252,10 @@ public final class UiIconStrip implements UiInteractionSession.Target, UiFocusTa
         return delta != 0 && moveFocus(delta);
     }
 
-    // ---------- UiFocusTarget ----------
-
+    /** {@inheritDoc} */
     @Override
     public UiFocusState focusState() {
-        return focusState;
+        return shell.focusState();
     }
 
     @Override
@@ -273,11 +273,6 @@ public final class UiIconStrip implements UiInteractionSession.Target, UiFocusTa
             clearPress();
             for (Item item : cells) item.control.focusState().clear();
         }
-    }
-
-    @Override
-    public boolean isFocused() {
-        return focusState.isFocused();
     }
 
     @Override
@@ -338,7 +333,7 @@ public final class UiIconStrip implements UiInteractionSession.Target, UiFocusTa
                 : Math.floorMod(position + delta, focusable.size());
         focusedIndex = focusable.get(next);
 
-        focusState.request();
+        shell.focusState().request();
         return true;
     }
 
@@ -360,8 +355,8 @@ public final class UiIconStrip implements UiInteractionSession.Target, UiFocusTa
         cellWidth += CELL_PADDING * 2;
         cellHeight += CELL_PADDING * 2;
         if (orientation == Orientation.HORIZONTAL) {
-            int y = bounds.y() + Math.max(0, (bounds.height() - cellHeight) / 2);
-            int x = bounds.x();
+            int y = bounds().y() + Math.max(0, (bounds().height() - cellHeight) / 2);
+            int x = bounds().x();
             for (Item item : cells) {
                 if (!item.control.isVisible()) {
                     item.control.setBounds(0, 0, 0, 0);
@@ -371,8 +366,8 @@ public final class UiIconStrip implements UiInteractionSession.Target, UiFocusTa
                 x += cellWidth;
             }
         } else {
-            int x = bounds.x() + Math.max(0, (bounds.width() - cellWidth) / 2);
-            int y = bounds.y();
+            int x = bounds().x() + Math.max(0, (bounds().width() - cellWidth) / 2);
+            int y = bounds().y();
             for (Item item : cells) {
                 if (!item.control.isVisible()) {
                     item.control.setBounds(0, 0, 0, 0);
@@ -395,9 +390,6 @@ public final class UiIconStrip implements UiInteractionSession.Target, UiFocusTa
         private final UiAction action;
         private UiIcon normal;
         private UiIcon disabled;
-        private boolean enabled = true;
-        private boolean visible = true;
-        private boolean selected;
 
         private Item(UiIconStrip strip, UiIcon normal, UiIcon disabled,
                      @Nullable Component tooltip, @Nullable UiAction action) {
@@ -415,8 +407,7 @@ public final class UiIconStrip implements UiInteractionSession.Target, UiFocusTa
          * 禁用当前按压格子时取消该次按压，恢复启用后等待新输入。
          */
         public void setEnabled(boolean value) {
-            if (enabled == value) return;
-            enabled = value;
+            if (control.isEnabled() == value) return;
             if (!value && strip.pressedIndex >= 0 && strip.cells.get(strip.pressedIndex) == this) strip.cancelPress();
             control.setEnabled(value);
             applyIcon();
@@ -426,15 +417,14 @@ public final class UiIconStrip implements UiInteractionSession.Target, UiFocusTa
          * 隐藏当前按压格子时取消该次按压，再更新占位布局。
          */
         public void setVisible(boolean value) {
-            if (visible == value) return;
-            visible = value;
+            if (control.isVisible() == value) return;
             if (!value && strip.pressedIndex >= 0 && strip.cells.get(strip.pressedIndex) == this) strip.cancelPress();
             control.setVisible(value);
             strip.relayout();
         }
 
+        /** 业务选中由核心持有，与条内键盘导航分开。 */
         public void setSelected(boolean value) {
-            selected = value;
             control.setSelected(value);
         }
 
@@ -448,16 +438,19 @@ public final class UiIconStrip implements UiInteractionSession.Target, UiFocusTa
             strip.relayout();
         }
 
+        /** 当前格子的可用性直接读取核心状态。 */
         public boolean isEnabled() {
-            return enabled;
+            return control.isEnabled();
         }
 
+        /** 当前格子的显隐直接读取核心状态。 */
         public boolean isVisible() {
-            return visible;
+            return control.isVisible();
         }
 
+        /** 当前格子的业务选中状态。 */
         public boolean isSelected() {
-            return selected;
+            return control.isSelected();
         }
 
         public UiRect bounds() {
@@ -467,7 +460,7 @@ public final class UiIconStrip implements UiInteractionSession.Target, UiFocusTa
         // 禁用时换成禁用字形；提示与动作保持不变，因此只需重配一次 UiControl。
         private void applyIcon() {
             control.configure(strip.font, Component.empty(), EMPTY_LABEL_COLOR,
-                    enabled ? normal : disabled,
+                    control.isEnabled() ? normal : disabled,
                     tooltipOrNull == null ? List.of() : List.of(tooltipOrNull),
                     action);
         }

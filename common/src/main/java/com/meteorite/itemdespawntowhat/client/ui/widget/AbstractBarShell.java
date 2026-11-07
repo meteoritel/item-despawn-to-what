@@ -11,7 +11,6 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiRangeControl;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiRangeEnd;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiValueTextBinding;
@@ -30,9 +29,8 @@ import org.lwjgl.glfw.GLFW;
 /**
  * 两个区间宿主控件（{@link UiCyclicTimeBar}、{@link UiRangeBar}）共用的外壳：标签行与轨道行的几何、
  * 独立提示行、精确输入行、焦点与捕获生命周期，以及指针与键盘的统一分发。
- * <p>外壳只依赖两个 kit 核心（{@code UiCyclicRange}、{@code UiRangeSlider}）共同实现的输入契约
- * {@link UiInputTarget} 与 {@link UiInteractionSession.Target}；两者尚无共同类型接口，其余核心能力
- * （拖动查询、边界与可见性写入、结束交互、选中端）直接使用 UiRangeControl 共同契约。</p>
+ * <p>通过 {@link UiRangeControl} 使用核心的输入、几何、资格与端点能力；
+ * 外壳保留标签和精确输入的布局，焦点视图及可用状态与核心共用。</p>
  */
 abstract class AbstractBarShell<C extends UiRangeControl>
         implements UiWidget, UiFocusTarget {
@@ -58,8 +56,6 @@ abstract class AbstractBarShell<C extends UiRangeControl>
     protected UiRect trackRow = new UiRect(0, 0, 0, 0);
     // 独立提示行；宿主高度不足时为 null（提示改在标签行内显示）
     protected @Nullable UiRect hintRow;
-    protected boolean enabled = true;
-    protected boolean visible = true;
     protected boolean preciseActive;
 
     /**
@@ -123,7 +119,6 @@ abstract class AbstractBarShell<C extends UiRangeControl>
     // ---- 可见性与禁用：状态与核心保持同步，关闭精确输入不留在半开状态 ----
 
     protected final void applyEnabled(boolean next) {
-        this.enabled = next;
         core.setEnabled(next);
         if (!next) {
             closePrecise();
@@ -131,7 +126,6 @@ abstract class AbstractBarShell<C extends UiRangeControl>
     }
 
     protected final void applyVisible(boolean next) {
-        this.visible = next;
         core.setVisible(next);
         if (!next) {
             closePrecise();
@@ -145,13 +139,15 @@ abstract class AbstractBarShell<C extends UiRangeControl>
         return bounds;
     }
 
+    /** {@inheritDoc} */
     @Override
     public final boolean isVisible() {
-        return visible;
+        return core.isVisible();
     }
 
+    /** 当前可用性由共享状态壳持有。 */
     public final boolean isEnabled() {
-        return enabled;
+        return core.isEnabled();
     }
 
     @Override
@@ -159,9 +155,10 @@ abstract class AbstractBarShell<C extends UiRangeControl>
         return core.focusState();
     }
 
+    /** {@inheritDoc} */
     @Override
     public final boolean canFocus() {
-        return visible && enabled;
+        return core.canFocus();
     }
 
     @Override
@@ -174,20 +171,18 @@ abstract class AbstractBarShell<C extends UiRangeControl>
         core.focusChanged(focused);
     }
 
-
     @Override
     public final boolean activate() {
         return openPrecise();
     }
 
-    // ---- 输入分发 ----
-
+    /** {@inheritDoc} */
     @Override
     public final boolean mousePressed(UiInputContext context) {
         double mouseX = context.pointerX();
         double mouseY = context.pointerY();
         int button = context.button();
-        if (!visible || !enabled || !acceptsClick(button)) {
+        if (!isVisible() || !isEnabled() || !acceptsClick(button)) {
             return false;
         }
         if (preciseActive && precise.mousePressed(context)) {
@@ -229,9 +224,10 @@ abstract class AbstractBarShell<C extends UiRangeControl>
         return preciseActive && precise.mouseReleased(context);
     }
 
+    /** {@inheritDoc} */
     @Override
     public final boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (!visible || !enabled) {
+        if (!isVisible() || !isEnabled()) {
             return false;
         }
         if (preciseActive && precise.keyPressed(keyCode, scanCode, modifiers)) {
@@ -272,7 +268,7 @@ abstract class AbstractBarShell<C extends UiRangeControl>
      * @return 当前控件是否接受精确编辑请求
      */
     public final boolean openPrecise() {
-        if (!enabled || !visible) {
+        if (!isEnabled() || !isVisible()) {
             return false;
         }
         if (preciseEditor != null) {
@@ -330,7 +326,6 @@ abstract class AbstractBarShell<C extends UiRangeControl>
         closePrecise();
     }
 
-
     // ---- 子类实现 ----
 
     @Override
@@ -348,7 +343,7 @@ abstract class AbstractBarShell<C extends UiRangeControl>
     /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
     @Override
     public @Nullable UiPointerHit hitTest(double x, double y) {
-        if (!visible || !enabled || !bounds.contains(x, y)) return null;
+        if (!isVisible() || !isEnabled() || !bounds.contains(x, y)) return null;
         if (preciseActive) {
             UiPointerHit hit = precise.hitTest(x, y);
             if (hit != null) return hit.within(this).preservingFocus();
