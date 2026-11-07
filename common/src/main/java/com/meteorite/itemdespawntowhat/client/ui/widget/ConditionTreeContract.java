@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.ConditionNode;
@@ -17,7 +18,7 @@ import org.jetbrains.annotations.Nullable;
 public final class ConditionTreeContract {
 
     // 根节点的路径（与条件树 JSON 的字段名一致）
-    public static final String ROOT_PATH = RuleFields.CONDITIONS;
+    public static final FieldPath ROOT_PATH = FieldPath.key(RuleFields.CONDITIONS);
 
     /** 条件类型选项：宿主注入的可选条件类型，{@code id} 用于生成默认叶与 JSON 序列化，{@code label} 只用于界面展示。 */
     public record TypeOption(ResourceLocation id, Component label) {
@@ -43,11 +44,11 @@ public final class ConditionTreeContract {
      */
     public interface Navigation {
 
-        @Nullable String selectedPath();
+        @Nullable FieldPath selectedPath();
 
         @Nullable ConditionNode selectedNode();
 
-        void selectPath(@Nullable String path);
+        void selectPath(@Nullable FieldPath path);
     }
 
     private ConditionTreeContract() {

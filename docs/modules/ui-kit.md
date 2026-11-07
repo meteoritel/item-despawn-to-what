@@ -258,6 +258,8 @@ sequenceDiagram
 
 `UiModal` 将裁剪内正文与 footer 登记为实际成员，保留正文快捷键、Esc 关闭次序与消息滚动。`UiModalStack` 持有通用模态与栈政策，`UiButtonWidget` 让默认按钮和宿主按钮共用 footer；栈在结构变化时派生稳定呈现项清单，淡入与错位排版仍归栈；独立绘制入口与 `UiLayers` 复用同一呈现实现。宿主注入焦点播报与业务历史。编辑保存、草稿和 type picker 的优先级仍由宿主解释。可运行接入见开发工作台 `KitShowcaseScreen`、`KitInputsExample` 与 `KitSurfacesExample`。
 
+`UiModal.onPrepare` 注册通用准备回调，`UiModalStack.prepareUi` 准备当前呈现的模态。宿主在选择输入作用域、确定命中或呈现前调用栈的准备入口；栈首次 push 时先准备，再发布作用域、布局与收集焦点，移除顶层模态时先准备重新显示的内容。回调负责宿主数据接纳与控件状态更新，kit 只维护生命周期。
+
 ### 纯样例与独立编译
 
 `KitSkinSamples` 展示默认、局部配色、sprite/九宫格与 painter 配方，以及单控件完整覆盖；展示屏幕以 F6 或 Theme 按钮轮换相同内容的主题。Surfaces 页展示通用角色，输入、模态和滚动页共用同一 Context。

@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
@@ -51,16 +52,16 @@ final class CatalystQuantities {
     }
 
     static void retargetCatalystItems(RuleDraft draft) {
-        RuleValue cost = draft.valueAt(RuleFields.CATALYST_COST);
+        RuleValue cost = draft.valueAt(FieldPath.key(RuleFields.CATALYST_COST));
         if (cost == null) cost = RuleValue.mapping().build();
         if (cost.isMapping()) {
             List<String> references = PresenceLeaves.ruleLevelCatalystItems(draft.root());
-            draft.setAt(RuleFields.CATALYST_COST, RuleValue.mapping(cost)
+            draft.setAt(FieldPath.key(RuleFields.CATALYST_COST), RuleValue.mapping(cost)
                     .put(RuleFields.CATALYST_ITEMS, RuleValue.textList(references).build()).build());
             reconcileQuantities(draft, references);
-            RuleValue updated = draft.valueAt(RuleFields.CATALYST_COST);
+            RuleValue updated = draft.valueAt(FieldPath.key(RuleFields.CATALYST_COST));
             if (updated != null && updated.has(RuleFields.CONSUME_COUNTS)) {
-                draft.setAt(RuleFields.CATALYST_COST, withQuantities(updated, RuleFields.CONSUME_COUNTS,
+                draft.setAt(FieldPath.key(RuleFields.CATALYST_COST), withQuantities(updated, RuleFields.CONSUME_COUNTS,
                         references));
             }
         }
@@ -68,11 +69,11 @@ final class CatalystQuantities {
 
     // 按 ownerPath 写回重建后的计数表；数量字段固定为 item_counts，仅此字段需要与引用列表对账
     static void reconcileQuantities(RuleDraft draft, List<String> references) {
-        RuleValue owner = draft.valueAt(RuleFields.CATALYST_COST);
+        RuleValue owner = draft.valueAt(FieldPath.key(RuleFields.CATALYST_COST));
         if (owner == null || !owner.isMapping()) {
             return;
         }
-        draft.setAt(RuleFields.CATALYST_COST, withQuantities(owner, RuleFields.ITEM_COUNTS, references));
+        draft.setAt(FieldPath.key(RuleFields.CATALYST_COST), withQuantities(owner, RuleFields.ITEM_COUNTS, references));
     }
 
     // 按 references 顺序重建 field 计数表：已有计数值原样保留，新键取 DEFAULT_COUNT

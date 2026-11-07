@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
-import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
@@ -20,8 +20,8 @@ import org.jetbrains.annotations.Nullable;
 
 /** 源物品与催化剂选择的互斥快照，标签按客户端同步成员展开，源排除项优先。 */
 final class SourceCatalystSelectionPolicy implements Function<String, @Nullable Component> {
-    private static final String SOURCE_ITEMS_PATH = DraftPaths.child(RuleFields.SOURCE, RuleFields.SOURCE_ITEMS);
-    private static final String SOURCE_EXCLUDE_PATH = DraftPaths.child(RuleFields.SOURCE, RuleFields.SOURCE_EXCLUDE);
+    private static final FieldPath SOURCE_ITEMS_PATH = FieldPath.key(RuleFields.SOURCE).child(RuleFields.SOURCE_ITEMS);
+    private static final FieldPath SOURCE_EXCLUDE_PATH = FieldPath.key(RuleFields.SOURCE).child(RuleFields.SOURCE_EXCLUDE);
 
     private final Map<String, Set<String>> members = new HashMap<>();
     private final Map<String, Boolean> conflicts = new HashMap<>();
@@ -43,12 +43,10 @@ final class SourceCatalystSelectionPolicy implements Function<String, @Nullable 
                 + (selectingSource ? "pick.catalyst_conflict" : "pick.source_conflict"));
     }
 
-    static Function<String, @Nullable Component> forField(RuleValue draft, String path) {
+    static Function<String, @Nullable Component> forField(RuleValue draft, FieldPath path) {
         boolean source = SOURCE_ITEMS_PATH.equals(path);
-        int separator = path.lastIndexOf('.');
-        if (!source && (separator < 0 || !RuleFields.CATALYST_ITEMS.equals(path.substring(separator + 1))))
-            return ignored -> null;
-        String ownerPath = path.substring(0, separator);
+        if (!source && !RuleFields.CATALYST_ITEMS.equals(path.lastKey())) return ignored -> null;
+        FieldPath ownerPath = path.parent();
         if (!source && !isCatalystOwner(draft.valueAt(ownerPath), ownerPath)) return ignored -> null;
         return new SourceCatalystSelectionPolicy(draft, source);
     }
@@ -61,16 +59,16 @@ final class SourceCatalystSelectionPolicy implements Function<String, @Nullable 
         return conflict ? reason : null;
     }
 
-    private static boolean isCatalystOwner(@Nullable RuleValue owner, String path) {
+    private static boolean isCatalystOwner(@Nullable RuleValue owner, FieldPath path) {
         if (owner == null || !owner.isMapping()) return false;
         String type = RuleValue.text(owner, RuleFields.TYPE);
-        return RuleFields.CATALYST_COST.equals(path)
+        return FieldPath.key(RuleFields.CATALYST_COST).equals(path)
                 || RuleEditorPageSupport.CATALYST_PRESENT_ID.toString().equals(type);
     }
 
     private static void collectCatalysts(RuleValue value, Set<String> out) {
         if (value.isMapping()) {
-            if (isCatalystOwner(value, "")) out.addAll(references(value.child(RuleFields.CATALYST_ITEMS)));
+            if (isCatalystOwner(value, FieldPath.ROOT)) out.addAll(references(value.child(RuleFields.CATALYST_ITEMS)));
             for (Map.Entry<String, RuleValue> entry : value.entries().entrySet()) {
                 if (RuleFields.CATALYST_COST.equals(entry.getKey()))
                     out.addAll(references(entry.getValue().child(RuleFields.CATALYST_ITEMS)));

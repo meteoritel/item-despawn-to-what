@@ -1,9 +1,9 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
 import java.util.Objects;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.client.ui.shared.PreviewResources;
-import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.net.RuleEditClientWorkspace;
@@ -169,7 +169,7 @@ public final class RuleEditorPanelFactory {
     static UiModal fieldCatalogModal(Font font, EditorShell shell, RuleEditClientWorkspace workspace, RuleCatalogType type,
                                      CatalogSelectionBinding binding, Component title, int screenWidth, int screenHeight,
                                      EditorField field, RuleValue draft,
-                                     String path, @Nullable Predicate<String> entryFilter) {
+                                     FieldPath path, @Nullable Predicate<String> entryFilter) {
         return catalogModal(font, shell, workspace, type, binding, title, screenWidth, screenHeight,
                 field, SourceCatalystSelectionPolicy.forField(draft, path), entryFilter);
     }
@@ -179,125 +179,8 @@ public final class RuleEditorPanelFactory {
                                         @Nullable EditorField field,
                                         Function<String, @Nullable Component> unavailableReason,
                                         @Nullable Predicate<String> entryFilter) {
-        UiHostTheme THEME = shell.theme();
-        boolean includeTags = field != null && field.allowsTags();
-        workspace.refreshDirectory(type);
-        if (includeTags) workspace.refreshDirectory(RuleCatalogType.TAG);
-        // 默认排除规则与「主分类 / 标签 / 一起」范围由同一个策略实例持有，页码与总数始终一致
-        CatalogEntryPolicy policy = includeTags ? CatalogEntryPolicy.scoped(type) : CatalogEntryPolicy.fixed(type);
-        CatalogMapper mapper = new CatalogMapper();
-        mapper.field = field;
-        mapper.includeTags = includeTags;
-        mapper.policy = policy;
-        mapper.entryFilter = entryFilter;
-        CatalogViewState viewState = new CatalogViewState(binding.initialSelection());
-        UiModal modal = UiModal.create(THEME, font);
-        // 确认按钮可用态由目录每帧刷新：值不变时不再重配按钮（重配会复制文本并重建命中目标）
-        ConfirmGate confirmGate = new ConfirmGate();
-        UiCatalogGrid grid = new UiCatalogGrid(THEME, font, binding.mode(), catalogTexts(type, includeTags), new UiCatalogGrid.Listener() {
-            @Override
-            public void onSelectionChanged(List<String> selection) {
-                viewState.select(selection);
-                refreshCatalogConfirm(modal, shell.editable(), selection, unavailableReason, confirmGate);
-            }
-
-            @Override
-            public void onSearch(String filter) {
-                mapper.page = 0;
-                mapper.filter = filter == null ? "" : filter;
-                
-            }
-
-            @Override
-            public void onPageChange(int delta) {
-                if (delta > 0 && !mapper.hasNext) {
-                    return;
-                }
-                if (delta < 0 && mapper.page <= 0) {
-                    return;
-                }
-                mapper.page = Math.max(0, mapper.page + delta);
-                
-            }
-
-            @Override
-            public void onScopeChanged(UiCatalogGrid.Scope scope) {
-                mapper.scope = scope;
-                mapper.page = 0;
-            }
-
-            @Override
-            public void onConfirm() {
-                if (!modal.buttons().isEmpty()) modal.buttons().getFirst().activate();
-            }
-        });
-        grid.setViewSource(() -> {
-            boolean active = shell.editable();
-            List<UiCatalogGrid.Entry> mapped = mapper.map(workspace, type);
-            refreshCatalogConfirm(modal, active, viewState.selection(), unavailableReason, confirmGate);
-            boolean loading = mapper.cached == null || !mapper.cached.lastPage()
-                    || includeTags && (mapper.cachedTags == null || !mapper.cachedTags.lastPage());
-            String errorState = workspace.directory(type).failed()
-                    || includeTags && workspace.directory(RuleCatalogType.TAG).failed() ? "retry" : active ? "" : "frozen";
-            viewState.entries(mapped == null ? List.of() : mapped);
-            viewState.navigation(mapper.scope, mapper.page, mapper.pageCount, null);
-            viewState.status(loading, active, mapper.total, switch (errorState) {
-                case "retry" -> "pick.retry_hint";
-                case "frozen" -> "pick.frozen";
-                default -> null;
-            });
-            return viewState.view();
-        }, policy, unavailableReason);
-        grid.setOnRetry(() -> {
-            workspace.retryDirectory(type);
-            if (includeTags) workspace.retryDirectory(RuleCatalogType.TAG);
-        });
-        grid.setTooltipSuffix(id -> {
-            var tag = mapper.tagPreviews.get(id);
-            if (tag != null) return tag.tooltip();
-            // 给不出静态预览的条目在悬停里说明原因：实体没有可见渲染器、方块没有静态模型（告示牌等）
-            if (type == RuleCatalogType.ENTITY && PreviewIcons.entityUnavailable(id, 0)) {
-                return Component.translatable(UI + "preview.unavailable");
-            }
-            if (type == RuleCatalogType.BLOCK && PreviewIcons.blockUnavailable(id)) {
-                return Component.translatable(UI + "preview.unavailable");
-            }
-            return null;
-        });
-        modal.title(title);
-        modal.preferredWidth(pickerWidth(screenWidth));
-        // 翻页与状态排到确认/取消同一行的左侧，省下独立一行的底部空间
-        modal.inlineFooter();
-        modal.contentWidget(grid, pickerBodyHeight(shell.theme(), screenHeight));
-        modal.confirm(Component.translatable(UI + "button.confirm"), () -> {
-            List<String> selection = List.copyOf(viewState.selection());
-            if (shell.editable() && selection.stream().noneMatch(id -> unavailableReason.apply(id) != null))
-                binding.confirm(selection);
-        });
-        confirmGate.enabled = null;
-        refreshCatalogConfirm(modal, shell.editable(), viewState.selection(), unavailableReason, confirmGate);
-        modal.cancel(Component.translatable(UI + "button.cancel"));
-        modal.layoutCentered(screenWidth, screenHeight);
-        return modal;
-    }
-
-    // 确认按钮可用态缓存：目录每帧都刷新它，但按钮重配一次会复制文本、重算宽度并重建命中目标
-    private static final class ConfirmGate {
-        private @Nullable Boolean enabled;
-    }
-
-    private static void refreshCatalogConfirm(UiModal modal, boolean active, List<String> selection,
-                                               Function<String, @Nullable Component> unavailableReason,
-                                               ConfirmGate gate) {
-        // 选择与宿主业务状态每帧都可能变，因此每次仍要算出结果，只在结果变化时才推给按钮
-        boolean enabled = active && selection.stream().noneMatch(id -> unavailableReason.apply(id) != null);
-        if (gate.enabled != null && gate.enabled == enabled) {
-            return;
-        }
-        gate.enabled = enabled;
-        if (!modal.buttons().isEmpty()) {
-            modal.buttons().getFirst().setEnabled(enabled);
-        }
+        return new CatalogPicker(font, shell, workspace, type, binding, title, screenWidth, screenHeight,
+                field, unavailableReason, entryFilter).modal;
     }
 
     // 选择页宽度：屏幕越宽弹窗越宽，但保留窗口感
@@ -311,17 +194,126 @@ public final class RuleEditorPanelFactory {
                 PICKER_MAX_BODY_HEIGHT);
     }
 
-    // 目录缓存 -> 面板条目；同一份缓存实例只转换一次，避免逐帧重建
-    private static final class CatalogMapper {
+    // 平铺目录宿主独占查询、选择与发布；目录映射和名称缓存留在查询实现内。
+    private static final class CatalogPicker implements UiCatalogGrid.Listener {
+        private final EditorShell shell;
+        private final RuleEditClientWorkspace workspace;
+        private final RuleCatalogType type;
+        private final CatalogSelectionBinding binding;
+        private final Function<String, @Nullable Component> unavailableReason;
+        private final UiModal modal;
+        private final UiCatalogGrid grid;
+        private List<String> selection;
+        private UiCatalogGrid.View view;
+        private long contentGeneration;
+        private int noteTotal = -1;
+        private String errorKey;
+
+        private CatalogPicker(Font font, EditorShell shell, RuleEditClientWorkspace workspace, RuleCatalogType type,
+                              CatalogSelectionBinding binding, Component title, int width, int height,
+                              @Nullable EditorField field, Function<String, @Nullable Component> unavailableReason,
+                              @Nullable Predicate<String> entryFilter) {
+            this.shell = shell;
+            this.workspace = workspace;
+            this.type = type;
+            this.binding = binding;
+            this.field = field;
+            this.unavailableReason = unavailableReason;
+            this.entryFilter = entryFilter;
+            includeTags = field != null && field.allowsTags();
+            policy = includeTags ? CatalogEntryPolicy.scoped(type) : CatalogEntryPolicy.fixed(type);
+            selection = List.copyOf(binding.mode().snapshot(binding.initialSelection()));
+            workspace.refreshDirectory(type);
+            if (includeTags) workspace.refreshDirectory(RuleCatalogType.TAG);
+            modal = UiModal.create(shell.theme(), font);
+            grid = new UiCatalogGrid(shell.theme(), font, binding.mode(), catalogTexts(type, includeTags), this);
+            grid.configure(policy, unavailableReason);
+            grid.setOnRetry(() -> {
+                workspace.retryDirectory(type);
+                if (includeTags) workspace.retryDirectory(RuleCatalogType.TAG);
+                prepare();
+            });
+            grid.setTooltipSuffix(id -> {
+                var tag = tagPreviews.get(id);
+                if (tag != null) return tag.tooltip();
+                if (type == RuleCatalogType.ENTITY && PreviewIcons.entityUnavailable(id, 0)
+                        || type == RuleCatalogType.BLOCK && PreviewIcons.blockUnavailable(id))
+                    return Component.translatable(UI + "preview.unavailable");
+                return null;
+            });
+            modal.title(title).preferredWidth(pickerWidth(width)).inlineFooter();
+            modal.contentWidget(grid, pickerBodyHeight(shell.theme(), height));
+            modal.confirm(Component.translatable(UI + "button.confirm"), () -> {
+                if (shell.editable() && selection.stream().noneMatch(id -> unavailableReason.apply(id) != null))
+                    binding.confirm(selection);
+            });
+            modal.cancel(Component.translatable(UI + "button.cancel"));
+            modal.onPrepare(this::prepare);
+            prepare();
+            modal.layoutCentered(width, height);
+        }
+
+        private void prepare() {
+            List<UiCatalogGrid.Entry> mapped = queryEntries();
+            boolean active = shell.editable();
+            boolean loading = cached == null || !cached.lastPage()
+                    || includeTags && (cachedTags == null || !cachedTags.lastPage());
+            String nextError = workspace.directory(type).failed()
+                    || includeTags && workspace.directory(RuleCatalogType.TAG).failed() ? "pick.retry_hint"
+                    : active ? null : "pick.frozen";
+            UiCatalogGrid.Content content = view == null || view.content().generation() != contentGeneration
+                    || view.content().selection() != selection
+                    ? new UiCatalogGrid.Content(contentGeneration, mapped, selection) : view.content();
+            UiCatalogGrid.Navigation navigation = new UiCatalogGrid.Navigation(scope, filter, page, pageCount, null);
+            UiCatalogGrid.Status status = view == null ? null : view.status();
+            if (status == null || status.loading() != loading || status.enabled() != active
+                    || noteTotal != total || !Objects.equals(errorKey, nextError)) {
+                status = new UiCatalogGrid.Status(loading, active, Component.translatable(UI + "pick.total", total),
+                        nextError == null ? null : Component.translatable(UI + nextError));
+                noteTotal = total;
+                errorKey = nextError;
+            }
+            view = new UiCatalogGrid.View(content, navigation, status);
+            grid.applyView(view);
+            boolean canConfirm = active && selection.stream().noneMatch(id -> unavailableReason.apply(id) != null);
+            modal.buttons().getFirst().setEnabled(canConfirm);
+        }
+
+        /** {@inheritDoc} */
+        @Override public void onSelectionChanged(List<String> next) {
+            selection = List.copyOf(binding.mode().snapshot(next));
+            prepare();
+        }
+        /** {@inheritDoc} */
+        @Override public void onSearch(String next) {
+            page = 0;
+            filter = next;
+            prepare();
+        }
+        /** {@inheritDoc} */
+        @Override public void onPageChange(int delta) {
+            if (delta > 0 && !hasNext || delta < 0 && page == 0) return;
+            page += delta;
+            prepare();
+        }
+        /** {@inheritDoc} */
+        @Override public void onScopeChanged(UiCatalogGrid.Scope next) {
+            scope = next;
+            page = 0;
+            prepare();
+        }
+        /** {@inheritDoc} */
+        @Override public void onConfirm() { modal.buttons().getFirst().activate(); }
+
 
         private RuleCatalog cached;
         private RuleCatalog cachedTags;
-        private boolean includeTags;
-        private @Nullable EditorField field;
-        private @Nullable CatalogEntryPolicy policy;
+        private final boolean includeTags;
+        private final @Nullable EditorField field;
+        private final CatalogEntryPolicy policy;
         // 条目可见范围：只作用于资源条目，标签条目不受限制
-        private @Nullable Predicate<String> entryFilter;
-        private @Nullable List<UiCatalogGrid.Entry> entries;
+        private final @Nullable Predicate<String> entryFilter;
+        private List<UiCatalogGrid.Entry> entries = List.of();
         private int page;
         private int pageCount;
         private int total;
@@ -338,8 +330,7 @@ public final class RuleEditorPanelFactory {
         private CatalogDisplayQuery.Pages<List<UiCatalogGrid.Entry>> queryPages;
         private final Map<String, TagPreviewIcons.Tag> tagPreviews = new HashMap<>();
 
-        @Nullable
-        List<UiCatalogGrid.Entry> map(RuleEditClientWorkspace workspace, RuleCatalogType type) {
+        private List<UiCatalogGrid.Entry> queryEntries() {
             Object nextResources = PreviewResources.generation();
             Object nextLanguage = Language.getInstance();
             if (resources != null && (resources != nextResources || language != nextLanguage)) {
@@ -357,14 +348,19 @@ public final class RuleEditorPanelFactory {
                 cachedTags = tags;
                 mappedScope = scope;
                 mappedPage = -1;
-                if (catalog == null) { entries = null; hasNext = false; pageCount = 0; total = 0; return null; }
+                if (catalog == null) {
+                    entries = List.of(); full = List.of(); queryPages = null;
+                    hasNext = false; pageCount = 0; total = 0;
+                    contentGeneration++;
+                    return entries;
+                }
                 List<UiCatalogGrid.Entry> mapped = new ArrayList<>();
                 boolean withItems = scope != UiCatalogGrid.Scope.TAG;
                 boolean withTags = includeTags && scope != UiCatalogGrid.Scope.ITEM;
                 Set<String> validTags = field != null && type == RuleCatalogType.TAG ? FieldCatalogChoices.tags(field) : null;
                 for (RuleCatalogEntry entry : withItems ? catalog.entries() : List.<RuleCatalogEntry>of()) {
                     TaggedId reference = Objects.requireNonNull(TaggedId.tryParse(entry.id()));
-                    if (policy != null && policy.hidden(reference)) continue;
+                    if (policy.hidden(reference)) continue;
                     if (validTags != null && !validTags.contains(entry.id())) continue;
                     if (entryFilter != null && !entryFilter.test(entry.id())) continue;
                     if (type == RuleCatalogType.ENTITY && field != null
@@ -408,6 +404,7 @@ public final class RuleEditorPanelFactory {
                 entries = result.content();
                 hasNext = result.hasNext();
                 mappedPage = page; mappedFilter = filter;
+                contentGeneration++;
             }
             return entries;
         }
@@ -486,7 +483,7 @@ public final class RuleEditorPanelFactory {
      * @param onChange   变更后刷新视图（表单重载/宿主刷新）
      */
     static LeafPanel leafPanel(Font font, FormView form, EditSession session, List<EditorField> fields,
-                               String basePath, Consumer<Consumer<RuleDraft>> applyChange, Runnable onChange) {
+                               FieldPath basePath, Consumer<Consumer<RuleDraft>> applyChange, Runnable onChange) {
         List<UiWidget> extras = new ArrayList<>();
         List<UiButton> buttons = new ArrayList<>();
         List<Runnable> reloadValues = new ArrayList<>();
@@ -551,13 +548,13 @@ public final class RuleEditorPanelFactory {
     // 描述符字段本身精确承载；气候区间字段额外承载其 min/max 端点；物品数量字段额外承载现役引用条目。
     // 更深后缀、不存在的子项与已失效引用一律不承载，避免宽前缀把失效位置当成有效位置；
     // 判定不看草稿值，因此有合法缺省值的字段（如催化剂门槛省略）仍算承载。
-    static boolean carriesField(List<EditorField> fields, String conditionPath, String fieldPath,
+    static boolean carriesField(List<EditorField> fields, FieldPath conditionPath, FieldPath fieldPath,
                                 Function<EditorField, List<String>> itemReferences) {
-        if (fieldPath == null || fieldPath.isBlank()) {
+        if (fieldPath == null || fieldPath.isRoot()) {
             return false;
         }
         for (EditorField field : fields) {
-            String fieldAt = join(conditionPath, field.name());
+            FieldPath fieldAt = join(conditionPath, field.name());
             if (fieldPath.equals(fieldAt)) {
                 return true;
             }
@@ -581,9 +578,9 @@ public final class RuleEditorPanelFactory {
     }
 
     // 嵌套对象的内部字段路径也由所在表单承载，避免问题定位落到面板之外
-    private static boolean carriesObjectField(EditorField field, String fieldAt, String fieldPath) {
+    private static boolean carriesObjectField(EditorField field, FieldPath fieldAt, FieldPath fieldPath) {
         for (EditorField child : field.subFields()) {
-            String childAt = join(fieldAt, child.name());
+            FieldPath childAt = join(fieldAt, child.name());
             if (fieldPath.equals(childAt)) {
                 return true;
             }
@@ -594,17 +591,14 @@ public final class RuleEditorPanelFactory {
         return false;
     }
 
-    // 基路径归一：空白基路径按无字段处理；本层保留 isBlank 口径
-    // （DraftPaths.child 只判 isEmpty，两者仅对「全空白基路径」不同，此处不合并）
-    private static String join(String basePath, String name) {
-        return basePath == null || basePath.isBlank() ? name : DraftPaths.child(basePath, name);
+    private static FieldPath join(FieldPath basePath, String name) {
+        return basePath.child(name);
     }
 
-    // 高度/光照区间：两个可省略的整数端点
     private static UiRangeBar intRangeBar(UiHostTheme THEME, Font font, EditSession session, EditorField minField, EditorField maxField,
-                                          String basePath, Consumer<Consumer<RuleDraft>> applyChange, Runnable onChange) {
-        String lowPath = join(basePath, minField.name());
-        String highPath = join(basePath, maxField.name());
+                                          FieldPath basePath, Consumer<Consumer<RuleDraft>> applyChange, Runnable onChange) {
+        FieldPath lowPath = join(basePath, minField.name());
+        FieldPath highPath = join(basePath, maxField.name());
         UiRangeBar bar = new UiRangeBar(THEME, font,
                 UiNumberPolicy.integer(minField.intMin(FALLBACK_RANGE_MIN), maxField.intMax(FALLBACK_RANGE_MAX), 1, 1),
                 integerRange(session, minField, maxField, basePath), rangeTexts(), value -> {
@@ -622,9 +616,9 @@ public final class RuleEditorPanelFactory {
 
     // 昼夜时间条：0..23999 刻，from>to 跨零点，同刻单点
     private static UiCyclicTimeBar timeBar(UiHostTheme THEME, Font font, EditSession session, EditorField from, EditorField to,
-                                           String basePath, Consumer<Consumer<RuleDraft>> applyChange, Runnable onChange) {
-        String fromPath = join(basePath, from.name());
-        String toPath = join(basePath, to.name());
+                                           FieldPath basePath, Consumer<Consumer<RuleDraft>> applyChange, Runnable onChange) {
+        FieldPath fromPath = join(basePath, from.name());
+        FieldPath toPath = join(basePath, to.name());
         UiCyclicTimeBar bar = dailyBar(THEME, font, (fromTick, toTick) -> {
             applyChange.accept( edits -> {
                 edits.setAt(fromPath, RuleValue.integer((int) Math.round(fromTick)));
@@ -637,13 +631,13 @@ public final class RuleEditorPanelFactory {
         return bar;
     }
 
-    private static int intAt(EditSession session, String path, int fallback) {
+    private static int intAt(EditSession session, FieldPath path, int fallback) {
         RuleValue value = session.valueAt(path);
         return value != null && value.isNumber() ? value.asInteger(fallback) : fallback;
     }
 
     // 缺失端以滑条窗口边界显示，草稿仍保留缺失状态；首次拖动后才写入区间。
-    private static UiRangeValue integerRange(EditSession session, EditorField min, EditorField max, String basePath) {
+    private static UiRangeValue integerRange(EditSession session, EditorField min, EditorField max, FieldPath basePath) {
         double low = intAt(session, join(basePath, min.name()), (int) min.sliderMin(min.intMin(FALLBACK_RANGE_MIN)));
         double high = intAt(session, join(basePath, max.name()), (int) max.sliderMax(max.intMax(FALLBACK_RANGE_MAX)));
         // 单端合法值可能超出常用窗口；缺失端的预览须包含它，不改变草稿中的无限端。
@@ -654,7 +648,7 @@ public final class RuleEditorPanelFactory {
                 : UiRangeValue.of(min.intMin(FALLBACK_RANGE_MIN), max.intMax(FALLBACK_RANGE_MAX));
     }
 
-    private static void writeNumber(RuleDraft draft, String path, @Nullable Double value) {
+    private static void writeNumber(RuleDraft draft, FieldPath path, @Nullable Double value) {
         if (value == null) {
             draft.removeAt(path);
         } else {

@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTypePicker;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiSurfaceRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
@@ -187,7 +188,7 @@ final class RuleEditorEditSections implements UiInputTarget {
     }
 
     // 定位结果字段时在装配内展开所属分区，布局和焦点树随同一次重建完成
-    private void rebuild(@Nullable String resultRevealPath) {
+    private void rebuild(@Nullable FieldPath resultRevealPath) {
         reset();
         content = switch (page) {
             case INFO -> infoSection.content;
@@ -439,18 +440,18 @@ final class RuleEditorEditSections implements UiInputTarget {
         int effects = ResultStructure.totalEffectCount(rule);
         Component limit = Component.translatable(RuleEditorPageSupport.UI + "issue.candidate_limit", ConditionLimits.MAX_EFFECTS);
         if (candidates > ConditionLimits.MAX_EFFECTS) {
-            issues.add(FormIssue.error(RuleFields.OUTCOMES, Component.translatable(RuleEditorPageSupport.UI + "candidate.section"), limit));
+            issues.add(FormIssue.error(FieldPath.key(RuleFields.OUTCOMES), Component.translatable(RuleEditorPageSupport.UI + "candidate.section"), limit));
         } else if (effects > ConditionLimits.MAX_EFFECTS) {
-            issues.add(FormIssue.error(RuleFields.EFFECTS, Component.translatable(RuleEditorPageSupport.UI + "candidate.section"), limit));
+            issues.add(FormIssue.error(FieldPath.key(RuleFields.EFFECTS), Component.translatable(RuleEditorPageSupport.UI + "candidate.section"), limit));
         }
         if (RuleEditorPanelFactory.climateAllUnbounded(rule)) {
             Component message = Component.translatable(RuleEditorPageSupport.UI + "issue.climate_empty");
-            issues.add(FormIssue.error(RuleFields.CONDITIONS, Component.translatable(RuleEditorPageSupport.UI + "rule.conditions"), message));
+            issues.add(FormIssue.error(FieldPath.key(RuleFields.CONDITIONS), Component.translatable(RuleEditorPageSupport.UI + "rule.conditions"), message));
         }
         RuleValue combination = rule == null ? null : rule.child(RuleFields.COMBINATION);
         if (combination != null && combination.isText() && !isKnownCombination(combination.asText())) {
             Component message = Component.translatable(RuleEditorPageSupport.UI + "issue.combination_invalid");
-            issues.add(FormIssue.error(RuleFields.COMBINATION, Component.translatable(RuleEditorPageSupport.UI + "rule.combination"), message));
+            issues.add(FormIssue.error(FieldPath.key(RuleFields.COMBINATION), Component.translatable(RuleEditorPageSupport.UI + "rule.combination"), message));
         }
     }
 
@@ -463,21 +464,11 @@ final class RuleEditorEditSections implements UiInputTarget {
     }
 
     // 从草稿路径里取某个数组段的序号（例如 outcomes[1].effects[2] 里的 outcomes 序号）
-    private static int indexIn(String path, String name) {
-        int at = path.indexOf(name + "[");
-        if (at < 0) {
-            return -1;
+    private static int indexIn(FieldPath path, String name) {
+        for (int depth = 1; depth < path.depth(); depth++) {
+            if (name.equals(path.prefix(depth).lastKey())) return path.prefix(depth + 1).lastIndex();
         }
-        int start = at + name.length() + 1;
-        int end = path.indexOf(']', start);
-        if (end < 0) {
-            return -1;
-        }
-        try {
-            return Integer.parseInt(path.substring(start, end).trim());
-        } catch (NumberFormatException error) {
-            return -1;
-        }
+        return -1;
     }
 
     /**
@@ -550,8 +541,8 @@ final class RuleEditorEditSections implements UiInputTarget {
      * 按草稿路径切到对应页签、选中候选与效果，并返回应当聚焦的字段控件。
      * <p>用于本地校验与服务器问题定位（规则 → 页签 → 候选 → 效果 → 条件 → 字段）。
      */
-    public @Nullable UiFocusTarget reveal(@Nullable String path) {
-        if (path == null || path.isBlank()) {
+    public @Nullable UiFocusTarget reveal(@Nullable FieldPath path) {
+        if (path == null || path.isRoot()) {
             return null;
         }
         for (FormView form : content.forms) {
@@ -582,7 +573,7 @@ final class RuleEditorEditSections implements UiInputTarget {
         return null;
     }
 
-    private static EditSection sectionFor(String path) {
+    private static EditSection sectionFor(FieldPath path) {
         if (ResultStructure.isResultPath(path) || inField(path, RuleFields.COMBINATION)) return EditSection.RESULTS;
         if (inField(path, RuleFields.CONDITIONS) || inField(path, RuleFields.TERMS)
                 || inField(path, RuleFields.TRIGGERS) || inField(path, RuleFields.TRIGGER_AFTER_SECONDS)) return EditSection.TRIGGER;
@@ -593,15 +584,8 @@ final class RuleEditorEditSections implements UiInputTarget {
 
     // 问题路径是否落在某字段内：等于字段本身，或字段后接「.」「[」的子项；
     // 仅字符串前缀相同（conditionsExtra）不算该字段
-    private static boolean inField(String path, String field) {
-        if (!path.startsWith(field)) {
-            return false;
-        }
-        if (path.length() == field.length()) {
-            return true;
-        }
-        char next = path.charAt(field.length());
-        return next == '.' || next == '[';
+    private static boolean inField(FieldPath path, String field) {
+        return path.isWithin(FieldPath.key(field));
     }
 
     // ---- 输入事件 ----
@@ -636,7 +620,7 @@ final class RuleEditorEditSections implements UiInputTarget {
      * 结算当前页的编辑状态：提交合法字段、保留非法文本、结束进行中的交互。
      *
      * <p>切页、切换候选/效果、结构变更、保存与撤销前调用。非法文本经
-     * {@link EditSession#retainPendingInput(String, List, List)} 留在会话，重建表单后回填，
+     * {@link EditSession#retainPendingInput(FieldPath, List, List)} 留在会话，重建表单后回填，
      * 因此本方法不阻塞后续操作；冻结（只读/会话失效）时不做任何写入。</p>
      */
     void retainPendingInputs() {

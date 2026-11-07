@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiShellWidget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidgetShell;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiSurfaceRole;
@@ -58,7 +59,7 @@ import org.lwjgl.glfw.GLFW;
  * 或定位参数问题时注入，容器节点没有参数不展开；表单复用 {@link FormView} 与描述符引擎。</p>
  *
  * <p>与调用方的关系保持既有形状：{@link Parameters}、{@link ParameterFactory}、构造签名，
- * 以及 {@link #historyChanged()} / {@link #discardView()} / {@link #unmount()} / {@link #reveal(String)}
+ * 以及 {@link #historyChanged()} / {@link #discardView()} / {@link #unmount()} / {@link #reveal(FieldPath)}
  * 都由 {@code RuleEditorEditSections} 原样调用。参数编辑以共享草稿路径为准，未完成的输入留在会话。</p>
  */
 public final class ConditionTreeOverlay implements UiShellWidget, UiLayoutSource {
@@ -111,7 +112,7 @@ public final class ConditionTreeOverlay implements UiShellWidget, UiLayoutSource
      */
     @FunctionalInterface
     public interface ParameterFactory {
-        Parameters create(String conditionPath, ConditionNode.Leaf leaf);
+        Parameters create(FieldPath conditionPath, ConditionNode.Leaf leaf);
 
         /**
          * 该叶的现役参数表单是否承载这个参数字段路径。
@@ -125,7 +126,7 @@ public final class ConditionTreeOverlay implements UiShellWidget, UiLayoutSource
          * @param fieldPath     待定位的参数字段绝对路径
          * @return 现役参数表单承载该字段时为 {@code true}
          */
-        default boolean carriesField(String conditionPath, ConditionNode.Leaf leaf, String fieldPath) {
+        default boolean carriesField(FieldPath conditionPath, ConditionNode.Leaf leaf, FieldPath fieldPath) {
             return false;
         }
     }
@@ -135,7 +136,7 @@ public final class ConditionTreeOverlay implements UiShellWidget, UiLayoutSource
 
     private final Font font;
     private final EditSession session;
-    private final String scope;
+    private final FieldPath scope;
     private final ParameterFactory parameterFactory;
     private final Runnable changed;
     private final UiConditionGraphEditor editor;
@@ -167,9 +168,9 @@ public final class ConditionTreeOverlay implements UiShellWidget, UiLayoutSource
     private @Nullable Parameters parameters;
     // 当前注入画布的内联参数框；与 parameters 同生命周期
     private @Nullable ConditionTreeChrome.Inline inlineEditor;
-    private @Nullable String parameterPath;
+    private @Nullable FieldPath parameterPath;
     private @Nullable String parameterType;
-    private @Nullable String selectedPath;
+    private @Nullable FieldPath selectedPath;
     private @Nullable Component decodeError;
     // 下一个待定位的问题下标：F8 或点击状态栏时递增并循环
     private int nextIssueIndex;
@@ -200,7 +201,7 @@ public final class ConditionTreeOverlay implements UiShellWidget, UiLayoutSource
      * @param parameterFactory 叶参数表单工厂
      * @param changed          草稿发生变化时的通知
      */
-    public ConditionTreeOverlay(UiHostTheme theme, UiHostTheme chromeTheme, Font font, EditSession session, String scope, ConditionEditingSupport support, ConditionTreeViewModel viewModel,
+    public ConditionTreeOverlay(UiHostTheme theme, UiHostTheme chromeTheme, Font font, EditSession session, FieldPath scope, ConditionEditingSupport support, ConditionTreeViewModel viewModel,
                                 ParameterFactory parameterFactory, Runnable changed) {
         UiHostTheme THEME = UiHostThemes.require(theme);
         this.CHROME_THEME = UiHostThemes.require(chromeTheme);
@@ -284,7 +285,7 @@ public final class ConditionTreeOverlay implements UiShellWidget, UiLayoutSource
         return session;
     }
 
-    public String scope() {
+    public FieldPath scope() {
         return scope;
     }
 
@@ -333,9 +334,8 @@ public final class ConditionTreeOverlay implements UiShellWidget, UiLayoutSource
                 ? sourceValue.child(RuleFields.SOURCE_ITEMS) : null;
         Component sourceSummary = items != null && items.isList() && !items.items().isEmpty()
                 ? RuleNaming.sourceTitle(rule, RuleDisplayLabels::label) : Component.empty();
-        String ownerPath = scope.equals(RuleFields.CONDITIONS) ? ""
-                : scope.substring(0, scope.length() - RuleFields.CONDITIONS.length() - 1);
-        RuleValue owner = ownerPath.isEmpty() ? rule : session.valueAt(ownerPath);
+        FieldPath ownerPath = scope.parent();
+        RuleValue owner = ownerPath.isRoot() ? rule : session.valueAt(ownerPath);
         Component resultSummary = Component.empty();
         if (owner != null && owner.isMapping()) {
             RuleValue effects = owner.child(RuleFields.EFFECTS);
@@ -488,7 +488,7 @@ public final class ConditionTreeOverlay implements UiShellWidget, UiLayoutSource
     }
 
     private void syncSelection(boolean openLeaf) {
-        String next = editor.selectedPath();
+        FieldPath next = editor.selectedPath();
         ConditionNode.Leaf leaf = editableLeaf(editor.selectedNode());
         boolean editable = leaf != null && next != null && (openLeaf || parameters != null
                 && Objects.equals(selectedPath, next));
@@ -501,7 +501,7 @@ public final class ConditionTreeOverlay implements UiShellWidget, UiLayoutSource
         unmountParameters();
         selectedPath = next;
         if (editable) {
-            parameterPath = scope + next.substring(ConditionTreeContract.ROOT_PATH.length()) + "." + RuleFields.CONDITION;
+            parameterPath = parameterPathOf(next);
             parameterType = leaf.condition().type().toString();
             parameters = parameterFactory.create(parameterPath, leaf);
             // 参数框关联当前主选中节点；画布负责右侧吸附、滑入动画与裁剪。
@@ -554,7 +554,7 @@ public final class ConditionTreeOverlay implements UiShellWidget, UiLayoutSource
      *
      * <p>路径必须是本作用域下的完整节点前缀，可选再接一段参数字段后缀。节点前缀按结构语法
      * 严格拆解（{@code .terms[i]} / {@code .term}），并用
-     * {@link ConditionTreeNodes#jsonPath(ConditionNode, UiTreePath, String)} 回渲染核对，
+     * {@link ConditionTreeNodes#jsonPath(ConditionNode, UiTreePath, FieldPath)} 回渲染核对，
      * 确保前缀确实对应当前树中的结构；参数字段后缀必须由现役参数表单承载。</p>
      *
      * <p>任一步不成立时都只把焦点交给画布：不选中根、祖先或邻居，不创建参数视图，
@@ -562,7 +562,7 @@ public final class ConditionTreeOverlay implements UiShellWidget, UiLayoutSource
      *
      * @param fieldPath 草稿中的绝对路径
      */
-    public void reveal(String fieldPath) {
+    public void reveal(FieldPath fieldPath) {
         sourceView = false;
         source.focusState().clear();
         var address = ConditionTreeNodes.address(fieldPath, scope);
@@ -571,8 +571,8 @@ public final class ConditionTreeOverlay implements UiShellWidget, UiLayoutSource
             return;
         }
         UiTreePath treePath = address.path();
-        String nodePath = ConditionTreeNodes.jsonPath(editor.expression().root(), treePath, ConditionTreeContract.ROOT_PATH);
-        String parameterSuffix = address.parameterSuffix();
+        FieldPath nodePath = ConditionTreeNodes.jsonPath(editor.expression().root(), treePath, ConditionTreeContract.ROOT_PATH);
+        FieldPath parameterSuffix = address.parameterSuffix();
         if (!ConditionTreeNodes.jsonPath(editor.expression().root(), treePath, scope).equals(address.nodePath())) {
             // 结构回渲染与本路径不一致：路径语义与当前树不符，退化为只打开树
             setFocusSlot(FocusSlot.CANVAS);
@@ -597,9 +597,9 @@ public final class ConditionTreeOverlay implements UiShellWidget, UiLayoutSource
             setFocusSlot(FocusSlot.CANVAS);
             return;
         }
-        String parameterPath = parameterPathOf(nodePath);
+        FieldPath parameterPath = parameterPathOf(nodePath);
         // 「.condition」本身指向参数对象：选中节点并展开参数；更深的字段必须由现役表单承载才聚焦
-        boolean parameterItself = parameterSuffix.equals("." + RuleFields.CONDITION);
+        boolean parameterItself = parameterSuffix.equals(FieldPath.key(RuleFields.CONDITION));
         if (!parameterItself && !parameterFactory.carriesField(parameterPath, leaf, fieldPath)) {
             // 失效或不存在参数字段：只打开树，不选中节点、不创建参数视图
             setFocusSlot(FocusSlot.CANVAS);
@@ -614,8 +614,8 @@ public final class ConditionTreeOverlay implements UiShellWidget, UiLayoutSource
     }
 
     // 参数表单在草稿中的绝对基路径：节点路径映射回绝对坐标后接条件对象字段
-    private String parameterPathOf(String nodePath) {
-        return scope + nodePath.substring(ConditionTreeContract.ROOT_PATH.length()) + "." + RuleFields.CONDITION;
+    private FieldPath parameterPathOf(FieldPath nodePath) {
+        return nodePath.replacePrefix(ConditionTreeContract.ROOT_PATH, scope).child(RuleFields.CONDITION);
     }
 
     // 拆出「完整节点前缀 + 可选参数字段后缀」：结构语法不合法或节点后还有尾随字符时返回 null。

@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
 import java.util.function.Consumer;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
@@ -313,7 +314,7 @@ final class ConditionTreeControl extends FormControl {
     }
 
     @Override
-    List<FormIssue> issues(String path) {
+    List<FormIssue> issues(FieldPath path) {
         if (fallbackRaw != null) {
             // 未注册 / 第三方类型或参数读不出来：原数据整体保留，只提醒不阻塞（服务端才是权威校验方）
             return List.of(FormIssue.warning(path, label(),
@@ -324,9 +325,7 @@ final class ConditionTreeControl extends FormControl {
         }
         List<FormIssue> list = new ArrayList<>();
         for (ConditionTreeInspection.Issue issue : editor.issues()) {
-            String relative = issue.path();
-            String issuePath = relative == null || !relative.startsWith(ConditionTreeContract.ROOT_PATH) ? path
-                    : path + relative.substring(ConditionTreeContract.ROOT_PATH.length());
+            FieldPath issuePath = issue.path().replacePrefix(ConditionTreeContract.ROOT_PATH, path);
             list.add(FormIssue.error(issuePath, label(), issue.label()));
         }
         if (list.isEmpty()) {
@@ -342,10 +341,10 @@ final class ConditionTreeControl extends FormControl {
     }
 
     @Override
-    @Nullable UiFocusTarget revealPath(String path, String basePath) {
+    @Nullable UiFocusTarget revealPath(FieldPath path, FieldPath basePath) {
         // 归属按字段段边界判定：等于本字段或本字段下的子项；仅字符串前缀相同（conditionsExtra）不算
-        if (fallbackRaw != null || !(path.equals(basePath) || path.startsWith(basePath + "."))) return null;
-        String treePath = ConditionTreeContract.ROOT_PATH + path.substring(basePath.length());
+        if (fallbackRaw != null || !path.isWithin(basePath)) return null;
+        FieldPath treePath = path.replacePrefix(basePath, ConditionTreeContract.ROOT_PATH);
         ConditionEditContext context = context();
         if (context == null) {
             editor.selectPath(treePath);

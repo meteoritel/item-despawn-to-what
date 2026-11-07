@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
@@ -30,7 +31,7 @@ public final class FormField {
     public EditorField descriptor() { requireAttached(); return row.field; }
 
     /** 当前数据地址；同一行重排后返回新地址。 */
-    public String path() { requireAttached(); return row.path; }
+    public FieldPath path() { requireAttached(); return row.path; }
 
     /** 当前控件的未提交值，不改变草稿。 */
     public @Nullable RuleValue pendingValue() { requireAttached(); return row.control.draftValue(); }

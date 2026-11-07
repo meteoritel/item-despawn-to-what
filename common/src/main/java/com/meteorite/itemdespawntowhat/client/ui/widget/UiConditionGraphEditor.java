@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiShellWidget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidgetShell;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
@@ -183,7 +184,7 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
     private @Nullable UiTreeEditor.Change<ConditionNode> lastChange;
     private @Nullable Component operationError;
     private String lastOpKey = EditSession.OP_EDIT_CONDITIONS;
-    private @Nullable String selectedPath;
+    private @Nullable FieldPath selectedPath;
     private long viewRevision;
 
     // 手势状态（世界坐标，缩放与平移无关）
@@ -486,7 +487,7 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
     }
 
     @Override
-    public @Nullable String selectedPath() {
+    public @Nullable FieldPath selectedPath() {
         return selectedPath;
     }
 
@@ -500,7 +501,7 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
      * 按 JSON 路径选中节点或其所属节点，并把卡片带回视口。
      */
     @Override
-    public void selectPath(@Nullable String path) {
+    public void selectPath(@Nullable FieldPath path) {
         if (path == null) {
             selectedPath = null;
             tree.select(null);

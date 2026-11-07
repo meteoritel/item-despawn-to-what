@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
 import com.meteorite.itemdespawntowhat.client.edit.ClientTypeRegistries;
-import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
@@ -88,19 +88,19 @@ final class RuleEditorValidation {
             issues.add(FormIssue.required(missing.path(), Component.translatable(missing.labelKey())));
         // 全部脏规则都需检查，避免切换规则或返回管理页后绕过触发方式校验。
         if (RuleTriggers.isExplicitlyEmpty(draft)) {
-            issues.add(FormIssue.error(RuleFields.TRIGGERS, Component.translatable(UI + "rule.triggers"),
+            issues.add(FormIssue.error(FieldPath.key(RuleFields.TRIGGERS), Component.translatable(UI + "rule.triggers"),
                     Component.translatable(UI + "issue.trigger_empty")));
         }
         RuleValue effects = listOf(draft.child(RuleFields.EFFECTS));
         RuleValue outcomes = listOf(draft.child(RuleFields.OUTCOMES));
         if (effects.isEmpty() && outcomes.isEmpty()) {
-            issues.add(issue(RuleFields.EFFECTS, UI + "issue.effects_empty"));
+            issues.add(issue(FieldPath.key(RuleFields.EFFECTS), UI + "issue.effects_empty"));
         } else if (effects.size() > MAX_EFFECTS) {
-            issues.add(issue(RuleFields.EFFECTS, UI + "issue.effects_limit"));
+            issues.add(issue(FieldPath.key(RuleFields.EFFECTS), UI + "issue.effects_limit"));
         }
         // effects 与 outcomes 二选一：同时声明会被服务端拒绝，本地先拦
         if (!effects.isEmpty() && !outcomes.isEmpty()) {
-            issues.add(issue(RuleFields.OUTCOMES, UI + "issue.outcomes_conflict"));
+            issues.add(issue(FieldPath.key(RuleFields.OUTCOMES), UI + "issue.outcomes_conflict"));
         }
         // 规则级条件树
         validateConditionTree(draft, issues);
@@ -108,7 +108,7 @@ final class RuleEditorValidation {
         Set<String> candidateIds = new LinkedHashSet<>();
         for (int i = 0; i < outcomes.size(); i++) {
             RuleValue element = outcomes.item(i);
-            String candidatePath = DraftPaths.indexPath(RuleFields.OUTCOMES, i);
+            FieldPath candidatePath = FieldPath.key(RuleFields.OUTCOMES).index(i);
             if (element == null || !element.isMapping()) {
                 issues.add(issue(candidatePath, UI + "issue.candidate_id_invalid"));
                 continue;
@@ -116,55 +116,55 @@ final class RuleEditorValidation {
             RuleValue idElement = element.child(RuleFields.CANDIDATE_ID);
             if (idElement == null || !idElement.isScalar() || idElement.asText().isBlank()
                     || !candidateIds.add(idElement.asText())) {
-                issues.add(issue(DraftPaths.child(candidatePath, RuleFields.CANDIDATE_ID), UI + "issue.candidate_id_invalid"));
+                issues.add(issue(candidatePath.child(RuleFields.CANDIDATE_ID), UI + "issue.candidate_id_invalid"));
             }
             RuleValue candidateEffects = listOf(element.child(RuleFields.CANDIDATE_EFFECTS));
             if (candidateEffects.isEmpty()) {
-                issues.add(issue(DraftPaths.child(candidatePath, RuleFields.CANDIDATE_EFFECTS), UI + "issue.candidate_effects_empty"));
+                issues.add(issue(candidatePath.child(RuleFields.CANDIDATE_EFFECTS), UI + "issue.candidate_effects_empty"));
             }
         }
         RuleValue name = draft.child(RuleFields.DISPLAY_NAME);
         if (name != null && name.isScalar()
                 && name.asText().codePointCount(0, name.asText().length()) > MAX_DISPLAY_NAME_CODE_POINTS) {
-            issues.add(issue(RuleFields.DISPLAY_NAME, UI + "issue.display_name_too_long"));
+            issues.add(issue(FieldPath.key(RuleFields.DISPLAY_NAME), UI + "issue.display_name_too_long"));
         }
         RuleValue notes = draft.child(RuleFields.NOTES);
         if (notes != null && notes.isScalar()
                 && notes.asText().codePointCount(0, notes.asText().length()) > MAX_NOTES_CODE_POINTS) {
-            issues.add(issue(RuleFields.NOTES, UI + "issue.notes_too_long"));
+            issues.add(issue(FieldPath.key(RuleFields.NOTES), UI + "issue.notes_too_long"));
         }
         RuleValue seconds = draft.child(RuleFields.TRIGGER_AFTER_SECONDS);
         if (seconds != null && seconds.isNumber() && seconds.asInteger(0) < 0) {
-            issues.add(issue(RuleFields.TRIGGER_AFTER_SECONDS, UI + "issue.trigger_negative"));
+            issues.add(issue(FieldPath.key(RuleFields.TRIGGER_AFTER_SECONDS), UI + "issue.trigger_negative"));
         }
         // 固定成本按引用分别校验；数量必须为正整数，引用必须来自已选物品。
         RuleValue sourceCost = draft.child(RuleFields.SOURCE_COST);
-        RuleValue sourceItems = listOf(draft.valueAt(DraftPaths.child(RuleFields.SOURCE, RuleFields.SOURCE_ITEMS)));
+        RuleValue sourceItems = listOf(draft.valueAt(FieldPath.key(RuleFields.SOURCE).child(RuleFields.SOURCE_ITEMS)));
         if (sourceCost != null && invalidItemCounts(sourceCost, sourceItems, Integer.MAX_VALUE)) {
-            issues.add(issue(RuleFields.SOURCE_COST, UI + "issue.source_cost_not_positive"));
+            issues.add(issue(FieldPath.key(RuleFields.SOURCE_COST), UI + "issue.source_cost_not_positive"));
         }
         // 规则催化剂配置：门槛和实际消耗分别校验，全部引用共享一个整数半径。
         RuleValue catalystCost = draft.child(RuleFields.CATALYST_COST);
         boolean hasCatalystCost = catalystCost != null && !catalystCost.isNull();
         if (hasCatalystCost) {
             if (!catalystCost.isMapping()) {
-                issues.add(issue(RuleFields.CATALYST_COST, UI + "issue.catalyst_cost_not_object"));
+                issues.add(issue(FieldPath.key(RuleFields.CATALYST_COST), UI + "issue.catalyst_cost_not_object"));
             } else {
                 RuleValue counts = catalystCost.child(RuleFields.ITEM_COUNTS);
                 if (counts != null && invalidItemCounts(counts, listOf(catalystCost.child(RuleFields.CATALYST_ITEMS)),
                         CatalystCost.MAX_COUNT)) {
-                    issues.add(issue(DraftPaths.child(RuleFields.CATALYST_COST, RuleFields.ITEM_COUNTS),
+                    issues.add(issue(FieldPath.key(RuleFields.CATALYST_COST).child(RuleFields.ITEM_COUNTS),
                             UI + "issue.catalyst_cost_count_out_of_range"));
                 }
                 if (listOf(catalystCost.child(RuleFields.CATALYST_ITEMS)).isEmpty()) {
-                    issues.add(issue(DraftPaths.child(RuleFields.CATALYST_COST, RuleFields.CATALYST_ITEMS),
+                    issues.add(issue(FieldPath.key(RuleFields.CATALYST_COST).child(RuleFields.CATALYST_ITEMS),
                             UI + "issue.catalyst_cost_items_empty"));
                 }
                 // 契约层允许 0（只检测）；编辑器里写成 0 会在输入页回收为未勾选，不保留该表
                 RuleValue consumed = catalystCost.child(RuleFields.CONSUME_COUNTS);
                 if (consumed != null && invalidItemCounts(consumed, listOf(catalystCost.child(RuleFields.CATALYST_ITEMS)),
                         CatalystCost.MIN_CONSUME_COUNT, CatalystCost.MAX_COUNT)) {
-                    issues.add(issue(DraftPaths.child(RuleFields.CATALYST_COST, RuleFields.CONSUME_COUNTS), UI + "issue.catalyst_consume_count_out_of_range"));
+                    issues.add(issue(FieldPath.key(RuleFields.CATALYST_COST).child(RuleFields.CONSUME_COUNTS), UI + "issue.catalyst_consume_count_out_of_range"));
                 }
                 RuleValue radiusElement = catalystCost.child(RuleFields.CATALYST_RADIUS);
                 if (radiusElement != null && (!radiusElement.isNumber()
@@ -172,7 +172,7 @@ final class RuleEditorValidation {
                         || radiusElement.asDecimal(0) != Math.floor(radiusElement.asDecimal(0))
                         || radiusElement.asDecimal(0) < CatalystCost.MIN_RADIUS
                         || radiusElement.asDecimal(0) > CatalystCost.MAX_RADIUS)) {
-                    issues.add(issue(DraftPaths.child(RuleFields.CATALYST_COST, RuleFields.CATALYST_RADIUS),
+                    issues.add(issue(FieldPath.key(RuleFields.CATALYST_COST).child(RuleFields.CATALYST_RADIUS),
                             UI + "issue.catalyst_cost_radius_out_of_range"));
                 }
             }
@@ -180,7 +180,7 @@ final class RuleEditorValidation {
         // 结构版本：当前只支持 RuleCodecs.DEFAULT_SCHEMA_VERSION
         RuleValue schemaVersion = draft.child(RuleFields.SCHEMA_VERSION);
         if (isInteger(schemaVersion) && schemaVersion.asInteger(0) != RuleCodecs.DEFAULT_SCHEMA_VERSION) {
-            issues.add(issue(RuleFields.SCHEMA_VERSION, UI + "issue.schema_version_unsupported"));
+            issues.add(issue(FieldPath.key(RuleFields.SCHEMA_VERSION), UI + "issue.schema_version_unsupported"));
         }
         return issues;
     }
@@ -229,38 +229,38 @@ final class RuleEditorValidation {
             // 只有本地可证结构损坏（不是对象 / 缺 op / op 不是字符串）才阻塞；
             // 未注册或第三方类型只提醒：原数据在草稿里原样保留，服务端才是权威校验方
             if (isStructurallyDamaged(raw)) {
-                issues.add(issue(RuleFields.CONDITIONS, UI + "issue.conditions_decode"));
+                issues.add(issue(FieldPath.key(RuleFields.CONDITIONS), UI + "issue.conditions_decode"));
             } else {
-                issues.add(warning(RuleFields.CONDITIONS, UI + "issue.conditions_unregistered"));
+                issues.add(warning(FieldPath.key(RuleFields.CONDITIONS), UI + "issue.conditions_unregistered"));
             }
             return;
         }
         if (!expression.isStructurallyValid()) {
-            issues.add(issue(RuleFields.CONDITIONS, ISSUE + "incomplete_group"));
+            issues.add(issue(FieldPath.key(RuleFields.CONDITIONS), ISSUE + "incomplete_group"));
         }
         if (expression.leafCount() > ConditionLimits.MAX_LEAVES) {
-            issues.add(issue(RuleFields.CONDITIONS, ISSUE + "too_many_leaves"));
+            issues.add(issue(FieldPath.key(RuleFields.CONDITIONS), ISSUE + "too_many_leaves"));
         }
         if (expression.nodeCount() > ConditionLimits.MAX_NODES) {
-            issues.add(issue(RuleFields.CONDITIONS, ISSUE + "too_many_nodes"));
+            issues.add(issue(FieldPath.key(RuleFields.CONDITIONS), ISSUE + "too_many_nodes"));
         }
         if (expression.depth() > ConditionLimits.MAX_DEPTH) {
-            issues.add(issue(RuleFields.CONDITIONS, ISSUE + "too_deep", expression.depth(), ConditionLimits.MAX_DEPTH));
+            issues.add(issue(FieldPath.key(RuleFields.CONDITIONS), ISSUE + "too_deep", expression.depth(), ConditionLimits.MAX_DEPTH));
         }
     }
 
-    private FormIssue issue(String path, String messageKey) {
+    private FormIssue issue(FieldPath path, String messageKey) {
         return issue(path, messageKey, new Object[0]);
     }
 
     // 带占位符参数的校验项（阻塞保存）
-    private FormIssue issue(String path, String messageKey, Object... args) {
+    private FormIssue issue(FieldPath path, String messageKey, Object... args) {
         Component message = Component.translatable(messageKey, args);
         return FormIssue.error(path, message, message);
     }
 
     // 带占位符参数的提醒项（不阻塞保存）
-    private FormIssue warning(String path, String messageKey, Object... args) {
+    private FormIssue warning(FieldPath path, String messageKey, Object... args) {
         Component message = Component.translatable(messageKey, args);
         return FormIssue.warning(path, message, message);
     }

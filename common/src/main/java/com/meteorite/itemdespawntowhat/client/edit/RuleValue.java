@@ -278,14 +278,14 @@ public final class RuleValue {
         return type != null && type.isText() ? type.asText() : null;
     }
 
-    /** 按草稿路径读取；返回只读句柄，缺席与显式 null 仍可区分。 */
-    public @Nullable RuleValue valueAt(String path) {
+    /** 按类型化位置读取；缺席与显式 null 保持不同结果。 */
+    public @Nullable RuleValue valueAt(FieldPath path) {
         JsonElement value = DraftPaths.readAt(element, path);
         return value == null ? null : wrap(value);
     }
 
     /** 指定列表路径的长度；缺失或非列表返回零，非法元素仍占位。 */
-    public int listSizeAt(String path) {
+    public int listSizeAt(FieldPath path) {
         RuleValue value = valueAt(path);
         return value != null && value.isList() ? value.size() : 0;
     }

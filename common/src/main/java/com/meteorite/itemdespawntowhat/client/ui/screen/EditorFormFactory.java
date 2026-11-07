@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
@@ -23,7 +24,7 @@ final class EditorFormFactory {
         this.geometryChanged = geometryChanged;
     }
 
-    FormView create(EditSession session, String basePath, TypeEditorDescriptor descriptor) {
+    FormView create(EditSession session, FieldPath basePath, TypeEditorDescriptor descriptor) {
         FormView form = new FormView(shell.theme(), font, session, basePath);
         EditorFormBindings.configure(form, basePath);
         EditorQuantityBindings.configureReferenceWrites(form, basePath);
@@ -37,7 +38,7 @@ final class EditorFormFactory {
         form.setOnRejectedNotice(message -> shell.setNotice(message,EditorShell.NoticeLevel.DANGER));
         CatalogSelectionOpener catalog = new CatalogSelectionOpener(shell, font, session);
         form.setSelectionCatalogOpener((field, path, tags, filter, binding) -> {
-            if (RuleFields.SOURCE.equals(basePath) && RuleFields.SOURCE_EXCLUDE.equals(field.name())) {
+            if (FieldPath.key(RuleFields.SOURCE).equals(basePath) && RuleFields.SOURCE_EXCLUDE.equals(field.name())) {
                 if (shell.editable() && shell.editingSession() == session) {
                     modals.push(SourceBlacklistPicker.modal(font, shell, session, session.root(),
                             shell.screenWidth(), shell.screenHeight(), binding));

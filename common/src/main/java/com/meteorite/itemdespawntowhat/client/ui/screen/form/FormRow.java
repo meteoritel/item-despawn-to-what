@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
@@ -50,7 +51,7 @@ final class FormRow {
     }
 
     final EditorField field;
-    String path;
+    FieldPath path;
     final FormControl control;
     int contentY;
     int contentHeight;
@@ -99,7 +100,7 @@ final class FormRow {
         buttonLayoutH = source.buttonLayoutH;
     }
 
-    FormRow(EditorField field, String path, FormControl control) {
+    FormRow(EditorField field, FieldPath path, FormControl control) {
         this.field = field;
         this.path = path;
         this.control = control;

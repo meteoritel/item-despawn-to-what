@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.edit.draft;
 
+import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -32,7 +33,7 @@ record PersistedDraft(
         @Nullable RuleEdit.Action enableIntent,
         @Nullable JsonObject baseline,
         JsonObject draft,
-        Map<String, List<String>> pendingInputs,
+        Map<FieldPath, List<String>> pendingInputs,
         long savedAt) {
 
     // 规则体与未完成输入分别保存，恢复时由表单重新校验文本。
@@ -58,7 +59,7 @@ record PersistedDraft(
         pendingInputs.forEach((path, text) -> {
             JsonArray values = new JsonArray();
             text.forEach(values::add);
-            inputs.add(path, values);
+            inputs.add(path.toString(), values);
         });
         json.add(PENDING_INPUTS, inputs);
         return json;
@@ -81,8 +82,8 @@ record PersistedDraft(
     }
 
     // 输入文本按控件顺序保存为字符串数组，损坏形状交由仓库报告。
-    private static Map<String, List<String>> readPendingInputs(JsonObject json) {
-        Map<String, List<String>> inputs = new LinkedHashMap<>();
+    private static Map<FieldPath, List<String>> readPendingInputs(JsonObject json) {
+        Map<FieldPath, List<String>> inputs = new LinkedHashMap<>();
         for (var entry : json.getAsJsonObject(PENDING_INPUTS).entrySet()) {
             List<String> text = new ArrayList<>();
             for (JsonElement value : entry.getValue().getAsJsonArray()) {
@@ -91,7 +92,7 @@ record PersistedDraft(
                 }
                 text.add(value.getAsString());
             }
-            inputs.put(entry.getKey(), List.copyOf(text));
+            inputs.put(FieldPath.parse(entry.getKey()), List.copyOf(text));
         }
         return Map.copyOf(inputs);
     }

@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
 import java.util.function.Consumer;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
@@ -7,7 +8,6 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
-import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
@@ -276,9 +276,9 @@ final class ItemCountsControl extends FormControl {
     }
 
     @Override
-    @Nullable UiFocusTarget revealPath(String path, String basePath) {
+    @Nullable UiFocusTarget revealPath(FieldPath path, FieldPath basePath) {
         for (Entry entry : entries.values()) {
-            String referencePath = DraftPaths.child(basePath, entry.reference);
+            FieldPath referencePath = basePath.child(entry.reference);
             if (path.equals(referencePath)) return entry.control.revealPath(referencePath, referencePath);
         }
         return null;
@@ -429,10 +429,10 @@ final class ItemCountsControl extends FormControl {
     }
 
     @Override
-    List<FormIssue> issues(String path) {
+    List<FormIssue> issues(FieldPath path) {
         List<FormIssue> result = new ArrayList<>();
         for (Entry entry : entries.values()) {
-            result.addAll(entry.control.issues(DraftPaths.child(path, entry.reference)));
+            result.addAll(entry.control.issues(path.child(entry.reference)));
         }
         return result;
     }

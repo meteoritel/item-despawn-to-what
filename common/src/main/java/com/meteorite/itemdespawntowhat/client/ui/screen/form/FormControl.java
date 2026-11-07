@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
@@ -238,12 +239,12 @@ abstract class FormControl implements UiInputTarget {
     // 复合控件可按当前命中条目提供提示，注册名只在悬停时显示。
 
     // 本地校验问题清单
-    List<FormIssue> issues(String path) {
+    List<FormIssue> issues(FieldPath path) {
         return List.of();
     }
 
     // 复合控件可在字段行内部定位问题，并返回更准确的焦点目标。
-    @Nullable UiFocusTarget revealPath(String path, String basePath) {
+    @Nullable UiFocusTarget revealPath(FieldPath path, FieldPath basePath) {
         return null;
     }
 

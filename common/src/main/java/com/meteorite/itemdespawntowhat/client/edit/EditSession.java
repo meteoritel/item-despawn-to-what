@@ -61,12 +61,12 @@ public final class EditSession {
     private final Deque<Entry> redoStack = new ArrayDeque<>();
     private final List<Runnable> listeners = new ArrayList<>();
     private RuleDraft draft;
-    private final Map<String, PendingInput> pendingInputs = new LinkedHashMap<>();
+    private final Map<FieldPath, PendingInput> pendingInputs = new LinkedHashMap<>();
     private long nextInputIdentity;
     private long revision;
-    private @Nullable Map<String, String> transactionInputPaths;
-    private @Nullable Set<String> transactionRemovedScopes;
-    private @Nullable Set<String> transactionAddedScopes;
+    private @Nullable Map<FieldPath, FieldPath> transactionInputPaths;
+    private @Nullable Set<FieldPath> transactionRemovedScopes;
+    private @Nullable Set<FieldPath> transactionAddedScopes;
 
     public long revision() { return revision; }
 
@@ -79,7 +79,7 @@ public final class EditSession {
     }
 
     /** 保留字段输入；只有文本或校验结果变化时才通知草稿日志，避免逐帧重复捕获快照。 */
-    public void retainPendingInput(String path, List<String> text, List<FormIssue> issues) {
+    public void retainPendingInput(FieldPath path, List<String> text, List<FormIssue> issues) {
         PendingInput previous = pendingInputs.get(path);
         if (previous != null && previous.text().equals(text) && previous.issues().equals(issues)) return;
         long identity = previous == null ? ++nextInputIdentity : previous.identity();
@@ -88,8 +88,8 @@ public final class EditSession {
     }
 
     /** 捕获按字段路径组织的独立文本快照，供本地草稿保存；输入身份与界面问题由会话重建。 */
-    public Map<String, List<String>> pendingInputSnapshot() {
-        Map<String, List<String>> snapshot = new LinkedHashMap<>();
+    public Map<FieldPath, List<String>> pendingInputSnapshot() {
+        Map<FieldPath, List<String>> snapshot = new LinkedHashMap<>();
         pendingInputs.forEach((path, input) -> snapshot.put(path, input.text()));
         return Map.copyOf(snapshot);
     }
@@ -99,22 +99,22 @@ public final class EditSession {
      *
      * @param inputs 字段路径与控件顺序对应的文本快照
      */
-    public void restorePendingInputs(Map<String, List<String>> inputs) {
+    public void restorePendingInputs(Map<FieldPath, List<String>> inputs) {
         pendingInputs.clear();
         inputs.forEach((path, text) -> {
-            FormIssue issue = FormIssue.error(path, Component.literal(path),
+            FormIssue issue = FormIssue.error(path, Component.literal(path.toString()),
                     Component.translatable(TypeLabels.UI_PREFIX + "tree.pending_input"));
             pendingInputs.put(path, new PendingInput(++nextInputIdentity, text, List.of(issue)));
         });
         notifyListeners();
     }
 
-    public @Nullable PendingInput pendingInput(String path) {
+    public @Nullable PendingInput pendingInput(FieldPath path) {
         return pendingInputs.get(path);
     }
 
     /** 移除已接受或已还原的字段输入，并同步本地草稿保留状态。 */
-    public void clearPendingInput(String path) {
+    public void clearPendingInput(FieldPath path) {
         if (pendingInputs.remove(path) != null) notifyListeners();
     }
 
@@ -122,27 +122,27 @@ public final class EditSession {
         return pendingInputs.values().stream().flatMap(input -> input.issues().stream()).distinct().toList();
     }
 
-    public boolean hasPendingInput(String scope) {
+    public boolean hasPendingInput(FieldPath scope) {
         return pendingInputs.keySet().stream().anyMatch(path -> within(path, scope));
     }
 
     /** 删除节点时移除其输入；移动节点时由宿主同步迁移路径。 */
-    public void clearPendingInputs(String scope) {
+    public void clearPendingInputs(FieldPath scope) {
         if (pendingInputs.keySet().removeIf(path -> within(path, scope))) notifyListeners();
     }
 
-    public void remapPendingInputs(String from, String to) {
+    public void remapPendingInputs(FieldPath from, FieldPath to) {
         remapPendingInputs(Map.of(from, to));
     }
 
     /** 同时迁移所有路径，交换兄弟节点时不会互相覆盖。 */
-    public void remapPendingInputs(Map<String, String> paths) {
+    public void remapPendingInputs(Map<FieldPath, FieldPath> paths) {
         if (transactionInputPaths != null) transactionInputPaths.putAll(paths);
-        Map<String, PendingInput> moved = new LinkedHashMap<>();
+        Map<FieldPath, PendingInput> moved = new LinkedHashMap<>();
         for (var entry : pendingInputs.entrySet()) {
-            String from = paths.keySet().stream().filter(scope -> within(entry.getKey(), scope))
-                    .max(Comparator.comparingInt(String::length)).orElse(null);
-            String path = from == null ? entry.getKey() : paths.get(from) + entry.getKey().substring(from.length());
+            FieldPath from = paths.keySet().stream().filter(scope -> within(entry.getKey(), scope))
+                    .max(Comparator.comparingInt(FieldPath::depth)).orElse(null);
+            FieldPath path = from == null ? entry.getKey() : entry.getKey().replacePrefix(from, paths.get(from));
             moved.put(path, atPath(entry.getValue(), entry.getKey(), path));
         }
         pendingInputs.clear();
@@ -150,24 +150,24 @@ public final class EditSession {
     }
 
     /** 在 apply 内记录完全移除/新建的子树，历史恢复不将新节点输入按祖先路径冒认旧节点。 */
-    public void recordInputStructure(Set<String> removed, Set<String> added) {
+    public void recordInputStructure(Set<FieldPath> removed, Set<FieldPath> added) {
         if (transactionRemovedScopes != null) transactionRemovedScopes.addAll(removed);
         if (transactionAddedScopes != null) transactionAddedScopes.addAll(added);
     }
 
-    private static PendingInput atPath(PendingInput input, String from, String to) {
+    private static PendingInput atPath(PendingInput input, FieldPath from, FieldPath to) {
         List<FormIssue> issues = input.issues().stream().map(issue ->
-                new FormIssue(within(issue.path(), from) ? to + issue.path().substring(from.length()) : issue.path(),
+                new FormIssue(within(issue.path(), from) ? issue.path().replacePrefix(from, to) : issue.path(),
                         issue.label(), issue.message(), issue.blocking())).toList();
         return new PendingInput(input.identity(), input.text(), issues);
     }
 
-    private static boolean within(String path, String scope) {
-        return scope.isEmpty() || path.equals(scope) || path.startsWith(scope + ".") || path.startsWith(scope + "[");
+    private static boolean within(FieldPath path, FieldPath scope) {
+        return path.isWithin(scope);
     }
 
     // 历史条目：操作标签 + 操作前的完整快照 + 删除标记
-    private record Entry(String opKey, JsonObject snapshot, boolean deleted, Map<String, PendingInput> inputs, Map<String, String> paths, Set<String> excludedScopes, Set<String> inverseExcludedScopes) {
+    private record Entry(String opKey, JsonObject snapshot, boolean deleted, Map<FieldPath, PendingInput> inputs, Map<FieldPath, FieldPath> paths, Set<FieldPath> excludedScopes, Set<FieldPath> inverseExcludedScopes) {
     }
 
     /**
@@ -190,7 +190,7 @@ public final class EditSession {
     public RuleValue root() { return draft.root(); }
 
     /** 按统一草稿路径读取值，不开放可变草稿。 */
-    public @Nullable RuleValue valueAt(String path) { return draft.valueAt(path); }
+    public @Nullable RuleValue valueAt(FieldPath path) { return draft.valueAt(path); }
 
     /** 内容是否偏离保存基线；不包含尚未提交的输入文本。 */
     public boolean contentDirty() { return draft.isDirty(); }
@@ -222,11 +222,11 @@ public final class EditSession {
         // 操作前快照是撤销栈的唯一来源，只能在这里一次性取得；是否真的变化改用变更计数判断，
         // 计数只在内容确实变化时推进，等价于整树相等比较但不再每次重扫整棵 JSON
         JsonObject before = draft.workingView().deepCopy();
-        Map<String, PendingInput> inputsBefore = Map.copyOf(pendingInputs);
+        Map<FieldPath, PendingInput> inputsBefore = Map.copyOf(pendingInputs);
         boolean deletedBefore = draft.isDeleted();
-        Map<String, String> changedPaths = new LinkedHashMap<>();
-        Set<String> removedScopes = new LinkedHashSet<>();
-        Set<String> addedScopes = new LinkedHashSet<>();
+        Map<FieldPath, FieldPath> changedPaths = new LinkedHashMap<>();
+        Set<FieldPath> removedScopes = new LinkedHashSet<>();
+        Set<FieldPath> addedScopes = new LinkedHashSet<>();
         transactionInputPaths = changedPaths;
         transactionRemovedScopes = removedScopes;
         transactionAddedScopes = addedScopes;
@@ -303,9 +303,9 @@ public final class EditSession {
     }
 
     private void restorePendingInputs(Entry entry) {
-        Map<Long, Map.Entry<String, PendingInput>> latest = new LinkedHashMap<>();
+        Map<Long, Map.Entry<FieldPath, PendingInput>> latest = new LinkedHashMap<>();
         pendingInputs.entrySet().forEach(input -> latest.put(input.getValue().identity(), input));
-        Map<String, PendingInput> restored = new LinkedHashMap<>();
+        Map<FieldPath, PendingInput> restored = new LinkedHashMap<>();
         for (var target : entry.inputs().entrySet()) {
             var current = latest.remove(target.getValue().identity());
             restored.put(target.getKey(), current == null ? target.getValue()
@@ -316,9 +316,9 @@ public final class EditSession {
         boolean fieldEdit = OP_SET_FIELD.equals(entry.opKey()) || OP_SET_SOURCE.equals(entry.opKey());
         for (var current : latest.values()) {
             if (entry.excludedScopes().stream().anyMatch(scope -> within(current.getKey(), scope))) continue;
-            String mapped = entry.paths().keySet().stream().filter(scope -> within(current.getKey(), scope))
-                    .max(Comparator.comparingInt(String::length)).orElse(null);
-            String target = mapped != null ? entry.paths().get(mapped) + current.getKey().substring(mapped.length())
+            FieldPath mapped = entry.paths().keySet().stream().filter(scope -> within(current.getKey(), scope))
+                    .max(Comparator.comparingInt(FieldPath::depth)).orElse(null);
+            FieldPath target = mapped != null ? current.getKey().replacePrefix(mapped, entry.paths().get(mapped))
                     : fieldEdit ? current.getKey() : restoredInputPath(current.getKey(), entry.snapshot());
             if (target != null) restored.put(target, atPath(current.getValue(), current.getKey(), target));
         }
@@ -326,31 +326,37 @@ public final class EditSession {
         pendingInputs.putAll(restored);
     }
 
-    private static Map<String, String> inversePaths(Map<String, String> paths) {
-        Map<String, String> inverse = new LinkedHashMap<>();
+    private static Map<FieldPath, FieldPath> inversePaths(Map<FieldPath, FieldPath> paths) {
+        Map<FieldPath, FieldPath> inverse = new LinkedHashMap<>();
         paths.forEach((from, to) -> inverse.put(to, from));
         return Map.copyOf(inverse);
     }
 
-    private @Nullable String restoredInputPath(String path, JsonObject target) {
-        int leafEnd = path.lastIndexOf("." + RuleFields.CONDITION + ".");
-        if (leafEnd < 0) return path;
-        String ownerPath = path.substring(0, leafEnd + RuleFields.CONDITION.length() + 1);
+    private @Nullable FieldPath restoredInputPath(FieldPath path, JsonObject target) {
+        FieldPath ownerPath = null;
+        for (int depth = path.depth() - 1; depth > 0; depth--) {
+            FieldPath candidate = path.prefix(depth);
+            if (RuleFields.CONDITION.equals(candidate.lastKey())) {
+                ownerPath = candidate;
+                break;
+            }
+        }
+        if (ownerPath == null) return path;
         JsonElement owner = draft.elementAt(ownerPath);
         if (owner == null) return null;
-        List<String> matches = new ArrayList<>();
-        findObjectPaths(target, "", owner, matches);
-        return matches.size() == 1 ? matches.getFirst() + path.substring(ownerPath.length()) : null;
+        List<FieldPath> matches = new ArrayList<>();
+        findObjectPaths(target, FieldPath.ROOT, owner, matches);
+        return matches.size() == 1 ? path.replacePrefix(ownerPath, matches.getFirst()) : null;
     }
 
-    private static void findObjectPaths(JsonElement value, String path, JsonElement target, List<String> matches) {
+    private static void findObjectPaths(JsonElement value, FieldPath path, JsonElement target, List<FieldPath> matches) {
         if (value.equals(target)) matches.add(path);
         if (value instanceof JsonObject object) {
             object.entrySet().forEach(entry -> findObjectPaths(entry.getValue(),
-                    DraftPaths.child(path, entry.getKey()), target, matches));
+                    path.child(entry.getKey()), target, matches));
         } else if (value.isJsonArray()) {
             for (int index = 0; index < value.getAsJsonArray().size(); index++) {
-                findObjectPaths(value.getAsJsonArray().get(index), DraftPaths.indexPath(path, index), target, matches);
+                findObjectPaths(value.getAsJsonArray().get(index), path.index(index), target, matches);
             }
         }
     }

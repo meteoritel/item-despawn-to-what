@@ -1,11 +1,11 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
 import java.util.function.Consumer;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
-import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.NumericDomain;
@@ -245,9 +245,9 @@ final class ClimateControl extends FormControl {
     }
 
     @Override
-    @Nullable UiFocusTarget revealPath(String path, String basePath) {
-        if (path.equals(DraftPaths.child(basePath, MAX_FIELD))) return maxInput;
-        if (path.equals(DraftPaths.child(basePath, MIN_FIELD))) return minInput;
+    @Nullable UiFocusTarget revealPath(FieldPath path, FieldPath basePath) {
+        if (path.equals(basePath.child(MAX_FIELD))) return maxInput;
+        if (path.equals(basePath.child(MIN_FIELD))) return minInput;
         return null;
     }
 
@@ -377,24 +377,24 @@ final class ClimateControl extends FormControl {
     }
 
     @Override
-    List<FormIssue> issues(String path) {
+    List<FormIssue> issues(FieldPath path) {
         if (!matching.isChecked()) return List.of();
         Double min = UiNumbers.parseFinite(minInput.value());
         Double max = UiNumbers.parseFinite(maxInput.value());
         List<FormIssue> issues = new ArrayList<>();
-        checkEnd(issues, DraftPaths.child(path, MIN_FIELD), minInput.value(), min);
-        checkEnd(issues, DraftPaths.child(path, MAX_FIELD), maxInput.value(), max);
+        checkEnd(issues, path.child(MIN_FIELD), minInput.value(), min);
+        checkEnd(issues, path.child(MAX_FIELD), maxInput.value(), max);
         if (minInput.value().isBlank() && maxInput.value().isBlank()) {
             issues.add(FormIssue.required(path, label()));
         }
         if (min != null && max != null && min > max) {
-            issues.add(FormIssue.error(DraftPaths.child(path, MIN_FIELD), label(),
+            issues.add(FormIssue.error(path.child(MIN_FIELD), label(),
                     Component.translatable(ISSUE_PREFIX + "range_order")));
         }
         return issues;
     }
 
-    private void checkEnd(List<FormIssue> issues, String path, String text, @Nullable Double value) {
+    private void checkEnd(List<FormIssue> issues, FieldPath path, String text, @Nullable Double value) {
         if (text.isBlank()) return;
         double lower = lower();
         double upper = upper();

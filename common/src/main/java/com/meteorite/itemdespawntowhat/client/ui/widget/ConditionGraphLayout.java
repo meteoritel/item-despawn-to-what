@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
 import com.meteorite.itemdespawntowhat.client.edit.ConditionTreeNodes;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
@@ -577,7 +578,7 @@ final class ConditionGraphLayout {
         return null;
     }
 
-    @Nullable ConditionNode nodeForJsonPath(String path) {
+    @Nullable ConditionNode nodeForJsonPath(FieldPath path) {
         var address = ConditionTreeNodes.address(path, ConditionTreeContract.ROOT_PATH);
         if (address == null) return null;
         UiTreePath nodePath = address.path();

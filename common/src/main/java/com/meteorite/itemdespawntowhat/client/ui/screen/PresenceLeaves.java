@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
 import com.meteorite.itemdespawntowhat.client.edit.ClientTypeRegistries;
-import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
@@ -31,8 +31,8 @@ final class PresenceLeaves {
     private PresenceLeaves() {
     }
 
-    record PresenceLeaf(String path, String conditionPath, ResourceLocation type, int ordinal,
-                                Component scopeLabel, @Nullable String effectPath, int candidateIndex, int effectIndex) {
+    record PresenceLeaf(FieldPath path, FieldPath conditionPath, ResourceLocation type, int ordinal,
+                                Component scopeLabel, @Nullable FieldPath effectPath, int candidateIndex, int effectIndex) {
 
         // 催化剂叶的类型字段是物品引用列表，流体叶是单个流体引用
         boolean catalyst() {
@@ -45,8 +45,8 @@ final class PresenceLeaves {
         }
 
         // 类型字段的草稿路径
-        String fieldPath() {
-            return DraftPaths.child(conditionPath, fieldName());
+        FieldPath fieldPath() {
+            return conditionPath.child(fieldName());
         }
 
         // 规则级条件叶（非动作局部）
@@ -64,22 +64,22 @@ final class PresenceLeaves {
     static void addRuleLevelPresence(RuleDraft draft, ResourceLocation type) {
         RuleValue leaf = presenceLeafValue(type);
         if (RuleEditorPageSupport.CATALYST_PRESENT_ID.equals(type)) {
-            RuleValue cost = draft.valueAt(RuleFields.CATALYST_COST);
+            RuleValue cost = draft.valueAt(FieldPath.key(RuleFields.CATALYST_COST));
             RuleValue condition = RuleValue.mapping(leaf.child(RuleFields.CONDITION))
                     .put(RuleFields.CATALYST_ITEMS, cost == null ? RuleValue.list().build()
                             : cost.childOr(RuleFields.CATALYST_ITEMS, RuleValue.list().build()).deepCopy()).build();
             leaf = RuleValue.mapping(leaf).put(RuleFields.CONDITION, condition).build();
         }
-        RuleValue current = draft.valueAt(RuleFields.CONDITIONS);
+        RuleValue current = draft.valueAt(FieldPath.key(RuleFields.CONDITIONS));
         if (current == null || current.isNull()) {
-            draft.setAt(RuleFields.CONDITIONS, leaf);
+            draft.setAt(FieldPath.key(RuleFields.CONDITIONS), leaf);
             return;
         }
         if (current.isMapping() && RuleFields.OP_ALL_OF.equals(RuleValue.text(current, RuleFields.OP))) {
             RuleValue terms = current.child(RuleFields.TERMS);
             RuleValue.Sequence array = terms != null && terms.isList() ? RuleValue.list(terms) : RuleValue.list();
             array.add(leaf);
-            draft.setAt(RuleFields.CONDITIONS,
+            draft.setAt(FieldPath.key(RuleFields.CONDITIONS),
                     RuleValue.mapping(current).put(RuleFields.TERMS, array.build()).build());
             return;
         }
@@ -88,7 +88,7 @@ final class PresenceLeaves {
                 .put(RuleFields.OP, RuleValue.text(RuleFields.OP_ALL_OF))
                 .put(RuleFields.TERMS, RuleValue.list().add(current.deepCopy()).add(leaf).build())
                 .build();
-        draft.setAt(RuleFields.CONDITIONS, group);
+        draft.setAt(FieldPath.key(RuleFields.CONDITIONS), group);
     }
 
     static void removeRuleLevelPresence(RuleDraft draft, ResourceLocation type) {
@@ -110,11 +110,11 @@ final class PresenceLeaves {
         }
     }
 
-    static void removeLeafAt(RuleDraft draft, String path) {
-        String current = path;
+    static void removeLeafAt(RuleDraft draft, FieldPath path) {
+        FieldPath current = path;
         while (current != null) {
             draft.removeAt(current);
-            String parent = parentPath(current);
+            FieldPath parent = parentPath(current);
             if (parent == null) {
                 return;
             }
@@ -126,9 +126,9 @@ final class PresenceLeaves {
         }
     }
 
-    static @Nullable String parentPath(String path) {
-        int dot = path.lastIndexOf('.');
-        return dot < 0 ? null : path.substring(0, dot);
+    static @Nullable FieldPath parentPath(FieldPath path) {
+        FieldPath parent = path.lastIndex() < 0 ? path.parent() : path.parent().parent();
+        return parent.isRoot() ? null : parent;
     }
 
     static boolean isEmptyGroup(RuleValue node) {
@@ -167,7 +167,7 @@ final class PresenceLeaves {
             return leaves;
         }
         Map<String, Integer> counters = new HashMap<>();
-        collectPresence(view.child(RuleFields.CONDITIONS), RuleFields.CONDITIONS,
+        collectPresence(view.child(RuleFields.CONDITIONS), FieldPath.key(RuleFields.CONDITIONS),
                 Component.translatable(RuleEditorPageSupport.UI + "rule.presence.scope_rule"), null, -1, -1, leaves, counters);
         RuleValue effects = view.child(RuleFields.EFFECTS);
         if (effects != null && effects.isList()) {
@@ -176,9 +176,9 @@ final class PresenceLeaves {
                 if (!array.get(index).isMapping()) {
                     continue;
                 }
-                String effectPath = DraftPaths.indexPath(RuleFields.EFFECTS, index);
+                FieldPath effectPath = FieldPath.key(RuleFields.EFFECTS).index(index);
                 collectPresence(array.get(index).child(RuleFields.CONDITIONS),
-                        DraftPaths.child(effectPath, RuleFields.CONDITIONS),
+                        effectPath.child(RuleFields.CONDITIONS),
                         Component.translatable(RuleEditorPageSupport.UI + "rule.presence.scope_action", index + 1), effectPath, -1, index,
                         leaves, counters);
             }
@@ -199,10 +199,9 @@ final class PresenceLeaves {
                     if (!inner.get(effectIndex).isMapping()) {
                         continue;
                     }
-                    String effectPath = DraftPaths.indexPath(DraftPaths.child(
-                            DraftPaths.indexPath(RuleFields.OUTCOMES, candidateIndex), RuleFields.EFFECTS), effectIndex);
+                    FieldPath effectPath = FieldPath.key(RuleFields.OUTCOMES).index(candidateIndex).child(RuleFields.EFFECTS).index(effectIndex);
                     collectPresence(inner.get(effectIndex).child(RuleFields.CONDITIONS),
-                            DraftPaths.child(effectPath, RuleFields.CONDITIONS),
+                            effectPath.child(RuleFields.CONDITIONS),
                             Component.translatable(RuleEditorPageSupport.UI + "rule.presence.scope_effect", candidateIndex + 1, effectIndex + 1),
                             effectPath, candidateIndex, effectIndex, leaves, counters);
                 }
@@ -211,8 +210,8 @@ final class PresenceLeaves {
         return leaves;
     }
 
-    static void collectPresence(@Nullable RuleValue node, String path, Component scope,
-                                        @Nullable String effectPath, int candidateIndex, int effectIndex,
+    static void collectPresence(@Nullable RuleValue node, FieldPath path, Component scope,
+                                        @Nullable FieldPath effectPath, int candidateIndex, int effectIndex,
                                         List<PresenceLeaf> out, Map<String, Integer> counters) {
         if (node == null || !node.isMapping()) {
             return;
@@ -227,7 +226,7 @@ final class PresenceLeaves {
                 return;
             }
             int ordinal = counters.merge(type.toString(), 1, Integer::sum);
-            out.add(new PresenceLeaf(path, DraftPaths.child(path, RuleFields.CONDITION), type, ordinal, scope,
+            out.add(new PresenceLeaf(path, path.child(RuleFields.CONDITION), type, ordinal, scope,
                     effectPath, candidateIndex, effectIndex));
             return;
         }
@@ -235,13 +234,13 @@ final class PresenceLeaves {
         if (terms != null && terms.isList()) {
             List<RuleValue> array = terms.items();
             for (int index = 0; index < array.size(); index++) {
-                collectPresence(array.get(index), DraftPaths.indexPath(DraftPaths.child(path, RuleFields.TERMS), index),
+                collectPresence(array.get(index), path.child(RuleFields.TERMS).index(index),
                         scope, effectPath, candidateIndex, effectIndex, out, counters);
             }
         }
         RuleValue term = node.child(RuleFields.TERM);
         if (term != null && !term.isNull()) {
-            collectPresence(term, DraftPaths.child(path, RuleFields.TERM), scope, effectPath, candidateIndex,
+            collectPresence(term, path.child(RuleFields.TERM), scope, effectPath, candidateIndex,
                     effectIndex, out, counters);
         }
     }

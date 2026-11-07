@@ -20,7 +20,7 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat/client/net、cli
 
 - **协议工作区** `RuleEditClientWorkspace`：持有连接、快照、参考寿命与跨状态编排。`SessionLease` 独占会话身份、阶段与心跳，`SaveTicket` 独占保存关联、递增进度、取消标记与终态；`SourceViewRequests` 管理来源 LRU，`CatalogDirectory` 管理目录分页，两者共用 `PendingRequest` 的身份与期限机制。
 - **分片接收** `RuleChunkBuffer`：快照与来源视图共用同一套重组逻辑，同一时刻只保留最近一批分片。
-- **草稿** `RuleDraft` 与 `DraftPaths`：以 JSON 为唯一事实来源的规则草稿，支持路径级读写、条件树编解码，以及 flat effects 与 candidate outcomes 之间的原子转换；删除意图不写进工作副本，组装变更集时转成 `delete` 动作。
+- **草稿** `RuleDraft` 与 `FieldPath`：以 JSON 为唯一事实来源的规则草稿，支持类型化位置读写、条件树编解码，以及 flat effects 与 candidate outcomes 之间的原子转换；删除意图不写进工作副本，组装变更集时转成 `delete` 动作。
 - **撤销与重做** `EditSession`：`root/valueAt` 提供只读实时值，`snapshot` 提供独立快照；活草稿仅在 `apply(opKey, edits -> ...)` 回调中提供，每次编辑压成一条历史记录，恢复快照的同时恢复未完成的文本输入。会话本身不区分只读：只读条目的内容同样可改，改动只存在于当前界面生命周期。
 - **变更集** `EditorChangeSet`：按 id 收集内容动作与启停动作，两类分开去重，序列化成一份载荷提交；只读条目的内容动作不进来，启停动作照常进来。
 - **类型编辑器** `TypeEditorRegistry` 与条件/效果的注册表：类型 id 到编辑描述符的映射，未注册类型获得只读回退描述。
@@ -37,8 +37,18 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat/client/net、cli
 - **界面入口**：直接使用 `RuleEditClientWorkspace`。`session()` 返回 `EditorSessionView`，`saving()` 返回 `EditorSaveView` 与 `EditorSaveOutcome`，`directory(type)` / `sourceView(id)` 返回 `ResourceView<T>`；读取不发包、不推进结果序号，数据未变化时复用读模型。请求、刷新、重试、保存与关闭是显式动作。
 - **界面注册**：`EditorScreenHooks.setOpener(EditorScreenOpener)`；工作区在会话建立时 `open(EditorOpenRequest)`，会话失效时 `close()`，opener 未注册只记日志。
 - **平台接线**：`RuleEditClientWorkspace.instance()` 的 `installSender(PacketSender)` 由两端客户端初始化调用；`bindConnection` / `unbindConnection` 随连接事件绑定与解绑唯一接收对象。
-- **编辑数据**：`RuleDraft`、`EditSession`、`RuleValue`、`ResultStructure`、`EditorChangeSet`、`DraftPaths`、`DraftJournal`，供界面模块组装草稿与变更集。
+- **编辑数据**：`RuleDraft`、`EditSession`、`RuleValue`、`ResultStructure`、`EditorChangeSet`、`FieldPath`、`DraftJournal`，供界面模块组装草稿与变更集。
 - **类型编辑器扩展**：`EditorRegistries.CONDITIONS.register`、`EditorRegistries.EFFECTS.register`，参数是 `TypeEditorDescriptor`。
+
+### 字段位置与结构写入
+
+`FieldPath` 表达当前位置，键和数组下标分段比较；根、子键、下标、父路径、相对后缀与作用域替换共用同一代数。`EditorField.name` 保持直接字段键，表单装配时组合实际位置。数组重排后的输入身份由 `EditSession` 的路径映射与结构作用域维护，最长匹配按段深度选择。
+
+`RuleDraft.setAt` 允许新增最终字段，要求中间容器已经存在、数组目标已经占位；读取区分缺席和显式 null。列表新增由 `appendToList` 明确执行，缺席列表在该入口创建。`FormCommit` 在写入前校验整批合法变化；缺席或畸变的所属对象由实际表单组装，只纳入本批合法字段。已有对象保留未知字段，非法兄弟原文留在 pending input，接受基线与关联回调在写入后更新。
+
+`ConditionTreeNodes` 负责条件树结构段与 `UiTreePath` 的转换；条件字段上下文把树内作用域映射到草稿绝对位置。`FieldPath` 本身只处理通用位置。
+
+文本只在草稿磁盘键、服务端问题接纳和诊断出口使用。点与方括号格式沿用原有地址，字面键中的点、括号和反斜杠使用反斜杠转义，普通旧草稿地址保持原格式。`PersistedDraft` 接纳文件时解析一次，畸变地址沿 `DraftStore` 的文件错误通道报告并保留原文件；`RuleIssueLocator` 保留服务端原文，合法地址输出类型化位置，畸变地址落到规则信息区。
 
 ### 依赖方向
 
@@ -74,7 +84,7 @@ flowchart LR
 | `RuleDraft`（client/edit） | 草稿聚合根 | 保存服务器基线、工作副本与删除标记；路径级读写与条件树、候选结构处理 | `DraftPaths`、条件编解码、界面表单 |
 | `EditorChangeSet`（client/edit） | 变更集组装 | 按 id 收集内容动作与启停动作，分别去重后序列化成一份提交载荷 | `RuleEdit`、`RuleEditorModel` |
 | `RuleValue` / `ResultStructure`（client/edit） | 只读值与结构语义 | 严格读取文本、布尔与文本列表；共用结果形状、路径判定、候选效果定位及条件宿主结构快照 | 会话、表单与摘要 |
-| `DraftPaths`（client/edit） | 路径工具 | 草稿 JSON 的字段与数组路径解析、读写、删除；必要时创建中间容器 | `RuleDraft` |
+| `FieldPath` / 包内 `DraftPaths`（client/edit） | 字段位置与 JSON 遍历 | 前者持有不可变键与下标段、作用域代数和文本边界解析；后者按位置读取并严格写入已有容器 | 会话、表单、`RuleDraft` |
 | `TypeEditorRegistry` / `EditorRegistries`（client/edit） | 扩展点 | 类型 id 到编辑描述符的注册表；未注册类型返回只读回退描述 | 界面表单、内置类型表 |
 | `ParamProjection`（client/edit） | 参数投影 | 把 core 的类型参数声明投影成 `EditorField` 列表：顺序与层级取自声明，标签 key 由类型 id 与字段名派生，窗口、单位、精度与枚举分组同样取自声明，不显示的参数跳过 | `BuiltinEditorDescriptors`、`TypeEditorDescriptor` |
 | `EditorField`（client/edit） | 字段契约 | 描述字段名、标签 key、类型、值域、展示层级与编辑器元数据；以无 default 的枚举 switch 集中分类为形状、数值类别与引用能力；公开谓词回答列表、数值与标签等问题，调用方只问字段 | `ParamProjection`、界面表单控件 |

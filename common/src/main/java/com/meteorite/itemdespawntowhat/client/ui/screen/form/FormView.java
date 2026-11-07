@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiScrollView;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiChildren;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
@@ -8,7 +9,6 @@ import org.lwjgl.glfw.GLFW;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
-import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogSelectionBinding;
 import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogSelectionBinding.Mode;
@@ -73,7 +73,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
     private final FormCommit commit = new FormCommit(this);
     private static final int SCROLL_STEP = 24;
     private final UiChildren<FormRowInput> rowInputs = new UiChildren<>();
-    String basePath;
+    FieldPath basePath;
     long loadedRevision;
     @Nullable RuleValue acceptedObject;
     final List<FormRow> rows = new ArrayList<>();
@@ -95,7 +95,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
          * @param filter   资源条目过滤条件，标签资格继续由字段声明决定
          * @param binding  接收端声明的模式、初始快照与确认出口
          */
-        void open(EditorField field, String path, boolean tags, @Nullable Predicate<String> filter,
+        void open(EditorField field, FieldPath path, boolean tags, @Nullable Predicate<String> filter,
                   CatalogSelectionBinding binding);
     }
 
@@ -116,7 +116,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
     private @Nullable Function<FormView, ConditionEditContextFactory> conditionContextFactory;
     private @Nullable Runnable changeListener;
     private final List<FieldWritten> fieldWrites = new ArrayList<>();
-    private final List<Consumer<String>> fieldCommits = new ArrayList<>();
+    private final List<Consumer<FieldPath>> fieldCommits = new ArrayList<>();
     private @Nullable Function<RuleValue, Consumer<RuleDraft>> relatedEdit;
     private @Nullable DefaultValues defaultValues;
     private @Nullable String undoOperation;
@@ -125,30 +125,30 @@ public final class FormView implements UiWidget, UiLayoutSource {
     @FunctionalInterface
     public interface FieldWritten {
         /** 字段已写入本次草稿；before 是该字段写入前的独立值。 */
-        void written(RuleDraft draft, String path, @Nullable RuleValue before);
+        void written(RuleDraft draft, FieldPath path, @Nullable RuleValue before);
     }
 
     /** 宿主提供的缺省显示值，不改变字段的省略状态。 */
     @FunctionalInterface
     public interface DefaultValues {
         /** 按当前表单路径和所在对象计算字段的有效缺省值。 */
-        @Nullable RuleValue value(String basePath, RuleValue owner, EditorField field);
+        @Nullable RuleValue value(FieldPath basePath, RuleValue owner, EditorField field);
     }
 
     /** 按注册顺序组合同次历史中的业务关联写入。 */
     public void addFieldWritten(FieldWritten listener) { fieldWrites.add(listener); }
 
     /** 字段接受完成后同步局部视图；回调不参与草稿事务。 */
-    public void addFieldCommitted(Consumer<String> listener) { fieldCommits.add(listener); }
+    public void addFieldCommitted(Consumer<FieldPath> listener) { fieldCommits.add(listener); }
 
     /** 写入前捕获关联更新所需的旧状态，在本次字段写入后应用返回的动作。 */
-    public void setRelatedEdit(Function<RuleValue, Consumer<RuleDraft>> edit) { relatedEdit = edit; }
+    public void setRelatedEdit(@Nullable Function<RuleValue, Consumer<RuleDraft>> edit) { relatedEdit = edit; }
 
     /** 注入宿主有效默认值；独立表单默认使用字段声明。 */
-    public void setDefaultValues(DefaultValues values) { defaultValues = values; }
+    public void setDefaultValues(@Nullable DefaultValues values) { defaultValues = values; }
 
     /** 指定本表单字段的撤销标签；未指定时由字段控件表达。 */
-    public void setUndoOperation(String operation) { undoOperation = operation; }
+    public void setUndoOperation(@Nullable String operation) { undoOperation = operation; }
 
     @Nullable RuleValue defaultValue(FormRow row, RuleValue owner) {
         if (row.defaultValue != null) return row.defaultValue.get();
@@ -165,8 +165,8 @@ public final class FormView implements UiWidget, UiLayoutSource {
         return parent == null ? row.control.undoOpKey() : parent.undoOperation(row);
     }
 
-    void notifyFieldCommitted(String path) {
-        for (Consumer<String> listener : fieldCommits) listener.accept(path);
+    void notifyFieldCommitted(FieldPath path) {
+        for (Consumer<FieldPath> listener : fieldCommits) listener.accept(path);
         refreshRowVisibility();
         if (parent != null) parent.notifyFieldCommitted(path);
     }
@@ -190,7 +190,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
     // 子列表里的子表单：只由自己的渲染帧驱动，顶层表单由页面 tick 统一驱动
     private boolean childForm;
     @Nullable FormView parent;
-    private @Nullable String highlightPath;
+    private @Nullable FieldPath highlightPath;
     private int highlightTicks;
     // 行几何测量缓存：只有宽度、行结构、可见性或控件高度等真实几何输入变化后重算，
     // 静止帧与滚动帧直接复用上一次测量结果，避免把测量绑到帧循环上。
@@ -208,18 +208,18 @@ public final class FormView implements UiWidget, UiLayoutSource {
     /**
      * 独立表单入口使用默认主题。
      */
-    public FormView(Font font, EditSession session, String basePath) {
+    public FormView(Font font, EditSession session, FieldPath basePath) {
         this(UiHostThemes.defaultTheme(), font, session, basePath);
     }
 
     /**
      * 页面装配时显式注入主题，子表单和字段继承同一实例。
      */
-    public FormView(UiHostTheme theme, Font font, EditSession session, String basePath) {
+    public FormView(UiHostTheme theme, Font font, EditSession session, FieldPath basePath) {
         this.THEME = UiHostThemes.require(theme);
         this.font = font;
         this.session = session;
-        this.basePath = basePath == null ? "" : basePath;
+        this.basePath = basePath;
     }
 
     /**
@@ -277,7 +277,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
     }
 
     // 所有关联写同步使用同一草稿；控件刷新留到提交完成后。
-    void notifyFieldWritten(RuleDraft draft, String path, @Nullable RuleValue before) {
+    void notifyFieldWritten(RuleDraft draft, FieldPath path, @Nullable RuleValue before) {
         for (FieldWritten listener : fieldWrites) listener.written(draft, path, before);
         if (parent != null) parent.notifyFieldWritten(draft, path, before);
     }
@@ -425,21 +425,21 @@ public final class FormView implements UiWidget, UiLayoutSource {
     }
 
     // 复合控件按本次操作声明模式；路径和初始值在待提交输入完成后读取。
-    void openReferenceChoice(FormControl control, EditorField field, Supplier<String> path, Mode mode,
+    void openReferenceChoice(FormControl control, EditorField field, Supplier<FieldPath> path, Mode mode,
                              Supplier<List<String>> selected, Consumer<List<String>> onPicked) {
         FormRow row = rows.stream().filter(candidate -> candidate.control == control).findFirst().orElseThrow();
         openCatalog(row, field, path, false, () -> new CatalogSelectionBinding(mode, selected.get(), onPicked));
     }
 
     // 行级与复合控件共用本次打开的固定修订和所属行，表单刷新无法使旧回调重新生效。
-    private void openCatalog(FormRow row, EditorField field, Supplier<String> targetPath, boolean tags,
+    private void openCatalog(FormRow row, EditorField field, Supplier<FieldPath> targetPath, boolean tags,
                              Supplier<CatalogSelectionBinding> receiver) {
         if (!enabled || !row.visible || !row.attached || catalogOpener == null) return;
         commitPendingInputs();
         if (!enabled || !row.visible || !row.attached) return;
         long revision = session.revision();
-        String ownerPath = row.path;
-        String path = targetPath.get();
+        FieldPath ownerPath = row.path;
+        FieldPath path = targetPath.get();
         if (path == null) {
             rejectSelection();
             return;
@@ -462,23 +462,23 @@ public final class FormView implements UiWidget, UiLayoutSource {
     }
 
     // 字段在草稿中的路径：原始 JSON 行与说明行指向所在对象本身
-    private String pathFor(EditorField field) {
+    private FieldPath pathFor(EditorField field) {
         if (field.isDisplayOnly()) {
             return basePath;
         }
-        return childPath(field.name());
+        return childPath(FieldPath.key(field.name()));
     }
 
     void changeChildStructure(String relative, Runnable change, Supplier<RuleValue> value) {
         commit.changeStructure(relative, change, value);
     }
 
-    void clearChildInputs(String relative) {
+    void clearChildInputs(FieldPath relative) {
         session.clearPendingInputs(childPath(relative));
     }
 
     // 重排嵌套表单时同步输入路径，不把下标变化绑定到另一个子项。
-    void rebase(String nextBase) {
+    void rebase(FieldPath nextBase) {
         retainPendingInputs();
         session.remapPendingInputs(basePath, nextBase);
         basePath = nextBase;
@@ -486,8 +486,8 @@ public final class FormView implements UiWidget, UiLayoutSource {
     }
 
     // 拼接子路径
-    String childPath(String relative) {
-        return DraftPaths.child(basePath, relative);
+    FieldPath childPath(FieldPath relative) {
+        return basePath.append(relative);
     }
 
     /**
@@ -735,7 +735,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
     }
 
     // 新建子表单（子列表的每一项）
-    FormView newChildForm(String relativePath, List<EditorField> fields) {
+    FormView newChildForm(FieldPath relativePath, List<EditorField> fields) {
         FormView child = new FormView(THEME, font, session, childPath(relativePath));
         child.childForm = true;
         child.parent = this;
@@ -771,7 +771,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
     /**
      * 定位到指定草稿路径的字段：滚动使其整行可见、短暂高亮，返回其首个可聚焦目标（没有则返回 null）
      */
-    public @Nullable UiFocusTarget revealPath(String path) {
+    public @Nullable UiFocusTarget revealPath(FieldPath path) {
         FormRow row = rowFor(path);
         if (row == null || !row.visible) {
             return null;
@@ -809,8 +809,8 @@ public final class FormView implements UiWidget, UiLayoutSource {
     // 按问题路径找行：路径可能正好是字段，也可能指向字段下的子项
     // 归属必须唯一：多行的字段段边界同时匹配同一路径说明描述符不唯一，此时拒绝定位，
     // 调用方在滚动、高亮与进入控件之前就会收到 null，不会先改动视图状态
-    private @Nullable FormRow rowFor(String path) {
-        if (path == null || path.isBlank()) {
+    private @Nullable FormRow rowFor(FieldPath path) {
+        if (path == null || path.isRoot()) {
             return null;
         }
         FormRow matched = null;
@@ -818,7 +818,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
             if (row.field.isNote()) {
                 continue;
             }
-            if (path.equals(row.path) || path.startsWith(row.path + ".")) {
+            if (path.isWithin(row.path)) {
                 if (matched != null) {
                     return null;
                 }

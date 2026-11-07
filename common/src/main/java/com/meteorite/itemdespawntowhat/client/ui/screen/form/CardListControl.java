@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContainer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiChildren;
@@ -10,7 +11,6 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogSelectionBinding.Mode;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
-import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
@@ -52,7 +52,7 @@ import org.jetbrains.annotations.Nullable;
  * 适合「一个引用 + 少量数值」构成的列表（例如箭雨的药水效果）。</p>
  *
  * <p>字段行标签由本控件自绘（{@link #usesLabelColumn()} 返回 false，表单不再预留标签列），因此行内问题
- * 不再有红标签可依附，而是经 {@link #issues(String)} 汇总到校验面板，并由胶囊的空态文案就地表达
+ * 不再有红标签可依附，而是经 {@link #issues(FieldPath)} 汇总到校验面板，并由胶囊的空态文案就地表达
  * 「还缺一个引用」。</p>
  */
 final class CardListControl extends FormControl implements UiLayoutSource, UiInputContainer {
@@ -147,7 +147,7 @@ final class CardListControl extends FormControl implements UiLayoutSource, UiInp
             return;
         }
         // 选择范围是整段列表，目录策略按列表字段自身的路径解析。
-        context.openReferenceChoice(this, choiceField, () -> context.childPath(field.name()), Mode.MULTIPLE,
+        context.openReferenceChoice(this, choiceField, () -> context.childPath(FieldPath.key(field.name())), Mode.MULTIPLE,
                 this::selectedReferences, this::applyReferences);
     }
 
@@ -482,17 +482,17 @@ final class CardListControl extends FormControl implements UiLayoutSource, UiInp
     // ---- 问题与提示 ----
 
     @Override
-    List<FormIssue> issues(String path) {
+    List<FormIssue> issues(FieldPath path) {
         List<FormIssue> list = new ArrayList<>();
         for (int i = 0; i < entries.size(); i++) {
-            String entryPath = DraftPaths.indexPath(path, i);
+            FieldPath entryPath = path.index(i);
             Entry entry = entries.get(i);
             if (choiceField != null && (entry.reference == null || entry.reference.isBlank())) {
-                list.add(FormIssue.required(DraftPaths.child(entryPath, choiceField.name()),
+                list.add(FormIssue.required(entryPath.child(choiceField.name()),
                         Component.translatable(choiceField.labelKey())));
             }
             for (int v = 0; v < entry.values.size(); v++) {
-                list.addAll(entry.values.get(v).issues(DraftPaths.child(entryPath, valueFields.get(v).name())));
+                list.addAll(entry.values.get(v).issues(entryPath.child(valueFields.get(v).name())));
             }
         }
         return list;
@@ -561,13 +561,13 @@ final class CardListControl extends FormControl implements UiLayoutSource, UiInp
         RuleValue accepted = originalValue();
         for (int index = 0; index < entries.size(); index++) {
             Entry entry = entries.get(index);
-            entry.original = accepted != null && accepted.isList() && index < accepted.size()
-                    ? accepted.item(index).deepCopy() : null;
+            RuleValue acceptedEntry = accepted != null && accepted.isList() ? accepted.item(index) : null;
+            entry.original = acceptedEntry == null ? null : acceptedEntry.deepCopy();
             entry.referenceEdited = false;
             for (int value = 0; value < entry.values.size(); value++) {
                 FormControl control = entry.values.get(value);
                 RuleValue acceptedValue = entry.original == null ? null : entry.original.child(valueFields.get(value).name());
-                if (control.issues(valueFields.get(value).name()).stream().anyMatch(FormIssue::blocking)) {
+                if (control.issues(FieldPath.key(valueFields.get(value).name())).stream().anyMatch(FormIssue::blocking)) {
                     control.rememberLoaded(acceptedValue);
                 } else {
                     control.acceptValue(acceptedValue);
@@ -591,8 +591,8 @@ final class CardListControl extends FormControl implements UiLayoutSource, UiInp
     }
 
     // 条目在草稿里的引用字段路径：目录入口需要完整路径
-    private String entryChoicePath(EditorField choiceField, int index) {
-        return DraftPaths.child(context.childPath(DraftPaths.indexPath(field.name(), index)), choiceField.name());
+    private FieldPath entryChoicePath(EditorField choiceField, int index) {
+        return context.childPath(FieldPath.key(field.name()).index(index)).child(choiceField.name());
     }
 
     // 引用字段的 JSON 文本；非文本元素视为缺省

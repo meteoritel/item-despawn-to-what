@@ -74,12 +74,11 @@ public final class ResultStructure {
     }
 
     // 候选的效果数组路径（RuleDraft 路径语法）
-    public static String listPath(@Nullable RuleValue rule, int candidate) {
+    public static FieldPath listPath(@Nullable RuleValue rule, int candidate) {
         if (hasOutcomes(rule)) {
-            return DraftPaths.child(DraftPaths.indexPath(RuleFields.OUTCOMES, Math.max(0, candidate)),
-                    RuleFields.CANDIDATE_EFFECTS);
+            return FieldPath.key(RuleFields.OUTCOMES).index(Math.max(0, candidate)).child(RuleFields.CANDIDATE_EFFECTS);
         }
-        return RuleFields.EFFECTS;
+        return FieldPath.key(RuleFields.EFFECTS);
     }
 
     // 候选的效果数组（顶层 effects 结构下返回顶层数组）
@@ -118,10 +117,9 @@ public final class ResultStructure {
     }
 
     /** 结果区本身及其后代路径；按草稿路径段匹配，避免相似字段名前缀误命中。 */
-    public static boolean isResultPath(@Nullable String path) {
-        List<DraftPaths.Segment> segments = DraftPaths.parse(path);
-        if (segments.isEmpty()) return false;
-        String root = segments.getFirst().name();
+    public static boolean isResultPath(@Nullable FieldPath path) {
+        if (path == null) return false;
+        String root = path.firstKey();
         return RuleFields.EFFECTS.equals(root) || RuleFields.OUTCOMES.equals(root);
     }
 

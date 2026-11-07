@@ -101,7 +101,7 @@ public final class RuleCategoryAssignment {
         if (derived.equals(declared)) {
             return false;
         }
-        draft.setAt(RuleFields.CATEGORY, RuleValue.text(derived));
+        draft.setAt(FieldPath.key(RuleFields.CATEGORY), RuleValue.text(derived));
         return true;
     }
 

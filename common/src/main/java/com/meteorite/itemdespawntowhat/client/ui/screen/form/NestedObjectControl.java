@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContainer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiChildren;
@@ -36,7 +37,7 @@ final class NestedObjectControl extends FormControl implements UiInputContainer 
 
     NestedObjectControl(UiHostTheme theme, Font font, FormControlContext context, EditorField field, Runnable onChanged) {
         super(theme, field);
-        this.child = context.newChildForm(field.name(), field.subFields());
+        this.child = context.newChildForm(FieldPath.key(field.name()), field.subFields());
         members.add(child);
         this.child.setLabelWidth(Math.min(88, field.subFields().stream()
                 .mapToInt(nested -> font.width(Component.translatable(nested.labelKey())) + 4).max().orElse(0)));
@@ -107,7 +108,7 @@ final class NestedObjectControl extends FormControl implements UiInputContainer 
     }
 
     @Override
-    List<FormIssue> issues(String path) {
+    List<FormIssue> issues(FieldPath path) {
         return child.issues();
     }
 
@@ -137,7 +138,7 @@ final class NestedObjectControl extends FormControl implements UiInputContainer 
     }
 
     @Override
-    @Nullable UiFocusTarget revealPath(String path, String basePath) {
+    @Nullable UiFocusTarget revealPath(FieldPath path, FieldPath basePath) {
         return child.revealPath(path);
     }
 

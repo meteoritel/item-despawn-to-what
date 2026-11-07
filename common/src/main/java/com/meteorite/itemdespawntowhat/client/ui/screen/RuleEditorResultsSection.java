@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
@@ -8,7 +9,6 @@ import com.meteorite.itemdespawntowhat.client.ui.shared.RuleDisplayLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiScrollView;
 import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDefaults;
 import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDescriptors;
-import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorFactories;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
@@ -173,7 +173,7 @@ final class RuleEditorResultsSection {
         if (effect >= 0) effectIndex = effect;
     }
 
-    @Nullable UiFocusTarget revealField(String path) {
+    @Nullable UiFocusTarget revealField(FieldPath path) {
         UiFocusTarget target = effectForm == null ? null : effectForm.revealPath(path);
         return target != null || advancedEffectForm == null ? target : advancedEffectForm.revealPath(path);
     }
@@ -251,7 +251,7 @@ final class RuleEditorResultsSection {
     private @Nullable UiRect actionParametersRect;
 
     // place_block 的 radius→limit 联动：记录上次绑定的动作路径与会话，用于判断何时清除手动标记
-    private @Nullable String placeBlockLinkPath;
+    private @Nullable FieldPath placeBlockLinkPath;
     private @Nullable EditSession placeBlockLinkSession;
     // 上限是否已被手动改过：同一动作重建表单后沿用，避免一次手改后又被半径联动覆盖
     private boolean placeBlockLimitManual;
@@ -262,7 +262,7 @@ final class RuleEditorResultsSection {
 
     @Nullable UiRect effectNoteRect;
 
-    void buildResults(EditSession session, @Nullable String revealPath) {
+    void buildResults(EditSession session, @Nullable FieldPath revealPath) {
         RuleValue rule = session.root();
         int candidates = Math.max(1, ResultStructure.candidateCount(rule));
         candidateIndex = Math.clamp(candidateIndex, 0, candidates - 1);
@@ -283,8 +283,8 @@ final class RuleEditorResultsSection {
         int selectedIndex = Math.clamp(effectIndex, 0, Math.max(0, actions == null ? 0 : actions.size() - 1));
         RuleValue selected = actions == null ? null : actions.item(selectedIndex);
         ResourceLocation selectedType = selected == null ? null : ResourceLocation.tryParse(selected.text(RuleFields.TYPE, ""));
-        String listPath = ResultStructure.listPath(rule, candidateIndex);
-        String actionPath = DraftPaths.indexPath(listPath, selectedIndex);
+        FieldPath listPath = ResultStructure.listPath(rule, candidateIndex);
+        FieldPath actionPath = listPath.index(selectedIndex);
         boolean spawnEntity = ResourceLocation.fromNamespaceAndPath(TypeLabels.OWN_NAMESPACE, "spawn_entity").equals(selectedType)
                 && selected.isMapping();
         if (spawnEntity) {
@@ -386,7 +386,7 @@ final class RuleEditorResultsSection {
                         .filter(field -> field.tier() == ParamTier.ADVANCED)
                         .toList();
                 if (revealPath != null) {
-                    String fieldName = DraftPaths.directChildName(actionPath, revealPath);
+                    String fieldName = actionPath.childName(revealPath);
                     showAdvancedEffects = advanced.stream().anyMatch(field -> field.name().equals(fieldName));
                 }
                 effectForm = forms.create(session, actionPath, new TypeEditorDescriptor(descriptor.id(), descriptor.label(), primary, descriptor.readOnly()));
@@ -434,12 +434,12 @@ final class RuleEditorResultsSection {
      * 避免隐藏的固定方块仍按服务端优先级生效；shape 或 radius 变化时把 limit 的滑条窗口改为该形状在该半径下的容量，
      * 并把 limit 跟随到新的容量上限——limit 一旦被手动改过就不再跟随，直到切换到别的动作或规则。
      */
-    private void bindPlaceBlockVisibility(FormView form, EditSession session, String actionPath) {
-        String blockPath = DraftPaths.child(actionPath, PlaceBlockEffect.BLOCK_FIELD);
-        String useSourcePath = DraftPaths.child(actionPath, PlaceBlockEffect.USE_SOURCE_BLOCK_FIELD);
-        String shapePath = DraftPaths.child(actionPath, PlaceBlockEffect.SHAPE_FIELD);
-        String radiusPath = DraftPaths.child(actionPath, PlaceBlockEffect.RADIUS_FIELD);
-        String limitPath = DraftPaths.child(actionPath, PlaceBlockEffect.LIMIT_FIELD);
+    private void bindPlaceBlockVisibility(FormView form, EditSession session, FieldPath actionPath) {
+        FieldPath blockPath = actionPath.child(PlaceBlockEffect.BLOCK_FIELD);
+        FieldPath useSourcePath = actionPath.child(PlaceBlockEffect.USE_SOURCE_BLOCK_FIELD);
+        FieldPath shapePath = actionPath.child(PlaceBlockEffect.SHAPE_FIELD);
+        FieldPath radiusPath = actionPath.child(PlaceBlockEffect.RADIUS_FIELD);
+        FieldPath limitPath = actionPath.child(PlaceBlockEffect.LIMIT_FIELD);
         // 手工 JSON 可能同时写两个字段；固定方块仍生效时保留该行，避免把生效值藏起来
         form.field(PlaceBlockEffect.BLOCK_FIELD).visibleWhen(() -> !RuleValue.flag(
                 session.valueAt(actionPath), PlaceBlockEffect.USE_SOURCE_BLOCK_FIELD, false)
@@ -480,7 +480,7 @@ final class RuleEditorResultsSection {
      * @param session    当前编辑会话
      * @param actionPath 动作在草稿中的路径
      */
-    private void bindWeatherVisibility(FormView form, EditSession session, String actionPath) {
+    private void bindWeatherVisibility(FormView form, EditSession session, FieldPath actionPath) {
         form.field(WeatherEffect.THUNDERING_FIELD).visibleWhen(() -> {
             RuleValue draft = session.valueAt(actionPath);
             // mode 的 JSON 取值由 EnumCodecs.lowerCase 派生；忽略大小写比较，与手写 JSON 的解析口径一致
@@ -498,8 +498,8 @@ final class RuleEditorResultsSection {
      * @param actionPath 动作在草稿中的路径
      * @return 联动绑定（带回上次记录的手动状态）
      */
-    private UiLinkedValues placeBlockLimitLink(EditSession session, String actionPath, RuleDraft edits) {
-        String limitPath = DraftPaths.child(actionPath, PlaceBlockEffect.LIMIT_FIELD);
+    private UiLinkedValues placeBlockLimitLink(EditSession session, FieldPath actionPath, RuleDraft edits) {
+        FieldPath limitPath = actionPath.child(PlaceBlockEffect.LIMIT_FIELD);
         UiLinkedValues.Accessor follower = new UiLinkedValues.Accessor() {
             @Override
             public double read() {
@@ -524,7 +524,7 @@ final class RuleEditorResultsSection {
      * @param actionPath 动作在草稿中的路径
      * @return 当前形状在有效半径下的位置总数
      */
-    private int placeBlockCapacity(EditSession session, String actionPath) {
+    private int placeBlockCapacity(EditSession session, FieldPath actionPath) {
         return PlaceBlockEffect.limitUpperBound(draftPlaceBlockShape(session, actionPath),
                 draftPlaceBlockRadius(session, actionPath));
     }
@@ -536,7 +536,7 @@ final class RuleEditorResultsSection {
      * @param actionPath 动作在草稿中的路径
      * @return 有效形状
      */
-    private PlaceBlockEffect.Shape draftPlaceBlockShape(EditSession session, String actionPath) {
+    private PlaceBlockEffect.Shape draftPlaceBlockShape(EditSession session, FieldPath actionPath) {
         RuleValue action = session.valueAt(actionPath);
         String value = action == null ? null : action.text(PlaceBlockEffect.SHAPE_FIELD, null);
         return PlaceBlockEffect.Shape.fromWire(value);
@@ -549,7 +549,7 @@ final class RuleEditorResultsSection {
      * @param actionPath 动作在草稿中的路径
      * @return 有效半径
      */
-    private int draftPlaceBlockRadius(EditSession session, String actionPath) {
+    private int draftPlaceBlockRadius(EditSession session, FieldPath actionPath) {
         RuleValue action = session.valueAt(actionPath);
         int radius = action == null ? PlaceBlockEffect.DEFAULT_RADIUS
                 : action.integer(PlaceBlockEffect.RADIUS_FIELD, PlaceBlockEffect.DEFAULT_RADIUS);
@@ -567,7 +567,7 @@ final class RuleEditorResultsSection {
      * @param session    当前编辑会话
      * @param actionPath 动作在草稿中的路径
      */
-    private void updatePlaceBlockWindows(FormView form, EditSession session, String actionPath) {
+    private void updatePlaceBlockWindows(FormView form, EditSession session, FieldPath actionPath) {
         form.field(PlaceBlockEffect.RADIUS_FIELD).sliderWindow(PlaceBlockEffect.MIN_RADIUS, serverMaxPlaceBlockRadius());
         form.field(PlaceBlockEffect.LIMIT_FIELD).sliderWindow(PlaceBlockEffect.MIN_LIMIT, placeBlockCapacity(session, actionPath));
     }
@@ -629,7 +629,7 @@ final class RuleEditorResultsSection {
             if (convert) {
                 edits.convertToOutcomes(EditorFactories.uniqueCandidateId(Set.of()));
             }
-            edits.setAt(DraftPaths.child(DraftPaths.indexPath(RuleFields.OUTCOMES, index), field),
+            edits.setAt(FieldPath.key(RuleFields.OUTCOMES).index(index).child(field),
                     RuleValue.flag(value));
         });
         if (applied && convert) {
@@ -642,7 +642,7 @@ final class RuleEditorResultsSection {
         if (session == null) {
             return;
         }
-        commands.apply(EditSession.OP_SET_FIELD, edits -> edits.setAt(RuleFields.COMBINATION, RuleValue.text(value)));
+        commands.apply(EditSession.OP_SET_FIELD, edits -> edits.setAt(FieldPath.key(RuleFields.COMBINATION), RuleValue.text(value)));
     }
 
     void addCandidate() {
@@ -664,7 +664,7 @@ final class RuleEditorResultsSection {
                     .put(RuleFields.CANDIDATE_ID, RuleValue.text(EditorFactories.uniqueCandidateId(edits.candidateIds())))
                     .put(RuleFields.CANDIDATE_EFFECTS, RuleValue.list().build())
                     .build();
-            edits.setAt(DraftPaths.indexPath(RuleFields.OUTCOMES, edits.outcomeCount()), body);
+            edits.appendToList(FieldPath.key(RuleFields.OUTCOMES), body);
         })) {
             return;
         }
@@ -700,7 +700,7 @@ final class RuleEditorResultsSection {
             RuleValue body = RuleValue.mapping(source)
                     .put(RuleFields.CANDIDATE_ID, RuleValue.text(EditorFactories.uniqueCandidateId(edits.candidateIds())))
                     .build();
-            edits.setAt(DraftPaths.indexPath(RuleFields.OUTCOMES, edits.outcomeCount()), body);
+            edits.appendToList(FieldPath.key(RuleFields.OUTCOMES), body);
         })) {
             return;
         }
@@ -718,7 +718,7 @@ final class RuleEditorResultsSection {
         // 至少保留一个方案，与工具条的禁用边界一致。
         if (!ResultStructure.hasOutcomes(draft) || ResultStructure.outcomeCount(draft) <= 1) return;
         int index = Math.max(0, candidateIndex);
-        if (!commands.applyStructure(EditSession.OP_REMOVE_CANDIDATE, edits -> edits.removeAt(DraftPaths.indexPath(RuleFields.OUTCOMES, index)))) {
+        if (!commands.applyStructure(EditSession.OP_REMOVE_CANDIDATE, edits -> edits.removeAt(FieldPath.key(RuleFields.OUTCOMES).index(index)))) {
             return;
         }
         candidateIndex = Math.max(0, index - 1);
@@ -781,16 +781,16 @@ final class RuleEditorResultsSection {
             notice(EditorShell.NoticeLevel.WARNING, Component.translatable(RuleEditorPageSupport.UI + "issue.candidate_limit", ConditionLimits.MAX_EFFECTS));
             return;
         }
-        String listPath = ResultStructure.listPath(draft, candidateIndex);
+        FieldPath listPath = ResultStructure.listPath(draft, candidateIndex);
         RuleValue body = BuiltinEditorDefaults.effectBody(type);
         // 服务端上限低于默认半径时，新建动作的半径与上限一并收进上限，避免一出生就非法
         int placeRadius = Math.min(PlaceBlockEffect.DEFAULT_RADIUS, serverMaxPlaceBlockRadius());
         if (!commands.applyStructure(EditSession.OP_ADD_EFFECT, edits -> {
-            String effectPath = DraftPaths.indexPath(listPath, edits.effectCountAt(listPath));
-            edits.setAt(effectPath, body);
+            FieldPath effectPath = listPath.index(edits.effectCountAt(listPath));
+            if (!edits.appendToList(listPath, body)) return;
             if (PlaceBlockEffect.ID.equals(type) && placeRadius < PlaceBlockEffect.DEFAULT_RADIUS) {
-                edits.setAt(DraftPaths.child(effectPath, PlaceBlockEffect.RADIUS_FIELD), RuleValue.integer(placeRadius));
-                edits.setAt(DraftPaths.child(effectPath, PlaceBlockEffect.LIMIT_FIELD),
+                edits.setAt(effectPath.child(PlaceBlockEffect.RADIUS_FIELD), RuleValue.integer(placeRadius));
+                edits.setAt(effectPath.child(PlaceBlockEffect.LIMIT_FIELD),
                         RuleValue.integer(PlaceBlockEffect.limitUpperBound(PlaceBlockEffect.DEFAULT_SHAPE, placeRadius)));
             }
         })) {
@@ -805,11 +805,11 @@ final class RuleEditorResultsSection {
             return;
         }
         RuleValue draft = session.root();
-        String listPath = ResultStructure.listPath(draft, candidateIndex);
+        FieldPath listPath = ResultStructure.listPath(draft, candidateIndex);
         if (index < 0 || index >= draft.listSizeAt(listPath)) {
             return;
         }
-        if (!commands.applyStructure(EditSession.OP_REMOVE_EFFECT, edits -> edits.removeAt(DraftPaths.indexPath(listPath, index)))) {
+        if (!commands.applyStructure(EditSession.OP_REMOVE_EFFECT, edits -> edits.removeAt(listPath.index(index)))) {
             return;
         }
         // 删除非选中行时保留当前动作；删掉当前行时选中前一行。
@@ -842,7 +842,7 @@ final class RuleEditorResultsSection {
             return;
         }
         RuleValue draft = session.root();
-        String listPath = ResultStructure.listPath(draft, candidateIndex);
+        FieldPath listPath = ResultStructure.listPath(draft, candidateIndex);
         boolean[] moved = {false};
         if (!commands.applyStructure(EditSession.OP_MOVE_EFFECT, edits -> moved[0] = edits.moveInList(listPath, from, to)) || !moved[0]) {
             return;
@@ -898,7 +898,7 @@ final class RuleEditorResultsSection {
     }
 
     // 轮询产物档位：切换失败时保留原档位，避免界面档位与草稿 variant 不一致
-    void cycleProduct(String actionPath) {
+    void cycleProduct(FieldPath actionPath) {
         EntityProductStop next = productStop.next();
         if (applyProductStop(actionPath, next)) {
             productStop = next;
@@ -907,7 +907,7 @@ final class RuleEditorResultsSection {
     }
 
     // 档位不落盘：只重写 variant 与该档位专属字段的默认值，其余字段按描述符重新生成
-    private boolean applyProductStop(String path, EntityProductStop stop) {
+    private boolean applyProductStop(FieldPath path, EntityProductStop stop) {
         EditSession session = shell.editingSession();
         if (session == null) return false;
         commands.finishEditing();
@@ -940,7 +940,7 @@ final class RuleEditorResultsSection {
     }
 
     // 选中实体里只要有一个可能吃年龄就保留年龄行，否则整行隐藏；年龄只属于生物档
-    private boolean selectedEntityHasAge(String actionPath) {
+    private boolean selectedEntityHasAge(FieldPath actionPath) {
         if (productStop != EntityProductStop.MOB) return false;
         List<String> ids = entitySelection(actionPath);
         return ids.isEmpty() || ids.stream().anyMatch(id -> {
@@ -950,7 +950,7 @@ final class RuleEditorResultsSection {
     }
 
     // 草稿里的实体引用：字段可能是单个引用或引用列表
-    private List<String> entitySelection(String actionPath) {
+    private List<String> entitySelection(FieldPath actionPath) {
         EditSession session = shell.editingSession();
         if (session == null) return List.of();
         RuleValue element = session.valueAt(actionPath);
@@ -960,9 +960,9 @@ final class RuleEditorResultsSection {
     }
 
     // 实体选择变化后决定年龄行是否出现；不再需要年龄时在同一条撤销里清掉该字段
-    private void bindEntityProductUi(FormView form, String actionPath) {
-        String entityPath = DraftPaths.child(actionPath, "entity");
-        String agePath = DraftPaths.child(actionPath, "age");
+    private void bindEntityProductUi(FormView form, FieldPath actionPath) {
+        FieldPath entityPath = actionPath.child("entity");
+        FieldPath agePath = actionPath.child("age");
         if (productStop == EntityProductStop.MOB)
             form.field("age").visibleWhen(() -> selectedEntityHasAge(actionPath));
         form.field("entity").catalogFilter(this::catalogEntryAllowed);

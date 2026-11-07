@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
+
 /**
  * 条件编辑上下文的工厂：以实际条件字段的绝对草稿路径与所属对象路径创建局部目标上下文。
  *
@@ -17,5 +19,5 @@ public interface ConditionEditContextFactory {
      * @param ownerPath 该字段所属对象在草稿中的绝对路径；规则级为空串
      * @return 该字段对应的局部上下文
      */
-    ConditionEditContext create(String scope, String ownerPath);
+    ConditionEditContext create(FieldPath scope, FieldPath ownerPath);
 }

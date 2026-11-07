@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiShellWidget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiChildren;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidgetShell;
@@ -242,7 +243,7 @@ public final class LeafPanel implements UiShellWidget {
     }
 
     // 参数校验失败时，内部焦点与字段滚动保持一致。
-    public void focusField(String path) {
+    public void focusField(FieldPath path) {
         UiFocusTarget target = form.revealPath(path);
         if (target != null) target.focusState().request();
     }

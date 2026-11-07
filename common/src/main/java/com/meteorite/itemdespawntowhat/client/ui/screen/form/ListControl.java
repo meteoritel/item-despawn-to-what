@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
 import java.util.function.Consumer;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
@@ -163,7 +164,7 @@ final class ListControl extends FormControl {
     }
 
     @Override
-    List<FormIssue> issues(String path) {
+    List<FormIssue> issues(FieldPath path) {
         List<FormIssue> list = new ArrayList<>();
         if (field.required() && editor.size() == 0) {
             list.add(FormIssue.required(path, label()));

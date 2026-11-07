@@ -9,7 +9,7 @@ import net.minecraft.network.chat.contents.TranslatableContents;
  * <p>blocking 为 true 表示「本地可证非法」，必须先修正才能保存；为 false 表示仅提醒
  * （典型是未注册的第三方类型：原数据原样保留，由服务端做权威校验，不能挡住玩家保存其他字段）。
  */
-public record FormIssue(String path, Component label, Component message, boolean blocking) {
+public record FormIssue(FieldPath path, Component label, Component message, boolean blocking) {
 
     // 必填缺值的标准文案：字段行只用红色警示与必填角标表达，这段文案只留给保存提示等其它出口
     private static final String REQUIRED_KEY = TypeLabels.UI_PREFIX + "issue.required";
@@ -17,17 +17,17 @@ public record FormIssue(String path, Component label, Component message, boolean
     // 紧凑构造器：不允许空路径
     public FormIssue {
         if (path == null) {
-            path = "";
+            path = FieldPath.ROOT;
         }
     }
 
     // 阻塞项：本地可证非法，保存前必须修正
-    public static FormIssue error(String path, Component label, Component message) {
+    public static FormIssue error(FieldPath path, Component label, Component message) {
         return new FormIssue(path, label, message, true);
     }
 
     // 提醒项：不阻塞保存，只做提示
-    public static FormIssue warning(String path, Component label, Component message) {
+    public static FormIssue warning(FieldPath path, Component label, Component message) {
         return new FormIssue(path, label, message, false);
     }
 
@@ -38,7 +38,7 @@ public record FormIssue(String path, Component label, Component message, boolean
      * @param label 字段名
      * @return 必填缺值问题
      */
-    public static FormIssue required(String path, Component label) {
+    public static FormIssue required(FieldPath path, Component label) {
         return error(path, label, Component.translatable(REQUIRED_KEY));
     }
 
@@ -48,10 +48,10 @@ public record FormIssue(String path, Component label, Component message, boolean
     }
 
     // 该问题是否属于指定路径或其子路径
-    public boolean matches(String otherPath) {
+    public boolean matches(FieldPath otherPath) {
         if (otherPath == null) {
             return false;
         }
-        return otherPath.equals(path) || otherPath.startsWith(path + ".");
+        return otherPath.isWithin(path);
     }
 }

@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiShellWidget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidgetShell;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
@@ -62,7 +63,7 @@ public final class UiConditionTreeSummary implements UiShellWidget, ConditionTre
     private static final int GUIDE_INSET = 6;
 
     // 展平后的可见行；node 为空表示空组合的占位行
-    private record Row(@Nullable ConditionNode node, String path, UiTreePath treePath, int depth, int parentIndex,
+    private record Row(@Nullable ConditionNode node, FieldPath path, UiTreePath treePath, int depth, int parentIndex,
                        boolean incomplete, boolean overflow, boolean deep) {
     }
 
@@ -72,16 +73,16 @@ public final class UiConditionTreeSummary implements UiShellWidget, ConditionTre
     private final UiWidgetShell shell = new UiWidgetShell(this, this::invalidateInteraction);
     private final List<Row> rows = new ArrayList<>();
     // 与可见行分开维护：折叠只影响 rows，不改变节点计数与违规标记
-    private final Map<String, Row> allNodes = new HashMap<>();
+    private final Map<FieldPath, Row> allNodes = new HashMap<>();
     private UiTreeViewState view = UiTreeViewState.EMPTY;
     private ConditionTreeViewModel viewModel = new ConditionTreeViewModel();
     private @Nullable ConditionTreeProjection projection;
     private List<UiTreeProjection.Entry<Row>> navigationRows = List.of();
     private final List<ConditionTreeInspection.Issue> issues = new ArrayList<>();
     // 按表达式扫描一次算出，绘制时按路径查表，避免逐行遍历 issues
-    private final Set<String> flaggedPaths = new HashSet<>();
+    private final Set<FieldPath> flaggedPaths = new HashSet<>();
     // 键为节点路径，值已按行宽裁剪；表达式、注入选项、语言、字体或行宽变化时整批失效
-    private final Map<String, String> rowLabels = new HashMap<>();
+    private final Map<FieldPath, String> rowLabels = new HashMap<>();
     private int rowLabelsEpoch = -1;
     private @Nullable Font rowLabelsFont;
     private @Nullable Object rowLabelsLanguage;
@@ -106,7 +107,7 @@ public final class UiConditionTreeSummary implements UiShellWidget, ConditionTre
     // 宿主注入；为空时叶行只显示条件名
     private @Nullable Function<ConditionNode.Leaf, Component> leafDetail;
     // 参数为节点的树路径
-    private @Nullable Consumer<String> onOpenCanvas;
+    private @Nullable Consumer<FieldPath> onOpenCanvas;
     // 禁用时拒绝导航与进入画布
 
     /** {@inheritDoc} */
@@ -135,7 +136,7 @@ public final class UiConditionTreeSummary implements UiShellWidget, ConditionTre
      *
      * @param handler 接收节点树路径的回调
      */
-    public UiConditionTreeSummary setOnOpenCanvas(Consumer<String> handler) {
+    public UiConditionTreeSummary setOnOpenCanvas(Consumer<FieldPath> handler) {
         this.onOpenCanvas = handler;
         return this;
     }
@@ -272,7 +273,7 @@ public final class UiConditionTreeSummary implements UiShellWidget, ConditionTre
      * @return 节点路径；无选中时为 null
      */
     @Override
-    public @Nullable String selectedPath() {
+    public @Nullable FieldPath selectedPath() {
         return view.selected() == null ? null : ConditionTreeNodes.jsonPath(expression.root(), view.selected(), ConditionTreeContract.ROOT_PATH);
     }
 
@@ -312,7 +313,7 @@ public final class UiConditionTreeSummary implements UiShellWidget, ConditionTre
      * @param path 条件树路径；null 清除选中
      */
     @Override
-    public void selectPath(@Nullable String path) {
+    public void selectPath(@Nullable FieldPath path) {
         if (path == null) {
             view = view.select(null);
             return;
@@ -363,7 +364,7 @@ public final class UiConditionTreeSummary implements UiShellWidget, ConditionTre
             allNodes.clear();
             for (var entry : next.structure().entries()) {
                 var info = next.info(entry.path());
-                String json = next.jsonPath(entry.path());
+                FieldPath json = next.jsonPath(entry.path());
                 allNodes.put(json, new Row(entry.node(), json, entry.path(), entry.depth(), -1,
                         info.incomplete(), info.overflow(), info.deep()));
             }
@@ -384,7 +385,7 @@ public final class UiConditionTreeSummary implements UiShellWidget, ConditionTre
             nav.add(new UiTreeProjection.Entry<>(row, entry.path(), entry.depth(), entry.parent(), branch ? Math.max(1, entry.childCount()) : 0));
             if (branch && entry.childCount() == 0 && !view.collapsed().contains(entry.path())) {
                 UiTreePath slot = entry.path().child(0);
-                String json = ConditionTreeNodes.jsonPath(expression.root(), slot, ConditionTreeContract.ROOT_PATH);
+                FieldPath json = ConditionTreeNodes.jsonPath(expression.root(), slot, ConditionTreeContract.ROOT_PATH);
                 Row placeholder = new Row(null, json, slot, entry.depth() + 1, rows.size() - 1, false, false, false);
                 rows.add(placeholder);
                 nav.add(new UiTreeProjection.Entry<>(placeholder, slot, entry.depth() + 1, entry.path(), 0));
@@ -411,9 +412,9 @@ public final class UiConditionTreeSummary implements UiShellWidget, ConditionTre
         if (issues.isEmpty()) {
             return;
         }
-        for (String candidate : allNodes.keySet()) {
+        for (FieldPath candidate : allNodes.keySet()) {
             for (ConditionTreeInspection.Issue issue : issues) {
-                if (issue.path().equals(candidate) || issue.path().startsWith(candidate + ".")) {
+                if (issue.path().isWithin(candidate)) {
                     flaggedPaths.add(candidate);
                     break;
                 }
@@ -421,14 +422,14 @@ public final class UiConditionTreeSummary implements UiShellWidget, ConditionTre
         }
     }
 
-    private boolean unfold(String path) {
+    private boolean unfold(FieldPath path) {
         UiTreePath tree = ConditionTreeNodes.path(path);
         if (tree == null || !view.collapsed().contains(tree)) return false;
         view = view.fold(tree, false);
         return true;
     }
 
-    private void fold(String path) {
+    private void fold(FieldPath path) {
         UiTreePath tree = ConditionTreeNodes.path(path);
         if (tree != null) view = view.fold(tree, true);
     }
@@ -443,7 +444,7 @@ public final class UiConditionTreeSummary implements UiShellWidget, ConditionTre
     }
 
     // 路径对应的可见行下标，未找到返回 -1
-    private int indexOfPath(String path) {
+    private int indexOfPath(FieldPath path) {
         for (int i = 0; i < rows.size(); i++) {
             if (rows.get(i).path().equals(path)) {
                 return i;
@@ -614,9 +615,9 @@ public final class UiConditionTreeSummary implements UiShellWidget, ConditionTre
     // ---- 输入：只做导航与进入画布 ----
 
     // 选中并进入画布：只回调宿主，不在摘要内改变结构
-    private void openCanvas(String path) {
+    private void openCanvas(FieldPath path) {
         view = view.select(ConditionTreeNodes.path(path));
-        Consumer<String> handler = onOpenCanvas;
+        Consumer<FieldPath> handler = onOpenCanvas;
         if (handler != null) {
             handler.accept(path);
         }

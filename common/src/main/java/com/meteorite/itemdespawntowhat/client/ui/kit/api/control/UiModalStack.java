@@ -131,6 +131,7 @@ public final class UiModalStack implements UiWidget, UiLayoutSource {
 
     // 压入一个弹窗
     public UiModal push(UiModal modal) {
+        modal.prepareUi();
         modal.setCloseHandler(this::remove);
         modal.inputScope().focus().setListener(focusListener);
         modals.add(modal);
@@ -166,8 +167,9 @@ public final class UiModalStack implements UiWidget, UiLayoutSource {
         if (modals.remove(modal)) {
             presentations.remove(modal);
             refreshLayers();
-            onScopeChanged.run();
             modal.closed();
+            prepareUi();
+            onScopeChanged.run();
             relayout();
             refreshFocus();
         }
@@ -181,6 +183,11 @@ public final class UiModalStack implements UiWidget, UiLayoutSource {
         onScopeChanged.run();
         closing.reversed().forEach(UiModal::closed);
 
+    }
+
+    /** 在宿主确定输入域与命中前准备所有呈现中的模态。 */
+    public void prepareUi() {
+        for (UiModal modal : List.copyOf(modals)) modal.prepareUi();
     }
 
     // 推进淡入动画，每帧调用一次

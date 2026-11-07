@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.ConditionLimits;
@@ -41,7 +42,7 @@ public final class ConditionTreeInspection {
     }
 
     /** 一条违规项：种类、违规节点的 JSON 路径与可直接展示的文本；由结构检查产出，调用方只读。 */
-    public record Issue(IssueKind kind, String path, Component label) {
+    public record Issue(IssueKind kind, FieldPath path, Component label) {
     }
 
     // 分组是否为空（空组合或空 NOT 视为结构不完整）
@@ -76,7 +77,7 @@ public final class ConditionTreeInspection {
     }
 
     // 单个节点产生的违规项（按种类顺序追加，供两种渲染共同使用）
-    public static List<Issue> nodeIssues(ConditionNode node, String path, int depth, int nodeOrdinal, int leafOrdinal) {
+    public static List<Issue> nodeIssues(ConditionNode node, FieldPath path, int depth, int nodeOrdinal, int leafOrdinal) {
         List<Issue> issues = new ArrayList<>();
         if (isIncomplete(node)) {
             issues.add(new Issue(IssueKind.INCOMPLETE_GROUP, path,

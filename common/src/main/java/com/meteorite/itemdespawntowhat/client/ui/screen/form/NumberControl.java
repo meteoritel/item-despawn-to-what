@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
 import java.util.function.Consumer;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
@@ -458,7 +459,7 @@ final class NumberControl extends FormControl {
     }
 
     @Override
-    List<FormIssue> issues(String path) {
+    List<FormIssue> issues(FieldPath path) {
         String text = input.value().trim();
         if (text.isEmpty()) {
             if (field.required()) {
@@ -524,7 +525,7 @@ final class NumberControl extends FormControl {
     }
 
     @Override
-    @Nullable UiFocusTarget revealPath(String path, String basePath) {
+    @Nullable UiFocusTarget revealPath(FieldPath path, FieldPath basePath) {
         return path.equals(basePath) ? input : null;
     }
 

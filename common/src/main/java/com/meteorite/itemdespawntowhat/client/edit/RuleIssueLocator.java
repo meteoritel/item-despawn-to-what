@@ -57,26 +57,22 @@ public final class RuleIssueLocator {
             List<ResolvedStep> resolved = new ArrayList<>(steps.size());
             JsonElement current = draft;
             for (AnchorStep step : steps) {
-                try {
-                    JsonElement container = member(current, step.name());
-                    if (step.index() < 0) {
-                        resolved.add(new ResolvedStep(step.name(), -1, container));
-                        current = container;
-                        continue;
-                    }
-                    int index = matchIndex(container, step.index(), step.identity());
-                    JsonElement element = elementAt(container, index);
-                    resolved.add(new ResolvedStep(step.name(), index, element));
-                    current = element;
-                } catch (RuntimeException error) {
-                    break;
+                JsonElement container = step.name().isEmpty() ? current : member(current, step.name());
+                if (step.index() < 0) {
+                    resolved.add(new ResolvedStep(step.name(), -1, container));
+                    current = container;
+                    continue;
                 }
+                int index = matchIndex(container, step.index(), step.identity());
+                JsonElement element = elementAt(container, index);
+                resolved.add(new ResolvedStep(step.name(), index, element));
+                current = element;
             }
             int candidateIndex = -1;
             String candidateId = null;
             int effectIndex = -1;
             String effectType = null;
-            String conditionPath = null;
+            FieldPath conditionPath = null;
             for (int i = 0; i < resolved.size(); i++) {
                 ResolvedStep step = resolved.get(i);
                 if (step.index() < 0) {
@@ -109,10 +105,10 @@ public final class RuleIssueLocator {
      * <p>{@code rawPath} 是服务端给的原始路径；{@code currentPath} 是按当前草稿重算的路径，
      * 界面可直接用它高亮对应字段。
      */
-    public record Location(String ruleId, Tab tab, String rawPath, String currentPath,
+    public record Location(String ruleId, Tab tab, String rawPath, FieldPath currentPath,
                            @Nullable String candidateId, int candidateIndex,
                            @Nullable String effectType, int effectIndex,
-                           @Nullable String conditionPath) {
+                           @Nullable FieldPath conditionPath) {
 
         public boolean known() {
             return rawPath != null && !rawPath.isBlank();
@@ -133,29 +129,29 @@ public final class RuleIssueLocator {
      */
     public static IssueAnchor anchor(@Nullable String ruleId, @Nullable String fieldPath, @Nullable JsonObject draft) {
         String path = fieldPath == null ? "" : fieldPath;
-        List<DraftPaths.Segment> segments;
+        FieldPath parsed;
         try {
-            segments = DraftPaths.parse(path);
-        } catch (RuntimeException error) {
-            segments = List.of();
+            parsed = FieldPath.parse(path);
+        } catch (IllegalArgumentException invalid) {
+            return new IssueAnchor(ruleId == null ? "" : ruleId, path, List.of(), Tab.INFO);
         }
-        List<AnchorStep> steps = new ArrayList<>(segments.size());
+        List<AnchorStep> steps = new ArrayList<>();
         JsonElement current = draft;
-        for (DraftPaths.Segment segment : segments) {
-            try {
-                JsonElement container = member(current, segment.name());
-                if (!segment.hasIndex()) {
-                    steps.add(new AnchorStep(segment.name(), -1, null));
-                    current = container;
-                    continue;
-                }
-                steps.add(new AnchorStep(segment.name(), segment.index(), identityAt(container, segment.index())));
-                current = elementAt(container, segment.index());
-            } catch (RuntimeException error) {
-                break;
+        List<FieldPath.Segment> segments = parsed.segments();
+        for (int cursor = 0; cursor < segments.size(); cursor++) {
+            FieldPath.Segment segment = segments.get(cursor);
+            String name = segment instanceof FieldPath.Key(var key) ? key : "";
+            JsonElement container = name.isEmpty() ? current : member(current, name);
+            int index = -1;
+            if (segment instanceof FieldPath.Index(var item)) index = item;
+            else if (cursor + 1 < segments.size() && segments.get(cursor + 1) instanceof FieldPath.Index(var item)) {
+                index = item;
+                cursor++;
             }
+            steps.add(new AnchorStep(name, index, index < 0 ? null : identityAt(container, index)));
+            current = index < 0 ? container : elementAt(container, index);
         }
-        return new IssueAnchor(ruleId == null ? "" : ruleId, path, List.copyOf(steps), tabOf(path));
+        return new IssueAnchor(ruleId == null ? "" : ruleId, path, List.copyOf(steps), tabOf(parsed));
     }
 
     // 批量记录同一规则的问题锚点
@@ -172,17 +168,10 @@ public final class RuleIssueLocator {
     }
 
     // 问题区映射：只按路径首段归类，未知首段落 INFO
-    public static Tab tabOf(@Nullable String fieldPath) {
-        List<DraftPaths.Segment> segments;
-        try {
-            segments = DraftPaths.parse(fieldPath == null ? "" : fieldPath);
-        } catch (RuntimeException error) {
-            return Tab.INFO;
-        }
-        if (segments.isEmpty()) {
-            return Tab.INFO;
-        }
-        return switch (segments.getFirst().name()) {
+    public static Tab tabOf(FieldPath path) {
+        String root = path.firstKey();
+        if (root == null) return Tab.INFO;
+        return switch (root) {
             case RuleFields.SOURCE -> Tab.SOURCE;
             case RuleFields.CONDITIONS -> Tab.CONDITIONS;
             case RuleFields.EFFECTS, RuleFields.OUTCOMES -> Tab.RESULTS;
@@ -243,22 +232,14 @@ public final class RuleIssueLocator {
     }
 
     // 把前 count 个已解析步骤渲染成路径
-    private static String render(List<ResolvedStep> resolved, int count) {
-        StringBuilder builder = new StringBuilder();
-        for (int i = 0; i < count && i < resolved.size(); i++) {
+    private static FieldPath render(List<ResolvedStep> resolved, int count) {
+        FieldPath path = FieldPath.ROOT;
+        for (int i = 0; i < count; i++) {
             ResolvedStep step = resolved.get(i);
-            if (step.name().isEmpty()) {
-                continue;
-            }
-            if (!builder.isEmpty()) {
-                builder.append('.');
-            }
-            builder.append(step.name());
-            if (step.index() >= 0) {
-                builder.append('[').append(step.index()).append(']');
-            }
+            if (!step.name().isEmpty()) path = path.child(step.name());
+            if (step.index() >= 0) path = path.index(step.index());
         }
-        return builder.toString();
+        return path;
     }
 
     // 转对象（可能为 null）

@@ -17,7 +17,7 @@ import org.jetbrains.annotations.Nullable;
  * 规则草稿：original（服务器基线）/ working（工作副本）/ dirty 判断 / 删除标记。
  * <p>JSON 是唯一事实来源：草稿不建立与后端 record 平行的强类型模型，
  * 因此未识别字段与第三方扩展字段都能原样保留。通用字段通过
- * {@link #valueAt(String)}、{@link #setAt(String, RuleValue)} 与 {@link #removeAt(String)} 统一访问；
+ * {@link #valueAt(FieldPath)}、{@link #setAt(FieldPath, RuleValue)} 与 {@link #removeAt(FieldPath)} 统一访问；
  * 只有用户显式做结构调整（树编辑器整体变更）时才调用 {@link #setConditions} 整体替换。
  * <p>路径语法：以 {@code .} 分隔字段名，数组下标写在字段名后的方括号中，
  * 例如 {@code conditions.terms[0].condition}、{@code effects[2].chance}。
@@ -138,20 +138,20 @@ public final class RuleDraft {
     // ---- 路径级读写（保留未识别字段的关键） ----
 
     // 按路径读取原始元素（包内私有：界面请使用 valueAt）
-    private @Nullable JsonElement readAt(String path) {
-        return read(working, parsePath(path));
+    private @Nullable JsonElement readAt(FieldPath path) {
+        return DraftPaths.readAt(working, path);
     }
 
     // 按路径写入原始元素（包内私有：界面请使用 setAt）
-    private boolean writeAt(String path, JsonElement value) {
+    private boolean writeAt(FieldPath path, JsonElement value) {
         // 与现有内容一致视为已写入：无变化操作不应产生撤销记录
-        if (!isRootPath(path)) {
+        if (!path.isRoot()) {
             JsonElement current = readAt(path);
             if (current != null && current.equals(value)) {
                 return true;
             }
         }
-        boolean written = write(working, parsePath(path), value);
+        boolean written = DraftPaths.write(working, path, value);
         if (written) {
             this.mutations++;
         }
@@ -161,8 +161,8 @@ public final class RuleDraft {
     /**
      * 按路径删除，路径不存在返回 false
      */
-    public boolean removeAt(String path) {
-        boolean removed = remove(working, parsePath(path));
+    public boolean removeAt(FieldPath path) {
+        boolean removed = DraftPaths.remove(working, path);
         if (removed) {
             this.mutations++;
         }
@@ -172,7 +172,7 @@ public final class RuleDraft {
     /**
      * 按路径读取值；路径不存在返回 null
      */
-    public @Nullable RuleValue valueAt(String path) {
+    public @Nullable RuleValue valueAt(FieldPath path) {
         JsonElement element = readAt(path);
         return element == null ? null : RuleValue.wrap(element);
     }
@@ -180,8 +180,26 @@ public final class RuleDraft {
     /**
      * 按路径写入值
      */
-    public boolean setAt(String path, RuleValue value) {
+    public boolean setAt(FieldPath path, RuleValue value) {
         return writeAt(path, value.unwrap().deepCopy());
+    }
+
+    /** 预先确认字段目标可写；只允许最终字段新增，中间容器必须已存在。 */
+    public boolean canSetAt(FieldPath path) {
+        return DraftPaths.canWrite(working, path);
+    }
+
+    /** 明确追加列表成员；缺席列表在此创建，已有非列表值保持原样并返回 false。 */
+    public boolean appendToList(FieldPath path, RuleValue value) {
+        JsonElement existing = readAt(path);
+        JsonArray array;
+        if (existing instanceof JsonArray list) array = list;
+        else if (existing == null && canSetAt(path)) array = new JsonArray();
+        else return false;
+        array.add(value.unwrap().deepCopy());
+        if (existing == null) DraftPaths.write(working, path, array);
+        mutations++;
+        return true;
     }
 
     // ---- 条件树 ----
@@ -189,7 +207,7 @@ public final class RuleDraft {
     /**
      * 任意位置条件树的值视图；path 为空表示规则级 conditions
      */
-    public @Nullable RuleValue conditionsValueAt(String path) {
+    public @Nullable RuleValue conditionsValueAt(FieldPath path) {
         JsonElement raw = conditionsElementAt(path);
         return raw == null ? null : RuleValue.wrap(raw);
     }
@@ -198,28 +216,28 @@ public final class RuleDraft {
      * 解码可续编的条件草稿；无法识别的形状或类型返回 null，调用方保留原始 JSON。
      */
     public @Nullable ConditionExpression conditionsOrNull(TypeRegistry<ConditionType<?>> conditionTypes) {
-        return conditionsAt("", conditionTypes);
+        return conditionsAt(FieldPath.ROOT, conditionTypes);
     }
 
     /**
      * 整体替换条件树：空表达式时删除 conditions 字段（契约要求不得输出 null）
      */
     public boolean setConditions(ConditionExpression expression, TypeRegistry<ConditionType<?>> conditionTypes) {
-        return setConditionsAt("", expression, conditionTypes);
+        return setConditionsAt(FieldPath.ROOT, expression, conditionTypes);
     }
 
     // ---- 规则级条件树 ----
 
     // 原始条件元素（包内私有：界面请使用 conditionsValueAt）
-    private @Nullable JsonElement conditionsElementAt(String path) {
-        JsonElement raw = isRootPath(path) ? working.get(RuleFields.CONDITIONS) : readAt(path);
+    private @Nullable JsonElement conditionsElementAt(FieldPath path) {
+        JsonElement raw = path.isRoot() ? working.get(RuleFields.CONDITIONS) : readAt(path);
         return raw == null || raw.isJsonNull() ? null : raw;
     }
 
     /**
      * 解码任意位置的条件草稿；空组与缺项 NOT 保留，正式配置解码仍由后端严格执行。
      */
-    public @Nullable ConditionExpression conditionsAt(String path, TypeRegistry<ConditionType<?>> conditionTypes) {
+    public @Nullable ConditionExpression conditionsAt(FieldPath path, TypeRegistry<ConditionType<?>> conditionTypes) {
         JsonElement raw = conditionsElementAt(path);
         if (raw == null) {
             return ConditionExpression.EMPTY;
@@ -230,18 +248,18 @@ public final class RuleDraft {
     /**
      * 替换任意位置的条件树；空表达式删除该字段（契约要求不得输出 null）
      */
-    public boolean setConditionsAt(String path, ConditionExpression expression, TypeRegistry<ConditionType<?>> conditionTypes) {
+    public boolean setConditionsAt(FieldPath path, ConditionExpression expression, TypeRegistry<ConditionType<?>> conditionTypes) {
         if (expression.isEmpty()) {
-            if (!isRootPath(path)) {
+            if (!path.isRoot()) {
                 return removeAt(path);
             }
-            return removeAt(RuleFields.CONDITIONS);
+            return removeAt(FieldPath.key(RuleFields.CONDITIONS));
         }
         JsonElement encoded = encodeConditionsElement(expression, conditionTypes);
         if (encoded == null) {
             return false;
         }
-        if (isRootPath(path)) {
+        if (path.isRoot()) {
             if (encoded.equals(working.get(RuleFields.CONDITIONS))) {
                 return true;
             }
@@ -287,10 +305,6 @@ public final class RuleDraft {
         return new ConditionDraftCodec(conditionTypes).decode(raw);
     }
 
-    // 规则级 conditions 视作根路径
-    private static boolean isRootPath(@Nullable String path) {
-        return path == null || path.isBlank();
-    }
 
     /**
      * 用快照整体替换工作副本（撤销/重做与草稿恢复使用，不改变 original 基线）
@@ -313,34 +327,34 @@ public final class RuleDraft {
      * 效果数量：默认取顶层 effects
      */
     public int effectCount() {
-        return effectCountAt(RuleFields.EFFECTS);
+        return effectCountAt(FieldPath.key(RuleFields.EFFECTS));
     }
 
     /**
      * 移动效果位置（数组重排）
      */
     public boolean moveEffect(int from, int to) {
-        return moveInList(RuleFields.EFFECTS, from, to);
+        return moveInList(FieldPath.key(RuleFields.EFFECTS), from, to);
     }
 
     /**
      * 候选结果内效果列表的路径
      */
-    public static String candidateEffectsPath(int candidateIndex) {
-        return DraftPaths.child(DraftPaths.indexPath(RuleFields.OUTCOMES, candidateIndex), RuleFields.CANDIDATE_EFFECTS);
+    public static FieldPath candidateEffectsPath(int candidateIndex) {
+        return FieldPath.key(RuleFields.OUTCOMES).index(candidateIndex).child(RuleFields.CANDIDATE_EFFECTS);
     }
 
     /**
      * 任意位置效果数量（按原始数组长度计数，畸变元素同样占位，保证下标与 JSON 一致）
      */
-    public int effectCountAt(String listPath) {
+    public int effectCountAt(FieldPath listPath) {
         return readAt(listPath) instanceof JsonArray array ? array.size() : 0;
     }
 
     /**
      * 任意位置效果列表的值视图（保序，含非对象元素）；非数组返回空表
      */
-    public List<RuleValue> effectValuesAt(String listPath) {
+    public List<RuleValue> effectValuesAt(FieldPath listPath) {
         JsonElement raw = readAt(listPath);
         if (!(raw instanceof JsonArray array)) {
             return List.of();
@@ -355,7 +369,7 @@ public final class RuleDraft {
     /**
      * 任意列表路径的重排（effects / outcomes / outcomes[i].effects / conditions.terms 共用）
      */
-    public boolean moveInList(String listPath, int from, int to) {
+    public boolean moveInList(FieldPath listPath, int from, int to) {
         if (from == to) {
             return false;
         }
@@ -442,7 +456,7 @@ public final class RuleDraft {
      * 移动候选位置（数组重排）
      */
     public boolean moveOutcome(int from, int to) {
-        return moveInList(RuleFields.OUTCOMES, from, to);
+        return moveInList(FieldPath.key(RuleFields.OUTCOMES), from, to);
     }
 
     /**
@@ -499,30 +513,8 @@ public final class RuleDraft {
     }
 
     // 按路径读取元素：包内工具（DraftListInputs / EditSession）使用
-    @Nullable JsonElement elementAt(String path) {
-        return read(working, parsePath(path));
-    }
-
-    // ---- 路径解析与读写（实现见 DraftPaths，条件树与效果路径共用同一套语法） ----
-
-    // 解析路径：字段名 + 可选一个数组下标
-    private static List<DraftPaths.Segment> parsePath(@Nullable String path) {
-        return DraftPaths.parse(path);
-    }
-
-    // 按路径读取
-    private static @Nullable JsonElement read(@Nullable JsonElement root, List<DraftPaths.Segment> segments) {
-        return DraftPaths.read(root, segments);
-    }
-
-    // 按路径写入，必要时创建中间容器
-    private static boolean write(JsonObject root, List<DraftPaths.Segment> segments, JsonElement value) {
-        return DraftPaths.write(root, segments, value);
-    }
-
-    // 按路径删除
-    private static boolean remove(JsonObject root, List<DraftPaths.Segment> segments) {
-        return DraftPaths.remove(root, segments);
+    @Nullable JsonElement elementAt(FieldPath path) {
+        return DraftPaths.readAt(working, path);
     }
 
 }

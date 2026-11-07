@@ -9,7 +9,7 @@ import java.util.List;
 public final class RuleRequirements {
 
     /** 路径用于已有字段定位，标签使用宿主本地化 key。 */
-    public record Missing(String path, String labelKey) { }
+    public record Missing(FieldPath path, String labelKey) { }
 
     private static final String UI = TypeLabels.UI_PREFIX;
 
@@ -28,24 +28,24 @@ public final class RuleRequirements {
         List<Missing> result = new ArrayList<>();
         RuleValue source = mappingOf(rule == null ? null : rule.child("source"));
         if (itemsOf(source.child("items")).isEmpty()) {
-            result.add(new Missing(DraftPaths.child(RuleFields.SOURCE, RuleFields.SOURCE_ITEMS), UI + "rule.source.items"));
+            result.add(new Missing(FieldPath.key(RuleFields.SOURCE).child(RuleFields.SOURCE_ITEMS), UI + "rule.source.items"));
         }
-        boolean any = inspect(itemsOf(rule == null ? null : rule.child("effects")), "effects", result);
+        boolean any = inspect(itemsOf(rule == null ? null : rule.child("effects")), FieldPath.key(RuleFields.EFFECTS), result);
         List<RuleValue> outcomes = itemsOf(rule == null ? null : rule.child("outcomes"));
         for (int index = 0; index < outcomes.size(); index++) {
             RuleValue candidate = mappingOf(outcomes.get(index));
             any |= inspect(itemsOf(candidate.child("effects")),
-                    DraftPaths.child(DraftPaths.indexPath(RuleFields.OUTCOMES, index), RuleFields.CANDIDATE_EFFECTS),
+                    FieldPath.key(RuleFields.OUTCOMES).index(index).child(RuleFields.CANDIDATE_EFFECTS),
                     result);
         }
         if (!any) {
-            result.add(new Missing("effects", UI + "required.results"));
+            result.add(new Missing(FieldPath.key(RuleFields.EFFECTS), UI + "required.results"));
         }
         return List.copyOf(result);
     }
 
     // 逐个效果核对必填字段；返回是否存在产出（消耗类效果不算）
-    private static boolean inspect(List<RuleValue> actions, String path, List<Missing> missing) {
+    private static boolean inspect(List<RuleValue> actions, FieldPath path, List<Missing> missing) {
         boolean any = !actions.isEmpty();
         for (int index = 0; index < actions.size(); index++) {
             RuleValue action = mappingOf(actions.get(index));
@@ -62,7 +62,7 @@ public final class RuleRequirements {
                 default -> "";
             };
             if (!field.isEmpty() && text(action, field).isBlank()) {
-                missing.add(new Missing(DraftPaths.child(DraftPaths.indexPath(path, index), field),
+                missing.add(new Missing(path.index(index).child(field),
                         UI + "required." + field));
             }
         }

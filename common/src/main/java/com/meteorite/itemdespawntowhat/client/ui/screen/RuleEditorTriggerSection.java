@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
 import net.minecraft.client.gui.Font;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
@@ -73,13 +74,13 @@ final class RuleEditorTriggerSection {
             content.widgets.add(box);
         }
         if (RuleTriggers.allowsDelay(rule)) {
-            delayForm = forms.create(session, "", BuiltinEditorDescriptors.delayDescriptor());
+            delayForm = forms.create(session, FieldPath.ROOT, BuiltinEditorDescriptors.delayDescriptor());
             delayWindow = delayForm.field(RuleFields.TRIGGER_AFTER_SECONDS);
             content.forms.add(delayForm);
             content.widgets.add(delayForm);
         }
         TypeEditorDescriptor conditions = BuiltinEditorDescriptors.conditionsDescriptor();
-        conditionsForm = forms.create(session, "", conditions);
+        conditionsForm = forms.create(session, FieldPath.ROOT, conditions);
         conditionsForm.setLabelWidth(90);
         content.forms.add(conditionsForm);
         content.widgets.add(conditionsForm);
@@ -112,7 +113,7 @@ final class RuleEditorTriggerSection {
                 values.add(value);
             }
         }
-        commands.apply(EditSession.OP_SET_FIELD, edits -> edits.setAt(RuleFields.TRIGGERS, RuleTriggers.toArray(values)));
+        commands.apply(EditSession.OP_SET_FIELD, edits -> edits.setAt(FieldPath.key(RuleFields.TRIGGERS), RuleTriggers.toArray(values)));
     }
 
     int layoutTrigger(UiRect area) {

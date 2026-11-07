@@ -107,6 +107,7 @@ public final class UiModal implements UiWidget, UiInputContainer {
     private boolean visible = true;
     private Consumer<UiHistoryShortcut> onHistoryChanged = shortcut -> {
     };
+    private Runnable onPrepare = () -> { };
     private Runnable onClosed = () -> {
     };
 
@@ -119,6 +120,13 @@ public final class UiModal implements UiWidget, UiInputContainer {
         onClosed = callback;
         return this;
     }
+
+    /** 注册输入与呈现前的准备动作，由模态栈统一调用。 */
+    public void onPrepare(Runnable callback) {
+        onPrepare = Objects.requireNonNull(callback);
+    }
+
+    void prepareUi() { onPrepare.run(); }
 
     void closed() {
         onClosed.run();

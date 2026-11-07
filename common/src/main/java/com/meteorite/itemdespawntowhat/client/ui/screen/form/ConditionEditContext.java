@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
 import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionTreeViewModel;
 import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionTreeContract;
 import org.jetbrains.annotations.Nullable;
@@ -20,27 +21,26 @@ public interface ConditionEditContext {
      *
      * @return 条件字段的绝对草稿路径
      */
-    String scope();
+    FieldPath scope();
 
     /**
-     * 条件字段所属对象在草稿中的绝对路径；规则级条件为空串。
+     * 条件字段所属对象在草稿中的绝对路径；规则级条件为根位置。
      *
-     * @return 所属对象的绝对草稿路径，规则级为空串
+     * @return 所属对象的绝对草稿路径，规则级为根位置
      */
-    String ownerPath();
+    FieldPath ownerPath();
 
     /**
      * 把条件树内部坐标转换为本上下文的草稿绝对路径。
      *
-     * <p>合法输入只有两种：恰好等于 {@link ConditionTreeContract#ROOT_PATH}，或以
-     * {@code ROOT_PATH + "."} 开头。判定按点分隔的完整段边界，不接受 {@code conditionsExtra}
-     * 这类仅字符串前缀相同的坐标；其余输入一律返回 null，不退回作用域根。</p>
+     * <p>树内坐标须属于 {@link ConditionTreeContract#ROOT_PATH} 作用域，按完整位置段
+     * 替换作用域，数组与字段后继保持原样；作用域外的位置返回 null。</p>
      *
      * @param treePath 摘要给出的树内相对坐标，以 {@link ConditionTreeContract#ROOT_PATH} 为根
      * @return 本上下文下对应的绝对草稿路径；坐标不合法时返回 null
      */
     @Nullable
-    String absolutePath(String treePath);
+    FieldPath absolutePath(FieldPath treePath);
 
     /**
      * 打开本上下文对应的条件画布。
@@ -49,5 +49,5 @@ public interface ConditionEditContext {
      * @param viewModel 本字段的展示协调器，不持有绝对路径
      * @return 是否已打开画布
      */
-    boolean open(@Nullable String treePath, ConditionTreeViewModel viewModel);
+    boolean open(@Nullable FieldPath treePath, ConditionTreeViewModel viewModel);
 }

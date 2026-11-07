@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContainer;
@@ -7,7 +8,6 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiChildren;
 import java.util.function.Consumer;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
-import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
@@ -97,8 +97,8 @@ final class SublistControl extends FormControl implements UiInputContainer {
     }
 
     // 子项相对路径：字段名[下标]
-    private String childPath(int index) {
-        return DraftPaths.indexPath(field.name(), index);
+    private FieldPath childPath(int index) {
+        return FieldPath.key(field.name()).index(index);
     }
 
     @Override
@@ -212,7 +212,7 @@ final class SublistControl extends FormControl implements UiInputContainer {
     }
 
     @Override
-    List<FormIssue> issues(String path) {
+    List<FormIssue> issues(FieldPath path) {
         List<FormIssue> list = new ArrayList<>();
         for (FormView child : children) {
             list.addAll(child.issues());

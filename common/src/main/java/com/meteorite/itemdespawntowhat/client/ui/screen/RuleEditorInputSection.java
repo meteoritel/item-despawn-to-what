@@ -1,10 +1,10 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
 import net.minecraft.client.gui.Font;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
 import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDescriptors;
-import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
@@ -115,7 +115,7 @@ final class RuleEditorInputSection {
         if (sourceForm != null) sourceForm.field(RuleFields.SOURCE_EXCLUDE).setVisible(!SourceBlacklistPicker.sourceTags(shell.editingValue()).isEmpty());
     }
 
-    private FormView newForm(EditSession session, String basePath, TypeEditorDescriptor descriptor) {
+    private FormView newForm(EditSession session, FieldPath basePath, TypeEditorDescriptor descriptor) {
         FormView form = forms.create(session, basePath, descriptor);
         form.addFieldCommitted(path -> {
             if (form == sourceForm) {
@@ -132,12 +132,12 @@ final class RuleEditorInputSection {
 
     void buildInput(EditSession session) {
         RuleValue rule = session.root();
-        sourceForm = newForm(session, RuleFields.SOURCE, BuiltinEditorDescriptors.sourceDescriptor());
+        sourceForm = newForm(session, FieldPath.key(RuleFields.SOURCE), BuiltinEditorDescriptors.sourceDescriptor());
         sourceForm.field(RuleFields.SOURCE_ITEMS).hideLabel();
         // 卡片标题与列表空态已说明该行用途，悬停不再弹出字段提示遮挡列表
         sourceForm.field(RuleFields.SOURCE_ITEMS).suppressHintTooltip();
         sourceForm.addFieldWritten((draft, path, before) -> {
-            if (!path.equals(DraftPaths.child(RuleFields.SOURCE, RuleFields.SOURCE_ITEMS))) return;
+            if (!path.equals(FieldPath.key(RuleFields.SOURCE).child(RuleFields.SOURCE_ITEMS))) return;
             List<String> references = RuleValue.textItems(draft.valueAt(path));
             if (draft.root().has(RuleFields.SOURCE_COST)) {
                 draft.replaceWith(CatalystQuantities.withQuantities(draft.root(),
@@ -153,7 +153,7 @@ final class RuleEditorInputSection {
         {
             boolean custom = rule.has(RuleFields.SOURCE_COST);
             sourceCostButton.setVisible(!custom);
-            sourceCostForm = custom ? newForm(session, "", BuiltinEditorDescriptors.sourceCostDescriptor()) : null;
+            sourceCostForm = custom ? newForm(session, FieldPath.ROOT, BuiltinEditorDescriptors.sourceCostDescriptor()) : null;
             if (sourceCostForm != null) {
                 // 卡片上方已用「源物品消耗」说明字段含义，行内不再重复标签
                 sourceCostForm.field(RuleFields.SOURCE_COST).hideLabel();
@@ -178,25 +178,25 @@ final class RuleEditorInputSection {
         catalystToggle.setOnChanged(this::onCatalystToggle);
         content.widgets.add(catalystToggle);
         catalystForm = catalystEnabled || cost != null
-                ? newForm(session, RuleFields.CATALYST_COST, BuiltinEditorDescriptors.catalystCostDescriptor()) : null;
+                ? newForm(session, FieldPath.key(RuleFields.CATALYST_COST), BuiltinEditorDescriptors.catalystCostDescriptor()) : null;
         if (catalystForm != null) {
             catalystForm.field(RuleFields.CATALYST_ITEMS).setVisible(!catalystEnabled);
-            String consumePath = DraftPaths.child(RuleFields.CATALYST_COST, RuleFields.CONSUME_COUNTS);
+            FieldPath consumePath = FieldPath.key(RuleFields.CATALYST_COST).child(RuleFields.CONSUME_COUNTS);
             catalystForm.addFieldWritten((draft, path, before) -> {
                 EditorQuantityBindings.materializeCatalystInput(session, draft);
 
                 // 每轮消耗至少 1 件：写回后没有任何正数等同于不消耗，移除该表并关闭开关
                 if (consumePath.equals(path)
-                        && !CatalystQuantities.consumesCatalysts(draft.valueAt(RuleFields.CATALYST_COST))) {
+                        && !CatalystQuantities.consumesCatalysts(draft.valueAt(FieldPath.key(RuleFields.CATALYST_COST)))) {
                     draft.removeAt(consumePath);
                     return;
                 }
-                if (!path.equals(DraftPaths.child(RuleFields.CATALYST_COST, RuleFields.CATALYST_ITEMS))) return;
+                if (!path.equals(FieldPath.key(RuleFields.CATALYST_COST).child(RuleFields.CATALYST_ITEMS))) return;
                 List<String> references = RuleValue.textItems(draft.valueAt(path));
                 CatalystQuantities.reconcileQuantities(draft, references);
-                RuleValue current = draft.valueAt(RuleFields.CATALYST_COST);
+                RuleValue current = draft.valueAt(FieldPath.key(RuleFields.CATALYST_COST));
                 if (current != null && current.has(RuleFields.CONSUME_COUNTS)) {
-                    draft.setAt(RuleFields.CATALYST_COST, CatalystQuantities.withQuantities(current,
+                    draft.setAt(FieldPath.key(RuleFields.CATALYST_COST), CatalystQuantities.withQuantities(current,
                             RuleFields.CONSUME_COUNTS, references));
                 }
             });
@@ -216,12 +216,12 @@ final class RuleEditorInputSection {
         // 规则里已开启时仍保留开关，否则这个值在界面上既看不到也关不掉
         fluidConsumeToggle.setVisible(fluidConsume
                 || PresenceLeaves.hasRuleLevelPresence(rule, RuleEditorPageSupport.FLUID_PRESENT_ID));
-        fluidConsumeToggle.setOnChanged(checked -> commands.apply(EditSession.OP_SET_FIELD, edits -> edits.setAt(RuleFields.CONSUME_FLUID, RuleValue.flag(checked))));
+        fluidConsumeToggle.setOnChanged(checked -> commands.apply(EditSession.OP_SET_FIELD, edits -> edits.setAt(FieldPath.key(RuleFields.CONSUME_FLUID), RuleValue.flag(checked))));
         content.widgets.add(fluidConsumeToggle);
     }
 
     private boolean consumesCatalysts(EditSession session) {
-        return CatalystQuantities.consumesCatalysts(session.valueAt(RuleFields.CATALYST_COST));
+        return CatalystQuantities.consumesCatalysts(session.valueAt(FieldPath.key(RuleFields.CATALYST_COST)));
     }
 
     /** 催化剂卡片中与消耗绑定的行只在勾选「消耗催化剂」后显示。 */
@@ -235,8 +235,8 @@ final class RuleEditorInputSection {
         if (session == null) {
             return;
         }
-        commands.apply(EditSession.OP_SET_FIELD, edits -> edits.setAt(RuleFields.SOURCE_COST, CatalystQuantities.defaultQuantities(null,
-                RuleValue.textItems(edits.valueAt(DraftPaths.child(RuleFields.SOURCE, RuleFields.SOURCE_ITEMS))))));
+        commands.apply(EditSession.OP_SET_FIELD, edits -> edits.setAt(FieldPath.key(RuleFields.SOURCE_COST), CatalystQuantities.defaultQuantities(null,
+                RuleValue.textItems(edits.valueAt(FieldPath.key(RuleFields.SOURCE).child(RuleFields.SOURCE_ITEMS))))));
     }
 
     void onCatalystToggle(boolean checked) {
@@ -246,20 +246,20 @@ final class RuleEditorInputSection {
         }
         commands.apply(EditSession.OP_SET_FIELD, edits -> {
             EditorQuantityBindings.materializeCatalystInput(session, edits);
-            RuleValue cost = edits.valueAt(RuleFields.CATALYST_COST);
+            RuleValue cost = edits.valueAt(FieldPath.key(RuleFields.CATALYST_COST));
             if (cost == null || !cost.isMapping()) cost = RuleValue.mapping().build();
             if (!cost.has(RuleFields.CATALYST_ITEMS)) {
                 cost = RuleValue.mapping(cost).put(RuleFields.CATALYST_ITEMS,
                         RuleValue.textList(PresenceLeaves.ruleLevelCatalystItems(edits.root())).build()).build();
-                edits.setAt(RuleFields.CATALYST_COST, cost);
+                edits.setAt(FieldPath.key(RuleFields.CATALYST_COST), cost);
             }
             if (checked) {
                 RuleValue values = CatalystQuantities.withQuantities(cost, RuleFields.ITEM_COUNTS,
                         RuleValue.textItems(cost.child(RuleFields.CATALYST_ITEMS)))
                         .childOr(RuleFields.ITEM_COUNTS, RuleValue.mapping().build());
-                edits.setAt(DraftPaths.child(RuleFields.CATALYST_COST, RuleFields.CONSUME_COUNTS), values.deepCopy());
+                edits.setAt(FieldPath.key(RuleFields.CATALYST_COST).child(RuleFields.CONSUME_COUNTS), values.deepCopy());
             } else {
-                edits.removeAt(DraftPaths.child(RuleFields.CATALYST_COST, RuleFields.CONSUME_COUNTS));
+                edits.removeAt(FieldPath.key(RuleFields.CATALYST_COST).child(RuleFields.CONSUME_COUNTS));
             }
         });
     }
@@ -309,13 +309,13 @@ final class RuleEditorInputSection {
             if (checked) {
                 PresenceLeaves.addRuleLevelPresence(edits, type);
                 if (RuleEditorPageSupport.CATALYST_PRESENT_ID.equals(type) && !edits.root().has(RuleFields.CATALYST_COST)) {
-                    edits.setAt(RuleFields.CATALYST_COST, RuleValue.mapping()
+                    edits.setAt(FieldPath.key(RuleFields.CATALYST_COST), RuleValue.mapping()
                             .put(RuleFields.CATALYST_ITEMS, RuleValue.list().build())
                             .put(RuleFields.CATALYST_RADIUS, RuleValue.integer(CatalystCost.DEFAULT_RADIUS)).build());
                 }
             } else {
-                if (RuleEditorPageSupport.CATALYST_PRESENT_ID.equals(type)) edits.removeAt(RuleFields.CATALYST_COST);
-                else edits.removeAt(RuleFields.CONSUME_FLUID);
+                if (RuleEditorPageSupport.CATALYST_PRESENT_ID.equals(type)) edits.removeAt(FieldPath.key(RuleFields.CATALYST_COST));
+                else edits.removeAt(FieldPath.key(RuleFields.CONSUME_FLUID));
                 PresenceLeaves.removeRuleLevelPresence(edits, type);
             }
         });

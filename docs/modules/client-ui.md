@@ -184,11 +184,11 @@ flowchart LR
 
 控件消费键盘前，`FormView` 固定原行身份；合法的普通字段 Enter 经 `FormCommit` 收集、写入并接受原行，长文本保留换行，待输入原文由会话保存。回调卸载或替换原行后停止该行后续提交。PageUp/PageDown 由持焦子树先处理，未消费才翻动表单。嵌套对象、子列表、卡片和叶子面板复用相同成员派发，值写入和历史仍由原提交入口负责。
 
-`FormControl.draftValue` 与 `FormField.pendingValue` 只读取候选，不改变草稿、pending input 或接受基线。`finishInput` 只完成局部输入；`FormCommit` 在进入 `EditSession.apply` 前固定原行、路径、修订和候选。普通字段保留字段级历史，嵌套对象与子列表按合法子路径合并为一次复合字段提交；非法子字段保留原文，父容器沿当前草稿合并，未知字段、显式 null 与省略键保留原状。数值、数量和卡片的接受基线在写入后逐级同步。
+`FormControl.draftValue` 与 `FormField.pendingValue` 只读取候选，不改变草稿、pending input 或接受基线。`finishInput` 只完成局部输入；`FormCommit` 在进入 `EditSession.apply` 前固定原行、路径、修订和候选。普通字段保留字段级历史，嵌套对象与子列表按合法子路径合并为一次复合字段提交；非法子字段保留原文，写集在变更前预检，缺席父对象由所属表单明确组装；已有对象沿当前草稿合并，未知字段、未编辑的显式 null 与省略键保留原状。数值、数量和卡片的接受基线在写入后逐级同步。
 
 `addFieldWritten` 按注册顺序组合同次历史中的业务写入，`setRelatedEdit` 在写入前捕获分类等旧状态、在事务末应用关联更新。原行接受完成后才调用 `addFieldCommitted` 更新数量行、年龄显隐与数值窗口；`FormField.reload` 只重载受影响行。结构增删由提交层组织：先完成合法输入，再在同次历史内变更容器及输入路径，纯候选供应器只组装值。
 
-`addField` 返回 `FormField`，`setDescriptor` 返回有序句柄集合；固定描述符在装配时用 `field(name)` 取得必需行，动态闭包保留句柄。JSON 路径继续承担数据读写、历史迁移、问题定位与高亮。
+`addField` 返回 `FormField`，`setDescriptor` 返回有序句柄集合；固定描述符在装配时用 `field(name)` 取得必需行，动态闭包保留句柄。`FieldPath` 统一承担数据读写、历史迁移、问题定位与高亮；字段名作为字面键组合，条件坐标经 `ConditionTreeNodes` 与实际字段上下文转换。
 
 保存、分区和目标切换、返回、刷新及关闭进入 `RuleEditorEditPage.finish(reason)`。完成编辑先保留当前修订输入，再取消未释放预览、提交合法值并通知模型，最后卸载或重建；非法文本保留在会话并参与阻塞校验。快照身份变化前只保留输入；重绑后旧修订控件重新装载并退出该次提交。放弃草稿先释放旧页面再清除记录，关闭与 removed 共用外壳的一次释放标记。保存与应用不关闭编辑页：回执到达后页面留在原处，用户退出、工作区释放或外部切屏才关屏。
 
@@ -275,7 +275,7 @@ resize 保留已有页面、文本控件与编辑会话，只重排几何；单�
 - **新增字段控件**：实现 `FormControl` 子类，并在 `FormControlRegistry` 的穷举 switch 增加工厂分支。数值字段先走 `FormControl#create` 的“滑杆 + 行内精确输入”，域元数据不足时才落到注册表；第三方只读描述符使用显式 `RAW_JSON` 类型；新增已知字段漏接控件会在编译期报错。字段归类用 `EditorField` 的分类谓词（列表、数值、说明行、可带标签等）判断，不对 `EditorFieldType` 做 switch。
 - **嵌套对象列表的卡片形态**：参数声明标 `ParamShape.CARD_LIST` 时，`ParamProjection` 把该列表投影成 `EditorField.cardList`，界面交给 `CardListControl`。控件自绘字段标题与「添加」入口，每条元素是一张卡片：首行是目录引用胶囊（图标 + 显示名，点开目录替换单个条目），下方是数值行里并排的数值控件。点「添加」以多选目录勾选引用：目录里把当前条目回填为已勾选，确认后按勾选结果补齐或移除卡片，保留卡片的数值与省略字段保持原样，新卡片采用声明默认值；更新时以原对象为底稿保留扩展字段。非对象项、缺失或非法引用项保留在原有相对顺序，新增项追加；单张替换只修改目标卡片的引用。
 - **目录接收与提交**：`CatalogSelectionBinding` 表达本次单选／多选、不可变初始引用与完整快照确认出口。普通引用字段按 `EditorField.isMultiCatalog` 声明模式，卡片替换与集合编辑按操作声明。表单完成合法待提交输入后捕获固定修订、所属行与目标路径；目录只修改临时选择，确认时核对行、路径、草稿修订及活动会话。空快照表示清空可编辑选择，取消与 Esc 只关闭目录；未变化的选择保留原始值。字段、关联数量与存在条件继续沿同一 `FormCommit`／`EditSession` 回调写入，共享一条内容历史；外部组件可在确认出口转换结果并使用现有草稿入口。
-- **目录宿主**：平铺目录与源黑名单选择器经 `CatalogViewState` 按内容、导航、状态分组发布不可变视图。未变化的组复用实例，网格分别应用条目与选择，选择变化保持布局；固定策略在装配时注入。`CatalogDisplayQuery` 统一搜索、过滤、切页与页号夹紧，翻页复用查询结果；黑名单保留源标签组及组内子页，当前页才建立完整条目，空搜索只读成员键。焦点在列表刷新时按条目 id 恢复。
+- **目录宿主**：`RuleEditorPanelFactory.CatalogPicker` 与 `SourceBlacklistPicker.Picker` 各自持有查询、页请求、完整临时选择与当前 `View`。搜索、翻页、范围与选择命令在返回前完成本地查询和发布，确认读取宿主最新选择。`CatalogDisplayQuery` 统一搜索和分页；平铺目录保留网络目录与标签合并，黑名单保留源标签组、空组和组内子页，当前页才展开条目与图标。宿主推进内容语义代次，选择或资格变化保持该代次。`UiCatalogGrid.applyView` 显式接纳快照，直接读取其中的条目、选择、导航和状态；搜索框原文、选区、光标、滚动、几何与绘制缓存仍由网格持有。同页内容更新按条目 id 恢复光标，页、范围或接受查询变化重置列表位置。`EditorShell.prepareUi` 通过模态栈在输入域与命中确定前接纳工作区、语言、资源及可编辑变化；首次打开先准备再布局与收集焦点。渲染、布局快照与旁白读取已发布视图，重试继续使用显式目录请求。
 - **目录名称与引用**：展示条目持有已解析的 `TaggedId`，图标、标签预览和策略直接消费引用值。目录 label 按类型解释，subLabel 为来源原文；已选内容复用同一名称策略，缺键使用资源路径可读名称，技术 id 保留给悬停与搜索。取舍见 [ADR-0059](../adr/0059-catalog-label-policy.md)。
 - **新增界面标记图标**：标记图集是 `textures/gui/editor/marks.png`，由 `tools/image_generator/generate-editor-marks.py` 生成，字形为纯白、按调用方给定的主题色染色；在 `theme` 的 `UiMarkIcons.Mark` 登记行号与尺寸，用 `UiMarkIcons.icon(mark, color)` 取得图标后交给控件的 `setIcon` 或直接渲染。
 - **新增事件图标**：事件图集是 `textures/gui/editor/events.png`，单列五行、每格 32×32 彩色成品，按 16 像素槽位缩放绘制，不做主题染色；图集为手工美术，增改图标直接替换贴图并保持格子尺寸与行序；在 `theme` 的 `UiEventIcons.Event` 登记行号，动作到事件的判定收在 `shared/EventPreviewIcons`，新增天象类动作在那里补一支分支。

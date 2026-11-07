@@ -34,7 +34,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
-import java.util.function.Supplier;
 
 import net.minecraft.Util;
 import net.minecraft.client.gui.Font;
@@ -124,16 +123,22 @@ public final class UiCatalogGrid implements UiShellWidget, UiFooterHost, UiLayou
     public record Entry(String id, TaggedId reference, Component label, @Nullable Component subLabel, @Nullable UiIcon icon) {
     }
 
-    /** 内容与选择分别使用稳定列表；选择变化不重建条目。 */
-    public record Content(List<Entry> entries, List<String> selection) { }
+    /** 内容代次由宿主推进；发布时冻结集合，选择变化保持内容代次。 */
+    public record Content(long generation, List<Entry> entries, List<String> selection) {
+        /** 冻结本次发布的内容与选择。 */
+        public Content {
+            entries = List.copyOf(entries);
+            selection = List.copyOf(selection);
+        }
+    }
 
     /** 页信息与范围；前后页能力由页号和页数派生。 */
-    public record Navigation(Scope scope, int page, int pageCount, @Nullable Component label) { }
+    public record Navigation(Scope scope, String filter, int page, int pageCount, @Nullable Component label) { }
 
     /** 加载、错误与可编辑状态独立于内容发布。 */
     public record Status(boolean loading, boolean enabled, @Nullable Component note, @Nullable Component error) { }
 
-    /** 宿主按变化组发布的不可变视图；未变化的组复用实例。 */
+    /** 宿主发布的不可变视图；网格直接读取同一份业务状态。 */
     public record View(Content content, Navigation navigation, Status status) { }
 
     /**
@@ -193,18 +198,13 @@ public final class UiCatalogGrid implements UiShellWidget, UiFooterHost, UiLayou
     private final Texts texts;
     private final Listener listener;
     private final UiTextInput search;
-    private final List<Entry> entries = new ArrayList<>();
-    // 条目集合代次：状态文案的「空结果」分支与列表内容都只随集合替换变化
-    private int entriesVersion;
-    private final List<String> selection = new ArrayList<>();
+    private View view = new View(new Content(0, List.of(), List.of()),
+            new Navigation(Scope.BOTH, "", 0, 0, null), new Status(false, true, null, null));
     // 行标签文本缓存：条目对象由宿主目录缓存持有，命中时不再把 Component 逐帧取成 String
     private final Map<Entry, String> rowLabels = new IdentityHashMap<>();
     private @Nullable Object rowLabelsLanguage;
 
-    private @Nullable Supplier<View> viewSource;
-    private @Nullable View sourceCache;
     private @Nullable EntryPolicy policy;
-    private Scope scope = Scope.BOTH;
     private @Nullable Runnable onRetry;
     private Function<String, Component> tooltipSuffix = ignored -> null;
     private Function<String, @Nullable Component> unavailableReason = ignored -> null;
@@ -240,14 +240,14 @@ public final class UiCatalogGrid implements UiShellWidget, UiFooterHost, UiLayou
     private @Nullable Object layoutPolicy;
     private @Nullable Object layoutLanguage;
     // 页码文本：页码与总页数才决定内容，缓存后布局与绘制都不再每帧构造 Component；
-    // 初值对应 page=0、pageCount=0，与 setPage 从未被调用时的旧页码文本一致。
+    // 初值对应尚未接纳目录结果时的第一页。
     private String pageNumber = "1";
 
     // 状态文案缓存：只有真实依赖（错误/加载/空结果/页码标签/附加说明/已选数/语言）变化才重建
     private @Nullable Component statusTextCache;
     private @Nullable Component statusTextError;
     private boolean statusTextExplicitLoading;
-    private int statusTextEntriesVersion = -1;
+    private long statusTextEntriesVersion = -1;
     private @Nullable Component statusTextPageLabel;
     private @Nullable Component statusTextNote;
     private int statusTextSelection = -1;
@@ -268,29 +268,11 @@ public final class UiCatalogGrid implements UiShellWidget, UiFooterHost, UiLayou
     // 焦点格矩形按值复用：静止帧不重复分配
     private UiRect focusedCellRect = new UiRect(0, 0, 0, 0);
 
-    private boolean explicitLoading;
-    private @Nullable Component error;
-    private @Nullable Component statusNote;
-    private @Nullable Component pageLabel;
     private boolean searchActive;
-    private int page;
-    private int pageCount;
-    private boolean canPrev = true;
-    private boolean canNext = true;
     private final UiScrollView scroll = new UiScrollView();
     private int cursor = -1;
     private int hoveredIndex = -1;
     private int hoverScrollTicks;
-
-    // 宿主可显示标签分组的页名，普通目录继续使用数字页码。
-    private void setPageLabel(@Nullable Component label) {
-        pageLabel = retainSameText(pageLabel, label);
-    }
-
-    // 宿主的附加状态文字（例如「共 1204 项」），填空表示不显示。
-    private void setStatusNote(@Nullable Component note) {
-        statusNote = retainSameText(statusNote, note);
-    }
 
     // 注入的宿主主题
     private final UiHostTheme theme;
@@ -336,62 +318,17 @@ public final class UiCatalogGrid implements UiShellWidget, UiFooterHost, UiLayou
         });
     }
 
-    /** 装配唯一视图入口；固定策略与即时业务原因不参与逐帧发布。 */
-    public void setViewSource(Supplier<View> source, EntryPolicy entryPolicy,
-                              Function<String, @Nullable Component> reason) {
-        viewSource = Objects.requireNonNull(source, "source");
-        policy = Objects.requireNonNull(entryPolicy, "entryPolicy");
-        unavailableReason = Objects.requireNonNull(reason, "reason");
-        sourceCache = null;
-        syncView();
-        layout(bounds().x(), bounds().y(), bounds().width(), bounds().height());
+    /** 装配固定条目策略；业务状态由宿主显式发布。 */
+    public void configure(EntryPolicy entryPolicy, Function<String, @Nullable Component> reason) {
+        policy = Objects.requireNonNull(entryPolicy);
+        unavailableReason = Objects.requireNonNull(reason);
     }
 
-    // 条目列表（当前已同步的视图）
-    public List<Entry> entries() {
-        syncView();
-        return List.copyOf(entries);
-    }
-
-    public int size() {
-        syncView();
-        return entries.size();
-    }
-
-    public List<String> selection() {
-        return List.copyOf(selection);
-    }
-
-    /**
-     * 回填完整选择，跨页与过滤保留；程序化回填不触发编辑回调。
-     *
-     * @param ids 当前完整选择，按本次操作的选择模式校验
-     */
-    private void setSelection(List<String> ids) {
-        selection.clear();
-        selection.addAll(selectionMode.snapshot(ids));
-    }
-
-    public boolean isSelected(String id) {
-        return id != null && selection.contains(id);
-    }
-
-    public UiCatalogGrid setFilter(String filter) {
-        search.setValue(filter == null ? "" : filter);
-        return this;
-    }
-
-    public String filter() {
-        return search.value();
-    }
-
-    private void setError(@Nullable Component error) {
-        this.error = retainSameText(this.error, error);
-    }
-
-    private void setLoading(boolean loading) {
-        explicitLoading = loading;
-    }
+    private List<Entry> entries() { return view.content().entries(); }
+    private List<String> selection() { return view.content().selection(); }
+    private boolean isSelected(String id) { return selection().contains(id); }
+    private boolean canPrev() { return view.navigation().page() > 0; }
+    private boolean canNext() { return view.navigation().page() + 1 < view.navigation().pageCount(); }
 
     public void setOnRetry(@Nullable Runnable retry) {
         onRetry = retry;
@@ -399,30 +336,6 @@ public final class UiCatalogGrid implements UiShellWidget, UiFooterHost, UiLayou
 
     public void setTooltipSuffix(Function<String, Component> suffix) {
         tooltipSuffix = suffix == null ? ignored -> null : suffix;
-    }
-
-    // 页码状态：page 从 0 开始；pageCount <= 0 表示未知（只显示当前页号）
-    private void setPage(int page, int pageCount) {
-        int nextPage = Math.max(0, page);
-        int nextPageCount = Math.max(0, pageCount);
-        if (nextPage != this.page) {
-            scroll.setOffset(0);
-            cursor = -1;
-        }
-        String nextPageNumber = pageNumberText(nextPage, nextPageCount);
-        this.page = nextPage;
-        this.pageCount = nextPageCount;
-        if (!nextPageNumber.equals(pageNumber)) {
-            pageNumber = nextPageNumber;
-            // 页码宽度参与底栏布局：页码真正变化时显式重排一次，不再依赖每帧重排兜底
-            layout(bounds().x(), bounds().y(), bounds().width(), bounds().height());
-        }
-    }
-
-    // 分页边界：由宿主按目录缓存的 lastPage / 返回条数判定，边界外不响应翻页
-    private void setPageLimits(boolean canPrev, boolean canNext) {
-        this.canPrev = canPrev;
-        this.canNext = canNext;
     }
 
     private void setEnabled(boolean nextEnabled) {
@@ -465,8 +378,8 @@ public final class UiCatalogGrid implements UiShellWidget, UiFooterHost, UiLayou
         Object language = Language.getInstance();
         if (layoutApplied && layoutX == x && layoutY == y && layoutWidth == nextWidth
                 && layoutHeight == nextHeight && layoutFooterRight == footerReservedRight
-                && layoutFooterHeight == footerReservedHeight && layoutPage == page
-                && layoutPageCount == pageCount && layoutScoped == nextScoped && layoutPolicy == policy
+                && layoutFooterHeight == footerReservedHeight && layoutPage == view.navigation().page()
+                && layoutPageCount == view.navigation().pageCount() && layoutScoped == nextScoped && layoutPolicy == policy
                 && layoutLanguage == language) {
             return;
         }
@@ -518,8 +431,8 @@ public final class UiCatalogGrid implements UiShellWidget, UiFooterHost, UiLayou
         layoutHeight = nextHeight;
         layoutFooterRight = footerReservedRight;
         layoutFooterHeight = footerReservedHeight;
-        layoutPage = page;
-        layoutPageCount = pageCount;
+        layoutPage = view.navigation().page();
+        layoutPageCount = view.navigation().pageCount();
         layoutScoped = nextScoped;
         layoutPolicy = policy;
         layoutLanguage = language;
@@ -565,52 +478,41 @@ public final class UiCatalogGrid implements UiShellWidget, UiFooterHost, UiLayou
         return widest + SCOPE_SIDE_PADDING * 2 + Mark.NEXT.width() + SCOPE_ARROW_GAP;
     }
 
-    private void syncView() {
-        Supplier<View> source = viewSource;
-        if (source == null) {
-            return;
-        }
-        View next = source.get();
-        View previous = sourceCache;
-        if (next == previous) {
-            return;
-        }
-        sourceCache = next;
-        Content content = next.content();
-        Content oldContent = previous == null ? null : previous.content();
-        if (oldContent == null || content.entries() != oldContent.entries()) {
-            String focusedId = cursor >= 0 && cursor < entries.size() ? entries.get(cursor).id() : null;
-            entries.clear();
-            entries.addAll(content.entries());
-            entriesVersion++;
+    /** 在输入命中和呈现前接纳快照；选择或资格变化保留列表位置。 */
+    public void applyView(View next) {
+        View previous = view;
+        Navigation navigation = next.navigation();
+        Navigation before = previous.navigation();
+        boolean reset = navigation.page() != before.page() || navigation.scope() != before.scope()
+                || !navigation.filter().equals(before.filter());
+        boolean contentChanged = next.content().generation() != previous.content().generation();
+        String focusedId = cursor >= 0 && cursor < entries().size() ? entries().get(cursor).id() : null;
+        view = next;
+        if (contentChanged) {
             rowLabels.clear();
             rowLabelsLanguage = null;
             hoveredIndex = -1;
             hoverScrollTicks = 0;
             cursor = focusedId == null ? -1 : indexOf(focusedId);
             clampCursor();
-            clampScroll();
         }
-        if (oldContent == null || content.selection() != oldContent.selection()) setSelection(content.selection());
-        Navigation navigation = next.navigation();
-        if (previous == null || navigation != previous.navigation()) {
-            scope = navigation.scope();
-            setPage(navigation.page(), navigation.pageCount());
-            setPageLimits(navigation.page() > 0, navigation.page() + 1 < navigation.pageCount());
-            setPageLabel(navigation.label());
+        if (reset) {
+            scroll.setOffset(0);
+            cursor = -1;
+            hoveredIndex = -1;
         }
-        Status status = next.status();
-        if (previous == null || status != previous.status()) {
-            setStatusNote(status.note());
-            setLoading(status.loading());
-            setError(status.error());
-            setEnabled(status.enabled());
+        if (contentChanged || reset) clampScroll();
+        if (navigation.page() != before.page() || navigation.pageCount() != before.pageCount())
+            pageNumber = pageNumberText(navigation.page(), navigation.pageCount());
+        setEnabled(next.status().enabled());
+        if (!navigation.equals(before) || layoutLanguage != Language.getInstance()) {
+            layout(bounds().x(), bounds().y(), bounds().width(), bounds().height());
         }
     }
 
     private int indexOf(String id) {
-        for (int index = 0; index < entries.size(); index++) {
-            if (entries.get(index).id().equals(id)) return index;
+        for (int index = 0; index < entries().size(); index++) {
+            if (entries().get(index).id().equals(id)) return index;
         }
         return -1;
     }
@@ -631,7 +533,7 @@ public final class UiCatalogGrid implements UiShellWidget, UiFooterHost, UiLayou
     }
 
     private int rowCount() {
-        return (entries.size() + columns() - 1) / columns();
+        return (entries().size() + columns() - 1) / columns();
     }
 
     private int firstVisibleRow() {
@@ -643,7 +545,7 @@ public final class UiCatalogGrid implements UiShellWidget, UiFooterHost, UiLayou
     }
 
     private void clampCursor() {
-        cursor = entries.isEmpty() ? -1 : Math.clamp(Math.max(0, cursor), 0, entries.size() - 1);
+        cursor = entries().isEmpty() ? -1 : Math.clamp(Math.max(0, cursor), 0, entries().size() - 1);
         ensureCursorVisible();
     }
 
@@ -680,7 +582,7 @@ public final class UiCatalogGrid implements UiShellWidget, UiFooterHost, UiLayou
             return -1;
         }
         int index = row * columns() + col;
-        return index >= 0 && index < entries.size() ? index : -1;
+        return index >= 0 && index < entries().size() ? index : -1;
     }
 
     // 每帧推进悬停行与名称滚动计时，指针换行立刻回到起点
@@ -705,12 +607,12 @@ public final class UiCatalogGrid implements UiShellWidget, UiFooterHost, UiLayou
         for (int row = firstVisibleRow(); row < last; row++) {
             for (int column = 0; column < columns; column++) {
                 int index = row * columns + column;
-                if (index >= entries.size()) { break; }
-                Component label = rowLabel(entries.get(index));
+                if (index >= entries().size()) { break; }
+                Component label = rowLabel(entries().get(index));
                 UiRect rect = new UiRect(cellsRect.x() + column * columnWidth(),
                         cellsRect.y() + (row - firstVisibleRow()) * ROW_HEIGHT, columnWidth(), ROW_HEIGHT);
                 nodes.add(new UiLayoutNode(UiLayoutNode.Kind.ROW, rect, label, font.width(label), rect.width(),
-                        isEnabled() && !explicitLoading, true, List.of()));
+                        isEnabled() && !view.status().loading(), true, List.of()));
             }
         }
         return List.copyOf(nodes);
@@ -719,7 +621,6 @@ public final class UiCatalogGrid implements UiShellWidget, UiFooterHost, UiLayou
     /** {@inheritDoc} */
     @Override
     public void render(GuiGraphics graphics, Font renderFont, UiPointer incomingPointer) {
-        syncView();
         UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
         prepareIcons();
         if (pointer.allowed()) updateHoverIndex(pointer.hit() == null ? -1 : pointer.hit().rowIndex(this));
@@ -733,9 +634,9 @@ public final class UiCatalogGrid implements UiShellWidget, UiFooterHost, UiLayou
         if (cellsRect.width() <= 0 || cellsRect.height() <= 0) return;
         int columns = columns();
         int from = Math.max(0, firstVisibleRow() - 1) * columns;
-        int to = Math.min(entries.size(), (firstVisibleRow() + visibleRows() + 1) * columns);
+        int to = Math.min(entries().size(), (firstVisibleRow() + visibleRows() + 1) * columns);
         for (int index = from; index < to; index++) {
-            UiIcon icon = entries.get(index).icon();
+            UiIcon icon = entries().get(index).icon();
             if (icon != null) icon.prepare();
         }
     }
@@ -757,7 +658,7 @@ public final class UiCatalogGrid implements UiShellWidget, UiFooterHost, UiLayou
         } else {
             theme.drawSurface(graphics, scopeRect, UiSurfaceRole.SEGMENT, UiControlStyle.State.DISABLED);
         }
-        String label = scopeLabel(scope).getString();
+        String label = scopeLabel(view.navigation().scope()).getString();
         int labelWidth = font.width(label);
         // 按钮宽度按最宽标签预留，标签与箭头因此总能整体居中放下
         int contentWidth = labelWidth + Mark.NEXT.width() + SCOPE_ARROW_GAP;
@@ -783,11 +684,11 @@ public final class UiCatalogGrid implements UiShellWidget, UiFooterHost, UiLayou
                 int cellY = cellsRect.y() + (row - firstVisibleRow()) * ROW_HEIGHT;
                 int index = row * columns;
                 for (int col = 0; col < columns; col++, index++) {
-                    if (index >= entries.size()) {
+                    if (index >= entries().size()) {
                         break;
                     }
                     // 直接传整数坐标：可见格不再逐个分配矩形对象
-                    drawRow(graphics, entries.get(index), cellsRect.x() + col * columnWidth, cellY,
+                    drawRow(graphics, entries().get(index), cellsRect.x() + col * columnWidth, cellY,
                             row, index == hoveredIndex, isFocusVisible() && index == cursor);
                 }
             }
@@ -886,7 +787,7 @@ public final class UiCatalogGrid implements UiShellWidget, UiFooterHost, UiLayou
         }
         theme.drawDivider(graphics, bounds().x(), footerRect.y() - 1, bounds().width());
         Component status = statusText();
-        boolean busy = explicitLoading && error == null;
+        boolean busy = view.status().loading() && view.status().error() == null;
         if (busy) {
             UiSpinner.render(graphics, statusRect.x(), statusRect.y() + Math.max(0, (statusRect.height() - 10) / 2),
                     Util.getMillis(), theme.secondaryTextColor());
@@ -895,7 +796,7 @@ public final class UiCatalogGrid implements UiShellWidget, UiFooterHost, UiLayou
         String trimmed = trimmedStatus(status, Math.max(0, statusRect.width() - textOffset), textOffset);
         graphics.drawString(font, trimmed, statusRect.x() + textOffset,
                 statusRect.y() + Math.max(0, (statusRect.height() - font.lineHeight) / 2),
-                error != null ? theme.palette().controls().danger() : theme.palette().surfaces().secondaryText(), false);
+                view.status().error() != null ? theme.palette().controls().danger() : theme.palette().surfaces().secondaryText(), false);
         if (canClear()) {
             boolean hovered = pointer.contains(clearRect);
             int color = hovered ? theme.palette().controls().accentPressed() : theme.palette().controls().link();
@@ -905,8 +806,8 @@ public final class UiCatalogGrid implements UiShellWidget, UiFooterHost, UiLayou
             graphics.fill(clearRect.x(), clearY + font.lineHeight - 1, clearRect.x() + font.width(link),
                     clearY + font.lineHeight, color);
         }
-        drawPagerButton(graphics, prevRect, Mark.PREVIOUS, canPrev && isEnabled(), pointer);
-        drawPagerButton(graphics, nextRect, Mark.NEXT, canNext && isEnabled(), pointer);
+        drawPagerButton(graphics, prevRect, Mark.PREVIOUS, canPrev() && isEnabled(), pointer);
+        drawPagerButton(graphics, nextRect, Mark.NEXT, canNext() && isEnabled(), pointer);
         String pages = trimmedPage(Math.max(1, pageRect.width()));
         graphics.drawString(font, pages,
                 pageRect.x() + Math.max(0, (pageRect.width() - font.width(pages)) / 2),
@@ -929,48 +830,48 @@ public final class UiCatalogGrid implements UiShellWidget, UiFooterHost, UiLayou
     }
 
     // 底部状态：错误 > 加载 > 空结果；正常时是「分组标签 · 总数 · 已选」，页码由翻页按钮旁的分子分母承担。
-    // 依赖未变时复用上一次结果：宿主可能每帧重配页码标签，但文本归一化后实例稳定，这里不会每帧重拼。
+    // 文案只随内容代次、状态、选择数与语言变化重新组合。
     private Component statusText() {
         Object language = Language.getInstance();
         if (statusTextCache != null && statusTextLanguage == language
-                && statusTextError == error
-                && statusTextExplicitLoading == explicitLoading
-                && statusTextEntriesVersion == entriesVersion
-                && statusTextPageLabel == pageLabel && statusTextNote == statusNote
-                && statusTextSelection == selection.size()) {
+                && Objects.equals(statusTextError, view.status().error())
+                && statusTextExplicitLoading == view.status().loading()
+                && statusTextEntriesVersion == view.content().generation()
+                && Objects.equals(statusTextPageLabel, view.navigation().label()) && Objects.equals(statusTextNote, view.status().note())
+                && statusTextSelection == selection().size()) {
             return statusTextCache;
         }
         Component text = buildStatusText();
         statusTextCache = text;
-        statusTextError = error;
-        statusTextExplicitLoading = explicitLoading;
-        statusTextEntriesVersion = entriesVersion;
-        statusTextPageLabel = pageLabel;
-        statusTextNote = statusNote;
-        statusTextSelection = selection.size();
+        statusTextError = view.status().error();
+        statusTextExplicitLoading = view.status().loading();
+        statusTextEntriesVersion = view.content().generation();
+        statusTextPageLabel = view.navigation().label();
+        statusTextNote = view.status().note();
+        statusTextSelection = selection().size();
         statusTextLanguage = language;
         return text;
     }
 
     private Component buildStatusText() {
-        if (error != null) {
-            return texts.error().copy().append(" ").append(error);
+        if (view.status().error() != null) {
+            return texts.error().copy().append(" ").append(view.status().error());
         }
-        if (explicitLoading) {
+        if (view.status().loading()) {
             return texts.loading();
         }
-        if (entries.isEmpty() && pageLabel == null && statusNote == null) {
+        if (entries().isEmpty() && view.navigation().label() == null && view.status().note() == null) {
             return texts.empty();
         }
         Component text = Component.empty();
-        if (pageLabel != null) {
-            text = text.copy().append(pageLabel);
+        if (view.navigation().label() != null) {
+            text = text.copy().append(view.navigation().label());
         }
-        if (statusNote != null) {
-            text = appendStatus(text, statusNote);
+        if (view.status().note() != null) {
+            text = appendStatus(text, view.status().note());
         }
-        text = appendStatus(text, texts.selection().copy().append(" " + selection.size()));
-        return entries.isEmpty() ? appendStatus(text, texts.empty()) : text;
+        text = appendStatus(text, texts.selection().copy().append(" " + selection().size()));
+        return entries().isEmpty() ? appendStatus(text, texts.empty()) : text;
     }
 
     // 状态块之间统一一个分隔符，首个块不带
@@ -985,15 +886,6 @@ public final class UiCatalogGrid implements UiShellWidget, UiFooterHost, UiLayou
 
     // 宿主每帧重配状态文案时（例如黑名单页码标签）文本未变就保留旧实例，
     // 状态文案缓存因此可以按实例身份判断，避免逐帧重建 Component。
-    private static @Nullable Component retainSameText(@Nullable Component current, @Nullable Component next) {
-        if (next == null) {
-            return null;
-        }
-        if (current != null && current.getString().equals(next.getString())) {
-            return current;
-        }
-        return next;
-    }
 
     // 状态文本裁剪结果按「来源 Component + 可用宽度 + 加载图标偏移」缓存
     private String trimmedStatus(Component status, int width, int offset) {
@@ -1031,7 +923,7 @@ public final class UiCatalogGrid implements UiShellWidget, UiFooterHost, UiLayou
     }
 
     private boolean canClear() {
-        return isEnabled() && !selection.isEmpty();
+        return isEnabled() && !selection().isEmpty();
     }
 
     /** {@inheritDoc} */
@@ -1044,7 +936,7 @@ public final class UiCatalogGrid implements UiShellWidget, UiFooterHost, UiLayou
         if (!isVisible() || !isEnabled() || button != GLFW.GLFW_MOUSE_BUTTON_LEFT) {
             return false;
         }
-        if (error != null && statusRect.contains(mouseX, mouseY) && onRetry != null) {
+        if (view.status().error() != null && statusRect.contains(mouseX, mouseY) && onRetry != null) {
             onRetry.run();
             return true;
         }
@@ -1057,7 +949,7 @@ public final class UiCatalogGrid implements UiShellWidget, UiFooterHost, UiLayou
         }
         if (policy != null && policy.scoped() && scopeRect.contains(mouseX, mouseY)) {
 
-            listener.onScopeChanged(nextScope(scope));
+            listener.onScopeChanged(nextScope(view.navigation().scope()));
             scroll.setOffset(0);
             cursor = -1;
             hoveredIndex = -1;
@@ -1070,17 +962,16 @@ public final class UiCatalogGrid implements UiShellWidget, UiFooterHost, UiLayou
             return true;
         }
         if (canClear() && clearRect.contains(mouseX, mouseY)) {
-            selection.clear();
-            listener.onSelectionChanged(selection());
+            listener.onSelectionChanged(List.of());
             return true;
         }
-        if (canPrev && prevRect.contains(mouseX, mouseY)) {
+        if (canPrev() && prevRect.contains(mouseX, mouseY)) {
             searchActive = false;
             search.focusState().clear();
             listener.onPageChange(-1);
             return true;
         }
-        if (canNext && nextRect.contains(mouseX, mouseY)) {
+        if (canNext() && nextRect.contains(mouseX, mouseY)) {
             searchActive = false;
             search.focusState().clear();
             listener.onPageChange(1);
@@ -1091,7 +982,7 @@ public final class UiCatalogGrid implements UiShellWidget, UiFooterHost, UiLayou
             searchActive = false;
             search.focusState().clear();
             cursor = hit;
-            toggle(entries.get(hit).id());
+            toggle(entries().get(hit).id());
             return true;
         }
         return bounds().contains(mouseX, mouseY);
@@ -1142,7 +1033,7 @@ public final class UiCatalogGrid implements UiShellWidget, UiFooterHost, UiLayou
             case GLFW.GLFW_KEY_UP -> moveCursor(-columns());
             case GLFW.GLFW_KEY_DOWN -> moveCursor(columns());
             case GLFW.GLFW_KEY_HOME -> setCursor(0);
-            case GLFW.GLFW_KEY_END -> setCursor(entries.size() - 1);
+            case GLFW.GLFW_KEY_END -> setCursor(entries().size() - 1);
             case GLFW.GLFW_KEY_PAGE_UP -> scrollRows(-visibleRows());
             case GLFW.GLFW_KEY_PAGE_DOWN -> scrollRows(visibleRows());
             case GLFW.GLFW_KEY_SPACE -> toggleCursor();
@@ -1174,18 +1065,18 @@ public final class UiCatalogGrid implements UiShellWidget, UiFooterHost, UiLayou
     }
 
     private void moveCursor(int delta) {
-        if (entries.isEmpty()) {
+        if (entries().isEmpty()) {
             return;
         }
         setCursor(Math.max(0, cursor) + delta);
     }
 
     private void setCursor(int index) {
-        if (entries.isEmpty()) {
+        if (entries().isEmpty()) {
             cursor = -1;
             return;
         }
-        cursor = Math.clamp(index, 0, entries.size() - 1);
+        cursor = Math.clamp(index, 0, entries().size() - 1);
         ensureCursorVisible();
     }
 
@@ -1195,19 +1086,19 @@ public final class UiCatalogGrid implements UiShellWidget, UiFooterHost, UiLayou
     }
 
     private void toggleCursor() {
-        if (cursor < 0 || cursor >= entries.size()) {
+        if (cursor < 0 || cursor >= entries().size()) {
             return;
         }
-        toggle(entries.get(cursor).id());
+        toggle(entries().get(cursor).id());
     }
 
     private void activateCursor() {
-        if (cursor < 0 || cursor >= entries.size()) {
+        if (cursor < 0 || cursor >= entries().size()) {
             return;
         }
-        String id = entries.get(cursor).id();
+        String id = entries().get(cursor).id();
         if (unavailableReason.apply(id) != null) return;
-        if (selectionMode == Mode.SINGLE && !selection.contains(id)) toggle(id);
+        if (selectionMode == Mode.SINGLE && !selection().contains(id)) toggle(id);
         listener.onActivate(id);
         listener.onConfirm();
     }
@@ -1218,16 +1109,15 @@ public final class UiCatalogGrid implements UiShellWidget, UiFooterHost, UiLayou
             return;
         }
         // 冲突项禁止新增，但保留取消已有冲突项的修复入口。
-        if (!selection.contains(id) && unavailableReason.apply(id) != null) return;
+        if (!selection().contains(id) && unavailableReason.apply(id) != null) return;
+        List<String> next = new ArrayList<>(selection());
         if (selectionMode == Mode.MULTIPLE) {
-            if (!selection.remove(id)) {
-                selection.add(id);
-            }
+            if (!next.remove(id)) next.add(id);
         } else {
-            selection.clear();
-            selection.add(id);
+            next.clear();
+            next.add(id);
         }
-        listener.onSelectionChanged(selection());
+        listener.onSelectionChanged(List.copyOf(next));
     }
 
     /** {@inheritDoc} */
@@ -1239,7 +1129,7 @@ public final class UiCatalogGrid implements UiShellWidget, UiFooterHost, UiLayou
     /** {@inheritDoc} */
     @Override
     public boolean activate() {
-        if (!isEnabled() || cursor < 0 || cursor >= entries.size()) {
+        if (!isEnabled() || cursor < 0 || cursor >= entries().size()) {
             return false;
         }
         activateCursor();
@@ -1248,18 +1138,18 @@ public final class UiCatalogGrid implements UiShellWidget, UiFooterHost, UiLayou
 
     @Override
     public Component accessibleName() {
-        return Component.empty().append(texts.selection()).append(" " + selection.size() + "/" + entries.size());
+        return Component.empty().append(texts.selection()).append(" " + selection().size() + "/" + entries().size());
     }
 
     // 悬停提示的每一行：条目只给显示名与注册名，宿主附加说明（标签成员、预览不可用）另起一行
     private List<Component> tooltipLines(int hit, double mouseX, double mouseY) {
         if (policy != null && policy.scoped() && scopeRect.contains(mouseX, mouseY)) {
-            return List.of(scopeText(scope));
+            return List.of(scopeText(view.navigation().scope()));
         }
-        if (isEnabled() && canPrev && prevRect.contains(mouseX, mouseY)) {
+        if (isEnabled() && canPrev() && prevRect.contains(mouseX, mouseY)) {
             return List.of(texts.prevPage());
         }
-        if (isEnabled() && canNext && nextRect.contains(mouseX, mouseY)) {
+        if (isEnabled() && canNext() && nextRect.contains(mouseX, mouseY)) {
             return List.of(texts.nextPage());
         }
         if (canClear() && clearRect.contains(mouseX, mouseY)) {
@@ -1268,7 +1158,7 @@ public final class UiCatalogGrid implements UiShellWidget, UiFooterHost, UiLayou
         if (hit < 0) {
             return List.of();
         }
-        Entry entry = entries.get(hit);
+        Entry entry = entries().get(hit);
         List<Component> lines = new ArrayList<>(3);
         lines.add(rowLabel(entry));
         lines.add(Component.literal(entry.id()));
@@ -1297,7 +1187,7 @@ public final class UiCatalogGrid implements UiShellWidget, UiFooterHost, UiLayou
             int columns = columns();
             UiRect cell = new UiRect(cellsRect.x() + index % columns * columnWidth(),
                     cellsRect.y() + (index / columns - firstVisibleRow()) * ROW_HEIGHT, columnWidth(), ROW_HEIGHT);
-            hit = hit.withRow(this, index, entries.get(index).id(), cell);
+            hit = hit.withRow(this, index, entries().get(index).id(), cell);
         }
         hit = hit.withTextTooltip(tooltipLines(index, x, y), bounds());
         return scopeRect.contains(x, y) ? hit.preservingFocus() : hit;

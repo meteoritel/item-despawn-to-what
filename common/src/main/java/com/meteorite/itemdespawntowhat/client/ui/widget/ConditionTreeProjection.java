@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
 import com.meteorite.itemdespawntowhat.client.edit.ConditionTreeNodes;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.tree.UiTreePath;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.tree.UiTreeProjection;
@@ -17,7 +18,7 @@ public final class ConditionTreeProjection {
     private final ConditionExpression expression;
     private final UiTreeProjection<ConditionNode> structure;
     private final Map<UiTreePath, Info> infos = new HashMap<>();
-    private final Map<UiTreePath, String> jsonPaths = new HashMap<>();
+    private final Map<UiTreePath, FieldPath> jsonPaths = new HashMap<>();
     private final List<ConditionTreeInspection.Issue> issues;
 
     /** 为不可变表达式构建一次完整结构、地址和诊断索引。 */
@@ -31,7 +32,7 @@ public final class ConditionTreeProjection {
             ConditionNode node = entry.node();
             int leaf = node instanceof ConditionNode.Leaf ? ++leaves : -1;
             int depth = entry.depth() + 1;
-            String json = ConditionTreeNodes.jsonPath(expression.root(), entry.path(), ConditionTreeContract.ROOT_PATH);
+            FieldPath json = ConditionTreeNodes.jsonPath(expression.root(), entry.path(), ConditionTreeContract.ROOT_PATH);
             jsonPaths.put(entry.path(), json);
             boolean incomplete = ConditionTreeInspection.isIncomplete(node);
             boolean missing = ConditionTreeInspection.isLeafMissing(node);
@@ -56,7 +57,7 @@ public final class ConditionTreeProjection {
     /** 节点诊断；仅接受本投影内的真实节点路径。 */
     public Info info(UiTreePath path) { return infos.get(path); }
     /** 节点的树内 JSON 地址。 */
-    public String jsonPath(UiTreePath path) { return jsonPaths.get(path); }
+    public FieldPath jsonPath(UiTreePath path) { return jsonPaths.get(path); }
     /** 全树诊断，与折叠状态无关。 */
     public List<ConditionTreeInspection.Issue> issues() { return issues; }
 }

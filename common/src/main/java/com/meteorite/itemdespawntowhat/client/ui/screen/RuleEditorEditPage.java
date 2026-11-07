@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.edit.RuleIssueLocator;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiChildren;
 
@@ -561,7 +562,7 @@ final class RuleEditorEditPage implements EditorPage {
                 continue;
             }
             String path = issue.fieldPath();
-            if (path == null || path.isBlank()) {
+            if (path == null || path.isEmpty()) {
                 continue;
             }
             if (issue.ruleId() != null && (!issue.ruleId().equals(shell.editingId()) || !shell.isEditing())) {
@@ -572,7 +573,9 @@ final class RuleEditorEditPage implements EditorPage {
             Component message = issue.messageCode().isBlank()
                     ? Component.literal(issue.fallbackMessage())
                     : Component.translatable(issue.messageCode(), issue.messageArgs().toArray());
-            revealIssue(FormIssue.error(path, message, message));
+            RuleIssueLocator.Location location = RuleIssueLocator.anchor(issue.ruleId(), path, null).location();
+            if (location.tab() == RuleIssueLocator.Tab.INFO) switchTab(EditSection.INFO.value());
+            else revealIssue(FormIssue.error(location.currentPath(), message, message));
             shell.setNotice(Component.translatable(UI + "notice.validation_located", message), EditorShell.NoticeLevel.DANGER);
             return;
         }

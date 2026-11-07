@@ -10,7 +10,6 @@ import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogDisplayQuery;
 import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogTypePresentation;
 import com.meteorite.itemdespawntowhat.client.ui.shared.PreviewResources;
 import net.minecraft.locale.Language;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCatalogGrid;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiModal;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
@@ -33,8 +32,6 @@ import org.jetbrains.annotations.Nullable;
 /** 黑名单仅从源标签的成员中添加具体物品，按标签分页；成员条目只在真正显示时创建。 */
 final class SourceBlacklistPicker {
 
-    // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
-
     private static final String UI = TypeLabels.UI_PREFIX;
 
     private SourceBlacklistPicker() { }
@@ -56,42 +53,71 @@ final class SourceBlacklistPicker {
 
     static UiModal modal(Font font, EditorShell shell, EditSession session, @Nullable RuleValue rule, int width, int height,
                          CatalogSelectionBinding binding) {
-        UiHostTheme THEME = shell.theme();
-        CatalogEntryPolicy policy = CatalogEntryPolicy.fixed(RuleCatalogType.ITEM);
-        Pages pages = new Pages(sourceTags(rule), policy);
-        UiCatalogGrid.Texts texts = RuleEditorPanelFactory.catalogTexts()
-                .withEmpty(Component.translatable(UI + "blacklist.empty"));
-        UiModal modal = UiModal.create(THEME, font).title(Component.translatable(UI + "rule.source.exclude"));
-        CatalogViewState viewState = new CatalogViewState(binding.initialSelection());
-        UiCatalogGrid grid = new UiCatalogGrid(THEME, font, binding.mode(), texts, new UiCatalogGrid.Listener() {
-                    @Override public void onSearch(String filter) { pages.filter(filter); }
-                    @Override public void onPageChange(int delta) { pages.move(delta); }
-                    @Override public void onSelectionChanged(List<String> selection) {
-                        viewState.select(selection);
-                    }
-                    @Override public void onConfirm() {
-                        if (!modal.buttons().isEmpty()) modal.buttons().getFirst().activate();
-                    }
-                });
-        grid.setViewSource(() -> {
+        return new Picker(font, shell, session, rule, width, height, binding).modal;
+    }
+
+    private static final class Picker implements UiCatalogGrid.Listener {
+        private final EditorShell shell;
+        private final EditSession session;
+        private final CatalogSelectionBinding binding;
+        private final Pages pages;
+        private final UiModal modal;
+        private final UiCatalogGrid grid;
+        private List<String> selection;
+        private UiCatalogGrid.View view;
+
+        private Picker(Font font, EditorShell shell, EditSession session, @Nullable RuleValue rule,
+                       int width, int height, CatalogSelectionBinding binding) {
+            this.shell = shell;
+            this.session = session;
+            this.binding = binding;
+            CatalogEntryPolicy policy = CatalogEntryPolicy.fixed(RuleCatalogType.ITEM);
+            pages = new Pages(sourceTags(rule), policy);
+            selection = List.copyOf(binding.mode().snapshot(binding.initialSelection()));
+            UiCatalogGrid.Texts texts = RuleEditorPanelFactory.catalogTexts()
+                    .withEmpty(Component.translatable(UI + "blacklist.empty"));
+            modal = UiModal.create(shell.theme(), font).title(Component.translatable(UI + "rule.source.exclude"));
+            grid = new UiCatalogGrid(shell.theme(), font, binding.mode(), texts, this);
+            grid.configure(policy, ignored -> null);
+            modal.preferredWidth(RuleEditorPanelFactory.pickerWidth(width)).inlineFooter();
+            modal.contentWidget(grid, RuleEditorPanelFactory.pickerBodyHeight(shell.theme(), height));
+            modal.confirm(Component.translatable(UI + "button.confirm"), () -> {
+                if (active()) binding.confirm(selection);
+                else shell.setNotice(Component.translatable(UI + "pick.target_changed"), EditorShell.NoticeLevel.WARNING);
+            });
+            modal.cancel(Component.translatable(UI + "button.cancel"));
+            modal.onPrepare(this::prepare);
+            prepare();
+            modal.layoutCentered(width, height);
+        }
+
+        private boolean active() { return shell.editable() && shell.editingSession() == session; }
+
+        private void prepare() {
             CatalogDisplayQuery.Page<Page> result = pages.current();
             Page page = result.content();
-            viewState.entries(page == null ? List.of() : page.items());
-            viewState.navigation(UiCatalogGrid.Scope.BOTH, result.index(), result.count(),
-                    page == null ? null : page.label());
-            viewState.status(false, shell.editable() && shell.editingSession() == session, -1, null);
-            return viewState.view();
-        }, policy, ignored -> null);
-        modal.preferredWidth(RuleEditorPanelFactory.pickerWidth(width));
-        modal.inlineFooter();
-        modal.contentWidget(grid, RuleEditorPanelFactory.pickerBodyHeight(THEME, height));
-        modal.confirm(Component.translatable(UI + "button.confirm"), () -> {
-            if (shell.editable() && shell.editingSession() == session) binding.confirm(viewState.selection());
-            else shell.setNotice(Component.translatable(UI + "pick.target_changed"), EditorShell.NoticeLevel.WARNING);
-        });
-        modal.cancel(Component.translatable(UI + "button.cancel"));
-        modal.layoutCentered(width, height);
-        return modal;
+            UiCatalogGrid.Content content = view == null || view.content().generation() != pages.contentGeneration
+                    || view.content().selection() != selection
+                    ? new UiCatalogGrid.Content(pages.contentGeneration, page == null ? List.of() : page.items(), selection)
+                    : view.content();
+            view = new UiCatalogGrid.View(content,
+                    new UiCatalogGrid.Navigation(UiCatalogGrid.Scope.BOTH, pages.query, result.index(), result.count(),
+                            page == null ? null : page.label()), new UiCatalogGrid.Status(false, active(), null, null));
+            grid.applyView(view);
+            modal.buttons().getFirst().setEnabled(active());
+        }
+
+        /** {@inheritDoc} */
+        @Override public void onSearch(String filter) { pages.filter(filter); prepare(); }
+        /** {@inheritDoc} */
+        @Override public void onPageChange(int delta) { pages.move(delta); prepare(); }
+        /** {@inheritDoc} */
+        @Override public void onSelectionChanged(List<String> next) {
+            selection = List.copyOf(binding.mode().snapshot(next));
+            prepare();
+        }
+        /** {@inheritDoc} */
+        @Override public void onConfirm() { modal.buttons().getFirst().activate(); }
     }
 
     /** 一个源标签的成员：成员 id 第一次需要分页或搜索时才解析，条目与图标只在显示时创建。 */
@@ -155,7 +181,7 @@ final class SourceBlacklistPicker {
         }
     }
 
-    /** 大标签分为多个子页，每个子页仍只属于一个源标签；条目列表在子页生命周期内复用同一实例。 */
+    /** 大标签分为多个子页，每个子页仍只属于一个源标签；当前子页缓存已展开的条目。 */
     private static final class Page {
         private final CatalogDisplayQuery.Part<Group, String> part;
         private @Nullable List<UiCatalogGrid.Entry> items;
@@ -168,7 +194,7 @@ final class SourceBlacklistPicker {
             return label;
         }
 
-        // 只展开当前子页的条目；UiCatalogGrid 用实例身份判断内容变化，因此必须返回同一个列表
+        // 只展开当前子页，避免为未显示的组创建名称与图标
         private List<UiCatalogGrid.Entry> items() {
             if (items == null) {
                 items = part.items().stream().map(part.group()::entry).toList();
@@ -187,6 +213,7 @@ final class SourceBlacklistPicker {
         private Object generation;
         private Object language;
         private int index;
+        private long contentGeneration;
 
         Pages(List<String> tags, CatalogEntryPolicy policy) {
             this.policy = policy;
@@ -198,6 +225,8 @@ final class SourceBlacklistPicker {
         }
 
         void filter(String text) {
+            if (filtered != null && query.equals(text) && generation == PreviewResources.generation()
+                    && language == Language.getInstance()) return;
             query = text;
             CatalogDisplayQuery.Search search = CatalogDisplayQuery.search(text, false);
             var result = CatalogDisplayQuery.grouped(groups, group -> group.visibleIds(policy),
@@ -207,9 +236,15 @@ final class SourceBlacklistPicker {
             language = Language.getInstance();
             index = 0;
             published = null;
+            contentGeneration++;
         }
 
-        private void move(int delta) { index = filtered.page(index + delta).index(); }
+        private void move(int delta) {
+            int next = filtered.page(index + delta).index();
+            if (next == index) return;
+            index = next;
+            contentGeneration++;
+        }
 
         private CatalogDisplayQuery.Page<Page> current() {
             if (generation != PreviewResources.generation() || language != Language.getInstance()) {

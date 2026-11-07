@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
+
 import net.minecraft.client.gui.Font;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
@@ -91,7 +93,7 @@ final class RuleEditorInfoSection {
         // 自上而下：只读规则 ID、分类、来源摘要、显示名、启用、加高的优先级控件、多行备注；
         // 页头只保留当前实际生效名称，页内不再重复说明文案
         TypeEditorDescriptor descriptor = BuiltinEditorDescriptors.infoDescriptor();
-        infoForm = forms.create(session, "", descriptor);
+        infoForm = forms.create(session, FieldPath.ROOT, descriptor);
         infoForm.useCompactSpacing();
         // 滑条与数字输入同高，备注保留三行可见高度。
         infoForm.field(RuleFields.PRIORITY).setHeight(RuleEditorEditSections.PRIORITY_ROW_HEIGHT);

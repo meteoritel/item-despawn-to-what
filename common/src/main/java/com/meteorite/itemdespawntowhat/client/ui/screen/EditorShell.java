@@ -378,6 +378,7 @@ final class EditorShell {
         if (requested.contains(Refresh.LIST)) listPage.refreshList();
         if (requested.contains(Refresh.EDIT)) editPage.rebuildEdit();
         activePage().prepare();
+        modals.prepareUi();
         if (requested.contains(Refresh.FOCUS) || requested.contains(Refresh.EDIT)) rebuildFocus();
     }
 

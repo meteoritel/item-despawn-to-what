@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
@@ -25,7 +26,7 @@ final class CatalogSelectionOpener implements FormView.SelectionCatalogOpener {
     }
 
     @Override
-    public void open(EditorField field, String path, boolean tags, @Nullable Predicate<String> filter,
+    public void open(EditorField field, FieldPath path, boolean tags, @Nullable Predicate<String> filter,
                      CatalogSelectionBinding binding) {
         if (!shell.editable() || shell.editingSession() != session) return;
         RuleCatalogType type = tags ? RuleCatalogType.TAG : FieldCatalogTypes.catalogTypeOf(field);

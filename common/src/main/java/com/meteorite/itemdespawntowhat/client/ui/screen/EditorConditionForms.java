@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
 import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionTreeViewModel;
 import net.minecraft.client.gui.Font;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiModalStack;
@@ -101,35 +102,33 @@ final class EditorConditionForms {
         ConditionHostCoordination coordination = conditionHostCoordination(host);
         return (scope, ownerPath) -> new ConditionEditContext() {
             @Override
-            public String scope() {
+            public FieldPath scope() {
                 return scope;
             }
 
             @Override
-            public String ownerPath() {
+            public FieldPath ownerPath() {
                 return ownerPath;
             }
 
             @Override
-            public @Nullable String absolutePath(String treePath) {
-                String root = ConditionTreeContract.ROOT_PATH;
-                // 只接受完整段边界：根本身，或根后接点分隔的后继；拒绝 conditionsExtra 这类相似前缀
-                if (!treePath.equals(root) && !treePath.startsWith(root + ".")) return null;
-                return scope + treePath.substring(root.length());
+            public @Nullable FieldPath absolutePath(FieldPath treePath) {
+                FieldPath root = ConditionTreeContract.ROOT_PATH;
+                return treePath.isWithin(root) ? treePath.replacePrefix(root, scope) : null;
             }
 
             @Override
-            public boolean open(@Nullable String treePath, ConditionTreeViewModel viewModel) {
+            public boolean open(@Nullable FieldPath treePath, ConditionTreeViewModel viewModel) {
                 // null 是显式「只打开作用域画布」；非空坐标转换失败则不开画布，也不提交原宿主输入
                 if (treePath == null) return openConditionTree(coordination, scope, ownerPath, null, viewModel);
-                String absolute = absolutePath(treePath);
+                FieldPath absolute = absolutePath(treePath);
                 if (absolute == null) return false;
                 return openConditionTree(coordination, scope, ownerPath, absolute, viewModel);
             }
         };
     }
 
-    ConditionTreeOverlay.Parameters createLeafParameters(EditSession session, String path, ConditionNode.Leaf leaf) {
+    ConditionTreeOverlay.Parameters createLeafParameters(EditSession session, FieldPath path, ConditionNode.Leaf leaf) {
         TypeEditorDescriptor descriptor = EditorRegistries.CONDITIONS.descriptorFor(leaf.condition().type());
         boolean catalystLeaf = RuleEditorPageSupport.CATALYST_PRESENT_ID.equals(leaf.condition().type());
         // 催化剂门槛字段对外统一称「最低触发数量」，留空时才给出「默认：N」
@@ -185,8 +184,8 @@ final class EditorConditionForms {
         }
     }
 
-    boolean openConditionTree(ConditionHostCoordination coordination, String scope, String ownerPath,
-                              @Nullable String fieldPath, ConditionTreeViewModel viewModel) {
+    boolean openConditionTree(ConditionHostCoordination coordination, FieldPath scope, FieldPath ownerPath,
+                              @Nullable FieldPath fieldPath, ConditionTreeViewModel viewModel) {
         EditSession session = shell.editingSession();
         if (session == null || !shell.editable()) return false;
         coordination.prepareHost();
@@ -194,13 +193,13 @@ final class EditorConditionForms {
         ConditionTreeOverlay overlay = new ConditionTreeOverlay(THEME, shell.chromeTheme(), font, session, scope, sharedConditionSupport(), viewModel,
                 new ConditionTreeOverlay.ParameterFactory() {
                     @Override
-                    public ConditionTreeOverlay.Parameters create(String path, ConditionNode.Leaf leaf) {
+                    public ConditionTreeOverlay.Parameters create(FieldPath path, ConditionNode.Leaf leaf) {
                         return createLeafParameters(session, path, leaf);
                     }
 
                     // 参数承载能力按现役描述符与绑定引用判定：不构建面板，也不写草稿
                     @Override
-                    public boolean carriesField(String conditionPath, ConditionNode.Leaf leaf, String fieldPath) {
+                    public boolean carriesField(FieldPath conditionPath, ConditionNode.Leaf leaf, FieldPath fieldPath) {
                         if (leaf.condition() == null) return false;
                         TypeEditorDescriptor descriptor = EditorRegistries.CONDITIONS.descriptorFor(leaf.condition().type());
                         return RuleEditorPanelFactory.carriesField(descriptor.fields(), conditionPath, fieldPath,
@@ -226,7 +225,7 @@ final class EditorConditionForms {
                         EditSession.OP_CREATE_RULE, EditSession.OP_DELETE_RULE -> true;
                 default -> false;
             };
-            if (!ownerPath.isEmpty() && (outerStructure || session.valueAt(ownerPath) == null
+            if (!ownerPath.isRoot() && (outerStructure || session.valueAt(ownerPath) == null
                     || !owners.equals(ResultStructure.conditionOwnerShape(session.root())))) {
                 modal.onClosed(() -> coordination.discardView(overlay));
                 modals.close(modal);
