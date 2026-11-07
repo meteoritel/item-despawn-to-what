@@ -155,13 +155,13 @@ flowchart TB
 - **`client/net`** — 编辑会话的客户端镜像：连接、会话租约、保存工单、来源请求、分页目录与只读值模型、分片缓冲、界面注册槽。
   - 允许：`core/api`、`core/model`、`core/network/transport`、`core/network/protocol`、`core/catalog`、`core/service/edit`、`core/service` 的限额常量、原版客户端类型。
   - 禁止：依赖 `client/edit` 与 `client/ui`。界面经 `EditorScreenHooks` 注册槽注入，由客户端入口接线。
-- **`client/edit`** — 客户端编辑数据：草稿、回调写入的撤销会话、严格只读值与结果结构判别、类型参数投影与类型化字段描述符、固定规则表单、类型编辑器注册表、条件树编解码与摘要。
+- **`client/edit`** — 客户端编辑数据：不可变字段位置代数（`FieldPath`）、基于位置读写与条件树转换的规则草稿（`RuleDraft`）、回调写入的撤销会话（`EditSession`）、严格只读值与结果结构判别（`RuleValue`、`ResultStructure`）、类型参数投影与类型化字段描述符、固定规则表单、类型编辑器注册表、条件树编解码与摘要。
   - 允许：`core/api`、`core/model`、`core/catalog`、`core/service/edit`、`core/type/BuiltinTypeRegistries` 的冻结装配记录、`client/net`、`client/ui/kit/api/tree` 的树编辑契约、`client/edit/draft`、原版客户端类型。
   - 禁止：依赖 `client/ui` 的宿主子包（`theme`、`widget`、`shared`、`screen`、`screen/form`）；不发起网络请求、不打开界面。
-- **`client/edit/draft`** — `DraftJournal` 统一草稿保留策略、保存基线与落盘生命周期，接收业务状态并输出恢复模型；文件仓库、后台写入者与磁盘格式为包内实现。
+- **`client/edit/draft`** — `DraftJournal` 统一草稿业务动作（打开、新建、恢复、刷新、保存、保留、冲突选择）、保存基线与落盘生命周期；文件仓库、后台写入者与磁盘格式为包内实现。
   - 允许：`core` 的公开类型与原版客户端类型。
   - 禁止：写服务端目录或覆盖层目录；格式损坏按跳过处理，不向界面抛异常。
-- **`client/ui/kit`** — 声明式 UI kit：排版、控件与交互、样式注入、树编辑、输入作用域与持续交互、数值策略、滑块、文本局部历史、焦点、导航、灯箱。
+- **`client/ui/kit`** — 声明式 UI kit：排版、控件与容器契约（`UiInputContainer`）、呈现清单（`UiLayers`）、控件状态壳与标签呈现（`UiWidgetShell`、`UiLabelPresentation`）、样式注入、树编辑、输入作用域与持续交互、数值策略与滑块交互、文本局部历史、焦点、导航、灯箱。
   - 允许：JDK、原版客户端类型与 kit 公开面内的白名单。
   - 禁止：依赖本模组其它包。kit 提供完整默认主题、皮肤组合与通用屏幕，业务规则、协议和外观方案由宿主注入。
   - `api` 按能力提供受支持入口，公开类型与消费角色在各能力目录登记；input 的焦点协作、number 的区间内核和 preview 的场景协作保留包内可见。能力入口见 [UI kit](../modules/ui-kit.md#能力包与导出)。
@@ -175,10 +175,10 @@ flowchart TB
 - **`client/ui/shared`** — 界面中立子包：目录图标、展示名称、字段到目录类型的映射、条件摘要格式化。
   - 允许：`client/edit`、`client/ui/kit`、`client/ui/theme`、`core/api`、`core/model`、`core/catalog`、`core/service/edit`、原版客户端类型与 JDK。
   - 禁止：依赖 `client/ui/screen`、`client/ui/screen/form`、`client/ui/widget`，保证屏幕与表单都只向下依赖。
-- **`client/ui/screen`** — 编辑器主屏与外壳：编辑器外壳、管理页/编辑页/调试页三个编辑器页面、分区各自拥有的装配产物、页面收尾与屏幕独占输入作用域、保存遮罩与提示状态。
+- **`client/ui/screen`** — 编辑器主屏与外壳：编辑器外壳、管理页/编辑页/调试页三个编辑器页面、分区各自拥有的装配产物、呈现清单选择（`EditorLayers`）、页面输入装配（`EditorPageInputRoot`）、页面收尾与屏幕输入作用域、保存遮罩与提示状态。
   - 允许：`client/edit`（含 `draft`）、`client/net`、`client/ui/kit`、`client/ui/theme`、`client/ui/widget`、`client/ui/shared`、`client/ui/screen/form`、`core` 的只读投影与限额常量。
   - 禁止：业务字段声明回流 screen；被 `screen/form`、`shared`、`widget`、`theme`、`kit` 反向依赖。
-- **`client/ui/screen/form`** — 表单控件与叶子面板：字段行句柄、行布局、控件注册、条件树面板及带修订守卫的输入保留与提交。
+- **`client/ui/screen/form`** — 表单控件与叶子面板：表单聚合根（`FormView`）、表单装载与批量提交协议（`FormCommit`）、字段行句柄与行输入边界（`FormRowInput`）、行布局、控件注册、条件树面板及带修订守卫的输入保留。
   - 允许：`client/edit`、`client/net`、`client/ui/kit`、`client/ui/theme`、`client/ui/widget`、`client/ui/shared`。
   - 禁止：依赖 `client/ui/screen`；屏幕单向依赖表单，不反向。
 ## 包职责的维护方式

@@ -131,6 +131,7 @@ flowchart TD
 | `UiHostTheme` / `UiHostThemes` / `AbstractHostTheme` | 主题注入入口 | 调色板、度量、文本色、控件样式、滑块皮肤、结构绘制与图标行号；两套主题逐项相同的宿主度量与外壳原语收在 `AbstractHostTheme`，默认入口给出像素外观，扁平外观由调用方显式取用 | 全部控件与屏幕 |
 | `UiWidget` / `UiModalStack` | 控件与弹窗契约 | 控件共享 `UiInputTarget`；模态栈维护层次与关闭通知，宿主选择顶层模态作用域，历史回调注入该作用域 | `EditorLayers`、`UiInputScope` |
 | `ConditionTreeContract` / `UiConditionGraphEditor` / `UiConditionTreeSummary` / `ConditionTreeOverlay` | 条件树界面家族 | 同一份条件数据与校验的两种展示；共享契约提供类型选项、叶子工厂与定位，画布提供语义动作、只读工具状态与完整结构事件 | 条件模型、`FormView`、`ConditionTreeChrome` |
+| `ConditionGraphInteraction` / `ConditionGraphMenus` | 画布交互与菜单协作 | 前者持有按下候选、拖动、平移、框选与交互生命周期；后者持有类型插入目标与确认菜单及其几何 | `UiConditionGraphEditor`、`UiInteractionSession` |
 | `ConditionTreeProjection` / `ConditionTreeViewModel` / `ConditionTreeLabels` | 条件展示快照 | 字段协调器复用结构与诊断版本；共享标签，画布布局生成几何；相对 JSON 地址由 `ConditionTreeNodes` 解释 | 摘要、画布、条件表单 |
 | `UiTreeView` / `UiTreeNode` | 管理树 | 节点仅承载数据，视图拥有投影及选择折叠；管理页用分类/规则业务 key 恢复重建状态 | kit 树投影、状态与导航 |
 | `PreviewResources` | 资源生命周期所有者 | 世界、语言与模型身份决定资源世代；客户端 tick 观察变化；关屏保留近期 READY 场景，超时或世代变化释放 | `PreviewIcons`、目录名称索引 |
@@ -164,7 +165,7 @@ sequenceDiagram
 ```mermaid
 flowchart LR
     A["指针或键盘"] --> S["EditorLayers：选择实际呈现清单"]
-    S --> B["页内输入分发 / 表单输入分发"]
+    S --> B["容器树派发<br/>UiInputContainer · FormRowInput"]
     B --> C["控件（UiWidget）"]
     C --> D["kit 输入作用域与持续交互"]
     D --> E["控件预览值"]
@@ -188,7 +189,7 @@ flowchart LR
 
 ### 表单装配与页面收尾
 
-`EditorFormFactory` 为表单注入目录入口、条件上下文、业务绑定与几何失效通知。`EditorFormBindings` 负责有效默认值、legacy fluid 兼容、来源撤销标签及结果分类跟随；`EditorQuantityBindings` 装配动态数量引用、数量显示默认值与引用过滤。普通表单与条件叶表单共用 `CatalogSelectionOpener`；嵌套表单继承该入口、默认值配方、拒绝提示与上层几何失效通知，并传递自身行过滤条件。条件上下文配方按实际子表单身份重新绑定，路径在打开时读取；源黑名单在输入表单装配处路由到分组目录。输入分区的刷新联动留在输入分区；`EditorConditionForms` 装配条件画布与局部参数表；`EditorQuantityBindings` 提供共享数量及存在条件写回。结果结构与严格值读取由编辑数据层的 `ResultStructure`、`RuleValue` 提供。
+`EditorFormFactory` 为表单注入目录入口、条件上下文、业务绑定与几何失效通知。`EditorFormBindings` 负责有效默认值、流体单复数字段兼容、来源撤销标签及结果分类跟随；`EditorQuantityBindings` 装配动态数量引用、数量显示默认值与引用过滤。普通表单与条件叶表单共用 `CatalogSelectionOpener`；嵌套表单继承该入口、默认值配方、拒绝提示与上层几何失效通知，并传递自身行过滤条件。条件上下文配方按实际子表单身份重新绑定，路径在打开时读取；源黑名单在输入表单装配处路由到分组目录。输入分区的刷新联动留在输入分区；`EditorConditionForms` 装配条件画布与局部参数表；`EditorQuantityBindings` 提供共享数量及存在条件写回。结果结构与严格值读取由编辑数据层的 `ResultStructure`、`RuleValue` 提供。
 
 控件消费键盘前，`FormView` 固定原行身份；合法的普通字段 Enter 经 `FormCommit` 收集、写入并接受原行，长文本保留换行，待输入原文由会话保存。回调卸载或替换原行后停止该行后续提交。PageUp/PageDown 由持焦子树先处理，未消费才翻动表单。嵌套对象、子列表、卡片和叶子面板复用相同成员派发，值写入和历史仍由原提交入口负责。
 

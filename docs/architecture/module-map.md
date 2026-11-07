@@ -56,9 +56,9 @@ authority:
 | rule-loading | `RuleLoader`、`RuleLoadingService`、`RuleSourceLayer`、`RuleMerger` | conversion-runtime、authoring、platform |
 | conversion-runtime | `ConversionRuntime`、`RuleIndex`、`ServerScheduler`、`SettlementLedger` | authoring（只读索引）、core/host、command、debug |
 | authoring | `AuthoringHost`、`RuleEditChannels`、`RuleEditTransport`、`RuleEditService`、`EditAdmission`、`EditSessionManager`、`RuleCommandTree`、`RuleCatalogService` | client-editor 与 client-ui（协议与限额）、platform（编辑上下文） |
-| client-editor | `RuleEditClientWorkspace`、`EditorSessionView`、`EditorSaveView`、`EditSession`、`RuleValue`、`ResultStructure`、`TypeEditorRegistry` | client-ui |
-| ui-kit | `api.layout.UiDocument`、`api.control.UiControl`、`api.tree.UiTreeEditor`、`api.input.UiInputRouter`、`api.number.UiSliderSkin` | client-ui、client-editor（树编辑契约） |
-| client-ui | `RuleEditorScreen`、`EditorScreenHooks` 的实现、`UiHostThemes` | platform 客户端入口（挂载界面） |
+| client-editor | `RuleEditClientWorkspace`、`EditorSessionView`、`EditorSaveView`、`FieldPath`、`EditSession`、`DraftJournal`、`RuleValue`、`ResultStructure`、`TypeEditorRegistry` | client-ui |
+| ui-kit | `api.control.UiControl`、`api.control.UiWidgetShell`、`api.input.UiInputContainer`、`api.render.UiLayers`、`api.input.UiInputRouter`、`api.tree.UiTreeEditor`、`api.number.UiSliderSkin` | client-ui、client-editor（树编辑契约） |
+| client-ui | `RuleEditorScreen`、`EditorLayers`、`ConditionTreeOverlay`、`EditorScreenHooks` 的实现、`UiHostThemes` | platform 客户端入口（挂载界面） |
 
 ## 逻辑模块与 Gradle 子项目的映射
 

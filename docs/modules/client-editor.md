@@ -90,7 +90,7 @@ flowchart LR
 | `EditorField`（client/edit） | 字段契约 | 描述字段名、标签 key、类型、值域、展示层级与编辑器元数据；以无 default 的枚举 switch 集中分类为形状、数值类别与引用能力；公开谓词回答列表、数值与标签等问题，调用方只问字段 | `ParamProjection`、界面表单控件 |
 | `BuiltinEditorDescriptors` / `BuiltinEditorDefaults`（client/edit） | 描述符与新建初值 | 遍历本地已发现类型表按 `params()` 投影注册描述符，并为少数内置类型补说明行与半径窗口；新建条目按 `initialValues()` 写初值，条件与效果各查自己的默认值表 | `ClientTypeRegistries`、`ParamProjection`、`EditorRegistries` |
 | `ClientTypeRegistries`（client/edit） | 客户端类型表 | 复用 `BuiltinTypeRegistries` 惰性装配内置与本地 SPI 类型，从 `core/type/BuiltinTypeRegistries` 取得冻结查询视图，条件表、效果表与条件 Codec 共用同一实例 | 注册表、条件编解码 |
-| `DraftJournal`（client/edit/draft） | 草稿业务入口 | 决定保留或删除，持有保存基线、捕获快照、节流写盘、显式失败重试与一次性失败上报 | `DraftState`、`RestoredDraft`、包内存储实现 |
+| `DraftJournal`（client/edit/draft） | 草稿生命周期与保留策略 | 接纳打开、新建、恢复、编辑、保存、保留与冲突选择等业务动作，统一维护保存基线、捕获快照、节流写盘与终止状态 | `DraftState`、`RestoredDraft`、包内存储实现 |
 | `DraftConflicts` / `DraftConflict`（client/edit/draft） | 恢复规则 | 按目标存在性、创建意图与原始基线判定整条规则冲突 | `RestoredDraft`、界面模型 |
 
 ## 4. 关键流程

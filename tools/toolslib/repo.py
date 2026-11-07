@@ -4,7 +4,7 @@ from pathlib import Path
 
 EXCLUDED_DIRS = frozenset({
     "build", ".gradle", ".git", ".local", ".scratch", "node_modules",
-    "run", "runs", "logs", ".idea",
+    "run", "runs", "logs", ".idea", ".agents", ".agent-teams",
 })
 
 

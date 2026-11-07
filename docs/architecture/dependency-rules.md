@@ -71,7 +71,7 @@ flowchart LR
 8. `client/edit` 的 UI 依赖限定为 `client/ui/kit`，控件和表单工厂归 `client/ui`。
 9. `client/net` 禁止依赖 `client/edit` 与 `client/ui`。screen 根包不调用 `EditorField` 工厂声明业务字段；form 内从既有字段派生单项控件的适配保留。
 
-10. 四个编辑分区不持有组合容器；screen 不调用活草稿 getter，`EditSession` 不公开 `RuleDraft` getter，`FormView` 不公开按路径或字段名配置行的旧入口。
+10. 四个编辑分区不持有组合容器；screen 不调用活草稿 getter，`EditSession` 不公开 `RuleDraft` getter，`FormView` 按类型描述符与字段行句柄装配，不公开按路径或字段名直接配置行的接口。
 11. `core/load` 禁止引用 `core/model`；`core/api`、`config`、`load`、`model`、`registry`、`extension`、`type`、`runtime`、`state`、`service`、`catalog` 禁止引用 `core/command`、`debug`、`network`、`host`。
 
 根包 `Constants` 只声明模组标识、显示名、命名空间与日志入口，属环境级常量，不受包分层约束。

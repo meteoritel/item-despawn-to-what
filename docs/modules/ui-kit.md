@@ -138,6 +138,7 @@ flowchart LR
 | `UiPreviewCache` | 有界状态容器 | 客户端线程使用的 LRU；显式世代变化清空，非 null 结果及加载失败含义由宿主提供 | 宿主图标 wrapper 与目录索引 |
 | `UiTreeMoveInteraction` | 树移动值模型 | 预览不写绑定、正常释放提交一次、其它结束原因取消 | `UiTreeEditor`、`UiInteractionSession` |
 | `UiNumberPolicy` / `UiSliderWindow` / `UiNumbers` | 数值契约值 | 合法域与粗细步长吸附、轨道显示窗口、数值文本显示与解析各由唯一实现承担 | 滑条、精确输入、宿主字段 |
+| `SliderInteraction` / `SliderTrack`（api/number） | 滑块交互与轨道几何 | 标量滑块与区间内核共用会话开始、按键与指针匹配、释放、取消恢复和拖动锚点；按手柄宽度计算轨道几何 | `UiScalarSlider`、`AbstractRangeCore` |
 | `UiNumberField` | 数值字段组合 | 注入 `UiSingleLineEditor`，统一双向绑定、相对几何、输入与绘制；两个子控件分别参与 Tab，空文本缺席由宿主回调处理 | `UiScalarSlider`、`UiValueTextBinding`、宿主数值字段 |
 | `UiValueTextBinding` | 双向绑定 | 统一数值预览/提交/取消与程序回填的重入保护；解析暂不可用时保留原文并停在最近有效值，未开始文本预览的取消保持原文 | 数值控件、精确输入行 |
 | `UiLayer` / `UiLayers` | 呈现清单 | 稳定作用域、绘制动作与布局来源组成呈现项；基础内容和覆盖面共用顶层输入选择、绘制与快照顺序 | 编辑器、纯 kit 展示、模态栈 |
