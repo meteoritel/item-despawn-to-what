@@ -62,6 +62,7 @@ python tools/gui-probes/lib/run.py --run-dir .scratch/gui-check --only workbench
 | Kit Layers | 图文与普通贴图可直接展示；有世界时外层注入方块预览，前景/重叠开关与状态节点供定位 |
 | Kit 预算 | 需要已加载世界；B 轮换默认、小预算、几何过限、请求容量拒绝/恢复 |
 | 图标预览 | 需要已加载世界；Space 转台、B 轮换预算、N 换请求组、R 释放重读 |
+| 规则动画 | 需要已加载世界；阶段按钮先暂停再定位，Space 暂停、R 重播、1/2/3 定位三阶段 |
 | 测试规则草稿 | 需要可编辑工作区；填充或删除测试草稿，由管理页应用后落盘 |
 
 场景独立持有本地模型和输入作用域，退出释放捕获与模态。工作台返回编辑器时按现存工作区新建屏幕；失效工作区通过正式编辑命令重新获取。
@@ -100,14 +101,14 @@ python tools/gui-probes/lib/run.py --run-dir .scratch/gui-check --only workbench
 | assertion | value_equals | JSON 类型与值相等 |
 | assertion | value_changed | 与本例 capture 不同 |
 
-星号表示必需字段。start 公共字段为 world、timeout_seconds；scene 取值：gallery、interactions、previews、kit_showcase。
+星号表示必需字段。start 公共字段为 world、timeout_seconds；scene 取值：gallery、interactions、previews、kit_showcase、rule_flow。
 selector 字段：kind、lang、text、lang_any、text_any、enabled、within、has_text；within 仅含 kind/lang/text。
 lang/text/lang_any/text_any 要求整段文本相等；has_text 在节点自身与后代文本中做子串匹配，适合带参数的本地化文本。
 wait_for 的轮询期限由步骤级 timeout_ms 控制，默认 2500ms；断言对象内的同名兼容字段保留校验，不改变该期限。
 expected、expected_lang、expected_capture 是互斥期望来源；capture 引用必须在同例前序步骤中存在。
 <!-- gui-case-contract:end -->
 
-每例独立声明 `start`：`editor` 表示规则列表，`new_rule: true` 在列表通过真实命名弹窗创建新草稿；`workbench` 表示目录；`scene` 配合 `gallery`、`interactions`、`kit_showcase` 或 `previews`。导航每次推进一次公开输入并等待渲染。下面的用例可保存为 `.scratch/gui-control-check/cases/gallery-control-check.json`，直接验证展台控件并生成断言记录，全程不采集截图。
+每例独立声明 `start`：`editor` 表示规则列表，`new_rule: true` 在列表通过真实命名弹窗创建新草稿；`workbench` 表示目录；`scene` 配合 `gallery`、`interactions`、`kit_showcase` 或 `previews`；`rule_flow` 需要已进入世界，并声明 `world`。导航每次推进一次公开输入并等待渲染。下面的用例可保存为 `.scratch/gui-control-check/cases/gallery-control-check.json`，直接验证展台控件并生成断言记录，全程不采集截图。
 
 ```json
 {
@@ -175,6 +176,7 @@ prelude 经 client adapter 按内容摘要和运行目录安装；握手校验�
 | 双点阵配置、资源重载与重新进入 | kit-render-resources |
 | 默认/小预算/几何过限、请求容量拒绝与恢复 | kit-preview-budget |
 | 混合图文/3D、前景与兄弟重叠、提示及 resize | kit-layers |
+| 规则动画三阶段定位、提示与返回目录 | rule-flow |
 
 新增界面的实际可见几何、字段和条目作用域通过 `UiLayoutSource` 导出，避免在用例中猜测坐标。
 

@@ -1,0 +1,132 @@
+{
+  "name": "rule-flow",
+  "description": "规则动画工作台：三阶段定位、提示与返回目录",
+  "start": {
+    "kind": "scene",
+    "scene": "rule_flow",
+    "world": "test",
+    "timeout_seconds": 180
+  },
+  "window": {
+    "width": 1600,
+    "height": 1000,
+    "scale": 2
+  },
+  "steps": [
+    {
+      "assert": {
+        "name": "规则动画页标题",
+        "kind": "value_equals",
+        "query": {
+          "source": "screen_title"
+        },
+        "expected_lang": "gui.itemdespawntowhat.debug.workbench.rule_flow"
+      }
+    },
+    {
+      "assert": {
+        "name": "输入模块",
+        "kind": "text_present",
+        "selector": {
+          "kind": "FRAME",
+          "lang": "gui.itemdespawntowhat.debug.workbench.rule_flow.input"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "触发模块",
+        "kind": "text_present",
+        "selector": {
+          "kind": "FRAME",
+          "lang": "gui.itemdespawntowhat.debug.workbench.rule_flow.trigger"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "结果模块",
+        "kind": "text_present",
+        "selector": {
+          "kind": "FRAME",
+          "lang": "gui.itemdespawntowhat.debug.workbench.rule_flow.result"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.rule_flow.input"
+        }
+      }
+    },
+    {
+      "shot": "94-rule-flow-input.png"
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.rule_flow.trigger"
+        }
+      }
+    },
+    {
+      "shot": "94-rule-flow-trigger.png"
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.rule_flow.result"
+        }
+      }
+    },
+    {
+      "shot": "94-rule-flow-result.png"
+    },
+    {
+      "assert": {
+        "name": "操作提示行",
+        "kind": "text_present",
+        "selector": {
+          "kind": "ROW",
+          "lang": "gui.itemdespawntowhat.debug.workbench.rule_flow.hint"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "触发模块在窗口内",
+        "kind": "geometry_inside",
+        "selector": {
+          "kind": "FRAME",
+          "lang": "gui.itemdespawntowhat.debug.workbench.rule_flow.trigger"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.back"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "返回后目录仍有入口",
+        "kind": "text_present",
+        "selector": {
+          "kind": "CONTROL",
+          "lang": "gui.itemdespawntowhat.debug.workbench.rule_flow"
+        }
+      }
+    }
+  ]
+}

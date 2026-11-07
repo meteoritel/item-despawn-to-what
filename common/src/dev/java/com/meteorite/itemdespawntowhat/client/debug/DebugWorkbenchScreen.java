@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.debug;
 
 import com.meteorite.itemdespawntowhat.client.debug.kit.KitShowcaseScreen;
+import com.meteorite.itemdespawntowhat.client.debug.ruleflow.RuleFlowScreen;
 import com.meteorite.itemdespawntowhat.client.debug.kit.UiSliderExamples;
 import com.meteorite.itemdespawntowhat.client.debug.kit.WorkbenchLayout;
 import com.meteorite.itemdespawntowhat.client.ui.shared.PreviewIcons;
@@ -96,6 +97,7 @@ public class DebugWorkbenchScreen extends Screen {
                             Minecraft.getInstance().level == null ? null : PreviewIcons::createScenes))),
                     new Tool("gallery", () -> true, () -> Minecraft.getInstance().setScreen(new Gallery(home, false))),
                     new Tool("interactions", () -> true, () -> Minecraft.getInstance().setScreen(new Gallery(home, true))),
+                    new Tool("rule_flow", () -> Minecraft.getInstance().level != null, () -> Minecraft.getInstance().setScreen(new RuleFlowScreen(home))),
                     new Tool("previews", () -> Minecraft.getInstance().level != null, () -> Minecraft.getInstance().setScreen(new PreviewExamplesScreen(home))),
                     new Tool("drafts", () -> RuleEditClientWorkspace.instance().session().editable(), () -> {
                         var screen = new RuleEditorScreen(RuleEditClientWorkspace.instance());
