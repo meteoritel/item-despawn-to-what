@@ -21,7 +21,7 @@ import org.jetbrains.annotations.Nullable;
  * 提交时丢弃先前排队的一切操作，因此「放弃全部草稿」之后不会有旧写入把文件写回来。
  *
  * <p>失败不在队列里无限重试：写盘失败只记录一次失败事件并丢弃该次操作，界面层据此提示一次；
- * 重新写盘的入口是玩家的显式动作（再次编辑、保存或关闭界面触发的 {@link DraftJournal#flushAll()}/{@link DraftJournal#retryFailed()}）。
+ * 重新写盘的入口是玩家的显式动作（再次编辑、保存或关闭界面触发的 {@link DraftJournal#flush(Iterable)}）。
  * 线程是 daemon 且空闲 {@link #IDLE_TIMEOUT_MS} 毫秒后自行退出，不会挂住游戏进程。
  */
 final class DraftWriter {
