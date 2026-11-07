@@ -30,6 +30,7 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.function.Consumer;
 
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -490,19 +491,23 @@ final class RuleEditorEditSections implements UiInputTarget {
     }
 
     /**
-     * 键盘抬起：把滑杆方向键的按住过程合并为一次提交（屏幕在 EDIT 模式下转发）
-     */
-    public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
-        for (UiWidget widget : content.widgets) {
-            if (widget.isVisible() && widget.keyReleased(keyCode, scanCode, modifiers)) return true;
-        }
-        return false;
-    }
-
-    /**
      * 聚焦目标（按视觉顺序）
      */
     @Override public long focusRevision() { return content.widgets.focusRevision(); }
+
+    /** 作用域沿实际控件结构登记焦点。 */
+    @Override
+    public void addFocusTargets(Consumer<UiFocusTarget> out) { content.widgets.addFocusTargets(out); }
+
+    /** 本地修饰态沿实际成员退出。 */
+    @Override
+    public void scopeExited(UiInteractionSession.EndReason reason) { content.widgets.scopeExited(reason); }
+
+    /** 普通释放只进入持焦子树；持续交互由作用域直接结束。 */
+    @Override
+    public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
+        return content.widgets.keyReleased(keyCode, scanCode, modifiers);
+    }
 
     public List<UiFocusTarget> focusTargets() {
         List<UiFocusTarget> targets = new ArrayList<>();

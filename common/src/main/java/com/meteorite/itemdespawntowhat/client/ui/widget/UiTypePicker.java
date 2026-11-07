@@ -5,6 +5,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import org.jetbrains.annotations.Nullable;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiOverlay;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiLayer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiRowMetrics;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputScope;
@@ -100,6 +101,15 @@ public final class UiTypePicker implements UiWidget, UiLayoutSource {
 
     private final UiOverlay overlay = new UiOverlay(this);
     private final UiInputScope inputScope = overlay.inputScope();
+    private final UiLayer layer = new UiLayer(inputScope, this::renderLayer, this);
+
+    /** 选择器的一份稳定呈现描述。 */
+    public UiLayer layer() { return layer; }
+
+    /** 每个可见绘制帧推进一次动画，事件重排只读取当前进度。 */
+    public void advanceAnimation() {
+        if (open) panel.tick();
+    }
 
     /**
      * 类型选择面板的稳定输入作用域。
@@ -148,12 +158,14 @@ public final class UiTypePicker implements UiWidget, UiLayoutSource {
      */
     @Override
     public void render(GuiGraphics graphics, Font renderFont, UiPointer incomingPointer) {
+        renderLayer(graphics, renderFont, incomingPointer, 0);
+    }
+
+    private void renderLayer(GuiGraphics graphics, Font renderFont, UiPointer incomingPointer, int depth) {
         if (!open) return;
-        panel.tick();
-        updateBounds();
         UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
         if (pointer.allowed()) updateHover(pointer);
-        overlay.render(graphics, new UiRect(0, 0, graphics.guiWidth(), graphics.guiHeight()), 0, 0,
+        overlay.render(graphics, new UiRect(0, 0, graphics.guiWidth(), graphics.guiHeight()), depth, 0,
                 () -> panel.render(graphics, bounds, title, () -> renderContents(graphics, renderFont)));
     }
 

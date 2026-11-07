@@ -9,6 +9,9 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiStyleSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiMinecraftTheme;
 import java.util.Objects;
+import java.util.IdentityHashMap;
+import java.util.Map;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiLayer;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -33,6 +36,8 @@ public final class UiModalStack implements UiWidget, UiLayoutSource {
 
     // 弹窗栈（末尾为最上层）
     private final List<UiModal> modals = new ArrayList<>();
+    private final Map<UiModal, UiLayer> presentations = new IdentityHashMap<>();
+    private List<UiLayer> layers = List.of();
     // 弹窗内部的焦点管理
     // 可用屏幕区域
     private UiRect bounds = new UiRect(0, 0, 0, 0);
@@ -129,6 +134,10 @@ public final class UiModalStack implements UiWidget, UiLayoutSource {
         modal.setCloseHandler(this::remove);
         modal.inputScope().focus().setListener(focusListener);
         modals.add(modal);
+        presentations.put(modal, new UiLayer(modal.inputScope(), (graphics, font, pointer, depth) ->
+                modal.renderOverlay(graphics, bounds, depth, dimColor(),
+                        () -> modal.render(graphics, font, pointer)), modal::layoutNodes));
+        refreshLayers();
         modal.inputScope().setHistory(this::requestHistory);
         onScopeChanged.run();
         fadeTicks = FADE_TICKS;
@@ -155,6 +164,8 @@ public final class UiModalStack implements UiWidget, UiLayoutSource {
     /** 宿主终态或销毁时强制移除，不执行用户动作。 */
     public void remove(UiModal modal) {
         if (modals.remove(modal)) {
+            presentations.remove(modal);
+            refreshLayers();
             onScopeChanged.run();
             modal.closed();
             relayout();
@@ -165,6 +176,8 @@ public final class UiModalStack implements UiWidget, UiLayoutSource {
     public void clear() {
         List<UiModal> closing = List.copyOf(modals);
         modals.clear();
+        presentations.clear();
+        refreshLayers();
         onScopeChanged.run();
         closing.reversed().forEach(UiModal::closed);
 
@@ -217,20 +230,22 @@ public final class UiModalStack implements UiWidget, UiLayoutSource {
     /** {@inheritDoc} */
     @Override
     public void render(GuiGraphics graphics, Font font, UiPointer pointer) {
-        int mouseX = (int) pointer.x();
-        int mouseY = (int) pointer.y();
-        if (modals.isEmpty()) {
-            return;
+        for (int depth = 0; depth < layers.size(); depth++) {
+            layers.get(depth).render(graphics, font, pointer.x(), pointer.y(), depth);
         }
-        int baseAlpha = (theme.surfaces().modalDim() >>> 24) & 0xFF;
-        int alpha = baseAlpha * (FADE_TICKS - fadeTicks) / FADE_TICKS;
-        int dim = (alpha << 24) | (theme.surfaces().modalDim() & 0x00FFFFFF);
-        for (int i = 0; i < modals.size(); i++) {
-            UiModal modal = modals.get(i);
-            UiPointer modalPointer = modal.inputScope().pointer(mouseX, mouseY).resolve(modal);
-            modal.renderOverlay(graphics, bounds, i, dim,
-                    () -> modal.render(graphics, font, modalPointer));
-        }
+    }
+
+    /** 引用栈当前拥有的模态，顺序随栈结构变化更新。 */
+    public List<UiLayer> layers() { return layers; }
+
+    private void refreshLayers() {
+        layers = modals.stream().map(presentations::get).toList();
+    }
+
+    private int dimColor() {
+        int color = theme.surfaces().modalDim();
+        int alpha = ((color >>> 24) & 0xFF) * (FADE_TICKS - fadeTicks) / FADE_TICKS;
+        return (alpha << 24) | (color & 0x00FFFFFF);
     }
 
     /**

@@ -1,9 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContainer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiFlowLayout;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutSource;
@@ -12,8 +10,6 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 
 import java.util.ArrayList;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiChildren;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
-import java.util.function.Consumer;
 import java.util.List;
 
 import net.minecraft.client.gui.Font;
@@ -28,7 +24,7 @@ import org.jetbrains.annotations.Nullable;
  * {@link RuleEditorListPage} 用它承载管理页工具排与列表底排，
  * {@link RuleEditorEditPage} 用它承载编辑页底排。</p>
  */
-final class RuleEditorScreenButtonBar implements UiLayoutSource, UiInputTarget {
+final class RuleEditorScreenButtonBar implements UiLayoutSource, UiInputContainer {
 
     // 上次布局的几何与按钮宽度签名：逐帧重排时相同输入直接跳过测量与换行分配
     private int generation;
@@ -182,14 +178,6 @@ final class RuleEditorScreenButtonBar implements UiLayoutSource, UiInputTarget {
         return nodes;
     }
 
-    @Override public void addFocusTargets(Consumer<UiFocusTarget> out) { buttons.addFocusTargets(out); }
-    @Override public long focusRevision() { return buttons.focusRevision(); }
-    public boolean mousePressed(UiInputContext context) { return buttons.mousePressed(context); }
-    /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
-    @Override
-    public @Nullable UiPointerHit hitTest(double x, double y) {
-        UiPointerHit hit = buttons.hitTest(x, y);
-        return hit == null ? null : hit.within(this);
-    }
-
+    /** 实际成员同时供绘制、命中和导航使用。 */
+    @Override public UiChildren<UiButton> inputChildren() { return buttons; }
 }

@@ -1,10 +1,11 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContainer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiChildren;
 import java.util.function.Consumer;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.NumericDomain;
@@ -19,7 +20,6 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
-
 // ---- 单个嵌套对象（固定子表单，不提供增删） ----
 
 /**
@@ -27,7 +27,8 @@ import org.jetbrains.annotations.Nullable;
  * <p>与子列表不同，这里不提供添加或删除：对象存在时展示为一个子表单，缺失时展示为空白子表单；
  * 用户编辑任一子字段后才由子表单写入草稿，未编辑时父字段保持原有的省略状态。</p>
  */
-final class NestedObjectControl extends FormControl {
+final class NestedObjectControl extends FormControl implements UiInputContainer {
+    private final UiChildren<UiInputTarget> members = new UiChildren<>();
 
     private final FormView child;
     private int measuredHeight;
@@ -35,6 +36,7 @@ final class NestedObjectControl extends FormControl {
     NestedObjectControl(Font font, FormView owner, EditorField field, Runnable onChanged) {
         super(owner.theme(), field);
         this.child = owner.newChildForm(field.name(), field.subFields());
+        members.add(child);
         this.child.setLabelWidth(Math.min(88, field.subFields().stream()
                 .mapToInt(nested -> font.width(Component.translatable(nested.labelKey())) + 4).max().orElse(0)));
         // 带端点标签的数值（如整格偏移的三轴）由控件自述方向，子表单不再重复绘制轴名行
@@ -79,46 +81,6 @@ final class NestedObjectControl extends FormControl {
     void render(GuiGraphics graphics, Font font, UiPointer incomingPointer) {
         UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
         child.render(graphics, font, pointer);
-    }
-
-    @Override
-    public boolean mousePressed(UiInputContext context) {
-        return child.mousePressed(context);
-    }
-
-    @Override
-    public boolean mouseReleased(UiInputContext context) {
-        return child.mouseReleased(context);
-    }
-
-    @Override
-    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
-        return child.mouseDragged(context, dragX, dragY);
-    }
-
-    @Override
-    public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
-        return child.mouseScrolled(context, scrollX, scrollY);
-    }
-
-    @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        return child.keyPressed(keyCode, scanCode, modifiers);
-    }
-
-    @Override
-    public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
-        return child.keyReleased(keyCode, scanCode, modifiers);
-    }
-
-    @Override
-    public boolean charTyped(char codePoint, int modifiers) {
-        return child.charTyped(codePoint, modifiers);
-    }
-
-    @Override
-    public void addFocusTargets(Consumer<UiFocusTarget> out) {
-        child.addFocusTargets(out);
     }
 
     @Override
@@ -178,10 +140,12 @@ final class NestedObjectControl extends FormControl {
     @Override
     void appendInputText(List<String> out) {
     }
-    /** 根据实际子控件解析当前命中。 */
-    @Override
-    public @Nullable UiPointerHit hitTest(double x, double y) {
-        UiPointerHit hit = child.hitTest(x, y);
-        return hit == null ? null : hit.within(this);
-    }
+
+    /** 实际成员同时提供命中和普通输入路径。 */
+    @Override public UiChildren<UiInputTarget> inputChildren() { return members; }
+    /** 基类的字段能力由真实子树提供。 */
+    @Override public void addFocusTargets(Consumer<UiFocusTarget> out) { members.addFocusTargets(out); }
+    /** 释放只进入当前持焦分支。 */
+    @Override public boolean keyReleased(int key, int scan, int modifiers) { return members.keyReleased(key, scan, modifiers); }
+
 }

@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiShellWidget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiChildren;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidgetShell;
 import org.jetbrains.annotations.Nullable;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
@@ -61,6 +62,7 @@ public final class LeafPanel implements UiShellWidget {
     private final List<UiRect> noteRects = new ArrayList<>();
     // 说明行行高：比正文字高多 1 像素，避免与表单末行贴死
     private final int noteLineHeight;
+    private final UiChildren<UiWidget> members = new UiChildren<>();
     private final UiWidgetShell shell = new UiWidgetShell(this);
 
     /** {@inheritDoc} */
@@ -77,6 +79,9 @@ public final class LeafPanel implements UiShellWidget {
         this.extras = extras;
         this.buttons = buttons;
         this.reloadValues = reloadValues;
+        members.addAll(extras);
+        members.addAll(buttons);
+        members.add(form);
     }
 
     /**
@@ -188,15 +193,26 @@ public final class LeafPanel implements UiShellWidget {
     // 面板内部焦点顺序：附加控件 -> 目录按钮 -> 表单字段
     public List<UiFocusTarget> focusTargets() {
         List<UiFocusTarget> targets = new ArrayList<>();
-        for (UiWidget extra : extras) {
-            if (extra instanceof UiFocusTarget target) {
-                targets.add(target);
-            }
-        }
-        targets.addAll(buttons);
-        targets.addAll(form.focusTargets());
+        members.addFocusTargets(targets::add);
         return targets;
     }
+
+    /** 焦点组保持自身身份，普通输入沿实际成员派发。 */
+    @Override public long focusRevision() { return members.focusRevision() + UiShellWidget.super.focusRevision(); }
+    /** 会话结束后传播本地退出通知。 */
+    @Override public void scopeExited(UiInteractionSession.EndReason reason) { members.scopeExited(reason); }
+    /** 指针只进入已命中的成员。 */
+    @Override public boolean mousePressed(UiInputContext context) { return isEnabled() && members.mousePressed(context); }
+    /** 配对释放沿原成员派发。 */
+    @Override public boolean mouseReleased(UiInputContext context) { return members.mouseReleased(context); }
+    /** 嵌套表单保留自己的视口回退。 */
+    @Override public boolean mouseScrolled(UiInputContext context, double x, double y) { return members.mouseScrolled(context, x, y); }
+    /** 普通按键沿持焦成员派发。 */
+    @Override public boolean keyPressed(int key, int scan, int modifiers) { return members.keyPressed(key, scan, modifiers); }
+    /** 普通释放沿持焦成员派发。 */
+    @Override public boolean keyReleased(int key, int scan, int modifiers) { return members.keyReleased(key, scan, modifiers); }
+    /** 字符沿持焦成员派发。 */
+    @Override public boolean charTyped(char value, int modifiers) { return members.charTyped(value, modifiers); }
 
     /** {@inheritDoc} */
     @Override
@@ -220,95 +236,9 @@ public final class LeafPanel implements UiShellWidget {
         }
     }
 
-    /** {@inheritDoc} */
-    @Override
-    public boolean mousePressed(UiInputContext context) {
-        double mouseX = context.pointerX();
-        double mouseY = context.pointerY();
-        if (!isEnabled() || !bounds().contains(mouseX, mouseY)) {
-            return false;
-        }
-
-        for (UiButton candidate : buttons) {
-            if (candidate.mousePressed(context)) return true;
-        }
-        for (UiWidget extra : extras) {
-            if (extra.mousePressed(context)) {
-                return true;
-            }
-        }
-        return form.mousePressed(context);
-    }
-
-    @Override
-    public boolean mouseReleased(UiInputContext context) {
-        boolean consumed = false;
-        for (UiWidget extra : extras) {
-            consumed |= extra.mouseReleased(context);
-        }
-        consumed |= form.mouseReleased(context);
-        for (UiButton candidate : buttons) {
-            consumed |= candidate.mouseReleased(context);
-        }
-        return consumed;
-    }
-
-    @Override
-    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
-        boolean consumed = false;
-        for (UiWidget extra : extras) {
-            consumed |= extra.mouseDragged(context, dragX, dragY);
-        }
-        consumed |= form.mouseDragged(context, dragX, dragY);
-        return consumed;
-    }
-
-    @Override
-    public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
-        return form.mouseScrolled(context, scrollX, scrollY);
-    }
-
     // 参数框内正在输入文本：画布快捷键让位，避免输入字母时触发复制/缩放
     boolean capturesKeyboard() {
         return form.isEditing();
-    }
-
-    @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-
-        for (UiWidget extra : extras) {
-            if (extra instanceof UiFocusTarget target && target.isFocused()
-                    && extra.keyPressed(keyCode, scanCode, modifiers)) {
-                return true;
-            }
-        }
-        for (UiButton button : buttons) {
-            if (button.isFocused() && button.keyPressed(keyCode, scanCode, modifiers)) {
-                return true;
-            }
-        }
-        return form.keyPressed(keyCode, scanCode, modifiers);
-    }
-
-    @Override
-    public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
-        boolean consumed = false;
-        for (UiWidget extra : extras) {
-            consumed |= extra.keyReleased(keyCode, scanCode, modifiers);
-        }
-        consumed |= form.keyReleased(keyCode, scanCode, modifiers);
-        return consumed;
-    }
-
-    @Override
-    public boolean charTyped(char codePoint, int modifiers) {
-        for (UiWidget extra : extras) {
-            if (extra instanceof UiFocusTarget target && target.isFocused()
-                    && extra.charTyped(codePoint, modifiers)) {
-                return true;
-            }
-        }
-        return form.charTyped(codePoint, modifiers);
     }
 
     // 参数校验失败时，内部焦点与字段滚动保持一致。
@@ -336,9 +266,7 @@ public final class LeafPanel implements UiShellWidget {
     @Override
     public @Nullable UiPointerHit hitTest(double x, double y) {
         if (!bounds().contains(x, y)) return null;
-        UiPointerHit hit = UiPointerHit.topmost(x, y, buttons);
-        if (hit == null) hit = UiPointerHit.topmost(x, y, extras);
-        if (hit == null) hit = form.hitTest(x, y);
+        UiPointerHit hit = members.hitTest(x, y);
         return hit == null ? null : hit.within(this);
     }
 

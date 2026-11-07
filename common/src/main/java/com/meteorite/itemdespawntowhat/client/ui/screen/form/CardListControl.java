@@ -1,5 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContainer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiChildren;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiSurfaceRole;
 import java.util.function.Consumer;
 
@@ -14,7 +17,6 @@ import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutSource;
@@ -52,7 +54,8 @@ import org.jetbrains.annotations.Nullable;
  * 不再有红标签可依附，而是经 {@link #issues(String)} 汇总到校验面板，并由胶囊的空态文案就地表达
  * 「还缺一个引用」。</p>
  */
-final class CardListControl extends FormControl implements UiLayoutSource {
+final class CardListControl extends FormControl implements UiLayoutSource, UiInputContainer {
+    private final UiChildren<UiInputTarget> members = new UiChildren<>();
 
     // 自绘标题栏高度：字段标题与「添加」胶囊共用一行
     private static final int HEADER_HEIGHT = 16;
@@ -96,6 +99,21 @@ final class CardListControl extends FormControl implements UiLayoutSource {
         this.valueFields = numericFields(field.subFields());
         this.addButton = new UiButton(THEME, font, Component.translatable(UI + "add"),
                 UiButtonVariant.SECONDARY, this::addEntry).setChipStyle(true);
+        refreshMembers();
+    }
+
+    private void refreshMembers() {
+        members.clear();
+        members.add(addButton);
+        int order = 0;
+        for (Entry entry : entries) {
+            members.add(entry.choice);
+            members.setTabOrder(entry.choice, ++order);
+            members.add(entry.remove);
+            members.addAll(entry.values);
+            for (FormControl value : entry.values) members.setTabOrder(value, ++order);
+            members.setTabOrder(entry.remove, ++order);
+        }
     }
 
     // 元素声明里的引用字段：卡片首行胶囊只描述一个引用
@@ -208,6 +226,7 @@ final class CardListControl extends FormControl implements UiLayoutSource {
         owner.changeChildStructure(field.name(), () -> {
             markEdited();
             change.run();
+            refreshMembers();
         }, this::store);
         onChanged.run();
     }
@@ -416,12 +435,14 @@ final class CardListControl extends FormControl implements UiLayoutSource {
     void load(@Nullable RuleValue value) {
         rememberLoaded(value);
         retainChildInputs();
+        endInteractions(UiInteractionSession.EndReason.UNMOUNTED);
         entries.clear();
         if (value != null && value.isList()) {
             for (RuleValue element : value.items()) {
                 entries.add(createEntry(element));
             }
         }
+        refreshMembers();
         layoutAt(0, 0, 1);
     }
 
@@ -477,92 +498,6 @@ final class CardListControl extends FormControl implements UiLayoutSource {
     }
 
     // 悬停提示给出完整注册名：显示名可能被同名资源混淆，完整 id 只在悬停时出现
-    @Override
-    public boolean mousePressed(UiInputContext context) {
-        if (addButton.mousePressed(context)) {
-            return true;
-        }
-        for (Entry entry : entries) {
-            if (entry.choice.mousePressed(context) || entry.remove.mousePressed(context)) {
-                return true;
-            }
-            for (FormControl value : entry.values) {
-                if (value.mousePressed(context)) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    @Override
-    public boolean mouseReleased(UiInputContext context) {
-        boolean consumed = addButton.mouseReleased(context);
-        for (Entry entry : entries) {
-            consumed |= entry.choice.mouseReleased(context);
-            consumed |= entry.remove.mouseReleased(context);
-            for (FormControl value : entry.values) {
-                consumed |= value.mouseReleased(context);
-            }
-        }
-        return consumed;
-    }
-
-    @Override
-    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
-        boolean consumed = false;
-        for (Entry entry : entries) {
-            for (FormControl value : entry.values) {
-                consumed |= value.mouseDragged(context, dragX, dragY);
-            }
-        }
-        return consumed;
-    }
-
-    @Override
-    public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
-        boolean consumed = false;
-        for (Entry entry : entries) {
-            for (FormControl value : entry.values) {
-                consumed |= value.mouseScrolled(context, scrollX, scrollY);
-            }
-        }
-        return consumed;
-    }
-
-    @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        boolean consumed = false;
-        for (Entry entry : entries) {
-            for (FormControl value : entry.values) {
-                consumed |= value.keyPressed(keyCode, scanCode, modifiers);
-            }
-        }
-        return consumed;
-    }
-
-    @Override
-    public boolean charTyped(char codePoint, int modifiers) {
-        boolean consumed = false;
-        for (Entry entry : entries) {
-            for (FormControl value : entry.values) {
-                consumed |= value.charTyped(codePoint, modifiers);
-            }
-        }
-        return consumed;
-    }
-
-    @Override
-    public void addFocusTargets(Consumer<UiFocusTarget> out) {
-        out.accept(addButton);
-        for (Entry entry : entries) {
-            out.accept(entry.choice);
-            for (FormControl value : entry.values) {
-                value.addFocusTargets(out);
-            }
-            out.accept(entry.remove);
-        }
-    }
 
     @Override
     void setEnabled(boolean enabled) {
@@ -665,20 +600,24 @@ final class CardListControl extends FormControl implements UiLayoutSource {
         private @Nullable RuleValue original;
         private @Nullable UiRect card;
     }
-    /** 按实际子控件解析指针，保留组合层的归属。 */
-    @Override
-    public @Nullable UiPointerHit hitTest(double x, double y) {
-        for (int i = entries.size() - 1; i >= 0; i--) {
-            Entry entry = entries.get(i);
-            UiPointerHit hit = UiPointerHit.topmost(x, y, entry.values);
-            if (hit == null) hit = UiPointerHit.first(x, y, entry.remove, entry.choice);
-            if (hit != null) {
-                if (hit.owns(entry.choice) && entry.reference != null && !entry.reference.isBlank())
-                    hit = hit.withTextTooltip(List.of(Component.literal(entry.reference)), entry.choice.bounds());
-                return hit.within(this);
+
+    /** 实际成员同时提供命中和普通输入路径。 */
+    @Override public UiChildren<UiInputTarget> inputChildren() { return members; }
+    /** 基类的字段能力由真实子树提供。 */
+    @Override public void addFocusTargets(Consumer<UiFocusTarget> out) { members.addFocusTargets(out); }
+    /** 释放只进入当前持焦分支。 */
+    @Override public boolean keyReleased(int key, int scan, int modifiers) { return members.keyReleased(key, scan, modifiers); }
+
+    /** 提示装饰使用共享命中的真实按钮身份。 */
+    @Override public @Nullable UiPointerHit hitTest(double x, double y) {
+        UiPointerHit hit = members.hitTest(x, y);
+        if (hit == null) return null;
+        for (Entry entry : entries) {
+            if (hit.owns(entry.choice) && entry.reference != null && !entry.reference.isBlank()) {
+                hit = hit.withTextTooltip(List.of(Component.literal(entry.reference)), entry.choice.bounds());
+                break;
             }
         }
-        UiPointerHit hit = addButton.hitTest(x, y);
-        return hit == null ? null : hit.within(this);
+        return hit.within(this);
     }
 }

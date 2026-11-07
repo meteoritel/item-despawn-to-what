@@ -2,11 +2,12 @@ package com.meteorite.itemdespawntowhat.client.ui.kit.api.control;
 
 import org.jetbrains.annotations.Nullable;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContainer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiChildren;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputScope;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiHistoryShortcut;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutSource;
@@ -35,7 +36,7 @@ import org.lwjgl.glfw.GLFW;
  * <p>遮罩与淡入淡出由 {@link UiModalStack} 处理，输入独占与焦点归本模态的作用域，
  * 弹窗本身只关心自身矩形内的绘制与命中。
  */
-public final class UiModal implements UiWidget {
+public final class UiModal implements UiWidget, UiInputContainer {
     private final UiOverlay overlay = new UiOverlay(this);
     private final UiInputScope inputScope = overlay.inputScope();
     private BooleanSupplier closeAllowed = () -> true;
@@ -73,7 +74,22 @@ public final class UiModal implements UiWidget {
     private int contentHeight;
     private ContentRenderer contentRenderer;
     private UiWidget contentWidget;
-    private final List<UiButtonWidget> buttons = new ArrayList<>();
+    private final UiChildren<UiButtonWidget> buttons = new UiChildren<>();
+    private final ContentInput contentInput = new ContentInput();
+    private final UiChildren<UiInputTarget> members = new UiChildren<>();
+
+    private final class ContentInput implements UiInputContainer {
+        private final UiChildren<UiWidget> widgets = new UiChildren<>();
+        /** 正文的实际控件结构。 */
+        @Override public UiChildren<UiWidget> inputChildren() { return widgets; }
+        /** 裁剪内才查询正文控件。 */
+        @Override public @Nullable UiPointerHit hitTest(double x, double y) {
+            return contentRect.contains(x, y) ? UiInputContainer.super.hitTest(x, y) : null;
+        }
+    }
+
+    /** 正文与 footer 共享同一成员结构，正文裁剪由局部 adapter 表达。 */
+    @Override public UiChildren<UiInputTarget> inputChildren() { return members; }
     private UiRect bounds = new UiRect(0, 0, 0, 0);
     // 绝对屏幕坐标
     private UiRect contentRect = new UiRect(0, 0, 0, 0);
@@ -124,6 +140,8 @@ public final class UiModal implements UiWidget {
     private UiModal(UiStyleSource theme, Font font) {
         this.theme = Objects.requireNonNull(theme, "theme");
         this.font = font;
+        members.add(contentInput);
+        members.add(buttons);
     }
 
     /**
@@ -158,6 +176,7 @@ public final class UiModal implements UiWidget {
     public UiModal content(ContentRenderer renderer, int height) {
         this.contentRenderer = renderer;
         this.contentWidget = null;
+        contentInput.widgets.clear();
         this.contentHeight = Math.max(0, height);
         return this;
     }
@@ -170,6 +189,8 @@ public final class UiModal implements UiWidget {
      */
     public UiModal contentWidget(UiWidget widget, int height) {
         this.contentWidget = widget;
+        contentInput.widgets.clear();
+        contentInput.widgets.add(widget);
         inputScope.invalidateFocus();
         this.contentRenderer = null;
         this.contentHeight = Math.max(0, height);
@@ -542,33 +563,12 @@ public final class UiModal implements UiWidget {
             if (closeOnBackdrop()) requestClose();
             return true;
         }
-        for (int i = buttons.size() - 1; i >= 0; i--) {
-            UiButtonWidget candidate = buttons.get(i);
-            if (candidate.isVisible() && context.hits(candidate) && candidate.mousePressed(context)) {
-                return true;
-            }
-        }
-        if (contentWidget != null) {
-            return context.hits(contentWidget) && contentWidget.mousePressed(context);
-        }
-        return true;
+        return members.mousePressed(context) || contentWidget == null;
     }
 
-    @Override
-    public boolean mouseReleased(UiInputContext context) {
-        if (!visible) {
-            return false;
-        }
-        if (contentWidget != null && context.hits(contentWidget)) contentWidget.mouseReleased(context);
-        return true;
-    }
-
-    @Override
-    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
-        if (contentWidget != null) {
-            contentWidget.mouseDragged(context, dragX, dragY);
-        }
-        return true;
+    /** 无会话配对释放仅进入原命中分支。 */
+    @Override public boolean mouseReleased(UiInputContext context) {
+        return visible && members.mouseReleased(context);
     }
 
     @Override
@@ -576,7 +576,7 @@ public final class UiModal implements UiWidget {
         double mouseX = context.pointerX();
         double mouseY = context.pointerY();
         if (contentWidget != null) {
-            contentWidget.mouseScrolled(context, scrollX, scrollY);
+            members.mouseScrolled(context, scrollX, scrollY);
         } else if (contentRect.contains(mouseX, mouseY)) {
             int maximum = Math.max(0, messageLines(contentRect.width() - theme.padding() * 2).size()
                     * (font.lineHeight + 2) + theme.padding() * 2 - contentRect.height());
@@ -601,38 +601,9 @@ public final class UiModal implements UiWidget {
         return false;
     }
 
-    /**
-     * 按键释放只交给本层内容，完成方向键数值交互。
-     */
-    @Override
-    public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
-        return visible && contentWidget != null && contentWidget.keyReleased(keyCode, scanCode, modifiers);
-    }
-
-    @Override
-    public boolean charTyped(char codePoint, int modifiers) {
-        return visible && contentWidget != null && contentWidget.charTyped(codePoint, modifiers);
-    }
-
-    @Override
-    public void scopeExited(UiInteractionSession.EndReason reason) {
-        if (contentWidget != null) contentWidget.scopeExited(reason);
-    }
-
-    // ---- 焦点 ----
-
-    // 把自身可聚焦控件登记到焦点管理器
-    /** 依视觉顺序贡献焦点目标；登记事务由作用域根统一提交。 */
-    public void addFocusTargets(Consumer<UiFocusTarget> sink) {
-        if (contentWidget != null) contentWidget.addFocusTargets(sink);
-        for (UiButtonWidget button : buttons) button.addFocusTargets(sink);
-    }
-
-    /** 内容与按钮的资格或结构变化传播到覆盖作用域。 */
+    /** 内容与 footer 变化共同使焦点索引失效。 */
     @Override public long focusRevision() {
-        long revision = contentWidget == null ? 0 : contentWidget.focusRevision();
-        for (UiButtonWidget button : buttons) revision = 31 * revision + button.focusRevision();
-        return revision;
+        return members.focusRevision() + UiWidget.super.focusRevision();
     }
 
     // ---- 关闭 ----
@@ -659,8 +630,7 @@ public final class UiModal implements UiWidget {
     @Override
     public @Nullable UiPointerHit hitTest(double x, double y) {
         if (!visible) return null;
-        UiPointerHit hit = UiPointerHit.topmost(x, y, buttons);
-        if (hit == null && contentWidget != null && contentRect.contains(x, y)) hit = contentWidget.hitTest(x, y);
+        UiPointerHit hit = members.hitTest(x, y);
         return hit == null ? UiPointerHit.leaf(this, x, y).preservingFocus() : hit.within(this);
     }
 

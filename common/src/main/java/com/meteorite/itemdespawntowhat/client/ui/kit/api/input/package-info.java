@@ -6,6 +6,7 @@
  * library 项逐项注明用途与 kit 外当前无直接生产引用；公开返回链随用途说明；嵌套公开契约随顶层类型维护。</p>
  * <ul>
  *   <li>{@code UiChildren}: host</li>
+ *   <li>{@code UiInputContainer}: host</li>
  *   <li>{@code UiPointerHit}: host</li>
  *   <li>{@code UiFocusManager}: host</li>
  *   <li>{@code UiFocusFollow}: host</li>
@@ -13,7 +14,7 @@
  *   <li>{@code UiFocusTarget}: host</li>
  *   <li>{@code UiHistoryShortcut}: host</li>
  *   <li>{@code UiInputContext}: host</li>
- *   <li>{@code UiInputRouter}: host</li>
+ *   <li>{@code UiInputRouter}: library；用途：选择稳定作用域并统一派发；宿主经 UiScreen.inputRouter 取得同一实例；当前无直接生产引用</li>
  *   <li>{@code UiInputScope}: host</li>
  *   <li>{@code UiInputTarget}: host</li>
  *   <li>{@code UiInteractionSession}: host</li>

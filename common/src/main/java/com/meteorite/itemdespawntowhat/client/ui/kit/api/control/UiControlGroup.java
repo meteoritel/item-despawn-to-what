@@ -5,9 +5,7 @@ import java.util.function.Consumer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusManager;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContainer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlStyle;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiStyleSource;
@@ -38,7 +36,7 @@ import java.util.Set;
  * 会话目标。坐标一律与控件矩形同坐标系，
  * 放在 {@code UiScrollView} 的平移 pose 内调用时传入内容坐标即可。</p>
  */
-public final class UiControlGroup implements UiInputTarget {
+public final class UiControlGroup implements UiInputContainer {
     /**
      * 稳定 key → 控件；迭代顺序即创建顺序，也是绘制与命中的层序（后创建者在上层）。
      */
@@ -124,16 +122,8 @@ public final class UiControlGroup implements UiInputTarget {
         return List.copyOf(ordered);
     }
 
-    /**
-     * 按绘制层序把可聚焦控件追加进焦点管理器：追加顺序即宿主期望的 Tab 顺序。
-     * 宿主可以在两段控件之间插入原生目标（例如 {@code EditBox} 的适配器），从而得到跨组件的正确顺序。
-     */
-    public void addFocusTargets(Consumer<UiFocusTarget> out) {
-        ordered.addFocusTargets(out);
-    }
-
-    /** 成员结构变化使作用域自动更新焦点索引。 */
-    @Override public long focusRevision() { return ordered.focusRevision(); }
+    /** 实际成员同时供绘制、命中和导航使用。 */
+    @Override public UiChildren<UiControl> inputChildren() { return ordered; }
 
     // ---------- 样式 ----------
 
@@ -175,7 +165,7 @@ public final class UiControlGroup implements UiInputTarget {
     public UiControl controlAt(double x, double y) {
         UiPointerHit hit = hitTest(x, y);
         if (hit == null) return null;
-        for (UiInputTarget owner : hit.owners()) if (owner instanceof UiControl control) return control;
+        for (var owner : hit.owners()) if (owner instanceof UiControl control) return control;
         return null;
     }
 
@@ -194,20 +184,6 @@ public final class UiControlGroup implements UiInputTarget {
     public void renderTooltip(GuiGraphics graphics, Font font, UiPointer pointer) {
         if (!pointer.allowsTooltip() || pointer.hit() == null) return;
         pointer.hit().renderTooltip(graphics, font, theme.tooltipSkin(), (int) pointer.x(), (int) pointer.y());
-    }
-
-    /**
-     * 按实际逆绘制命中派发，持续交互直接归属于叶子控件。
-     */
-    @Override
-    public boolean mousePressed(UiInputContext context) {
-        return ordered.mousePressed(context);
-    }
-    /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
-    @Override
-    public @Nullable UiPointerHit hitTest(double x, double y) {
-        UiPointerHit hit = ordered.hitTest(x, y);
-        return hit == null ? null : hit.within(this);
     }
 
 }

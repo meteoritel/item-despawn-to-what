@@ -1,13 +1,10 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiChildren;
 
-import java.util.function.Consumer;
-
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputScope;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.DebugTestRules;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
@@ -38,13 +35,17 @@ import org.jetbrains.annotations.Nullable;
  * 工作台的草稿工具入口进入，控件与视图状态全部留在本类。</p>
  */
 final class RuleEditorDebugPage implements EditorPage {
-    private final UiInputScope inputScope = new UiInputScope(this);
+    private final UiInputScope inputScope;
+    private final UiChildren<UiInputTarget> members = new UiChildren<>();
+
+    /** 页内实际成员，公共 chrome 由外壳装配。 */
+    @Override
+    public UiChildren<UiInputTarget> inputChildren() { return members; }
 
     @Override
     public UiInputScope inputScope() {
         return inputScope;
     }
-
 
     // ---- 页面度量与标题状态：屏幕按这些声明统一排版，页不自己算窗口几何 ----
 
@@ -85,7 +86,6 @@ final class RuleEditorDebugPage implements EditorPage {
 
     private @Nullable UiTextInput countField;
     private final RuleEditorScreenButtonBar bottomBar = new RuleEditorScreenButtonBar();
-    private final List<UiButton> buttons = new ArrayList<>();
     private @Nullable UiButton fillButton;
     private @Nullable UiButton deleteButton;
     private @Nullable UiButton toolsButton;
@@ -94,6 +94,7 @@ final class RuleEditorDebugPage implements EditorPage {
                         UiModalStack modals) {
         this.THEME = shell.theme();
         this.shell = shell;
+        this.inputScope = shell.createPageScope(this);
         this.model = model;
         this.font = font;
         this.modals = modals;
@@ -115,8 +116,7 @@ final class RuleEditorDebugPage implements EditorPage {
         UiButton back = button(EDIT_UI + "button.back", UiButtonVariant.SECONDARY, shell::backToList);
         toolsButton = button(EDIT_UI + "debug.button.tools", UiButtonVariant.SECONDARY, DebugWorkbenchHooks::open);
         bottomBar.set(List.of(fillButton, deleteButton, toolsButton, back));
-        buttons.clear();
-        buttons.addAll(List.of(fillButton, deleteButton, toolsButton, back));
+        members.addAll(List.of(countField, bottomBar));
         updateButtons();
     }
 
@@ -252,35 +252,6 @@ final class RuleEditorDebugPage implements EditorPage {
                 model.ruleIds().size(), model.dirtyRuleIds().size());
     }
 
-    // ---- 指针与键盘委托 ----
-
-
-    public boolean mousePressed(UiInputContext context) {
-        if (context.hits(shell.themeButton())) return shell.themeButton().mousePressed(context);
-        if (countField != null && countField.mousePressed(context)) {
-            return true;
-        }
-        return bottomBar.mousePressed(context);
-    }
-
-    public boolean mouseReleased(UiInputContext context) {
-        boolean consumed = countField != null && countField.mouseReleased(context);
-        consumed |= bottomBar.mouseReleased(context);
-        return consumed;
-    }
-
-    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
-        return countField != null && countField.mouseDragged(context, dragX, dragY);
-    }
-
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        return countField != null && countField.isFocused() && countField.keyPressed(keyCode, scanCode, modifiers);
-    }
-
-    public boolean charTyped(char codePoint, int modifiers) {
-        return countField != null && countField.isFocused() && countField.charTyped(codePoint, modifiers);
-    }
-
     // ---- 状态同步 ----
 
     // 每帧同步按钮可用状态：冻结时全部禁用，没有测试规则时删除按钮禁用
@@ -294,22 +265,6 @@ final class RuleEditorDebugPage implements EditorPage {
         if (deleteButton != null) {
             deleteButton.setEnabled(editable && hasTestRules);
         }
-    }
-
-    /** 依视觉顺序贡献焦点目标；登记事务由作用域根统一提交。 */
-    public void addFocusTargets(Consumer<UiFocusTarget> focus) {
-        focus.accept(shell.themeButton());
-        if (countField != null) {
-            focus.accept(countField);
-        }
-        for (UiButton button : buttons) {
-            focus.accept(button);
-        }
-    }
-    /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
-    @Override
-    public @Nullable UiPointerHit hitTest(double x, double y) {
-        return UiPointerHit.first(x, y, shell.themeButton(), bottomBar, countField);
     }
 
 }

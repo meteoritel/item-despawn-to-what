@@ -9,6 +9,8 @@
  *   <li>{@code UiFlatText}: host</li>
  *   <li>{@code UiIcon}: host</li>
  *   <li>{@code UiIconSheet}: host</li>
+ *   <li>{@code UiLayer}: host</li>
+ *   <li>{@code UiLayers}: host</li>
  *   <li>{@code UiModelBounds}: library；用途：以 renderer 实际提交的顶点测量模型，不使用实体碰撞框或方块形状推断可视范围；当前无直接生产引用</li>
  *   <li>{@code UiNineSlice}: host</li>
  *   <li>{@code UiOrthoLink}: library；用途：正交折线连接：父节点底部到子节点顶部，按「竖 → 横 → 竖」三段绘制，屏幕像素取整；当前无直接生产引用</li>

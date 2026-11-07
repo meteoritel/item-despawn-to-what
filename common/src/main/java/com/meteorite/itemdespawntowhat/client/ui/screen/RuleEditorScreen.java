@@ -29,7 +29,7 @@ import org.jetbrains.annotations.NotNull;
 import java.util.ArrayList;
 import java.util.List;
 
-import net.minecraft.Util;
+import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiThemedScreen;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiThemePublication;
@@ -70,7 +70,7 @@ public final class RuleEditorScreen extends UiThemedScreen implements UiLayoutSo
     private static final String UI = TypeLabels.UI_PREFIX;
 
     private final EditorShell shell;
-    private final EditorInputRouter input;
+    private final EditorLayers layers;
 
     private @Nullable RuleSaveOverlay saveOverlay;
     private UiRect contentArea = new UiRect(0, 0, 0, 0);
@@ -109,7 +109,10 @@ public final class RuleEditorScreen extends UiThemedScreen implements UiLayoutSo
         // 屏幕构造期 this.font 尚未注入，外壳与页面直接取客户端字体实例
         this.shell = new EditorShell(THEME, chromeTheme, workspace, model, new RuleListDisplayCache(model), Minecraft.getInstance().font, themeLabel(),
                 () -> requestTheme(themeScheme.next()));
-        this.input = new EditorInputRouter(shell, this::saveOverlay, inputRouter(), this::refreshUiState);
+        this.layers = new EditorLayers(shell, this::saveOverlay, this::renderPage, this::pageLayoutNodes);
+        shell.modals().setOnScopeChanged(this::refreshUiState);
+        shell.setInputChanged(this::refreshUiState);
+        shell.setCloseInput(inputRouter()::close);
     }
 
     private Component themeLabel() {
@@ -216,35 +219,35 @@ public final class RuleEditorScreen extends UiThemedScreen implements UiLayoutSo
                 : new UiRect(themeButton.bounds().x() - PAD - stateWidth, (headerBandHeight - stateHeight) / 2, stateWidth, stateHeight);
     }
 
+    @Override
+    protected void advanceUiFrame() {
+        UiTypePicker picker = shell.activePage().overlay();
+        if (picker != null && layers.select().activeScope() == picker.inputScope()) picker.advanceAnimation();
+    }
+
     // ---- 渲染 ----
 
     // 绘制消费根准备阶段已提交的几何
     @Override
     protected void renderThemedUi(@NotNull GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         PreviewIcons.beginFrame();
+        layers.select().render(graphics, font, mouseX, mouseY);
+        graphics.flush();
+        PreviewIcons.endFrame();
+    }
+
+    private void renderPage(GuiGraphics graphics, Font renderFont, UiPointer pointer, int depth) {
         EditorPage page = shell.activePage();
-        UiTypePicker picker = page.overlay();
-        boolean saving = shell.saving();
-        int w = this.width;
-        drawHeaderBand(graphics, w);
+        int mouseX = (int) pointer.x();
+        int mouseY = (int) pointer.y();
+        drawHeaderBand(graphics, width);
         drawHeaderText(graphics, page);
-        UiPointer pointer = page.inputScope().pointer(mouseX, mouseY).resolve(page);
         shell.themeButton().render(graphics, font, pointer);
         page.renderHeader(graphics, font, pointer);
         page.render(graphics, font, pointer, contentArea);
-        drawNotice(graphics, noticeY, w);
+        drawNotice(graphics, noticeY, width);
         page.renderFooter(graphics, font, pointer, footerArea);
-        if (saving) {
-            saveOverlay().render(graphics, width, height, saveOverlay().inputScope().pointer(mouseX, mouseY), Util.getMillis());
-            graphics.flush();
-            PreviewIcons.endFrame();
-            return;
-        }
-        shell.modals().render(graphics, font, UiPointer.at(mouseX, mouseY));
-        if (shell.modals().isEmpty() && picker != null) {
-            picker.render(graphics, font, picker.inputScope().pointer(mouseX, mouseY));
-        }
-        if (shell.modals().isEmpty() && picker == null && pointer.allowsTooltip()) {
+        if (pointer.allowsTooltip()) {
             Component tip = null;
             if (shell.notice() != null && noticeTruncated && noticeRect != null && noticeRect.contains(mouseX, mouseY)) {
                 tip = shell.notice();
@@ -258,12 +261,8 @@ public final class RuleEditorScreen extends UiThemedScreen implements UiLayoutSo
             } else if (pointer.hit() != null) {
                 pointer.hit().renderTooltip(graphics, font, THEME.tooltipSkin(), mouseX, mouseY);
             }
-            if (tip != null) {
-                renderTooltip(graphics, tip, mouseX, mouseY);
-            }
+            if (tip != null) renderTooltip(graphics, tip, mouseX, mouseY);
         }
-        graphics.flush();
-        PreviewIcons.endFrame();
     }
 
     // Component 的单行 tooltip 重载不处理换行；按窗口宽度折行后交给无阴影提示面板定位。
@@ -271,19 +270,16 @@ public final class RuleEditorScreen extends UiThemedScreen implements UiLayoutSo
         UiFlatText.tooltip(graphics, font, tip, Math.clamp(width - 16, 1, 240), mouseX, mouseY, THEME.tooltipSkin());
     }
 
-    /**
-     * 导出当前界面层的排版快照：活动页控件在前，顶部栏状态标签与换肤按钮随后，模态层在最后。
-     *
-     * <p>只导出活动页：另两页在切换后不再重排，其控件矩形会停留在上一次的屏幕位置，
-     * 报出来会让探针误以为那部分内容仍然可见。坐标已是屏幕 GUI 坐标——页每帧按内容区重排，
-     * 滚动也在页内部结算完毕。活动类型选择器由编辑页导出；保存遮罩由独立状态持有。</p>
-     */
+    /** 实际呈现项按绘制顺序导出，隐藏覆盖面不进入快照。 */
     @Override
     public List<UiLayoutNode> layoutNodes() {
+        return layers.select().layoutNodes();
+    }
+
+    private List<UiLayoutNode> pageLayoutNodes() {
         List<UiLayoutNode> nodes = new ArrayList<>(shell.activePage().layoutNodes());
         nodes.addAll(headerNodes());
         nodes.addAll(shell.themeButton().layoutNodes());
-        nodes.addAll(shell.modals().layoutNodes());
         return nodes;
     }
 
@@ -389,7 +385,7 @@ public final class RuleEditorScreen extends UiThemedScreen implements UiLayoutSo
 
     // ---- 焦点 / 事件 / 生命周期 ----
 
-    @Override protected UiInputScope inputScope() { return input.activeScope(); }
+    @Override protected UiInputScope inputScope() { return layers.select().activeScope(); }
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
@@ -413,7 +409,7 @@ public final class RuleEditorScreen extends UiThemedScreen implements UiLayoutSo
         if (shell.saving()) {
             return;
         }
-        input.close();
+        inputRouter().close();
         PreviewResources.screenClosed();
         shell.flushDrafts();
         super.onClose();

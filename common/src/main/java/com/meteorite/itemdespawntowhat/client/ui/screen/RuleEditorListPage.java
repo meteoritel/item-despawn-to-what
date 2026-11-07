@@ -1,8 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
-
-import java.util.function.Consumer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiChildren;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
@@ -62,13 +61,17 @@ import org.jetbrains.annotations.Nullable;
  * 页面切换与保存入口由 {@link EditorShell} 路由，编辑页负责本地保存编排。</p>
  */
 final class RuleEditorListPage implements EditorPage {
-    private final UiInputScope inputScope = new UiInputScope(this);
+    private final UiInputScope inputScope;
+    private final UiChildren<UiInputTarget> members = new UiChildren<>();
+
+    /** 页内实际成员，公共 chrome 由外壳装配。 */
+    @Override
+    public UiChildren<UiInputTarget> inputChildren() { return members; }
 
     @Override
     public UiInputScope inputScope() {
         return inputScope;
     }
-
 
     // ---- 页面度量与标题状态：屏幕按这些声明统一排版，页不自己算窗口几何 ----
 
@@ -205,6 +208,7 @@ final class RuleEditorListPage implements EditorPage {
                        UiModalStack modals) {
         this.THEME = shell.theme();
         this.shell = shell;
+        this.inputScope = shell.createPageScope(this);
         this.model = model;
         this.display = display;
         this.font = font;
@@ -240,6 +244,8 @@ final class RuleEditorListPage implements EditorPage {
             }
         });
         buildListButtons();
+        members.addAll(List.of(globalBar, searchField, filterBar, ruleList, listBar));
+        members.setTabOrder(globalBar, 1);
     }
 
     // 筛选按钮：状态与来源各一个轮询按钮，两者取交集
@@ -809,29 +815,6 @@ final class RuleEditorListPage implements EditorPage {
 
     // ---- 指针与键盘委托 ----
 
-
-    public boolean mousePressed(UiInputContext context) {
-        if (context.hits(shell.themeButton())) return shell.themeButton().mousePressed(context);
-        double mouseX = context.pointerX();
-        double mouseY = context.pointerY();
-        int button = context.button();
-        // 配方标签在整行命中之前优先：标签框很窄，先给树会吃掉这次点击
-        if (button == 0 && openTagDetails(mouseX, mouseY)) {
-            return true;
-        }
-        if (searchField != null && context.hits(searchField) && searchField.mousePressed(context)) {
-            return true;
-        }
-        if (context.hits(filterBar) && filterBar.mousePressed(context)) {
-            return true;
-        }
-        if (ruleList != null && context.hits(ruleList) && ruleList.mousePressed(context)) {
-            return true;
-        }
-        return globalBar.mousePressed(context)
-                || listBar.mousePressed(context);
-    }
-
     // 点击配方标签：打开标签轮播弹窗；未命中标签时返回 false 继续本页命中测试。
     private boolean openTagDetails(double mouseX, double mouseY) {
         TagPreviewIcons.Tag tag = tagAt(mouseX, mouseY);
@@ -862,47 +845,28 @@ final class RuleEditorListPage implements EditorPage {
         return display.snapshot(node.value()).preview().tagAt(font, row, mouseX, mouseY);
     }
 
-    public boolean mouseReleased(UiInputContext context) {
-        boolean consumed = ruleList != null && ruleList.mouseReleased(context);
-        consumed |= searchField != null && searchField.mouseReleased(context);
-        consumed |= filterBar.mouseReleased(context);
-        consumed |= globalBar.mouseReleased(context);
-        consumed |= listBar.mouseReleased(context);
+    /** 标签入口细分已命中的树分支，其余事件沿成员结构派发。 */
+    @Override
+    public boolean mousePressed(UiInputContext context) {
+        if (context.button() == 0 && context.hits(ruleList)
+                && openTagDetails(context.pointerX(), context.pointerY())) return true;
+        return members.mousePressed(context);
+    }
+
+    /** 搜索内容随控件消费的按键同步。 */
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        boolean consumed = members.keyPressed(keyCode, scanCode, modifiers);
+        if (consumed) syncSearch();
         return consumed;
     }
 
-    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
-        if (searchField != null && searchField.mouseDragged(context, dragX, dragY)) {
-            return true;
-        }
-        return ruleList != null && ruleList.mouseDragged(context, dragX, dragY);
-    }
-
-    public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
-        return ruleList != null && ruleList.mouseScrolled(context, scrollX, scrollY);
-    }
-
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        // 搜索框优先消费输入，其余按键交给规则树
-        return listKeyPressed(keyCode, scanCode, modifiers);
-    }
-
-
-    private boolean listKeyPressed(int keyCode, int scanCode, int modifiers) {
-        if (searchField != null && searchField.isFocused()
-                && searchField.keyPressed(keyCode, scanCode, modifiers)) {
-            syncSearch();
-            return true;
-        }
-        return ruleList != null && ruleList.isFocused() && ruleList.keyPressed(keyCode, scanCode, modifiers);
-    }
-
+    /** 搜索内容随字符输入同步。 */
+    @Override
     public boolean charTyped(char codePoint, int modifiers) {
-        if (searchField != null && searchField.isFocused() && searchField.charTyped(codePoint, modifiers)) {
-            syncSearch();
-            return true;
-        }
-        return false;
+        boolean consumed = members.charTyped(codePoint, modifiers);
+        if (consumed) syncSearch();
+        return consumed;
     }
 
     // 规则条目整行都进入条件提示的悬停范围；配方标签框优先，只有没命中标签时才展开条件树。
@@ -942,24 +906,11 @@ final class RuleEditorListPage implements EditorPage {
 
     // ---- 焦点与使能 ----
 
-    /** 依视觉顺序贡献焦点目标；登记事务由作用域根统一提交。 */
-    public void addFocusTargets(Consumer<UiFocusTarget> focus) {
-        focus.accept(shell.themeButton());
-        if (searchField != null) {
-            focus.accept(searchField);
-        }
-        filterBar.addFocusTargets(focus);
-        if (ruleList != null) ruleList.addFocusTargets(focus);
-        listBar.addFocusTargets(focus);
-        globalBar.addFocusTargets(focus);
-    }
-    @Override public long focusRevision() { return filterBar.focusRevision() + listBar.focusRevision() + globalBar.focusRevision(); }
-
     /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
     @Override
     public @Nullable UiPointerHit hitTest(double x, double y) {
-        UiPointerHit hit = UiPointerHit.first(x, y, shell.themeButton(), listBar, ruleList, filterBar, searchField, globalBar);
-        return describeHit(hit, x, y);
+        UiPointerHit hit = members.hitTest(x, y);
+        return hit == null ? null : describeHit(hit, x, y).within(this);
     }
 
 }

@@ -26,6 +26,8 @@ public abstract class UiScreen extends Screen {
     protected final UiInputRouter inputRouter() { return input; }
     /** 输入派发已结束，在下一次布局和命中前应用根拥有的待发布状态。 */
     protected void prepareUi() { }
+    /** 每个绘制帧只推进一次动画；事件触发的准备和布局不调用。 */
+    protected void advanceUiFrame() { }
     /** 内容布局钩子；稳定控件只更新几何，事件与绘制读取同一布局。 */
     protected void layoutUi() { }
     /** 在准备完布局、资源和焦点后绘制内容。 */
@@ -38,6 +40,7 @@ public abstract class UiScreen extends Screen {
             invalidateUiResources();
             resources = current;
         }
+        advanceUiFrame();
         prepareUi();
         layoutUi();
         refreshUiState();

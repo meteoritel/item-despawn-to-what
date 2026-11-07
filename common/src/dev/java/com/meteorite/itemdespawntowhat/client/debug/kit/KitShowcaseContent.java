@@ -21,7 +21,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiSliderRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiModal;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiModalStack;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiTextInput;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputScope;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiLayer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlRole;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -136,12 +136,29 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
         return control;
     }
 
-    UiInputScope activeScope(UiInputScope page) {
-        UiInputScope overlay = surfaces.overlayScope();
-        if (overlay != null) return overlay;
-        UiModal top = modals.top();
-        return top == null ? page : top.inputScope();
+    private List<UiLayer> modalLayers = List.of();
+    private List<UiLayer> imageLayers = List.of();
+    private List<UiLayer> overlayLayers = List.of();
+
+    List<UiLayer> overlayLayers() {
+        List<UiLayer> modalsNow = modals.layers();
+        List<UiLayer> imageNow = surfaces.overlayLayers();
+        if (modalLayers != modalsNow || imageLayers != imageNow) {
+            modalLayers = modalsNow;
+            imageLayers = imageNow;
+            List<UiLayer> next = new ArrayList<>(modalLayers);
+            next.addAll(imageLayers);
+            overlayLayers = List.copyOf(next);
+        }
+        return overlayLayers;
     }
+
+    void setOnScopeChanged(Runnable handler) {
+        modals.setOnScopeChanged(handler);
+        surfaces.setOnOverlayChanged(handler);
+    }
+
+    void advanceFrame() { modals.tick(); }
 
     private UiControl button(String key, Runnable action) {
         UiControl control = controls.obtain(key);
@@ -225,11 +242,8 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
         else renderControls(graphics, pointer);
         WorkbenchLayout.drawFooterRule(graphics, theme, width, height);
         footer.render(graphics, font, pointer);
-        modals.tick();
-        modals.render(graphics, font, pointer);
-        surfaces.renderOverlay(graphics, pointer);
         // 提示画在页脚与弹层之后；弹层开启时由弹层自己出提示
-        if (page == Page.CONTROLS && modals.isEmpty() && pointer.allowsTooltip() && pointer.hit() != null) {
+        if (page == Page.CONTROLS && pointer.allowsTooltip() && pointer.hit() != null) {
             pointer.hit().renderTooltip(graphics, font, theme.tooltipSkin(), (int) pointer.x(), (int) pointer.y());
         }
     }
@@ -353,7 +367,6 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
         for (UiControl control : navigation.controls()) result.addAll(control.layoutNodes());
         for (UiControl control : footer.controls()) result.addAll(control.layoutNodes());
         result.add(node(UiLayoutNode.Kind.FRAME, bounds, text("kit_showcase"), true, nodes));
-        result.addAll(modals.layoutNodes());
         return result;
     }
 

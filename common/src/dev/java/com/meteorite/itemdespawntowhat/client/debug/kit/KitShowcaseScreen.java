@@ -1,6 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.debug.kit;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputScope;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiLayer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiLayers;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutSource;
 import net.minecraft.client.gui.GuiGraphics;
@@ -27,7 +29,7 @@ public final class KitShowcaseScreen extends UiThemedScreen implements UiLayoutS
     private int themeIndex;
     private final UiThemePublication<UiStyleSource> themePublication;
     private KitShowcaseContent content;
-    private UiInputScope scope;
+    private UiLayers presentation;
 
     /** 创建独立本地场景，不要求世界或编辑工作区。 */
     public KitShowcaseScreen(Runnable returnTo) {
@@ -61,23 +63,33 @@ public final class KitShowcaseScreen extends UiThemedScreen implements UiLayoutS
     protected void init() {
         if (content == null) {
             content = new KitShowcaseContent(font, theme, this::onClose, this::nextTheme, previewFactory);
-            scope = new UiInputScope(content);
+            UiInputScope scope = new UiInputScope(content);
             scope.setEscape(this::onClose);
+            presentation = new UiLayers(new UiLayer(scope,
+                    (graphics, renderFont, pointer, depth) -> content.render(graphics, pointer), content));
         }
+        content.setOnScopeChanged(this::refreshUiState);
         content.layout(width, height);
         refreshUiState();
+    }
+
+    @Override protected void advanceUiFrame() { content.advanceFrame(); }
+
+    private UiLayers layers() {
+        presentation.setOverlays(content.overlayLayers());
+        return presentation;
     }
 
     @Override protected void layoutUi() { content.layout(width, height); }
 
     @Override
     protected void renderThemedUi(@NotNull GuiGraphics graphics, int x, int y, float delta) {
-        content.render(graphics, scope.pointer(x, y).resolve(content));
+        layers().render(graphics, font, x, y);
     }
 
     @Override
     public List<UiLayoutNode> layoutNodes() {
-        return content == null ? List.of() : content.layoutNodes();
+        return content == null ? List.of() : layers().layoutNodes();
     }
 
     private void nextTheme() { requestTheme(themes.get(themeIndex = (themeIndex + 1) % themes.size())); }
@@ -94,9 +106,9 @@ public final class KitShowcaseScreen extends UiThemedScreen implements UiLayoutS
         return super.keyPressed(key, scan, mods);
     }
 
-    @Override protected UiInputScope inputScope() { return content.activeScope(scope); }
+    @Override protected UiInputScope inputScope() { return layers().activeScope(); }
     @Override protected void invalidateUiResources() { content.invalidateResources(); }
-    @Override protected void releaseUiResources() { themePublication.discard(); content.releaseResources(); }
+    @Override protected void releaseUiResources() { themePublication.discard(); content.setOnScopeChanged(() -> { }); content.releaseResources(); }
     @Override public void onClose() { returnTo.run(); }
     @Override public boolean isPauseScreen() { return false; }
 }

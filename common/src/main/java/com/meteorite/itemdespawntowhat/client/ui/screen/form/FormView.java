@@ -1,6 +1,9 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiScrollView;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiChildren;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
+import org.lwjgl.glfw.GLFW;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
@@ -65,8 +68,8 @@ public final class FormView implements UiWidget, UiLayoutSource {
     final EditSession session;
     // 草稿装载与回写集中在 FormCommit
     private final FormCommit commit = new FormCommit(this);
-    // 输入分发集中在 FormInputRouter
-    private final FormInputRouter inputRouter = new FormInputRouter(this);
+    private static final int SCROLL_STEP = 24;
+    private final UiChildren<FormRowInput> rowInputs = new UiChildren<>();
     String basePath;
     long loadedRevision;
     final List<FormRow> rows = new ArrayList<>();
@@ -191,6 +194,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
     public List<FormField> setDescriptor(TypeEditorDescriptor descriptor) {
         unmount();
         rows.clear();
+        rowInputs.clear();
         focusRevision++;
         fields.clear();
         fieldHandles.clear();
@@ -226,6 +230,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
         fieldHandles.add(handle);
         addPickers(row);
         rows.add(row);
+        rowInputs.add(row.input);
         invalidateMeasure();
         return handle;
     }
@@ -765,27 +770,21 @@ public final class FormView implements UiWidget, UiLayoutSource {
         return matched;
     }
 
-    /**
-     * Tab 顺序（U 界面把本表登记进 UiFocusManager）
-     */
-    public List<UiFocusTarget> focusTargets() {
-        List<UiFocusTarget> list = new ArrayList<>();
-        addFocusTargets(list::add);
-        return list;
-    }
-
     private long focusRevision;
 
-    @Override public long focusRevision() { return focusRevision + UiWidget.super.focusRevision(); }
+    @Override public long focusRevision() { return focusRevision + rowInputs.focusRevision() + UiWidget.super.focusRevision(); }
 
+    /** 可见行沿成员结构贡献焦点。 */
+    @Override
     public void addFocusTargets(Consumer<UiFocusTarget> out) {
-        if (!visible) return;
-        for (FormRow row : rows) {
-            if (!row.visible) continue;
-            row.control.addFocusTargets(out);
-            row.pickers.forEach(out);
-            row.actions.forEach(out);
-        }
+        if (visible) rowInputs.addFocusTargets(out);
+    }
+
+    /** 会话结束后传播子树的本地退出通知。 */
+    @Override
+    public void scopeExited(UiInteractionSession.EndReason reason) {
+        scroll.scopeExited(reason);
+        rowInputs.scopeExited(reason);
     }
 
     /**
@@ -1014,15 +1013,19 @@ public final class FormView implements UiWidget, UiLayoutSource {
                             THEME.palette().surfaces().text(), false);
                     continue;
                 }
-                row.control.render(graphics, renderFont, pointer);
-                if (row.control.issues(row.path).stream().anyMatch(FormIssue::blocking)) {
-                    int left = viewportX + row.controlRelX;
-                    int top = screenY + row.controlRelY;
-                    graphics.fill(left, top + row.control.layoutHeight() - 1,
-                            left + row.controlWidth, top + row.control.layoutHeight(), THEME.palette().controls().danger());
+                for (UiInputTarget member : row.input.inputChildren()) {
+                    if (member instanceof UiButton button) {
+                        button.render(graphics, renderFont, pointer);
+                    } else {
+                        row.control.render(graphics, renderFont, pointer);
+                        if (row.control.issues(row.path).stream().anyMatch(FormIssue::blocking)) {
+                            int left = viewportX + row.controlRelX;
+                            int top = screenY + row.controlRelY;
+                            graphics.fill(left, top + row.control.layoutHeight() - 1,
+                                    left + row.controlWidth, top + row.control.layoutHeight(), THEME.palette().controls().danger());
+                        }
+                    }
                 }
-                for (var pickerButton : row.pickers) pickerButton.render(graphics, renderFont, pointer);
-                for (UiButton action : row.actions) action.render(graphics, renderFont, pointer);
             }
             if (highlightTicks > 0 && highlightBounds != null) {
                 THEME.drawFocusOutline(graphics, highlightBounds);
@@ -1035,32 +1038,75 @@ public final class FormView implements UiWidget, UiLayoutSource {
         }
     }
 
+    /** 滚动条优先，字段事件只进入已命中的行。 */
     @Override
     public boolean mousePressed(UiInputContext context) {
-        boolean handled = inputRouter.mousePressed(context);
+        if (!visible || !enabled || !bounds().contains(context.pointerX(), context.pointerY())) return false;
+        syncBounds();
+        boolean handled = context.hits(scroll) ? scroll.mousePressed(context) : rowInputs.mousePressed(context);
         if (handled) invalidateMeasure();
         return handled;
     }
 
+    /** 未建立持续会话的配对释放仍沿原行派发。 */
+    @Override
+    public boolean mouseReleased(UiInputContext context) {
+        return context.hits(scroll) ? scroll.mouseReleased(context) : rowInputs.mouseReleased(context);
+    }
+
+    /** 嵌套控件先消费滚轮，再由当前视口滚动。 */
     @Override
     public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
-        return inputRouter.mouseScrolled(context, scrollX, scrollY);
+        if (!visible || !bounds().contains(context.pointerX(), context.pointerY())) return false;
+        if (rowInputs.mouseScrolled(context, scrollX, scrollY)) return true;
+        return maxScroll() > 0 && scroll.scrollByPixels(scrollY * SCROLL_STEP);
     }
 
+    /** 回调前固定行身份，重建后停止旧行提交。 */
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        boolean handled = inputRouter.keyPressed(keyCode, scanCode, modifiers);
-        if (handled) invalidateMeasure();
-        return handled;
+        FormRow row = focusedFieldRow();
+        if (rowInputs.keyPressed(keyCode, scanCode, modifiers)) {
+            invalidateMeasure();
+            if (row != null && row.attached) {
+                retainPendingInputs();
+                if (row.attached && (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER)
+                        && !row.field.isLongText()
+                        && row.control.issues(row.path).stream().noneMatch(FormIssue::blocking)) {
+                    writeField(row, row.control.store());
+                    if (row.attached) acceptInput(row);
+                }
+            }
+            return true;
+        }
+        if (keyCode == GLFW.GLFW_KEY_PAGE_UP || keyCode == GLFW.GLFW_KEY_PAGE_DOWN) {
+            scroll.setOffset(scroll.offset() + (keyCode == GLFW.GLFW_KEY_PAGE_UP ? -viewportHeight : viewportHeight));
+            invalidateMeasure();
+            return true;
+        }
+        return false;
     }
 
+    /** 持续会话之外的按键释放沿持焦行派发。 */
+    @Override
     public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
-        return inputRouter.keyReleased(keyCode, scanCode, modifiers);
+        return rowInputs.keyReleased(keyCode, scanCode, modifiers);
     }
 
+    /** 字符消费后保留该次输入所属行的待输入。 */
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
-        return inputRouter.charTyped(codePoint, modifiers);
+        FormRow row = focusedFieldRow();
+        if (!rowInputs.charTyped(codePoint, modifiers)) return false;
+        if (row != null && row.attached) retainPendingInputs();
+        return true;
+    }
+
+    private @Nullable FormRow focusedFieldRow() {
+        for (FormRow row : rows) {
+            if (row.attached && row.visible && row.control.hasFocus()) return row;
+        }
+        return null;
     }
 
     /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
@@ -1072,10 +1118,8 @@ public final class FormView implements UiWidget, UiLayoutSource {
         if (scrollHit != null) return scrollHit.within(this);
         for (int index = rows.size() - 1; index >= 0; index--) {
             FormRow row = rows.get(index);
-            if (!row.visible) continue;
-            UiPointerHit hit = UiPointerHit.topmost(x, y, row.actions);
-            if (hit == null) hit = UiPointerHit.topmost(x, y, row.pickers);
-            if (hit == null) hit = row.control.hitTest(x, y);
+            if (!row.attached || !row.visible) continue;
+            UiPointerHit hit = row.input.hitTest(x, y);
             if (hit != null) return rowHit(row, index, hit);
             int screenY = rowScreenY(row);
             int labelHeight = row.narrow ? font.lineHeight : row.contentHeight;

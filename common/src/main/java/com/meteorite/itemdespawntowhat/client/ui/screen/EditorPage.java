@@ -1,14 +1,9 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
-
-import java.util.function.Consumer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContainer;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputScope;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTypePicker;
@@ -26,7 +21,7 @@ import org.jetbrains.annotations.Nullable;
  * 页只声明自己的差异度量（标题带最小高度、内边距）并按屏幕给出的区域绘制；页不互相引用，也不反向回调屏幕。
  * 页的构造期协作者与跨页命令由 {@link EditorShell} 提供。</p>
  */
-interface EditorPage extends UiInputTarget {
+interface EditorPage extends UiInputContainer {
 
     /**
      * 页面实例的稳定输入作用域。
@@ -104,35 +99,12 @@ interface EditorPage extends UiInputTarget {
 
     void renderFooter(GuiGraphics graphics, Font font, UiPointer pointer, UiRect footer);
 
-    void addFocusTargets(Consumer<UiFocusTarget> focus);
-
-    // ---- 输入派发 ----
-
-    boolean mousePressed(UiInputContext context);
-
-    boolean mouseReleased(UiInputContext context);
-
-    boolean mouseDragged(UiInputContext context, double dragX, double dragY);
-
-
-    boolean keyPressed(int keyCode, int scanCode, int modifiers);
-
-
-    boolean charTyped(char codePoint, int modifiers);
-
     // ---- 状态同步（屏幕不推送使能，页自己查询外壳）----
 
     /**
      * 按当前状态刷新本页按钮的可用状态与标签。
      */
     void updateButtons();
-
-    /**
-     * 输入作用域切换：结束本页正在进行的交互与捕获。
-     */
-    @Override
-    default void scopeExited(UiInteractionSession.EndReason reason) {
-    }
 
     // ---- 可选入口 ----
 

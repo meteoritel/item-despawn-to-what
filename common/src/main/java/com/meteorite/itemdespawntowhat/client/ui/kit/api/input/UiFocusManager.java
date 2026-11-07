@@ -186,12 +186,16 @@ public final class UiFocusManager {
         index = pending;
         pending = new Index();
         updating = false;
+        attachTargets();
+        lastWithin.entrySet().removeIf(entry -> !index.contains(entry.getKey(), entry.getValue()));
+        refresh();
+    }
+
+    private void attachTargets() {
         // 先挂组，再挂叶子：共享视图最终指向实际 Tab 目标。
         for (UiFocusTarget target : index.members.keySet()) target.focusState().attach(this, target);
         for (UiFocusTarget target : index.leaves) target.focusState().attach(this, target);
         if (focused != null && withinGroup != null) focused.focusState().attach(this, focused);
-        lastWithin.entrySet().removeIf(entry -> !index.contains(entry.getKey(), entry.getValue()));
-        refresh();
     }
 
     void requireUpdateComplete() {
@@ -361,6 +365,8 @@ public final class UiFocusManager {
     }
 
     void resume() {
+        // 公共 chrome 可出现在多个稳定域中，返回时将视图接回当前域。
+        attachTargets();
         refresh();
         suspended = false;
         if (focused == null) focusFirst();

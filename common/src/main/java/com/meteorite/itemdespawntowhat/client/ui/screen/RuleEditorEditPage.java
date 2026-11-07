@@ -1,11 +1,10 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
-import java.util.function.Consumer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiChildren;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputScope;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.ClientTypeRegistries;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorRegistries;
@@ -60,13 +59,18 @@ import org.jetbrains.annotations.Nullable;
  * 页切换由 {@link EditorShell} 负责；屏幕只驱动页面生命周期与输入派发。</p>
  */
 final class RuleEditorEditPage implements EditorPage {
-    private final UiInputScope inputScope = new UiInputScope(this);
+    private final UiInputScope inputScope;
+    private final UiChildren<UiInputTarget> sectionMembers = new UiChildren<>();
+    private final UiChildren<UiInputTarget> members = new UiChildren<>();
+
+    /** 页内实际成员，公共 chrome 由外壳装配。 */
+    @Override
+    public UiChildren<UiInputTarget> inputChildren() { return members; }
 
     @Override
     public UiInputScope inputScope() {
         return inputScope;
     }
-
 
     private final UiHostTheme THEME;
     // 布局常量
@@ -115,6 +119,7 @@ final class RuleEditorEditPage implements EditorPage {
                        UiModalStack modals) {
         this.THEME = shell.theme();
         this.shell = shell;
+        this.inputScope = shell.createPageScope(this);
         this.model = model;
         this.workspace = workspace;
         this.font = font;
@@ -176,6 +181,7 @@ final class RuleEditorEditPage implements EditorPage {
         tabControl.setSelected(tab.value());
         tabControl.setOnChanged(this::switchTab);
         buildFooterButtons();
+        members.addAll(List.of(tabControl, sectionMembers, footerBar));
     }
 
     private List<UiSegmentedControl.Option> tabOptions() {
@@ -329,8 +335,6 @@ final class RuleEditorEditPage implements EditorPage {
             nodes.addAll(pages.layoutNodes());
         }
         nodes.addAll(footerBar.layoutNodes());
-        UiTypePicker picker = activeTypePicker();
-        if (picker != null) { nodes.addAll(picker.layoutNodes()); }
         return nodes;
     }
 
@@ -343,14 +347,9 @@ final class RuleEditorEditPage implements EditorPage {
         footerBar.render(graphics, renderFont, pointer);
     }
 
-
-
-
     public @Nullable UiTypePicker overlay() {
         return activeTypePicker();
     }
-
-
 
     @Nullable UiTypePicker activeTypePicker() {
         if (pages == null) return null;
@@ -369,6 +368,7 @@ final class RuleEditorEditPage implements EditorPage {
         }
         if (pages == null) {
             pages = new RuleEditorEditSections(shell, model, font, focus, buildConditionEditingSupport(), () -> finish(Finish.EDIT));
+            sectionMembers.add(pages);
         }
         boundSession = session;
         pages.setPage(tab);
@@ -397,6 +397,7 @@ final class RuleEditorEditPage implements EditorPage {
         }
         if (reason == Finish.UNMOUNT || reason == Finish.CLOSE) {
             pages.unmount();
+            sectionMembers.clear();
             pages = null;
             boundSession = null;
         }
@@ -431,24 +432,6 @@ final class RuleEditorEditPage implements EditorPage {
         }
     }
 
-    /** 依视觉顺序贡献焦点目标；登记事务由作用域根统一提交。 */
-    public void addFocusTargets(Consumer<UiFocusTarget> focus) {
-        focus.accept(shell.themeButton());
-        if (tabControl != null) {
-            focus.accept(tabControl);
-        }
-        if (pages != null) {
-            for (UiFocusTarget target : pages.focusTargets()) {
-                focus.accept(target);
-            }
-        }
-        for (UiButton button : footerButtons) {
-            focus.accept(button);
-        }
-    }
-
-    @Override public long focusRevision() { return (pages == null ? 0 : pages.focusRevision()) + footerBar.focusRevision(); }
-
     private void syncEditableState() {
         if (pages != null) {
             pages.syncEditableState();
@@ -477,49 +460,6 @@ final class RuleEditorEditPage implements EditorPage {
                 ? Component.translatable(UI + "button.apply_changes", model.dirtyRuleIds().size())
                 : Component.translatable(UI + "button.no_changes"));
     }
-
-    // ---- 输入委托 ----
-
-    public boolean mousePressed(UiInputContext context) {
-        if (context.hits(shell.themeButton())) return shell.themeButton().mousePressed(context);
-        if (tabControl != null && context.hits(tabControl) && tabControl.mousePressed(context)) {
-            return true;
-        }
-        if (pages != null && context.hits(pages) && pages.mousePressed(context)) {
-            return true;
-        }
-        return footerBar.mousePressed(context);
-    }
-
-    // 底排按钮命中（页签 / 页面控件未消费时）
-
-    public boolean mouseReleased(UiInputContext context) {
-        boolean consumed = pages != null && pages.mouseReleased(context);
-        consumed |= footerBar.mouseReleased(context);
-        return consumed;
-    }
-
-    public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
-        return pages != null && pages.mouseDragged(context, dragX, dragY);
-    }
-
-    public boolean mouseScrolled(UiInputContext context, double scrollX, double scrollY) {
-        return pages != null && pages.mouseScrolled(context, scrollX, scrollY);
-    }
-
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        return tabControl != null && tabControl.isFocused() && tabControl.keyPressed(keyCode, scanCode, modifiers)
-                || pages != null && pages.keyPressed(keyCode, scanCode, modifiers);
-    }
-
-    public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
-        return pages != null && pages.keyReleased(keyCode, scanCode, modifiers);
-    }
-
-    public boolean charTyped(char codePoint, int modifiers) {
-        return pages != null && pages.charTyped(codePoint, modifiers);
-    }
-
 
     // ---- 保存 / 撤销 ----
 
@@ -763,11 +703,6 @@ final class RuleEditorEditPage implements EditorPage {
                 return ClientTypeRegistries.conditions();
             }
         };
-    }
-    /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
-    @Override
-    public @Nullable UiPointerHit hitTest(double x, double y) {
-        return UiPointerHit.first(x, y, shell.themeButton(), footerBar, pages, tabControl);
     }
 
 }

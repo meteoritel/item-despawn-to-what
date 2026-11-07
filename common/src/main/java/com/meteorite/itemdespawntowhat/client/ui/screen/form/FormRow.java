@@ -31,6 +31,7 @@ final class FormRow {
     @Nullable Supplier<RuleValue> defaultValue;
     boolean defaultDisplayed;
     boolean labelVisible = true;
+    final FormRowInput input = new FormRowInput(this);
     final List<UiButton> pickers = new ArrayList<>();
     final List<UiButton> actions = new ArrayList<>();
     final List<UiButton> buttons = new ArrayList<>();
@@ -40,6 +41,7 @@ final class FormRow {
         buttons.clear();
         buttons.addAll(pickers);
         buttons.addAll(actions);
+        input.refresh();
         // 按钮数量或顺序变化后旧的内容坐标失效，等下一次布局测量重建
         buttonLayoutCount = 0;
     }
@@ -98,5 +100,6 @@ final class FormRow {
         this.field = field;
         this.path = path;
         this.control = control;
+        input.refresh();
     }
 }

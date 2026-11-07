@@ -25,9 +25,9 @@ public interface UiInputTarget {
 
     /** 判断子树是否拥有逻辑焦点，用于键盘与字符的同一路径派发。 */
     default boolean hasFocus() {
-        if (this instanceof UiFocusTarget target) return target.isFocused();
+        if (this instanceof UiFocusTarget target) return target.focusState().containsFocus();
         boolean[] focused = {false};
-        addFocusTargets(target -> focused[0] |= target.isFocused());
+        addFocusTargets(target -> focused[0] |= target.focusState().containsFocus());
         return focused[0];
     }
 

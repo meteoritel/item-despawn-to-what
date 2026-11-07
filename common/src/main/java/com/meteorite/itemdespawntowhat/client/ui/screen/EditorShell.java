@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputScope;
 import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.net.RuleEditClientWorkspace;
@@ -136,6 +137,10 @@ final class EditorShell {
                             (next == null || !next.acceptsTextInput()) && !(next instanceof UiListEditor))));
         }
         model.refresh();
+    }
+
+    UiInputScope createPageScope(EditorPage page) {
+        return new UiInputScope(new EditorPageInputRoot(page, themeButton));
     }
 
     UiButton themeButton() { return themeButton; }

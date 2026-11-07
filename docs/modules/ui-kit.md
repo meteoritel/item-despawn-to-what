@@ -120,13 +120,13 @@ flowchart LR
 | `UiThemes` / `UiSkinImages` / `UiSurfaceSkin` | 皮肤组合 | 基底快照、角色、配色与资源画法 | 宿主主题、纯 kit 样例 |
 | `UiThemedScreen` / `UiThemePublication` | 根装配 | 共享 Context、默认背景和手势结束后的发布 | `UiScreen`、宿主屏幕 |
 | `UiInputTarget` / `UiInputContext` | 输入契约 | 指针、滚轮、键盘与字符输入都以“是否消费”返回；上下文是显式快照，坐标为 GUI 逻辑坐标 | 全部 kit 控件、宿主控件适配 |
-| `UiChildren` | 内容结构 | 一份实际成员驱动绘制遍历、命中、焦点贡献和普通输入；不持有第二份捕获 | 容器、页面、按钮栏 |
+| `UiChildren` / `UiInputContainer` | 内容结构与默认派发 | 容器提供稳定成员结构，派生命中归属、焦点贡献、普通输入与退出传播；Tab 可按成员附加次序派生 | 容器、页面、按钮栏 |
 | `UiOverlay` | 覆盖面外壳 | 统一遮罩、局部层与阻断作用域，内容保留自己的关闭语义 | 模态、灯箱、保存层、picker |
 | `UiInputRouter` / `UiInputScope` | 输入作用域与路由 | 实例路由器选择活动作用域；作用域持有内容、唯一焦点与会话；普通内容派发一次，持续输入按会话归属送达 | 宿主屏幕、模态、控件 |
 | `UiPointerHit` / `UiPointer` | 命中与绘制快照 | 命中结果保存所有者链、局部坐标、焦点候选、行身份与提示呈现；绘制指针结合 active 与 POINTER 捕获选择可悬停分支 | `UiInputTarget.hitTest`、控件、容器与文档 |
 | `UiInteractionSession` | 唯一持续交互 | 按 POINTER / KEY / TEXT 登记目标；结束先摘除所有权再通知，控件负责提交或恢复自己的值与手势模型 | `UiInputScope`、数值、文本、按钮及视图手势 |
 | `UiValueInteraction<V>` | 操作生命周期 | begin → preview → commit 或 cancel；真实模型注入有效性与等价判断，取消先由核心恢复实际值，所有结束路径通知 finished | 滑条、精确输入行、宿主历史 |
-| `UiFocusManager` / `UiFocusTarget` / `UiFocusState` | 唯一焦点与控件视图 | 作用域从内容树收集有类型的贡献，普通容器从实际成员声明顺序派生 Tab 顺序；资格、逻辑焦点、键盘提示与激活分别表达；复合控件内部编辑共用外部 Tab 位置 | `UiInputScope`、宿主旁白与自动滚动 |
+| `UiFocusManager` / `UiFocusTarget` / `UiFocusState` | 唯一焦点与控件视图 | 作用域从内容树收集有类型的贡献，普通容器默认从实际成员声明顺序派生 Tab 顺序；资格、逻辑焦点、键盘提示与激活分别表达；复合控件内部编辑共用外部 Tab 位置 | `UiInputScope`、宿主旁白与自动滚动 |
 | `UiFocusFollow` / `UiFocusManager.Listener` | 焦点效果 | 用注入的归属与内容坐标把目标滚入视口；组合效果按顺序执行，名称交给宿主播报 | `UiScrollView`、宿主 `UiNarration` |
 | `UiTreeEditor` / `UiTreeEditor.Adapter` / `UiTreeCodec` | 树聚合根与扩展点 | 绑定宿主不可变节点做结构操作，配置变更与视图变更分开上报；一次操作以一条 `Change` 提交 | `UiTreePath`、`UiTreeMoveInteraction`、宿主节点 |
 | `UiTreeProjection` / `UiTreeViewState` / `UiTreeNavigation` / `UiTreeRowMarker` | 树展示原语 | 每个结构版本建立先序索引；每个视图独立保存选择与折叠；可见行统一导航与标记命中，完整旧新路径映射迁移状态 | 管理树、条件摘要、`UiTreeEditor` |
@@ -140,6 +140,7 @@ flowchart LR
 | `UiNumberPolicy` / `UiSliderWindow` / `UiNumbers` | 数值契约值 | 合法域与粗细步长吸附、轨道显示窗口、数值文本显示与解析各由唯一实现承担 | 滑条、精确输入、宿主字段 |
 | `UiNumberField` | 数值字段组合 | 注入 `UiSingleLineEditor`，统一双向绑定、相对几何、输入与绘制；两个子控件分别参与 Tab，空文本缺席由宿主回调处理 | `UiScalarSlider`、`UiValueTextBinding`、宿主数值字段 |
 | `UiValueTextBinding` | 双向绑定 | 统一数值预览/提交/取消与程序回填的重入保护；解析暂不可用时保留原文并停在最近有效值，未开始文本预览的取消保持原文 | 数值控件、精确输入行 |
+| `UiLayer` / `UiLayers` | 呈现清单 | 稳定作用域、绘制动作与布局来源组成呈现项；基础内容和覆盖面共用顶层输入选择、绘制与快照顺序 | 编辑器、纯 kit 展示、模态栈 |
 | `UiRenderLayers` | 绘制层序 | 在相对 z 偏移内提交批次；模型以独立深度绘制并平面合成，模态层按深度展开 | 弹窗栈、屏幕、预览类原语 |
 | `UiTooltipPlacement` / `UiTooltipPanel` | 提示面板 | 折行前按宿主、上限、margin 与 padding 计算正文宽度，再翻转和钳制外框，统一 TOOLTIP 层与正文裁剪 | `UiFlatText`、宿主语义说明面板 |
 | `UiFlatText` | 文本绘制原语 | 无阴影的居中、折行文本与悬停提示面板；深色底板的悬停提示只去掉文字阴影，文字颜色由调用方给定 | 控件、列表与树的空状态文案、页面提示 |
@@ -247,13 +248,15 @@ sequenceDiagram
 
 `UiThemedScreen` 提供默认原版背景与主题窗口，再调用内容 hook；无注入时创建 Minecraft Context，注入时直接共享宿主实例。控件绑定同一来源，背景通过 `renderThemedBackground` 覆写，内容布局仍归宿主。使用该入口的内容只绘制标题与业务区域，窗口底板由屏幕统一绘制。
 
-`UiScreen` 的 final `render` 依次同步资源、调用 `prepareUi` 和 `layoutUi`、刷新作用域，再进入子类 `renderUi`；指针与键盘事件前完成准备和布局，派发结束后再次准备待发布状态。子类的 `inputScope` 只返回当前页或顶层覆盖面的稳定作用域，kit 是唯一应用选择的入口。根通过资源 hook 使自己拥有的缓存失效或释放。
+`UiScreen` 的 final `render` 依次同步资源、调用每帧一次的 `advanceUiFrame`、执行 `prepareUi` 和 `layoutUi`、刷新作用域，再进入子类 `renderUi`；指针与键盘事件前完成准备和布局，派发结束后再次准备待发布状态。子类的 `inputScope` 只返回当前页或顶层覆盖面的稳定作用域，kit 是唯一应用选择的入口。根通过资源 hook 使自己拥有的缓存失效或释放。
 
-`UiInputTarget.addFocusTargets` 是有类型的贡献契约。`UiChildren` 是容器实际成员，绘制遍历同一集合，逆序命中、顺序贡献焦点，并将结构及子树版本向上传递。`UiInputScope.refreshFocus` 只在 dirty 或 `focusRevision` 变化时提交索引，其他调用仅刷新资格；独立结构变更可调用 `invalidateFocus`。语义组仍由 `UiFocusTarget.focusTargets` 表达，复合编辑模式保持原有 Tab 锚点。resize 保持控件与编辑会话，只调整几何；多行换宽通过 snapshot/restore 恢复原版模型、选区与历史。
+`UiInputTarget.addFocusTargets` 是有类型的贡献契约。`UiInputContainer` 只要求提供稳定的 `UiChildren`，默认接入命中、自身归属、焦点贡献、结构版本和普通输入。`UiChildren` 是容器实际成员，绘制遍历同一集合，逆序命中，按声明顺序贡献焦点；成员的 `setTabOrder` 只调整派生导航视图，结构与导航配置改变时才重新排序。结构及子树版本向上传递，`scopeExited` 沿实际成员传播，持续拖动和匹配释放仍由作用域直接送到会话目标。`UiInputScope.refreshFocus` 只在 dirty 或 `focusRevision` 变化时提交索引，其他调用仅刷新资格；独立结构变更可调用 `invalidateFocus`。语义组仍由 `UiFocusTarget.focusTargets` 表达，复合编辑模式保持原有 Tab 锚点。`hasFocus` 使用焦点视图的 `containsFocus` 识别组归属；作用域恢复时重新绑定焦点视图，支持公共 chrome 在多个稳定域之间切换。resize 保持控件与编辑会话，只调整几何；多行换宽通过 snapshot/restore 恢复原版模型、选区与历史。
 
 `UiOverlay` 持有覆盖面的唯一阻断作用域、保焦背景命中、遮罩与局部内容层，模态、灯箱、保存层和 picker 共享它。`UiModal.closeWhen` 为正常关闭请求提供否决；Esc、背景、取消、确认与正常栈关闭统一经 `requestClose`，确认动作仅在关闭成功后执行。栈 `remove/clear` 用于宿主生命周期强制移除。保存阶段与取消协议仍由宿主解释。
 
-`UiModalStack` 持有通用模态与栈政策，`UiButtonWidget` 让默认按钮和宿主按钮共用 footer；宿主注入焦点播报与业务历史。编辑保存、草稿和 type picker 的优先级仍由宿主解释。可运行接入见开发工作台 `KitShowcaseScreen`、`KitInputsExample` 与 `KitSurfacesExample`。
+`UiLayer` 引用稳定作用域、绘制动作和布局来源。`UiLayers` 将基础内容与有序覆盖面组合为当前清单，顶项提供活动域，各项按自己的作用域解析指针，并按绘制次序汇集布局节点。清单位置提供覆盖深度，遮罩和内容包络仍由 `UiOverlay` 应用一次；显示关系由宿主决定。
+
+`UiModal` 将裁剪内正文与 footer 登记为实际成员，保留正文快捷键、Esc 关闭次序与消息滚动。`UiModalStack` 持有通用模态与栈政策，`UiButtonWidget` 让默认按钮和宿主按钮共用 footer；栈在结构变化时派生稳定呈现项清单，淡入与错位排版仍归栈；独立绘制入口与 `UiLayers` 复用同一呈现实现。宿主注入焦点播报与业务历史。编辑保存、草稿和 type picker 的优先级仍由宿主解释。可运行接入见开发工作台 `KitShowcaseScreen`、`KitInputsExample` 与 `KitSurfacesExample`。
 
 ### 纯样例与独立编译
 
@@ -283,6 +286,7 @@ sequenceDiagram
 
 - **新增 kit 公开原语**：按职责放入 `api` 能力包，在同目录 `package-info.java` 登记用途及 host/library/example 消费角色；共享内部实现按真实协作放入 `internal` 或保留包内可见。随后运行边界脚本。
 - **新增控件**：实现 `UiInputTarget`（必要时加 `UiFocusTarget`）；普通可聚焦 Widget 可通过 `UiShellWidget` 组合 `UiWidgetShell`，标签呈现可独立组合 `UiLabelPresentation`；输入交给 `UiInputRouter` 路由，持续交互登记到作用域的 `UiInteractionSession`，值快照由控件模型保存。
+- **新增容器或覆盖面**：普通容器实现 `UiInputContainer`，特殊裁剪、命令与滚动回退在真实容器覆写；覆盖面的呈现项接入 `UiLayers`，宿主一次选择实际显示清单。
 - **新增主题或皮肤**：实现 `UiStyleSource`，同一角色重复调用返回稳定值，根上下文发布变化版本；滑块务必以 `UiSliderSkin` 成对给出样式与画法，使 `UiSliderPainter.Frame` 携带的样式与轨道用色同源。宿主侧的落点见 [client-ui](client-ui.md)。
 - **新增数值字段**：`UiNumberPolicy` 描述合法域、粗细步长与整数策略，`UiSliderWindow` 描述这一段域映射到轨道的哪一截，`UiNumbers` 负责显示与解析，精确输入用 `UiValueTextBinding` 绑定。窗口只影响几何，超出窗口但仍在合法域内的值继续精确显示与编辑。
 - **新增树或树操作**：提供 `UiTreeEditor.Adapter`（不可变节点、容量、可接受子节点）与 `UiTreeCodec`；结构操作统一走 `UiTreeEditor`，拖动走 `UiTreeMoveInteraction`，一次拖动只提交一次。

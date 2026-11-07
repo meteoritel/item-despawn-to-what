@@ -1166,6 +1166,8 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
             inlinePanel.render(graphics, renderFont, pointer);
         }
         if (picker.isOpen()) {
+            picker.advanceAnimation();
+            picker.setBounds(bounds());
             picker.render(graphics, renderFont, pointer);
         }
         if (kindMenuOpen) {
