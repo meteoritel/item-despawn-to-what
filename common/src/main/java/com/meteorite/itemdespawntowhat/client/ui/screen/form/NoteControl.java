@@ -36,7 +36,7 @@ final class NoteControl extends FormControl {
     }
 
     @Override
-    @Nullable RuleValue store() {
+    @Nullable RuleValue draftValue() {
         return null;
     }
 

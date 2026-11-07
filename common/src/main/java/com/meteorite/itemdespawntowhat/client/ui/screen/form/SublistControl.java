@@ -19,6 +19,7 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -30,24 +31,26 @@ final class SublistControl extends FormControl implements UiInputContainer {
     private final UiChildren<UiInputTarget> members = new UiChildren<>();
 
     private final Font font;
-    private final FormView owner;
+    private final Runnable onChanged;
+    private final FormControlContext context;
     private final List<EditorField> subFields;
     private final List<FormView> children = new ArrayList<>();
     private final List<UiButton> removeButtons = new ArrayList<>();
     private final UiButton addButton;
     private int measuredHeight = defaultHeight();
 
-    SublistControl(Font font, FormView owner, EditorField field, Runnable onChanged) {
-        super(owner.theme(), field);
+    SublistControl(UiHostTheme theme, Font font, FormControlContext context, EditorField field, Runnable onChanged) {
+        super(theme, field);
         this.font = font;
-        this.owner = owner;
+        this.onChanged = onChanged;
+        this.context = context;
         this.subFields = field.subFields();
         this.addButton = new UiButton(THEME, font, Component.translatable(TypeLabels.UI_PREFIX + "list.add"),
                 UiButtonVariant.SECONDARY, () -> {
-            owner.changeChildStructure(field.name(), () -> {
+            context.changeChildStructure(field.name(), () -> {
                 markEdited();
                 appendChild(null);
-            }, this::store);
+            }, this::draftValue);
             onChanged.run();
         }).setChipStyle(true);
         members.add(addButton);
@@ -55,12 +58,12 @@ final class SublistControl extends FormControl implements UiInputContainer {
 
     // 追加一个子表单
     private void appendChild(@Nullable RuleValue value) {
-        FormView child = owner.newChildForm(childPath(children.size()), subFields);
-        child.reloadWith(value != null && value.isMapping() ? value : RuleValue.mapping().build());
+        FormView child = context.newChildForm(childPath(children.size()), subFields);
+        child.reloadWith(value == null ? RuleValue.mapping().build() : value);
         // 子表单里任何用户改动都要把整个子列表标记为已编辑
         child.setOnChanged(() -> {
             markEdited();
-            owner.notifyChanged();
+            onChanged.run();
         });
         children.add(child);
         UiButton remove = createRemoveButton(child);
@@ -75,20 +78,20 @@ final class SublistControl extends FormControl implements UiInputContainer {
                 UiButtonVariant.DANGER, () -> {
             int index = children.indexOf(child);
             if (index >= 0) {
-                owner.changeChildStructure(field.name(), () -> {
+                context.changeChildStructure(field.name(), () -> {
                     markEdited();
                     child.unmount();
-                    owner.clearChildInputs(childPath(index));
+                    context.clearChildInputs(childPath(index));
                     members.remove(child);
                     UiButton remove = removeButtons.remove(index);
                     remove.cancelPress();
                     members.remove(remove);
                     children.remove(index);
                     for (int next = index; next < children.size(); next++) {
-                        children.get(next).rebase(owner.childPath(childPath(next)));
+                        children.get(next).rebase(context.childPath(childPath(next)));
                     }
-                }, this::store);
-                owner.notifyChanged();
+                }, this::draftValue);
+                onChanged.run();
             }
         }).setChipStyle(true);
     }
@@ -168,8 +171,13 @@ final class SublistControl extends FormControl implements UiInputContainer {
     }
 
     @Override
+    List<FormView> childForms() {
+        return children;
+    }
+
+    @Override
     void finishInput() {
-        for (FormView child : children) child.commitPendingInputs();
+        for (FormView child : children) child.finishInputs();
     }
 
     @Override
@@ -191,15 +199,14 @@ final class SublistControl extends FormControl implements UiInputContainer {
     }
 
     @Override
-    @Nullable RuleValue store() {
+    @Nullable RuleValue draftValue() {
         // 未编辑（含未增删子项、子表单未改动）：原样返回装载数组
-        if (!isEdited()) {
+        if (!isEdited() && children.stream().noneMatch(FormView::hasDraftChanges)) {
             return originalValue();
         }
         RuleValue.Sequence array = RuleValue.list();
         for (FormView child : children) {
-            child.applyToDraft();
-            array.add(child.storeObject());
+            array.add(child.draftObject());
         }
         return array.build();
     }

@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiTypePicker;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiSurfaceRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
@@ -124,7 +125,7 @@ final class RuleEditorEditSections implements UiInputTarget {
         this.shell = shell;
         this.font = font;
         this.focus = focus;
-        this.actions = new EditorSectionActions(shell, finishEditing, this::rebuild, this::restoreSwitches);
+        this.actions = new EditorSectionActions(shell, finishEditing, this::restoreSwitches);
         EditorConditionForms conditions = new EditorConditionForms(shell, font, conditionEditingSupport);
         EditorFormFactory forms = new EditorFormFactory(shell, font, conditions, this::invalidateLayout);
         this.infoSection = new RuleEditorInfoSection(shell, model, font, forms, actions);
@@ -150,26 +151,32 @@ final class RuleEditorEditSections implements UiInputTarget {
         return page;
     }
 
-    /**
-     * 切页：先结束进行中的预览，再重建新页
-     */
-    public void setPage(@Nullable EditSection next) {
-        EditSection target = next == null ? EditSection.INFO : next;
-        if (target == page) {
-            return;
-        }
+    /** 切换分区时统一完成旧输入，并保存各分区的回访滚动位置。 */
+    public void setPage(EditSection target) {
+        if (target == page) return;
+        beginNavigation(target);
+        rebuild();
+        restoreScroll();
+        shell.rebuildFocus();
+    }
+
+    private void beginNavigation(EditSection target) {
+        actions.finishEditing();
         scrollOffsets.put(page, pageScroll.offset());
         endInteractions();
+        resultsSection.closeTypePicker();
+        if (target != page) shell.setNotice(null, EditorShell.NoticeLevel.INFO);
         page = target;
-        // 切页后旧提示失效：消息传 null 清除，色值沿用 INFO 级别的次要文本色
-        shell.setNotice(null, EditorShell.NoticeLevel.INFO);
-        resultsSection.effectIndex = 0;
-        rebuild();
+        shell.editNavigationStarted();
+    }
+
+    private void restoreScroll() {
         pageScroll.setOffset(scrollOffsets.getOrDefault(page, 0));
-        if (lastArea != null) {
-            // 新页在 rebuild 时已排好，切页只改变滚动位置：平移即可，不再整页重排
-            applyScroll(pageScroll.offset());
-        }
+        if (lastArea != null) applyScroll(pageScroll.offset());
+    }
+
+    @Nullable UiTypePicker activeTypePicker() {
+        return page == EditSection.RESULTS ? resultsSection.activeTypePicker() : null;
     }
 
     /**
@@ -202,7 +209,6 @@ final class RuleEditorEditSections implements UiInputTarget {
         if (lastArea != null) {
             layout(lastArea);
         }
-        shell.rebuildFocus();
     }
 
     private void reset() {
@@ -520,7 +526,7 @@ final class RuleEditorEditSections implements UiInputTarget {
      */
     void syncEditableState() {
         boolean editable = shell.editable();
-        if (!editable) resultsSection.typePicker.close();
+        if (!editable) resultsSection.closeTypePicker();
         applyEnabled();
     }
 
@@ -533,17 +539,11 @@ final class RuleEditorEditSections implements UiInputTarget {
         infoSection.applyServerState(editable);
     }
 
-    // 只同步基本页的本服控件：内容字段变化可能改变生效状态（无覆盖时生效=默认启用）
-    void refreshServerState() {
-        infoSection.applyServerState(shell.editable());
-    }
-
     public void tick() {
         triggerSection.updateLifespanWindow();
         for (FormView form : content.forms) {
             form.tick();
         }
-        actions.flushRebuild();
     }
 
     /**
@@ -562,55 +562,33 @@ final class RuleEditorEditSections implements UiInputTarget {
                 return target;
             }
         }
+        EditSection targetSection = sectionFor(path);
+        beginNavigation(targetSection);
         if (ResultStructure.isResultPath(path)) {
-            page = EditSection.RESULTS;
-            resultsSection.resultStage = path.contains("[") ? 2 : 1;
-            resultsSection.showAdvancedEffects = false;
-            int candidate = indexIn(path, RuleFields.OUTCOMES);
-            if (candidate >= 0) {
-                resultsSection.candidateIndex = candidate;
-            }
-            int effect = indexIn(path, RuleFields.EFFECTS);
-            if (effect >= 0) {
-                resultsSection.effectIndex = effect;
-            }
-            rebuild(path);
-            if (resultsSection.effectForm != null) {
-                UiFocusTarget target = resultsSection.effectForm.revealPath(path);
-                return target != null ? target : resultsSection.advancedEffectForm == null ? null
-                        : resultsSection.advancedEffectForm.revealPath(path);
-            }
-            return null;
+            resultsSection.prepareReveal(indexIn(path, RuleFields.OUTCOMES), indexIn(path, RuleFields.EFFECTS));
         }
-        if (inField(path, RuleFields.CONDITIONS) || inField(path, RuleFields.TERMS)) {
-            page = EditSection.TRIGGER;
-            rebuild();
-            return triggerSection.conditionsForm == null ? null : triggerSection.conditionsForm.revealPath(path);
+        rebuild(ResultStructure.isResultPath(path) ? path : null);
+        restoreScroll();
+        if (ResultStructure.isResultPath(path)) return resultsSection.revealField(path);
+        if (inField(path, RuleFields.COMBINATION)) return resultsSection.combinationButton;
+        if (inField(path, RuleFields.TRIGGERS) && !triggerSection.triggerBoxes.isEmpty()) {
+            return triggerSection.triggerBoxes.getFirst();
         }
-        if (path.startsWith(RuleFields.TRIGGERS) || path.startsWith(RuleFields.TRIGGER_AFTER_SECONDS)) {
-            page = EditSection.TRIGGER;
-            rebuild();
-            // 触发来源问题直接聚焦第一个勾选框；延迟秒数问题落到延迟表单
-            if (path.startsWith(RuleFields.TRIGGERS) && !triggerSection.triggerBoxes.isEmpty()) {
-                return triggerSection.triggerBoxes.getFirst();
-            }
-            return triggerSection.delayForm == null ? null : triggerSection.delayForm.revealPath(path);
+        for (FormView form : content.forms) {
+            if (!form.isVisible()) continue;
+            UiFocusTarget target = form.revealPath(path);
+            if (target != null) return target;
         }
-        if (path.startsWith(RuleFields.COMBINATION)) {
-            page = EditSection.RESULTS;
-            rebuild();
-            return resultsSection.combinationButton;
-        }
-        if (path.startsWith(RuleFields.SOURCE) || path.startsWith(RuleFields.CATALYST_COST)) {
-            page = EditSection.INPUT;
-            rebuild();
-            FormView target = path.startsWith(RuleFields.CATALYST_COST) ? inputSection.catalystForm
-                    : path.startsWith(RuleFields.SOURCE_COST) ? inputSection.sourceCostForm : inputSection.sourceForm;
-            return target == null ? null : target.revealPath(path);
-        }
-        page = EditSection.INFO;
-        rebuild();
-        return infoSection.infoForm == null ? null : infoSection.infoForm.revealPath(path);
+        return null;
+    }
+
+    private static EditSection sectionFor(String path) {
+        if (ResultStructure.isResultPath(path) || inField(path, RuleFields.COMBINATION)) return EditSection.RESULTS;
+        if (inField(path, RuleFields.CONDITIONS) || inField(path, RuleFields.TERMS)
+                || inField(path, RuleFields.TRIGGERS) || inField(path, RuleFields.TRIGGER_AFTER_SECONDS)) return EditSection.TRIGGER;
+        if (inField(path, RuleFields.SOURCE) || inField(path, RuleFields.SOURCE_COST)
+                || inField(path, RuleFields.CATALYST_COST)) return EditSection.INPUT;
+        return EditSection.INFO;
     }
 
     // 问题路径是否落在某字段内：等于字段本身，或字段后接「.」「[」的子项；

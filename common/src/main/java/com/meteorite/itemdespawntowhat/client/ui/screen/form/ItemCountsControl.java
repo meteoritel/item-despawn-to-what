@@ -405,11 +405,25 @@ final class ItemCountsControl extends FormControl {
     }
 
     @Override
-    @Nullable RuleValue store() {
+    void inputAccepted() {
+        RuleValue accepted = originalValue();
+        RuleValue.Mapping displayed = RuleValue.mapping(accepted);
+        for (Entry entry : entries.values()) {
+            RuleValue value = accepted == null ? null : accepted.child(entry.reference);
+            // 父映射可保持省略；其数值子控件仍以当前有效显示值作为下一次编辑的基线。
+            if (value == null) value = entry.control.draftValue();
+            entry.control.acceptValue(value);
+            displayed.putIfPresent(entry.reference, value);
+        }
+        values = displayed.build();
+    }
+
+    @Override
+    @Nullable RuleValue draftValue() {
         if (!isEdited() && !hasPendingInput()) return originalValue();
         RuleValue.Mapping result = RuleValue.mapping();
         for (Entry entry : entries.values()) {
-            result.putIfPresent(entry.reference, entry.control.store());
+            result.putIfPresent(entry.reference, entry.control.draftValue());
         }
         return result.build();
     }

@@ -139,9 +139,11 @@ final class EditorConditionForms {
         }
         PresenceLeaves.PresenceLeaf presence = catalystLeaf ? EditorQuantityBindings.findPresenceLeaf(session, path) : null;
         FormView form = new FormView(shell.theme(), font, session, path);
+        EditorFormBindings.configure(form, path);
+        EditorQuantityBindings.configureReferenceWrites(form, path);
         form.useCatalogSelections();
         form.setConditionEditingSupport(sharedConditionSupport());
-        form.setConditionContextFactory(conditionContextFactory(form));
+        form.setConditionContextFactory(this::conditionContextFactory);
         form.setOnChanged(shell::draftChanged);
         // 输入被长度上限拒绝时立刻显示一条可读提示（字段名：问题）
         form.setOnRejectedNotice(message -> shell.setNotice(message,EditorShell.NoticeLevel.DANGER));

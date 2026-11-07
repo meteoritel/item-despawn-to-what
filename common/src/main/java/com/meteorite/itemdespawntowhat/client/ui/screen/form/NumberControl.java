@@ -137,7 +137,7 @@ final class NumberControl extends FormControl {
             onChanged.run();
         }, this::markEdited, field.required() ? null : neutralValue(),
                 !field.required() && field.nullable() ? () -> {
-                    store();
+                    markEdited();
                     onChanged.run();
                 } : null, new UiNumberField.Metrics(GAP, MIN_SLIDER_WIDTH));
         for (EditorPreset preset : field.presets()) {
@@ -440,33 +440,21 @@ final class NumberControl extends FormControl {
     }
 
     @Override
-    @Nullable RuleValue store() {
+    @Nullable RuleValue draftValue() {
         String text = input.value().trim();
-        // 未编辑且文本仍等于装载基线：原样回写原始值（缺失即 null），applyToDraft 跳过该字段
-        if (!isEdited() && text.equals(loadedText.trim())) {
-            return originalValue();
-        }
+        if (!isEdited() && text.equals(loadedText.trim())) return originalValue();
         if (text.isEmpty()) {
-            // 必填/不可空字段清空时不删除既有值，交由 issues() 提示（阻止应用）
-            boolean keepExisting = loaded != null && (field.required() || !field.nullable());
-            if (!keepExisting) {
-                numberField.acceptText();
-                markEdited();
-                loaded = null;
-                loadedText = "";
-            }
-            return keepExisting ? loaded : null;
+            return loaded != null && (field.required() || !field.nullable()) ? loaded.deepCopy() : null;
         }
         RuleValue parsed = parseText(text);
-        if (parsed != null) {
-            numberField.acceptText();
-            markEdited();
-            // 失焦提交也更新回退基线，后续非法输入不能回写成更早的装载值。
-            loaded = parsed.deepCopy();
-            loadedText = text;
-        }
-        // 输入非法时保留原值，交由 issues() 提示玩家修正
-        return parsed != null ? parsed : loaded;
+        return parsed != null ? parsed : loaded == null ? null : loaded.deepCopy();
+    }
+
+    @Override
+    void inputAccepted() {
+        loaded = originalValue();
+        loadedText = input.value();
+        numberField.acceptText();
     }
 
     @Override

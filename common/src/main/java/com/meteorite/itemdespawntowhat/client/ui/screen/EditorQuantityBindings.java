@@ -27,10 +27,32 @@ final class EditorQuantityBindings {
         for (var handle : handles) {
             EditorField field = handle.descriptor();
             if (!isQuantityField(field)) continue;
-            handle.itemCountReferences(quantityReferences(session, basePath, field));
-            if (!RuleFields.CONSUME_COUNTS.equals(field.name()))
-                handle.defaultValue(() -> quantityDefaults(session, basePath, quantityFromSource(field)));
+            handle.bindItemCounts(() -> quantityReferences(session, basePath, field),
+                    RuleFields.CONSUME_COUNTS.equals(field.name()) ? null
+                            : () -> quantityDefaults(session, basePath, quantityFromSource(field)));
         }
+    }
+
+    static void configureReferenceWrites(FormView form, String basePath) {
+        String referencePath = DraftPaths.child(basePath, RuleFields.CATALYST_ITEMS);
+        form.addFieldWritten((edits, path, before) -> {
+            if (!referencePath.equals(path)) return;
+            String countsPath = DraftPaths.child(basePath, RuleFields.ITEM_COUNTS);
+            RuleValue amounts = edits.valueAt(countsPath);
+            if (amounts == null || !amounts.isMapping()) return;
+            RuleValue.Mapping selected = RuleValue.mapping();
+            for (String id : RuleValue.textItems(edits.valueAt(path))) {
+                if (amounts.has(id)) selected.put(id, amounts.child(id).deepCopy());
+            }
+            edits.setAt(countsPath, selected.build());
+        });
+        form.addFieldCommitted(path -> {
+            if (referencePath.equals(path)) reloadQuantityFields(form);
+        });
+    }
+
+    static void reloadQuantityFields(FormView form) {
+        for (FormField field : form.fields()) if (isQuantityField(field.descriptor())) field.reload();
     }
 
     private static boolean isQuantityField(EditorField field) {
@@ -124,7 +146,7 @@ final class EditorQuantityBindings {
     }
 
     static void configurePresenceWrites(FormView form, EditSession session, PresenceLeaves.PresenceLeaf leaf) {
-        form.setOnFieldWritten((draft, path, before) -> {
+        form.addFieldWritten((draft, path, before) -> {
             if (!leaf.fieldPath().equals(path)) return;
             if (leaf.catalyst()) {
                 materializeCatalystInput(session, draft);

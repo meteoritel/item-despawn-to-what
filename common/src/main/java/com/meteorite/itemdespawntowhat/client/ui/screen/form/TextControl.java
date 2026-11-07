@@ -236,7 +236,13 @@ final class TextControl extends FormControl {
     }
 
     @Override
-    @Nullable RuleValue store() {
+    void inputAccepted() {
+        loaded = originalValue();
+        loadedText = text();
+    }
+
+    @Override
+    @Nullable RuleValue draftValue() {
         String value = text();
         if (value.equals(loadedText)) {
             return originalValue();

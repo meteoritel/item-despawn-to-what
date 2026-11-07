@@ -9,25 +9,17 @@ import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 final class EditorSectionActions {
     private final EditorShell shell;
     private final Runnable finish;
-    private final Runnable rebuild;
     private final Runnable restoreSwitches;
-    private boolean pendingRebuild;
 
-    EditorSectionActions(EditorShell shell, Runnable finish, Runnable rebuild, Runnable restoreSwitches) {
+    EditorSectionActions(EditorShell shell, Runnable finish, Runnable restoreSwitches) {
         this.shell = shell;
         this.finish = finish;
-        this.rebuild = rebuild;
         this.restoreSwitches = restoreSwitches;
     }
 
     void finishEditing() { finish.run(); }
-    void requestRebuild() { pendingRebuild = true; }
-    boolean rebuildPending() { return pendingRebuild; }
-    void flushRebuild() {
-        if (!pendingRebuild) return;
-        pendingRebuild = false;
-        rebuild.run();
-    }
+    void requestRebuild() { shell.requestEditRefresh(); }
+    boolean rebuildPending() { return shell.editRefreshPending(); }
 
     boolean apply(String opKey, java.util.function.Consumer<RuleDraft> change) {
         return apply(opKey, change, false);

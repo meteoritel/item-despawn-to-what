@@ -36,6 +36,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.List;
 
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -78,7 +79,7 @@ final class CardListControl extends FormControl implements UiLayoutSource, UiInp
     private static final String UI = TypeLabels.UI_PREFIX + "list.";
 
     private final Font font;
-    private final FormView owner;
+    private final FormControlContext context;
     private final Runnable onChanged;
     // 卡片首行的目录引用字段；元素声明里没有引用字段时为 null，此时卡片只剩数值行
     private final @Nullable EditorField choiceField;
@@ -90,10 +91,10 @@ final class CardListControl extends FormControl implements UiLayoutSource, UiInp
     private UiRect titleBounds = new UiRect(0, 0, 0, 0);
     private @Nullable UiRect emptyBounds;
 
-    CardListControl(Font font, FormView owner, EditorField field, Runnable onChanged) {
-        super(owner.theme(), field);
+    CardListControl(UiHostTheme theme, Font font, FormControlContext context, EditorField field, Runnable onChanged) {
+        super(theme, field);
         this.font = font;
-        this.owner = owner;
+        this.context = context;
         this.onChanged = onChanged;
         this.choiceField = firstReference(field.subFields());
         this.valueFields = numericFields(field.subFields());
@@ -146,7 +147,7 @@ final class CardListControl extends FormControl implements UiLayoutSource, UiInp
             return;
         }
         // 选择范围是整段列表，目录策略按列表字段自身的路径解析。
-        owner.openReferenceChoice(this, choiceField, () -> owner.childPath(field.name()), Mode.MULTIPLE,
+        context.openReferenceChoice(this, choiceField, () -> context.childPath(field.name()), Mode.MULTIPLE,
                 this::selectedReferences, this::applyReferences);
     }
 
@@ -202,7 +203,7 @@ final class CardListControl extends FormControl implements UiLayoutSource, UiInp
         if (index < 0) {
             return;
         }
-        owner.openReferenceChoice(this, choiceField, () -> entries.contains(entry) ? entryChoicePath(choiceField, entries.indexOf(entry)) : null,
+        context.openReferenceChoice(this, choiceField, () -> entries.contains(entry) ? entryChoicePath(choiceField, entries.indexOf(entry)) : null,
                 Mode.SINGLE, () -> entry.reference != null && selectable(entry) ? List.of(entry.reference) : List.of(), picked -> {
                     String reference = picked.isEmpty() ? null : picked.getFirst();
                     if (Objects.equals(entry.reference, reference)) return;
@@ -223,11 +224,11 @@ final class CardListControl extends FormControl implements UiLayoutSource, UiInp
 
     // 结构改动立即写入草稿：增删与换引用不等下一次行级提交，卡片增减当场生效
     private void mutate(Runnable change) {
-        owner.changeChildStructure(field.name(), () -> {
+        context.changeChildStructure(field.name(), () -> {
             markEdited();
             change.run();
             refreshMembers();
-        }, this::store);
+        }, this::draftValue);
         onChanged.run();
     }
 
@@ -240,7 +241,7 @@ final class CardListControl extends FormControl implements UiLayoutSource, UiInp
                 .setIcon(UiMarkIcons.icon(UiMarkIcons.Mark.CLOSE, THEME.palette().controls().danger()))
                 .setAccessibleName(Component.translatable(UI + "remove"));
         for (EditorField sub : valueFields) {
-            FormControl control = FormControl.create(font, owner, sub, () -> {
+            FormControl control = FormControl.create(THEME, font, context, sub, () -> {
                 markEdited();
                 onChanged.run();
             });
@@ -447,19 +448,19 @@ final class CardListControl extends FormControl implements UiLayoutSource, UiInp
     }
 
     @Override
-    @Nullable RuleValue store() {
+    @Nullable RuleValue draftValue() {
         // 未编辑：原样返回装载数组，保持省略键与未知字段不变
-        if (!isEdited()) {
+        if (!isEdited() && !hasPendingInput()) {
             return originalValue();
         }
         RuleValue.Sequence array = RuleValue.list();
         for (Entry entry : entries) {
-            array.add(storeEntry(entry));
+            array.add(draftEntry(entry));
         }
         return array.build();
     }
 
-    private RuleValue storeEntry(Entry entry) {
+    private RuleValue draftEntry(Entry entry) {
         if (entry.original != null && !entry.original.isMapping() && !entry.referenceEdited) {
             return entry.original.deepCopy();
         }
@@ -469,8 +470,8 @@ final class CardListControl extends FormControl implements UiLayoutSource, UiInp
             else object.put(choiceField.name(), RuleValue.text(entry.reference));
         }
         for (int i = 0; i < entry.values.size(); i++) {
-            RuleValue value = entry.values.get(i).store();
-            if (entry.original == null || entry.values.get(i).isEdited()) {
+            RuleValue value = entry.values.get(i).draftValue();
+            if (entry.original == null || (entry.values.get(i).isEdited() || entry.values.get(i).hasPendingInput())) {
                 if (value == null) object.remove(valueFields.get(i).name());
                 else object.put(valueFields.get(i).name(), value.deepCopy());
             }
@@ -557,9 +558,20 @@ final class CardListControl extends FormControl implements UiLayoutSource, UiInp
 
     @Override
     void inputAccepted() {
-        for (Entry entry : entries) {
-            for (FormControl value : entry.values) {
-                value.inputAccepted();
+        RuleValue accepted = originalValue();
+        for (int index = 0; index < entries.size(); index++) {
+            Entry entry = entries.get(index);
+            entry.original = accepted != null && accepted.isList() && index < accepted.size()
+                    ? accepted.item(index).deepCopy() : null;
+            entry.referenceEdited = false;
+            for (int value = 0; value < entry.values.size(); value++) {
+                FormControl control = entry.values.get(value);
+                RuleValue acceptedValue = entry.original == null ? null : entry.original.child(valueFields.get(value).name());
+                if (control.issues(valueFields.get(value).name()).stream().anyMatch(FormIssue::blocking)) {
+                    control.rememberLoaded(acceptedValue);
+                } else {
+                    control.acceptValue(acceptedValue);
+                }
             }
         }
     }
@@ -580,7 +592,7 @@ final class CardListControl extends FormControl implements UiLayoutSource, UiInp
 
     // 条目在草稿里的引用字段路径：目录入口需要完整路径
     private String entryChoicePath(EditorField choiceField, int index) {
-        return DraftPaths.child(owner.childPath(DraftPaths.indexPath(field.name(), index)), choiceField.name());
+        return DraftPaths.child(context.childPath(DraftPaths.indexPath(field.name(), index)), choiceField.name());
     }
 
     // 引用字段的 JSON 文本；非文本元素视为缺省

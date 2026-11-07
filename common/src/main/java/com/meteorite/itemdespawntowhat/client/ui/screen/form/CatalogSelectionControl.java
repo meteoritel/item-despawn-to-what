@@ -198,7 +198,7 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
     }
 
     @Override
-    @Nullable RuleValue store() {
+    @Nullable RuleValue draftValue() {
         if (!isEdited()) return originalValue();
         boolean multiple = field.isMultiCatalog();
         if (!multiple) return values.isEmpty() ? null : values.getFirst().value().deepCopy();

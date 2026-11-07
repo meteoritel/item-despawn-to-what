@@ -121,7 +121,7 @@ final class EnumControl extends FormControl {
     }
 
     @Override
-    @Nullable RuleValue store() {
+    @Nullable RuleValue draftValue() {
         // 用户没点过枚举：保持 JSON 原样（省略 shape/pickup 时不会写入或写成空串）
         if (!isEdited()) {
             return originalValue();

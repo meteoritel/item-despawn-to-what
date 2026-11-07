@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -30,6 +31,8 @@ final class FormRow {
     boolean hintTooltipEnabled = true;
     @Nullable Supplier<RuleValue> defaultValue;
     boolean defaultDisplayed;
+    @Nullable Runnable beforeLoad;
+    UnaryOperator<RuleValue> displayValue = value -> value;
     boolean labelVisible = true;
     final FormRowInput input = new FormRowInput(this);
     final List<UiButton> pickers = new ArrayList<>();

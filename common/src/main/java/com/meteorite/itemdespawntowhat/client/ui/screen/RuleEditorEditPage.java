@@ -92,7 +92,6 @@ final class RuleEditorEditPage implements EditorPage {
     private final RuleEditorValidation validation;
 
     // ---- 页签与底排 ----
-    private EditSection tab = EditSection.INFO;
     private @Nullable RuleEditorEditSections pages;
     private @Nullable EditSession boundSession;
 
@@ -178,7 +177,7 @@ final class RuleEditorEditPage implements EditorPage {
     public void init() {
         Font font = this.font;
         tabControl = new UiSegmentedControl(THEME, font, tabOptions());
-        tabControl.setSelected(tab.value());
+        tabControl.setSelected(currentSection().value());
         tabControl.setOnChanged(this::switchTab);
         buildFooterButtons();
         members.addAll(List.of(tabControl, sectionMembers, footerBar));
@@ -193,18 +192,17 @@ final class RuleEditorEditPage implements EditorPage {
         return options;
     }
 
-    // 切页：先结束进行中的预览并提交有效编辑，再重建目标页
+    private EditSection currentSection() {
+        return pages == null ? EditSection.INFO : pages.page();
+    }
+
+    private void syncSelectedSection() {
+        if (tabControl != null) tabControl.setSelected(currentSection().value());
+    }
+
     private void switchTab(String value) {
-        EditSection target = EditSection.of(value);
-        if (target == tab) {
-            return;
-        }
-        if (pages != null) {
-            finish(Finish.EDIT);
-            pages.setPage(target);
-        }
-        tab = target;
-        shell.rebuildFocus();
+        if (pages != null) pages.setPage(EditSection.of(value));
+        syncSelectedSection();
     }
 
     private void buildFooterButtons() {
@@ -304,7 +302,6 @@ final class RuleEditorEditPage implements EditorPage {
         if (pages == null) {
             return;
         }
-        syncEditableState();
         // 布局按需执行：几何输入未变时这里只命中缓存，渲染帧不再做任何测量
         pages.ensureLayout(lastEditArea);
     }
@@ -353,8 +350,7 @@ final class RuleEditorEditPage implements EditorPage {
 
     @Nullable UiTypePicker activeTypePicker() {
         if (pages == null) return null;
-        UiTypePicker picker = pages.resultsSection.typePicker;
-        return picker.isOpen() ? picker : null;
+        return pages.activeTypePicker();
     }
 
     // ---- 页面装配与生命周期 ----
@@ -371,7 +367,6 @@ final class RuleEditorEditPage implements EditorPage {
             sectionMembers.add(pages);
         }
         boundSession = session;
-        pages.setPage(tab);
         pages.rebuild();
         if (lastEditArea.width() > 0) {
             // 重建后页面已按当前几何排好；这里只补一次缓存命中判断
@@ -406,9 +401,8 @@ final class RuleEditorEditPage implements EditorPage {
     // 进入新规则的编辑页：页签回到基本信息并丢弃上一份页面状态（候选与效果选择归零）
     void openNew() {
         finish(Finish.UNMOUNT);
-        tab = EditSection.INFO;
         if (tabControl != null) {
-            tabControl.setSelected(tab.value());
+            tabControl.setSelected(currentSection().value());
         }
     }
 
@@ -416,7 +410,7 @@ final class RuleEditorEditPage implements EditorPage {
     void openInputTab() {
         switchTab(EditSection.INPUT.value());
         if (tabControl != null) {
-            tabControl.setSelected(tab.value());
+            tabControl.setSelected(currentSection().value());
         }
     }
 
@@ -436,20 +430,20 @@ final class RuleEditorEditPage implements EditorPage {
         if (pages != null) {
             pages.syncEditableState();
         }
-        updateButtons();
     }
 
     public void tick() {
         if (shell.isEditing() && pages != null) {
             pages.tick();
-            // 内容里的「默认启用」可能被改：本服开关显示的是生效状态，需要跟着刷新
-            pages.refreshServerState();
         }
     }
 
     // 底排「保存」按钮的可用状态与标签：只有存在待应用改动时才可点，无改动时显示「无改动」。
     // 沙盒内容本身不产生脏，因此只读条目在没改启停时自然保持禁用。
-    public void updateButtons() {
+    /** 在布局和输入前同步本页动作与可编辑状态。 */
+    public void prepare() {
+        syncSelectedSection();
+        syncEditableState();
         if (footerButtons.isEmpty()) {
             return;
         }
@@ -527,8 +521,7 @@ final class RuleEditorEditPage implements EditorPage {
         EditSession session = shell.editingSession();
         if (session != null && session.canUndo()) {
             session.undo();
-            rebuildEdit();
-            shell.rebuildFocus();
+            shell.requestEditRefresh();
         }
     }
 
@@ -540,8 +533,7 @@ final class RuleEditorEditPage implements EditorPage {
         EditSession session = shell.editingSession();
         if (session != null && session.canRedo()) {
             session.redo();
-            rebuildEdit();
-            shell.rebuildFocus();
+            shell.requestEditRefresh();
         }
     }
 
@@ -551,11 +543,9 @@ final class RuleEditorEditPage implements EditorPage {
         if (pages == null || issue == null) {
             return;
         }
-        finish(Finish.EDIT);
         UiFocusTarget target = pages.reveal(issue.path());
-        tab = pages.page();
         if (tabControl != null) {
-            tabControl.setSelected(tab.value());
+            tabControl.setSelected(currentSection().value());
         }
         shell.rebuildFocus();
         if (target != null) {
@@ -609,18 +599,14 @@ final class RuleEditorEditPage implements EditorPage {
         modal.confirm(Component.translatable(UI + "conflict.keep"), () -> {
             model.resolveConflict(id, true);
             promptedConflicts.remove(id);
-            shell.refreshList();
-            rebuildEdit();
-            shell.rebuildFocus();
+            shell.requestWorkspaceRefresh();
             shell.setNotice(Component.translatable(UI + "notice.conflict_kept"), EditorShell.NoticeLevel.INFO);
         });
         modal.addButton(new UiButton(THEME, font, Component.translatable(UI + "conflict.use_server"),
                 UiButtonVariant.DANGER, () -> {
             model.resolveConflict(id, false);
             promptedConflicts.remove(id);
-            shell.refreshList();
-            rebuildEdit();
-            shell.rebuildFocus();
+            shell.requestWorkspaceRefresh();
             shell.setNotice(Component.translatable(UI + "notice.conflict_discarded"), EditorShell.NoticeLevel.WARNING);
         }));
         modal.cancel(Component.translatable(UI + "conflict.later"));
@@ -634,7 +620,7 @@ final class RuleEditorEditPage implements EditorPage {
         if (sequence != seenResultSeq) {
             seenResultSeq = sequence;
             RuleSaveStatus status = workspace.saving().outcome().status();
-            shell.refreshSnapshot();
+            shell.requestWorkspaceRefresh();
             if (status == RuleSaveStatus.SUCCESS || status == RuleSaveStatus.NO_CHANGES) {
                 model.acceptSaved();
                 shell.setNotice(Component.translatable(com.meteorite.itemdespawntowhat.core.network.transport.RuleEditMessages.key(status)), EditorShell.NoticeLevel.SUCCESS);
@@ -651,14 +637,12 @@ final class RuleEditorEditPage implements EditorPage {
                         EditorShell.NoticeLevel.DANGER);
             } else if (status == RuleSaveStatus.VALIDATION_FAILED) {
                 shell.setNotice(Component.translatable(com.meteorite.itemdespawntowhat.core.network.transport.RuleEditMessages.key(status)), EditorShell.NoticeLevel.DANGER);
+                shell.prepareUi();
                 locateValidationIssues();
             } else if (status != null) {
                 shell.setNotice(Component.translatable(com.meteorite.itemdespawntowhat.core.network.transport.RuleEditMessages.key(status), workspace.saving().outcome().messageArgs().toArray()),
                         EditorShell.NoticeLevel.DANGER);
             }
-            shell.refreshList();
-            rebuildEdit();
-            shell.rebuildFocus();
         }
         if (workspace.session().state() == RuleEditClientState.FREE && workspace.session().openRequest() == null) {
             shell.requestClose();

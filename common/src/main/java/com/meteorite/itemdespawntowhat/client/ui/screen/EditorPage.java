@@ -102,9 +102,9 @@ interface EditorPage extends UiInputContainer {
     // ---- 状态同步（屏幕不推送使能，页自己查询外壳）----
 
     /**
-     * 按当前状态刷新本页按钮的可用状态与标签。
+     * 布局和输入前同步当前页面的动作状态；后台页在激活时准备。
      */
-    void updateButtons();
+    void prepare();
 
     // ---- 可选入口 ----
 

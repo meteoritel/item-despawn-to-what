@@ -104,21 +104,11 @@ final class RuleEditorInputSection {
     void refreshQuantityReferences() {
         EditSession session = shell.editingSession();
         if (session == null) return;
-        if (sourceCostForm != null) {
-            sourceCostForm.field(RuleFields.SOURCE_COST).itemCountReferences(RuleValue.textItems(session.valueAt(DraftPaths.child(RuleFields.SOURCE, RuleFields.SOURCE_ITEMS))));
-            sourceCostForm.reload();
-        }
-        for (PresenceRow row : presenceRows) if (row.leaf.catalyst()) {
-            row.form.reload();
-        }
-        if (catalystForm != null) {
-            String base = RuleFields.CATALYST_COST;
-            catalystForm.field(RuleFields.CONSUME_COUNTS).itemCountReferences(RuleValue.textItems(session.valueAt(DraftPaths.child(base, RuleFields.CATALYST_ITEMS))));
-            catalystForm.field(RuleFields.ITEM_COUNTS).itemCountReferences(RuleValue.textItems(session.valueAt(
-                            DraftPaths.child(base, RuleFields.CATALYST_ITEMS))));
-            catalystForm.reload();
-        }
-        shell.rebuildFocus();
+        if (sourceCostForm != null) EditorQuantityBindings.reloadQuantityFields(sourceCostForm);
+        for (PresenceRow row : presenceRows) if (row.leaf.catalyst())
+            EditorQuantityBindings.reloadQuantityFields(row.form);
+        if (catalystForm != null) EditorQuantityBindings.reloadQuantityFields(catalystForm);
+        shell.requestFocusRefresh();
     }
 
     void updateBlacklistVisibility() {
@@ -127,17 +117,15 @@ final class RuleEditorInputSection {
 
     private FormView newForm(EditSession session, String basePath, TypeEditorDescriptor descriptor) {
         FormView form = forms.create(session, basePath, descriptor);
-        form.setOnChanged(() -> {
+        form.addFieldCommitted(path -> {
             if (form == sourceForm) {
                 updateBlacklistVisibility();
                 refreshQuantityReferences();
             }
             if (form == catalystForm) {
-                for (RuleEditorInputSection.PresenceRow row : presenceRows) {
-                    if (row.leaf.catalyst()) row.form.reload();
-                }
+                for (PresenceRow row : presenceRows) if (row.leaf.catalyst())
+                    EditorQuantityBindings.reloadQuantityFields(row.form);
             }
-            shell.draftChanged();
         });
         return form;
     }
@@ -148,7 +136,7 @@ final class RuleEditorInputSection {
         sourceForm.field(RuleFields.SOURCE_ITEMS).hideLabel();
         // 卡片标题与列表空态已说明该行用途，悬停不再弹出字段提示遮挡列表
         sourceForm.field(RuleFields.SOURCE_ITEMS).suppressHintTooltip();
-        sourceForm.setOnFieldWritten((draft, path, before) -> {
+        sourceForm.addFieldWritten((draft, path, before) -> {
             if (!path.equals(DraftPaths.child(RuleFields.SOURCE, RuleFields.SOURCE_ITEMS))) return;
             List<String> references = RuleValue.textItems(draft.valueAt(path));
             if (draft.root().has(RuleFields.SOURCE_COST)) {
@@ -194,14 +182,13 @@ final class RuleEditorInputSection {
         if (catalystForm != null) {
             catalystForm.field(RuleFields.CATALYST_ITEMS).setVisible(!catalystEnabled);
             String consumePath = DraftPaths.child(RuleFields.CATALYST_COST, RuleFields.CONSUME_COUNTS);
-            catalystForm.setOnFieldWritten((draft, path, before) -> {
+            catalystForm.addFieldWritten((draft, path, before) -> {
                 EditorQuantityBindings.materializeCatalystInput(session, draft);
 
                 // 每轮消耗至少 1 件：写回后没有任何正数等同于不消耗，移除该表并关闭开关
                 if (consumePath.equals(path)
                         && !CatalystQuantities.consumesCatalysts(draft.valueAt(RuleFields.CATALYST_COST))) {
                     draft.removeAt(consumePath);
-                    if (catalystToggle != null) catalystToggle.setChecked(false);
                     return;
                 }
                 if (!path.equals(DraftPaths.child(RuleFields.CATALYST_COST, RuleFields.CATALYST_ITEMS))) return;
@@ -212,6 +199,9 @@ final class RuleEditorInputSection {
                     draft.setAt(RuleFields.CATALYST_COST, CatalystQuantities.withQuantities(current,
                             RuleFields.CONSUME_COUNTS, references));
                 }
+            });
+            catalystForm.addFieldCommitted(path -> {
+                if (consumePath.equals(path) && catalystToggle != null) catalystToggle.setChecked(consumesCatalysts(session));
             });
             bindConsumeVisibility(catalystForm, session);
             catalystForm.field(RuleFields.ITEM_COUNTS).pairBelow(catalystForm.field(RuleFields.CONSUME_COUNTS));
@@ -298,15 +288,9 @@ final class RuleEditorInputSection {
         EditorQuantityBindings.configurePresenceWrites(form, session, leaf);
         // 类型改写立即落盘（类型 + 关联消耗配置重指向 = 同一次可撤销操作）；此处不重建页面，
         // 目录选择可连续多次回调，重建会让后续选择写进已卸载的控件
-        form.setOnChanged(() -> {
-            EditSession current = shell.editingSession();
-            if (current == null || !shell.editable()) {
-                return;
-            }
+        form.addFieldCommitted(path -> {
             refreshQuantityReferences();
             applyEnabled(shell.editable());
-            // 目录选择已在同一次字段写入中提交，仍需通知宿主刷新规则摘要。
-            shell.draftChanged();
         });
         // 选择卡片自带逐项移除；多个同类型叶保留移除整条条件的入口。
         if (PresenceLeaves.ruleLevelPresence(session.root(), leaf.type()).size() > 1) {

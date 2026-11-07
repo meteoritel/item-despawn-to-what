@@ -15,6 +15,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSess
 
 import java.util.List;
 
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -33,9 +34,9 @@ final class NestedObjectControl extends FormControl implements UiInputContainer 
     private final FormView child;
     private int measuredHeight;
 
-    NestedObjectControl(Font font, FormView owner, EditorField field, Runnable onChanged) {
-        super(owner.theme(), field);
-        this.child = owner.newChildForm(field.name(), field.subFields());
+    NestedObjectControl(UiHostTheme theme, Font font, FormControlContext context, EditorField field, Runnable onChanged) {
+        super(theme, field);
+        this.child = context.newChildForm(field.name(), field.subFields());
         members.add(child);
         this.child.setLabelWidth(Math.min(88, field.subFields().stream()
                 .mapToInt(nested -> font.width(Component.translatable(nested.labelKey())) + 4).max().orElse(0)));
@@ -92,18 +93,17 @@ final class NestedObjectControl extends FormControl implements UiInputContainer 
     void load(@Nullable RuleValue value) {
         rememberLoaded(value);
         child.retainPendingInputs();
-        child.reloadWith(value != null && value.isMapping() ? value : RuleValue.mapping().build());
+        child.reloadWith(value == null ? RuleValue.mapping().build() : value);
         layoutAt(0, 0, 1);
     }
 
     @Override
-    @Nullable RuleValue store() {
+    @Nullable RuleValue draftValue() {
         // 未编辑时原样返回装载值（含缺失或显式 null），不把空白子表单写成空对象
-        if (!isEdited()) {
+        if (!isEdited() && !child.hasDraftChanges()) {
             return originalValue();
         }
-        child.applyToDraft();
-        return child.storeObject();
+        return child.draftObject();
     }
 
     @Override
@@ -117,8 +117,13 @@ final class NestedObjectControl extends FormControl implements UiInputContainer 
     }
 
     @Override
+    List<FormView> childForms() {
+        return List.of(child);
+    }
+
+    @Override
     void finishInput() {
-        child.commitPendingInputs();
+        child.finishInputs();
     }
 
     @Override

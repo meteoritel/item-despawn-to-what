@@ -126,7 +126,10 @@ public final class RuleEditorScreen extends UiThemedScreen implements UiLayoutSo
     }
 
     @Override
-    protected void prepareUi() { themePublication.prepare(inputRouter().active()); }
+    protected void prepareUi() {
+        themePublication.prepare(inputRouter().active());
+        shell.prepareUi();
+    }
 
     private void publishTheme(UiThemeScheme scheme) {
         UiHostThemeSet next = scheme.themes();
@@ -165,9 +168,8 @@ public final class RuleEditorScreen extends UiThemedScreen implements UiLayoutSo
         shell.listPage().init();
         shell.editPage().init();
         shell.debugPage().init();
-        shell.listPage().refreshList();
-        shell.editPage().rebuildEdit();
-        shell.rebuildFocus();
+        shell.requestWorkspaceRefresh();
+        shell.prepareUi();
     }
 
     @Override

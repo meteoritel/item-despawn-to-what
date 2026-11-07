@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
@@ -152,11 +153,30 @@ final class RuleEditorResultsSection {
         typePicker = new UiTypePicker(shell.chromeTheme(), font,
                 Component.translatable(RuleEditorPageSupport.UI + "pick.type_title"), type -> {
             addEffectOfType(type);
-            commands.flushRebuild();
         });
     }
 
-    final UiTypePicker typePicker;
+    private final UiTypePicker typePicker;
+
+    @Nullable UiTypePicker activeTypePicker() {
+        return typePicker.isOpen() ? typePicker : null;
+    }
+
+    void closeTypePicker() {
+        typePicker.close();
+    }
+
+    void prepareReveal(int candidate, int effect) {
+        resultStage = effect >= 0 ? ResultStage.DETAIL : ResultStage.ACTIONS;
+        showAdvancedEffects = false;
+        if (candidate >= 0) candidateIndex = candidate;
+        if (effect >= 0) effectIndex = effect;
+    }
+
+    @Nullable UiFocusTarget revealField(String path) {
+        UiFocusTarget target = effectForm == null ? null : effectForm.revealPath(path);
+        return target != null || advancedEffectForm == null ? target : advancedEffectForm.revealPath(path);
+    }
 
     // 清理本页持有的控件引用（重建/切页时由容器调用）
     void reset() {
@@ -184,9 +204,9 @@ final class RuleEditorResultsSection {
         addEffectButton = null;
     }
 
-    int candidateIndex;
+    private int candidateIndex;
 
-    int effectIndex;
+    private int effectIndex;
 
     private @Nullable PlanPager planPager;
 
@@ -214,9 +234,10 @@ final class RuleEditorResultsSection {
 
     @Nullable UiButton resultBack;
 
-    boolean showAdvancedEffects;
+    private boolean showAdvancedEffects;
 
-    int resultStage;
+    private enum ResultStage { ACTIONS, DETAIL }
+    private ResultStage resultStage = ResultStage.ACTIONS;
 
     private @Nullable UiButton openActionButton;
 
@@ -245,7 +266,6 @@ final class RuleEditorResultsSection {
         RuleValue rule = session.root();
         int candidates = Math.max(1, ResultStructure.candidateCount(rule));
         candidateIndex = Math.clamp(candidateIndex, 0, candidates - 1);
-        resultStage = Math.clamp(resultStage, 1, 2);
         planPager = new PlanPager(candidates);
         content.widgets.add(planPager);
         content.widgets.add(planPager.previous);
@@ -254,7 +274,7 @@ final class RuleEditorResultsSection {
         content.buttons.add(planPager.next);
         resultBack = new UiButton(THEME, font,
                 Component.translatable(RuleEditorPageSupport.UI + "button.result_actions"), UiButtonVariant.SECONDARY,
-                () -> enterResultStage(1)).setChipStyle(true);
+                () -> enterResultStage(ResultStage.ACTIONS)).setChipStyle(true);
         content.widgets.add(resultBack);
         content.buttons.add(resultBack);
 
@@ -317,7 +337,7 @@ final class RuleEditorResultsSection {
             effectIndex = Math.max(0, index);
             commands.requestRebuild();
         });
-        effectList.setOnActivate(index -> enterResultStage(2));
+        effectList.setOnActivate(index -> enterResultStage(ResultStage.DETAIL));
         content.widgets.add(effectList);
         // 与行为列表同属一栏：加号只在列表侧显示，窄屏 stage 2 的详情页不出现
         addEffectButton = new UiButton(THEME, font, Component.empty(), UiButtonVariant.SECONDARY, this::openEffectPicker)
@@ -331,7 +351,7 @@ final class RuleEditorResultsSection {
         if (effectCount > 0) {
             openActionButton = new UiButton(THEME, font,
                     Component.translatable(RuleEditorPageSupport.UI + "button.effect_edit"), UiButtonVariant.SECONDARY,
-                    () -> enterResultStage(2)).setChipStyle(true);
+                    () -> enterResultStage(ResultStage.DETAIL)).setChipStyle(true);
             content.widgets.add(openActionButton);
             content.buttons.add(openActionButton);
         }
@@ -430,24 +450,25 @@ final class RuleEditorResultsSection {
             placeBlockLimitManual = false;
         }
         updatePlaceBlockWindows(form, session, actionPath);
-        form.setOnFieldWritten((draft, path, before) -> {
+        form.addFieldWritten((draft, path, before) -> {
             UiLinkedValues limitLink = placeBlockLimitLink(session, actionPath, draft);
             if (useSourcePath.equals(path)) {
                 if (!RuleValue.flag(draft.valueAt(actionPath),
                         PlaceBlockEffect.USE_SOURCE_BLOCK_FIELD, false)) return;
                 draft.removeAt(blockPath);
-                form.reload();
-                // 重载会按描述符初值重建控件，radius 的窗口需要再按当前草稿补一次
-                updatePlaceBlockWindows(form, session, actionPath);
             } else if (shapePath.equals(path) || radiusPath.equals(path)) {
-                updatePlaceBlockWindows(form, session, actionPath);
-                // 形状或半径变化后上限跟随到新容量；上限被手动改过则不再覆盖
-                if (limitLink.driverChanged()) form.reload();
+                // 形状或半径变化后上限跟随到新容量；手动上限保持原值。
+                limitLink.driverChanged();
                 placeBlockLimitManual = limitLink.manual();
             } else if (limitPath.equals(path)) {
                 limitLink.followerChanged();
                 placeBlockLimitManual = limitLink.manual();
             }
+        });
+        form.addFieldCommitted(path -> {
+            if (useSourcePath.equals(path)) form.field(PlaceBlockEffect.BLOCK_FIELD).reload();
+            if (shapePath.equals(path) || radiusPath.equals(path)) form.field(PlaceBlockEffect.LIMIT_FIELD).reload();
+            updatePlaceBlockWindows(form, session, actionPath);
         });
     }
 
@@ -945,10 +966,12 @@ final class RuleEditorResultsSection {
         if (productStop == EntityProductStop.MOB)
             form.field("age").visibleWhen(() -> selectedEntityHasAge(actionPath));
         form.field("entity").catalogFilter(this::catalogEntryAllowed);
-        form.setOnFieldWritten((draft, path, previous) -> {
+        form.addFieldWritten((draft, path, previous) -> {
             if (!entityPath.equals(path)) return;
             if (!selectedEntityHasAge(actionPath)) draft.removeAt(agePath);
-            form.reload();
+        });
+        if (productStop == EntityProductStop.MOB) form.addFieldCommitted(path -> {
+            if (entityPath.equals(path)) form.field("age").reload();
         });
     }
 
@@ -965,7 +988,7 @@ final class RuleEditorResultsSection {
         candidateIndex = target;
         effectIndex = 0;
         showAdvancedEffects = false;
-        enterResultStage(1);
+        enterResultStage(ResultStage.ACTIONS);
     }
 
     // 容器统一应用使能后恢复方案数量与位置边界，避免不可用操作被重新启用。
@@ -983,17 +1006,17 @@ final class RuleEditorResultsSection {
         if (movePlanDownButton != null) movePlanDownButton.setEnabled(enabled && candidateIndex + 1 < count);
     }
 
-    void enterResultStage(int stage) {
+    private void enterResultStage(ResultStage stage) {
         commands.finishEditing();
-        resultStage = Math.clamp(stage, 1, 2);
+        resultStage = stage;
         scroll.setOffset(0);
         commands.requestRebuild();
     }
 
     int layoutResults(UiRect area) {
         boolean split = area.width() >= NAVIGATION_MIN_WIDTH + DETAIL_MIN_WIDTH + RuleEditorPageSupport.CARD_GAP;
-        boolean actions = split || resultStage == 1;
-        boolean detail = split || resultStage == 2;
+        boolean actions = split || resultStage == ResultStage.ACTIONS;
+        boolean detail = split || resultStage == ResultStage.DETAIL;
         show(effectList, actions);
         show(addEffectButton, actions);
         show(openActionButton, !split && actions);

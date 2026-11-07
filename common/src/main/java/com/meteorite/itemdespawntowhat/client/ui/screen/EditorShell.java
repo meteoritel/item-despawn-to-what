@@ -24,6 +24,7 @@ import com.meteorite.itemdespawntowhat.core.service.edit.RuleIssue;
 import com.meteorite.itemdespawntowhat.core.service.edit.RuleSnapshotEntry;
 
 import java.util.List;
+import java.util.EnumSet;
 
 import net.minecraft.Util;
 import net.minecraft.client.gui.Font;
@@ -92,7 +93,8 @@ final class EditorShell {
     // 快照解析失败与冻结只提示一次；草稿修改后列表需刷新
     private boolean snapshotFailureNotified;
     private boolean frozenNotified;
-    private boolean listNeedsRefresh;
+    private enum Refresh { LIST, EDIT, FOCUS }
+    private final EnumSet<Refresh> pendingRefresh = EnumSet.noneOf(Refresh.class);
     // 草稿冲刷只做一次：关闭路径会连续经过多个入口
     private boolean released;
     private boolean closeRequested;
@@ -299,8 +301,8 @@ final class EditorShell {
         setNotice(null, NoticeLevel.INFO);
         // 换规则时重建页面状态（候选与效果选择归零）
         editPage.openNew();
-        editPage.rebuildEdit();
-        rebuildFocus();
+        requestEditRefresh();
+        prepareUi();
     }
 
     void backToList() {
@@ -313,14 +315,15 @@ final class EditorShell {
         page = listPage;
         editingId = null;
         setNotice(null, NoticeLevel.INFO);
-        listPage.refreshList();
-        rebuildFocus();
+        refreshList();
+        requestFocusRefresh();
+        prepareUi();
     }
 
     void enterDebug() {
         page = debugPage;
         setNotice(null, NoticeLevel.INFO);
-        debugPage.updateButtons();
+        debugPage.prepare();
         rebuildFocus();
     }
 
@@ -354,12 +357,28 @@ final class EditorShell {
         modals.push(modal);
     }
 
-    void refreshList() {
-        listPage.refreshList();
+    void refreshList() { pendingRefresh.add(Refresh.LIST); }
+
+    void draftChanged() { refreshList(); }
+
+    void requestEditRefresh() { pendingRefresh.add(Refresh.EDIT); }
+    boolean editRefreshPending() { return pendingRefresh.contains(Refresh.EDIT); }
+    void editNavigationStarted() { pendingRefresh.remove(Refresh.EDIT); }
+    void requestFocusRefresh() { pendingRefresh.add(Refresh.FOCUS); }
+
+    void requestWorkspaceRefresh() {
+        refreshList();
+        requestEditRefresh();
     }
 
-    void draftChanged() {
-        listNeedsRefresh = true;
+    // 先取走本批请求；执行期间新增的需求留给下个准备点。
+    void prepareUi() {
+        var requested = pendingRefresh.clone();
+        pendingRefresh.clear();
+        if (requested.contains(Refresh.LIST)) listPage.refreshList();
+        if (requested.contains(Refresh.EDIT)) editPage.rebuildEdit();
+        activePage().prepare();
+        if (requested.contains(Refresh.FOCUS) || requested.contains(Refresh.EDIT)) rebuildFocus();
     }
 
     void rebuildFocus() {
@@ -395,25 +414,18 @@ final class EditorShell {
             clearStickyNotice();
         }
         lastModalsEmpty = modalsEmpty;
-        // 快照是打开屏幕之后才到的（打开时只发出了请求），每帧消费一次；
-        // refresh() 内部按快照实例去重，重复调用无副作用
+        // 快照统一在 tick 消费；回执先接纳最终模型，再结算本轮展示刷新。
         long applyStarted = DevelopmentDiagnostics.start();
         boolean applied = refreshSnapshot();
         if (applied) {
             logSnapshotApplied(DevelopmentDiagnostics.micros(applyStarted));
-            listPage.refreshList();
-            editPage.rebuildEdit();
-            rebuildFocus();
+            requestWorkspaceRefresh();
             // 快照修订变化会清空来源视图缓存：仍在编辑的规则按需重新取回，失败只影响来源对照
             if (page == editPage && editingId != null) {
                 model.requestSourceView(editingId);
             }
         }
-        if (listNeedsRefresh) {
-            listNeedsRefresh = false;
-            listPage.refreshList();
-        }
-        editPage.tick();
+        if (!applied) editPage.tick();
         editPage.pollWorkspace();
         // 节流落盘、恢复提示、按钮状态、冲突弹窗与冻结
         model.tickPersistence();
@@ -431,7 +443,6 @@ final class EditorShell {
         if (restored > 0) {
             setNotice(Component.translatable(UI + "notice.restored_draft", restored), NoticeLevel.WARNING);
         }
-        updateActionButtons();
         editPage.promptConflicts();
         if (!editable() && !frozenNotified) {
             frozenNotified = true;
@@ -443,6 +454,7 @@ final class EditorShell {
         if (notice != null && noticeExpiresAt > 0L && Util.getMillis() >= noticeExpiresAt) {
             setNotice(null, NoticeLevel.INFO);
         }
+        prepareUi();
     }
 
     // 首载分段观测：快照进入模型（绑定草稿、重建会话）的耗时
@@ -457,26 +469,16 @@ final class EditorShell {
         DevelopmentDiagnostics.event(DevelopmentDiagnostics.SCENE_FIRST_LOAD, "CLIENT_APPLY", data);
     }
 
-    // 应用全部按钮与撤销/重做按钮的可用状态与标签
-    private void updateActionButtons() {
-        listPage.updateButtons();
-        editPage.updateButtons();
-        debugPage.updateButtons();
-    }
-
     // ---- 关闭与落盘 ----
 
-    boolean refreshSnapshot() {
+    private boolean refreshSnapshot() {
         if (!model.snapshotPending()) return false;
         editPage.finish(RuleEditorEditPage.Finish.RETAIN);
         return model.refresh();
     }
 
     void refreshFromWorkspace() {
-        refreshSnapshot();
-        listPage.refreshList();
-        editPage.rebuildEdit();
-        rebuildFocus();
+        requestWorkspaceRefresh();
     }
 
     // 用户主动关闭：有未保存改动时提供「暂存到本地」「放弃」「取消」三个选择

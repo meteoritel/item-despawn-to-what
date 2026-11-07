@@ -28,7 +28,7 @@ authority: common/client/ui/theme、common/client/ui/widget、common/client/ui/s
 | `client/ui/screen` | 编辑器外壳、三个编辑器页面、编辑分区组合、保存遮罩与页内输入分发 |
 | `client/ui/screen/form` | 描述符驱动的表单视图、字段控件基类与注册表 |
 
-三个编辑器页面（管理页、编辑页、调试页）共用 `EditorPage` 契约，由编辑器外壳持有并决定谁是活动页。页面在渲染和按钮刷新时查询外壳的可编辑状态，同步自身控件使能；外壳不向页面推送使能状态。编辑页内的编辑分区由 `RuleEditorEditSections.EditSection` 定义：INFO（基本信息）、INPUT（输入与消耗）、TRIGGER（触发条件）、RESULTS（效果与产物），`EditSection#of` 把键名解析成分区、未知键回落到 INFO。分区之间共用同一份 `EditSession` 草稿。四个分区各自持有 `EditorSectionContent`，拥有表单、控件、按钮与卡片；组合视图只消费活动分区的产物，维护布局缓存、文档坐标与滚动记忆。分区直接接收外壳、字体、表单工厂与编辑动作，不持有组合容器或其他分区。
+三个编辑器页面（管理页、编辑页、调试页）共用 `EditorPage` 契约，由编辑器外壳持有并决定谁是活动页。活动页通过 `EditorPage.prepare` 在布局和输入前查询外壳状态，同步动作资格、文案与控件使能。编辑页内的编辑分区由 `RuleEditorEditSections.EditSection` 定义：INFO（基本信息）、INPUT（输入与消耗）、TRIGGER（触发条件）、RESULTS（效果与产物），`EditSection#of` 把键名解析成分区、未知键回落到 INFO。分区之间共用同一份 `EditSession` 草稿。四个分区各自持有 `EditorSectionContent`，拥有表单、控件、按钮与卡片；组合视图唯一持有当前分区与各分区滚动记忆，页签从该状态派生选中值，并维护活动分区的布局缓存和文档坐标。分区直接接收外壳、字体、表单工厂与编辑动作，不持有组合容器或其他分区。
 
 规则启用状态分两层，界面各有一处落点：默认启用是规则内容，落在基本信息分区的表单字段里；本服启用状态是独立的一层，落在基本信息分区行尾的本服开关与「恢复默认」，以及列表页的启停按钮。两者的语义见 [规则 JSON](../api/rule-json.md)，客户端侧的意图与草稿记录见 [client-editor](client-editor.md)。
 
@@ -105,15 +105,15 @@ flowchart TD
 | 类型 | 角色 | 职责 | 协作对象 |
 |---|---|---|---|
 | `RuleEditorOpener` | 界面入口 | 提供 `bootstrap`/`shutdown`/`lastRequest` 静态入口，在客户端线程把编辑器切到前台或刷新 | `client/net` 的 hooks 与打开请求 |
-| `EditorShell` | 编辑器外壳 | 持有当前编辑目标、编辑会话选取、提示级别、可编辑判定与跨页命令，并持有三个编辑器页面；屏幕经它取活动页与状态 | 三个编辑器页面、`RuleEditorModel`、`UiModalStack`、`UiFocusManager` |
-| `EditorPage` | 编辑器页面契约 | 三个顶层页共用的派发面：头部度量与绘制、标题与状态标签、内容与页脚排版、鼠标键盘输入、按钮状态刷新，以及可选的覆盖层与悬停说明 | `RuleEditorScreen`、编辑器外壳 |
+| `EditorShell` | 编辑器外壳 | 持有当前编辑目标、编辑会话选取、提示级别、可编辑判定与跨页命令，并持有三个编辑器页面及列表、编辑结构、焦点的待刷新需求；屏幕经它取活动页与状态 | 三个编辑器页面、`RuleEditorModel`、`UiModalStack`、`UiFocusManager` |
+| `EditorPage` | 编辑器页面契约 | 三个顶层页共用的派发面：头部度量与绘制、标题与状态标签、内容与页脚排版、容器输入、布局与输入前的动作准备，以及可选的覆盖层 | `RuleEditorScreen`、编辑器外壳 |
 | `EditorLayers` | 呈现清单选择 | 将当前页、保存、modal 和 picker 状态映射为同一份 `UiLayers`；输入、绘制与布局快照共同消费 | `EditorShell`、`EditorPage`、弹窗栈 |
 | `EditorPageInputRoot` | 页面输入装配 | 将页面成员与公共主题按钮装入页面的稳定作用域；chrome 命中优先，Tab 位于页面目标之前 | `EditorShell`、`UiInputContainer` |
 | `RuleEditorScreen` | 屏幕聚合根 | 继承 kit `UiScreen`，持有业务生命周期、窗口排版与绘制：活动页从哪里取、提示带与页脚带怎么排都由屏幕决定，输入经 `EditorLayers` 的呈现清单选择作用域后派发；工作区进入可编辑态才允许编辑，应用期间冻结，工作区释放时自行关屏 | 编辑器外壳、`EditorPage`、弹窗栈、提示条 |
 | `RuleEditorListPage` | 管理页 | 搜索、状态/来源轮询筛选、分类树、规则导出与配方预览，列表底排按钮状态同步；只持有管理页控件与视图状态 | 规则会话、目录图标、`RulePackExporter`、`RuleEditorListActions` |
 | `RulePackExporter` | 规则导出口 | 把列表可导出的已保存规则写成一个数据包 zip：跳过未保存草稿与有问题条目，清单格式取当前游戏的数据包版本，规则文件按 `data/<ns>/idtw/rules/<path>.json` 落位，id 强制写回 | 列表页导出弹窗、`RulePaths`、`RuleFields` |
 | `RuleListDisplayCache` / `RuleListDisplaySnapshot` | 列表行展示 | 把快照条目、草稿会话与启停意图合成一行的展示快照：生效启用、待应用标记、本服标记、只读标记；缓存按内容版本、会话修订号与意图修订号失效 | `RuleEditorModel`、列表页 |
-| `RuleEditorEditSections` | 编辑分区组合 | 组合四个分区的装配产物，汇总布局、滚动、焦点与输入；分区各自拥有控件和使能策略，`EditorSectionActions` 完成编辑收尾、历史路径迁移与分类跟随 | 分区实现、`FormView`、`RuleEditorValidation` |
+| `RuleEditorEditSections` | 编辑分区组合 | 唯一持有当前分区，统一切换与定位收尾，汇总布局、滚动、焦点与输入；分区各自拥有控件和使能策略，`EditorSectionActions` 完成编辑收尾、历史路径迁移与分类跟随 | 分区实现、`FormView`、`RuleEditorValidation` |
 | `RuleEditorEditPage` | 编辑页与保存入口 | 编辑分区切换、类型选择、代码视图、保存与校验入口；`finish(reason)` 统一保留输入、结束交互、提交与释放 | `RuleEditorEditSections`、`UiModalStack` |
 | `RuleEditorInfoSection` | 基本信息分区 | 规则 ID、分类与来源摘要的只读展示，显示名、默认启用、优先级与备注的表单编辑，以及行尾的本服两态开关与「恢复默认」 | `FormView`、`RuleEditorModel` |
 | `RuleChangesView` | 变更清单 | 列出待应用的规则，每条同时给出内容动作与启停动作 | `RuleEditorModel`、`EditSession` |
@@ -124,8 +124,10 @@ flowchart TD
 | `UiCatalogGrid` | 目录网格 | 以一次发布的 `View` 读取条目、选择、分页、加载/错误与可用状态；只向宿主发送搜索、分页、范围和选择意图 | `RuleEditorPanelFactory`、`SourceBlacklistPicker`、弹窗 footer |
 | `FormView` | 表单聚合根 | 按 `TypeEditorDescriptor` 渲染可滚动控件列；写入统一经 `EditSession`；支持定位高亮、内联选择与行尾动作 | `FormCommit`、`FormRowInput`、`FormControl` |
 | `FormField` | 行身份与装配入口 | 绑定实际行，配置显隐、默认值、数值窗口、目录过滤、行尾动作与数量配对；路径随 rebase 更新，换描述符或卸载后失效 | `FormView`、字段声明 |
-| `FormCommit` | 表单提交协议 | 装载与保留文本，按修订守卫提交合法输入；字段及关联更新共用会话回调，非法文本留在会话 | `FormView`、`EditSession` |
-| `FormControl` / `FormControlRegistry` | 字段控件扩展点 | 一个字段一行，负责 JSON 值与控件值的双向搬运与本地校验；无 default 的枚举 switch 将每种字段显式映射到控件工厂。枚举控件是单个轮询按钮：当前取值显示在按钮文字里，点击切到下一个候选，候选列表与写入路径只有一份 | 描述符引擎、`EditSession` |
+| `FormCommit` | 表单提交协议 | 收集纯候选、执行同次历史写入、同步表单树修订并接受原行，最后通知局部视图；普通字段独立历史，复合字段收集合法子路径 | `FormView`、`EditSession` |
+| `EditorFormBindings` / `EditorQuantityBindings` | 业务表单绑定 | 有效默认值、流体兼容、撤销标签、结果分类、数量引用与存在条件关联写入 | 表单工厂、条件参数表、输入分区 |
+| `FormControlContext` | 复合控件装配能力 | 提供实际子表单创建、路径、目录选择与结构命令；表单保留会话和行守卫 | 子列表、嵌套对象、卡片控件 |
+| `FormControl` / `FormControlRegistry` | 字段控件扩展点 | 一个字段一行，负责装载、纯候选值转换与本地校验；普通工厂接收主题、字体、字段与变更出口，复合控件由 `FormControl.create` 单独装配。枚举控件是单个轮询按钮：当前取值显示在按钮文字里，点击切到下一个候选，候选列表与写入路径只有一份 | 描述符引擎、`EditSession` |
 | `UiHostTheme` / `UiHostThemes` / `AbstractHostTheme` | 主题注入入口 | 调色板、度量、文本色、控件样式、滑块皮肤、结构绘制与图标行号；两套主题逐项相同的宿主度量与外壳原语收在 `AbstractHostTheme`，默认入口给出像素外观，扁平外观由调用方显式取用 | 全部控件与屏幕 |
 | `UiWidget` / `UiModalStack` | 控件与弹窗契约 | 控件共享 `UiInputTarget`；模态栈维护层次与关闭通知，宿主选择顶层模态作用域，历史回调注入该作用域 | `EditorLayers`、`UiInputScope` |
 | `ConditionTreeContract` / `UiConditionGraphEditor` / `UiConditionTreeSummary` / `ConditionTreeOverlay` | 条件树界面家族 | 同一份条件数据与校验的两种展示；契约提供类型选项、叶子工厂、变更监听与选中路径同步 | 条件模型、`FormView`、`ConditionTreeChrome` |
@@ -178,13 +180,21 @@ flowchart LR
 
 ### 表单装配与页面收尾
 
-`EditorFormFactory` 为表单注入目录入口、条件上下文、数量默认值与几何失效通知。普通表单与条件叶表单共用 `CatalogSelectionOpener`；嵌套表单继承该入口并传递自身行过滤条件，源黑名单在输入表单装配处路由到分组目录。输入分区的刷新联动留在输入分区；`EditorConditionForms` 装配条件画布与局部参数表；`EditorQuantityBindings` 提供共享数量及存在条件写回。结果结构与严格值读取由编辑数据层的 `ResultStructure`、`RuleValue` 提供。
+`EditorFormFactory` 为表单注入目录入口、条件上下文、业务绑定与几何失效通知。`EditorFormBindings` 负责有效默认值、legacy fluid 兼容、来源撤销标签及结果分类跟随；`EditorQuantityBindings` 装配动态数量引用、数量显示默认值与引用过滤。普通表单与条件叶表单共用 `CatalogSelectionOpener`；嵌套表单继承该入口、默认值配方、拒绝提示与上层几何失效通知，并传递自身行过滤条件。条件上下文配方按实际子表单身份重新绑定，路径在打开时读取；源黑名单在输入表单装配处路由到分组目录。输入分区的刷新联动留在输入分区；`EditorConditionForms` 装配条件画布与局部参数表；`EditorQuantityBindings` 提供共享数量及存在条件写回。结果结构与严格值读取由编辑数据层的 `ResultStructure`、`RuleValue` 提供。
 
-控件消费键盘前，`FormView` 固定原行身份；合法的普通字段 Enter 经 `writeField`、`acceptInput` 提交，长文本保留换行，待输入原文由会话保存。回调卸载或替换原行后停止该行后续提交。PageUp/PageDown 由持焦子树先处理，未消费才翻动表单。嵌套对象、子列表、卡片和叶子面板复用相同成员派发，值写入和历史仍由原提交入口负责。
+控件消费键盘前，`FormView` 固定原行身份；合法的普通字段 Enter 经 `FormCommit` 收集、写入并接受原行，长文本保留换行，待输入原文由会话保存。回调卸载或替换原行后停止该行后续提交。PageUp/PageDown 由持焦子树先处理，未消费才翻动表单。嵌套对象、子列表、卡片和叶子面板复用相同成员派发，值写入和历史仍由原提交入口负责。
+
+`FormControl.draftValue` 与 `FormField.pendingValue` 只读取候选，不改变草稿、pending input 或接受基线。`finishInput` 只完成局部输入；`FormCommit` 在进入 `EditSession.apply` 前固定原行、路径、修订和候选。普通字段保留字段级历史，嵌套对象与子列表按合法子路径合并为一次复合字段提交；非法子字段保留原文，父容器沿当前草稿合并，未知字段、显式 null 与省略键保留原状。数值、数量和卡片的接受基线在写入后逐级同步。
+
+`addFieldWritten` 按注册顺序组合同次历史中的业务写入，`setRelatedEdit` 在写入前捕获分类等旧状态、在事务末应用关联更新。原行接受完成后才调用 `addFieldCommitted` 更新数量行、年龄显隐与数值窗口；`FormField.reload` 只重载受影响行。结构增删由提交层组织：先完成合法输入，再在同次历史内变更容器及输入路径，纯候选供应器只组装值。
 
 `addField` 返回 `FormField`，`setDescriptor` 返回有序句柄集合；固定描述符在装配时用 `field(name)` 取得必需行，动态闭包保留句柄。JSON 路径继续承担数据读写、历史迁移、问题定位与高亮。
 
 保存、分区和目标切换、返回、刷新及关闭进入 `RuleEditorEditPage.finish(reason)`。完成编辑先保留当前修订输入，再取消未释放预览、提交合法值并通知模型，最后卸载或重建；非法文本保留在会话并参与阻塞校验。快照身份变化前只保留输入；重绑后旧修订控件重新装载并退出该次提交。放弃草稿先释放旧页面再清除记录，关闭与 removed 共用外壳的一次释放标记。保存与应用不关闭编辑页：回执到达后页面留在原处，用户退出、工作区释放或外部切屏才关屏。
+
+当前分区只保存在 `RuleEditorEditSections`；手动切换与跨分区问题定位共用旧输入收尾、滚动保存、交互退出和 picker 关闭流程。当前可见字段直接定位，跨目标按当前草稿选择候选与效果、重建并恢复滚动后定位。结果分区私有持有候选、效果、列表/详情阶段及高级区展开状态，外部通过语义入口选择与定位。
+
+`EditorShell.prepareUi` 取走本批列表、编辑结构与焦点需求，依次刷新列表、重建编辑面、准备活动页动作并刷新最终焦点；回调新增需求留在下一准备点。根 `RuleEditorScreen.prepareUi` 在布局和输入前结算，tick 也在模型推进后收尾。普通输入只更新 pending input 与必要展示；结构操作、历史恢复、冲突解决和会话重绑请求编辑重建。显式导航同步完成布局与焦点并消费已满足的结构需求。快照统一在 shell tick 消费，保存回执先接纳模型和文案，再刷新展示；覆盖层变化继续立即选择实际作用域。
 
 `EditorLayers` 将当前业务状态映射为一份呈现清单：保存时为页面与保存层；存在 modal 时为页面与按栈顺序的 modal；其余情况下加入打开的 picker，或只显示页面。`UiLayers` 从清单顶项提供稳定作用域，按同序绘制和导出布局节点。被暂隐的覆盖对象保留在原所有者中。通用输入派发交给 kit `UiInputRouter`。`UiThemedScreen` 共享正文 Context 绘制原版背景与主题窗口，`layoutUi` 准备页头、内容与页脚，`renderThemedUi` 消费同一布局结果，各呈现项从自己的作用域解析 `UiPointer` 供绘制共用；复合控件的 `hitTest` 返回实际叶子与包装/核心归属。输入与 hover 使用同一个活动作用域，POINTER 捕获只保留所属分支反馈并关闭 tooltip，KEY/TEXT 会话保留普通 hover。左键命中合格候选自动转焦，标签和滚动条等操作区保焦，真实空白清焦；事件消费独立处理。F1–F12 保持放行，Ctrl+F8 在屏幕层按保存与模态状态进入开发工作台。关屏先取消未完成会话，再冲刷已提交草稿。
 

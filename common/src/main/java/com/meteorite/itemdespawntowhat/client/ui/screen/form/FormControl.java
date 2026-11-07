@@ -78,9 +78,14 @@ abstract class FormControl implements UiInputTarget {
     // 由 load() 调用：记录原始值并清除编辑标记
     final void rememberLoaded(@Nullable RuleValue value) {
         // 键缺失（null 引用）与显式 null 必须区分：前者保持 null，后者要原样保留，
-        // 否则未编辑时 store() 返回 null，applyToDraft 会把显式 null 字段 removeAt 掉
+        // 否则未编辑时 draftValue() 返回 null，applyToDraft 会把显式 null 字段 removeAt 掉
         this.loadedValue = value == null ? null : value.deepCopy();
         this.edited = false;
+    }
+
+    final void acceptValue(@Nullable RuleValue value) {
+        rememberLoaded(value);
+        inputAccepted();
     }
 
     // 由用户交互路径调用：标记该字段已被明确编辑
@@ -120,8 +125,8 @@ abstract class FormControl implements UiInputTarget {
     // 把草稿值装载进控件
     abstract void load(@Nullable RuleValue value);
 
-    // 把控件值写回草稿，返回 null 表示删除该字段
-    abstract @Nullable RuleValue store();
+    // 纯候选读取；null 表示字段缺席，不接受文本或写入会话
+    abstract @Nullable RuleValue draftValue();
 
     // 该控件最近一次改动对应的撤销操作 key（撤销按钮据此显示真实操作名，子类可覆写）
     String undoOpKey() {
@@ -161,6 +166,10 @@ abstract class FormControl implements UiInputTarget {
 
     // 列表等复合控件先结束尚未提交的条目输入。
     void finishInput() {
+    }
+
+    List<FormView> childForms() {
+        return List.of();
     }
 
     // 字段写入后更新复合控件的文本基线，不重载控件或打断焦点。
@@ -308,15 +317,22 @@ abstract class FormControl implements UiInputTarget {
 
     // ---- 工厂：按字段类型挑选控件 ----
 
-    static FormControl create(Font font, FormView owner, EditorField field, Runnable onChanged) {
+    static FormControl create(UiHostTheme theme, Font font, FormControlContext context, EditorField field, Runnable onChanged) {
         // 数值字段优先走「滑杆 + 行内精确输入」，域元数据不足时仍回退文本控件
         if (field.isNumeric()) {
-            NumberControl numeric = NumberControl.create(owner.theme(), font, field, onChanged);
+            NumberControl numeric = NumberControl.create(theme, font, field, onChanged);
             if (numeric != null) {
                 return numeric;
             }
         }
-        return FormControlRegistry.create(font, owner, field, onChanged);
+        return switch (field.type()) {
+            case SUBLIST -> new SublistControl(theme, font, context, field, onChanged);
+            case CARD_LIST -> new CardListControl(theme, font, context, field, onChanged);
+            case OBJECT -> new NestedObjectControl(theme, font, context, field, onChanged);
+            case CONDITION_TREE -> new ConditionTreeControl(theme, font, field, context.conditionSupport(),
+                    () -> context.conditionContext(field));
+            default -> FormControlRegistry.create(theme, font, field, onChanged);
+        };
     }
 
     // ---- 文本过滤器与解析工具 ----

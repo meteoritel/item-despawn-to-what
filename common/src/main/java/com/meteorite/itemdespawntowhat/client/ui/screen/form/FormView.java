@@ -16,6 +16,7 @@ import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
+import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
@@ -33,10 +34,12 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.function.Predicate;
+import java.util.function.Function;
 
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
@@ -72,6 +75,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
     private final UiChildren<FormRowInput> rowInputs = new UiChildren<>();
     String basePath;
     long loadedRevision;
+    @Nullable RuleValue acceptedObject;
     final List<FormRow> rows = new ArrayList<>();
     private @Nullable SelectionCatalogOpener catalogOpener;
     private final Map<String, FormField> fields = new HashMap<>();
@@ -109,26 +113,62 @@ public final class FormView implements UiWidget, UiLayoutSource {
     }
 
     private @Nullable ConditionEditingSupport conditionEditingSupport;
-    private @Nullable ConditionEditContextFactory conditionContextFactory;
+    private @Nullable Function<FormView, ConditionEditContextFactory> conditionContextFactory;
     private @Nullable Runnable changeListener;
-    @Nullable FieldWritten fieldWritten;
+    private final List<FieldWritten> fieldWrites = new ArrayList<>();
+    private final List<Consumer<String>> fieldCommits = new ArrayList<>();
+    private @Nullable Function<RuleValue, Consumer<RuleDraft>> relatedEdit;
+    private @Nullable DefaultValues defaultValues;
+    private @Nullable String undoOperation;
 
-    /**
-     * 字段与关联更新共享当前编辑回调，不允许异步保留草稿。
-     */
+    /** 同次历史中的关联字段写入；只允许同步使用本次草稿。 */
     @FunctionalInterface
     public interface FieldWritten {
-        /**
-         * 在同一次历史操作中同步关联字段。
-         */
-        void written(com.meteorite.itemdespawntowhat.client.edit.RuleDraft draft, String path, @Nullable RuleValue before);
+        /** 字段已写入本次草稿；before 是该字段写入前的独立值。 */
+        void written(RuleDraft draft, String path, @Nullable RuleValue before);
     }
 
-    /**
-     * 关联字段在同一次撤销操作内同步，回调接收当前草稿、路径与写入前值。
-     */
-    public void setOnFieldWritten(FieldWritten listener) {
-        fieldWritten = listener;
+    /** 宿主提供的缺省显示值，不改变字段的省略状态。 */
+    @FunctionalInterface
+    public interface DefaultValues {
+        /** 按当前表单路径和所在对象计算字段的有效缺省值。 */
+        @Nullable RuleValue value(String basePath, RuleValue owner, EditorField field);
+    }
+
+    /** 按注册顺序组合同次历史中的业务关联写入。 */
+    public void addFieldWritten(FieldWritten listener) { fieldWrites.add(listener); }
+
+    /** 字段接受完成后同步局部视图；回调不参与草稿事务。 */
+    public void addFieldCommitted(Consumer<String> listener) { fieldCommits.add(listener); }
+
+    /** 写入前捕获关联更新所需的旧状态，在本次字段写入后应用返回的动作。 */
+    public void setRelatedEdit(Function<RuleValue, Consumer<RuleDraft>> edit) { relatedEdit = edit; }
+
+    /** 注入宿主有效默认值；独立表单默认使用字段声明。 */
+    public void setDefaultValues(DefaultValues values) { defaultValues = values; }
+
+    /** 指定本表单字段的撤销标签；未指定时由字段控件表达。 */
+    public void setUndoOperation(String operation) { undoOperation = operation; }
+
+    @Nullable RuleValue defaultValue(FormRow row, RuleValue owner) {
+        if (row.defaultValue != null) return row.defaultValue.get();
+        RuleValue effective = defaultValues == null ? null : defaultValues.value(basePath, owner, row.field);
+        return effective == null ? row.field.defaultValue() : effective;
+    }
+
+    @Nullable Consumer<RuleDraft> relatedEdit() {
+        return relatedEdit == null ? null : relatedEdit.apply(session.root());
+    }
+
+    String undoOperation(FormRow row) {
+        if (undoOperation != null) return undoOperation;
+        return parent == null ? row.control.undoOpKey() : parent.undoOperation(row);
+    }
+
+    void notifyFieldCommitted(String path) {
+        for (Consumer<String> listener : fieldCommits) listener.accept(path);
+        refreshRowVisibility();
+        if (parent != null) parent.notifyFieldCommitted(path);
     }
 
     // 输入被上限拒绝时的即时提示出口（页面显示 notice）
@@ -149,6 +189,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
     boolean enabled = true;
     // 子列表里的子表单：只由自己的渲染帧驱动，顶层表单由页面 tick 统一驱动
     private boolean childForm;
+    @Nullable FormView parent;
     private @Nullable String highlightPath;
     private int highlightTicks;
     // 行几何测量缓存：只有宽度、行结构、可见性或控件高度等真实几何输入变化后重算，
@@ -213,7 +254,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
         boolean iconSelection = catalogSelections && catalogType != null && field.isCatalogReference();
         FormRow row = new FormRow(field, pathFor(field), iconSelection
                 ? new CatalogSelectionControl(THEME, font, field, this::notifyChanged)
-                : FormControl.create(font, this, field, this::notifyChanged));
+                : FormControl.create(THEME, font, new FormControlContext(this), field, this::notifyChanged));
         row.control.setMinimumHeight(minimumControlHeight);
         // 控件自身高度变化（如条件树摘要行数）经这一出口让行测量与页面布局失效
         row.control.setOnGeometryChanged(this::invalidateMeasure);
@@ -235,11 +276,10 @@ public final class FormView implements UiWidget, UiLayoutSource {
         return handle;
     }
 
-    // 草稿写入通知：关联更新使用同一次编辑草稿，before 为写入前的值。
-    void notifyFieldWritten(com.meteorite.itemdespawntowhat.client.edit.RuleDraft draft, String path, @Nullable RuleValue before) {
-        if (fieldWritten != null) {
-            fieldWritten.written(draft, path, before);
-        }
+    // 所有关联写同步使用同一草稿；控件刷新留到提交完成后。
+    void notifyFieldWritten(RuleDraft draft, String path, @Nullable RuleValue before) {
+        for (FieldWritten listener : fieldWrites) listener.written(draft, path, before);
+        if (parent != null) parent.notifyFieldWritten(draft, path, before);
     }
 
     /**
@@ -363,7 +403,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
                     value = ids.isEmpty() ? null : RuleValue.text(ids.getFirst());
                 }
                 writeField(row, value);
-                reload();
+                reloadField(row);
                 notifyChanged();
             });
         });
@@ -430,14 +470,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
     }
 
     void changeChildStructure(String relative, Runnable change, Supplier<RuleValue> value) {
-        commitPendingInputs();
-        session.apply(EditSession.OP_SET_FIELD, edits -> {
-            change.run();
-            edits.setAt(childPath(relative), value.get());
-        });
-        loadedRevision = session.revision();
-        for (FormRow row : rows) if (row.field.name().equals(relative)) acceptInput(row);
-        invalidateMeasure();
+        commit.changeStructure(relative, change, value);
     }
 
     void clearChildInputs(String relative) {
@@ -467,11 +500,11 @@ public final class FormView implements UiWidget, UiLayoutSource {
     }
 
     /**
-     * 装配条件编辑上下文的工厂：按实际字段路径与所属对象路径创建局部目标上下文。
+     * 按实际宿主表单绑定条件上下文工厂；嵌套表单继承配方并使用自身身份。
      *
      * @param factory 上下文工厂，null 时不提供条件画布入口
      */
-    public void setConditionContextFactory(@Nullable ConditionEditContextFactory factory) {
+    public void setConditionContextFactory(@Nullable Function<FormView, ConditionEditContextFactory> factory) {
         this.conditionContextFactory = factory;
     }
 
@@ -483,7 +516,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
     // 为实际条件字段创建局部上下文：字段路径取自与本行相同的 pathFor，所属对象由本表单基路径显式给出
     @Nullable ConditionEditContext conditionContext(EditorField field) {
         if (conditionContextFactory == null) return null;
-        return conditionContextFactory.create(pathFor(field), basePath);
+        return conditionContextFactory.apply(this).create(pathFor(field), basePath);
     }
 
     public void setLabelWidth(int width) {
@@ -499,7 +532,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
     void notifyChanged() {
         invalidateMeasure();
         refreshRowVisibility();
-        applyToDraft();
+        if (parent == null) applyToDraft();
         if (changeListener != null) {
             changeListener.run();
         }
@@ -532,14 +565,24 @@ public final class FormView implements UiWidget, UiLayoutSource {
      * 完成当前字段输入；只写合法值，非法文本留在会话缓冲。
      */
     public boolean commitPendingInputs() {
-        return commit.applyToDraft(true);
+        return commit.commitPendingInputs();
     }
 
     /**
      * 把控件值写回草稿；逐字段比较，只有真正变化才记入撤销历史
      */
     public boolean applyToDraft() {
-        return commit.applyToDraft(false);
+        return commit.applyToDraft();
+    }
+
+    void finishInputs() {
+        for (FormRow row : List.copyOf(rows)) if (row.attached && row.visible) row.control.finishInput();
+    }
+
+    void reloadField(FormRow row) {
+        commit.reloadField(row);
+        invalidateMeasure();
+        refreshRowVisibility();
     }
 
     // 输入分发桥接：字段提交与最近输入接受
@@ -663,26 +706,41 @@ public final class FormView implements UiWidget, UiLayoutSource {
         return FormRowLayout.rowScreenY(viewportY, row, scroll.offset());
     }
 
-    // 组装当前控件的对象形态（子列表用）
-    RuleValue storeObject() {
-        RuleValue.Mapping object = RuleValue.mapping();
+    boolean hasDraftChanges() {
         for (FormRow row : rows) {
-            if (row.field.isDisplayOnly()) {
-                continue;
-            }
-            RuleValue value = row.control.issues(row.path).stream().anyMatch(FormIssue::blocking)
-                    ? row.control.originalValue() : row.control.store();
-            if (value != null) {
-                object.put(row.field.name(), value.deepCopy());
-            }
+            if (row.visible && !row.field.isDisplayOnly()
+                    && row.control.issues(row.path).stream().noneMatch(FormIssue::blocking)
+                    && !Objects.equals(row.control.originalValue(), row.control.draftValue())) return true;
         }
-        return object.build();
+        return false;
+    }
+
+    FormView rootForm() { return parent == null ? this : parent.rootForm(); }
+
+    // 组装当前控件的对象形态（子列表用）
+    RuleValue draftObject() {
+        RuleValue.Mapping object = RuleValue.mapping(acceptedObject);
+        boolean changed = false;
+        for (FormRow row : rows) {
+            if (!row.visible || row.field.isDisplayOnly()) continue;
+            RuleValue value = row.control.issues(row.path).stream().anyMatch(FormIssue::blocking)
+                    ? row.control.originalValue() : row.control.draftValue();
+            RuleValue original = acceptedObject == null ? null : acceptedObject.child(row.field.name());
+            if (Objects.equals(original, value)) continue;
+            changed = true;
+            if (value == null) object.remove(row.field.name());
+            else object.put(row.field.name(), value.deepCopy());
+        }
+        return !changed && acceptedObject != null ? acceptedObject.deepCopy() : object.build();
     }
 
     // 新建子表单（子列表的每一项）
     FormView newChildForm(String relativePath, List<EditorField> fields) {
         FormView child = new FormView(THEME, font, session, childPath(relativePath));
         child.childForm = true;
+        child.parent = this;
+        child.setOnGeometryChanged(this::invalidateMeasure);
+        child.defaultValues = defaultValues;
         if (catalogSelections) child.useCatalogSelections();
         child.setConditionEditingSupport(conditionEditingSupport);
         child.setConditionContextFactory(conditionContextFactory);
@@ -836,10 +894,9 @@ public final class FormView implements UiWidget, UiLayoutSource {
             boolean editing = row.control.isEditing();
             if (row.wasEditing && !editing) {
                 row.control.finishInput();
-                if (row.control.issues(row.path).stream().noneMatch(FormIssue::blocking)) {
-                    RuleValue next = row.control.store();
+                if (!row.control.childForms().isEmpty() || row.control.issues(row.path).stream().noneMatch(FormIssue::blocking)) {
+                    RuleValue next = row.control.draftValue();
                     writeField(row, next);
-                    acceptInput(row);
                 } else {
                     // 收尾可能规范化文本缓冲：只对本次确实结束编辑的行定点重存，避免再扫全表
                     commit.retainRowInput(row);
@@ -969,7 +1026,10 @@ public final class FormView implements UiWidget, UiLayoutSource {
     public void unmount() {
         endInteractions(UiInteractionSession.EndReason.UNMOUNTED);
         retainPendingInputs();
-        for (FormRow row : rows) row.attached = false;
+        for (FormRow row : rows) {
+            for (FormView child : row.control.childForms()) child.unmount();
+            row.attached = false;
+        }
     }
 
 
@@ -1073,8 +1133,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
                 if (row.attached && (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER)
                         && !row.field.isLongText()
                         && row.control.issues(row.path).stream().noneMatch(FormIssue::blocking)) {
-                    writeField(row, row.control.store());
-                    if (row.attached) acceptInput(row);
+                    writeField(row, row.control.draftValue());
                 }
             }
             return true;

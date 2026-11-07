@@ -25,11 +25,13 @@ final class EditorFormFactory {
 
     FormView create(EditSession session, String basePath, TypeEditorDescriptor descriptor) {
         FormView form = new FormView(shell.theme(), font, session, basePath);
+        EditorFormBindings.configure(form, basePath);
+        EditorQuantityBindings.configureReferenceWrites(form, basePath);
         // 表单行几何变化时让页面布局缓存失效，页面滚动帧因此不必重排
         form.setOnGeometryChanged(geometryChanged);
         form.useCatalogSelections();
         form.setConditionEditingSupport(conditions.sharedConditionSupport());
-        form.setConditionContextFactory(conditions.conditionContextFactory(form));
+        form.setConditionContextFactory(conditions::conditionContextFactory);
         form.setOnChanged(shell::draftChanged);
         // 输入超过长度上限时立即提示，格式为「字段名：原因」
         form.setOnRejectedNotice(message -> shell.setNotice(message,EditorShell.NoticeLevel.DANGER));

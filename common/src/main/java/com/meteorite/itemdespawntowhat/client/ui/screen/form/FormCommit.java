@@ -1,120 +1,72 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
-import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDefaults;
-import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
-import com.meteorite.itemdespawntowhat.client.edit.RuleCategoryAssignment;
+import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
-import com.meteorite.itemdespawntowhat.client.edit.ResultStructure;
-import com.meteorite.itemdespawntowhat.core.api.RuleFields;
-import com.meteorite.itemdespawntowhat.core.model.CatalystCost;
-
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
-
+import java.util.Set;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 import org.jetbrains.annotations.Nullable;
 
-/**
- * 表单草稿写入：装载、会话输入保留与逐字段回写草稿。
- *
- * <p>所有写入仍经 {@link EditSession}（统一撤销门面）；本类只搬运数据，不持有界面几何。
- * 字段级撤销语义（未编辑不回写、无变化不记历史、关联字段同一条记录）在此保持原样。</p>
- */
+/** 表单装载与提交协议；候选收集、同次历史写入、接受基线及视图同步按顺序执行。 */
 final class FormCommit {
+    private enum InputMode { IDLE, FINISH }
+
+    private record FieldChange(FormView form, FormRow row, String path,
+                               @Nullable RuleValue before, @Nullable RuleValue next) {
+        boolean changed() { return !Objects.equals(before, next); }
+        boolean attached() { return row.attached && row.path.equals(path); }
+    }
 
     private final FormView view;
 
-    FormCommit(FormView view) {
-        this.view = view;
-    }
+    FormCommit(FormView view) { this.view = view; }
 
-    // 从草稿重新装载全部控件
     void reload() {
         retainPendingInputs();
         view.loadedRevision = view.session.revision();
-        RuleValue draft = view.session.root();
-        for (FormRow row : view.rows) {
-            RuleValue original = draft.valueAt(row.path);
-            RuleValue container = view.basePath.isEmpty() ? draft : draft.valueAt(view.basePath);
-            if (row.control instanceof ItemCountsControl counts && isCatalystQuantityField(row.field.name())) {
-                RuleValue owner = container != null && container.isMapping() ? container : RuleValue.mapping().build();
-                boolean source = RuleFields.SOURCE_COST.equals(row.field.name());
-                RuleValue references = source
-                        ? draft.valueAt(DraftPaths.child(RuleFields.SOURCE, RuleFields.SOURCE_ITEMS))
-                        : owner.child(RuleFields.CATALYST_ITEMS);
-                List<String> ids = stringReferences(references);
-                int fallback = row.field.intMin(CatalystCost.DEFAULT_COUNT);
-                counts.setDefaultCount(fallback);
-                if (source || owner.has(RuleFields.CATALYST_ITEMS)) counts.setReferences(ids);
-            }
-            RuleValue effective = original == null && row.defaultValue != null ? row.defaultValue.get()
-                    : original == null && container != null && container.isMapping()
-                    ? effectiveValue(container, row.field.name()) : row.field.defaultValue();
-            if (original == null && effective == null) effective = row.field.defaultValue();
-            row.defaultDisplayed = original == null && effective != null;
-            RuleValue displayed = row.defaultDisplayed ? effective : original;
-            if (row.control instanceof ItemCountsControl && row.defaultValue != null && original != null && original.isMapping()) {
-                RuleValue.Mapping merged = RuleValue.mapping(row.defaultValue.get());
-                for (Map.Entry<String, RuleValue> entry : original.entries().entrySet()) {
-                    merged.put(entry.getKey(), entry.getValue().deepCopy());
-                }
-                displayed = merged.build();
-            }
-            row.control.load(displayed);
-            row.control.rememberLoaded(original);
-            // 控件外露的是复用缓冲，基线必须复制，否则后续扫描会覆盖已装载文本
-            row.loadedInputs = List.copyOf(row.control.inputText());
-            row.loaded = true;
-            restorePendingInput(row);
+        RuleValue owner = view.basePath.isEmpty() ? view.session.root() : view.session.valueAt(view.basePath);
+        view.acceptedObject = view.parent == null ? null : copy(owner);
+        for (FormRow row : List.copyOf(view.rows)) {
+            if (row.attached) loadRow(row, owner);
         }
     }
 
-    private @Nullable RuleValue effectiveValue(RuleValue owner, String field) {
-        if (RuleFields.FLUIDS.equals(field) && owner.has(RuleFields.FLUID)) {
-            RuleValue fluid = owner.child(RuleFields.FLUID);
-            if (fluid != null) return RuleValue.list().add(fluid.deepCopy()).build();
-        }
-        // 条件叶的参数对象在固定 condition 键下，按路径选择表，允许条件和效果复用同一类型 id。
-        return view.basePath.equals(RuleFields.CONDITION) || view.basePath.endsWith("." + RuleFields.CONDITION)
-                ? BuiltinEditorDefaults.effectiveConditionValue(owner, field)
-                : BuiltinEditorDefaults.effectiveValue(owner, field);
-    }
-
-    // 只有规则级催化剂/来源成本字段与引用列表联动；其它 MapSpec 由控件沿用草稿自身的键
-    private static boolean isCatalystQuantityField(String fieldName) {
-        return RuleFields.SOURCE_COST.equals(fieldName)
-                || RuleFields.ITEM_COUNTS.equals(fieldName)
-                || RuleFields.CONSUME_COUNTS.equals(fieldName);
-    }
-
-    private static List<String> stringReferences(@Nullable RuleValue raw) {
-        List<String> result = new ArrayList<>();
-        if (raw != null && raw.isList()) for (RuleValue value : raw.items()) {
-            if (value.isText()) result.add(value.asText());
-        }
-        return result;
-    }
-
-    // 用给定对象装载控件（子列表新建子项时使用，不读草稿）
     void reloadWith(RuleValue object) {
         retainPendingInputs();
         view.loadedRevision = view.session.revision();
-        for (FormRow row : view.rows) {
-            RuleValue value = object.has(row.field.name()) ? object.child(row.field.name()) : null;
-            RuleValue effective = row.defaultValue != null ? row.defaultValue.get() : row.field.defaultValue();
-            row.defaultDisplayed = value == null && effective != null;
-            row.control.load(row.defaultDisplayed ? effective : value);
-            row.control.rememberLoaded(value);
-            row.loadedInputs = List.copyOf(row.control.inputText());
-            row.loaded = true;
-            restorePendingInput(row);
+        view.acceptedObject = view.parent == null ? null : object.deepCopy();
+        for (FormRow row : List.copyOf(view.rows)) {
+            if (row.attached) loadRow(row, object);
         }
     }
 
-    // 磁盘只存文本；控件装载后用当前字段规则替换恢复期间的占位问题。
+    private void loadRow(FormRow row, @Nullable RuleValue owner) {
+        if (row.beforeLoad != null) row.beforeLoad.run();
+        RuleValue original = owner == null ? null : owner.child(row.field.name());
+        RuleValue effective = view.defaultValue(row, owner == null ? RuleValue.mapping().build() : owner);
+        row.defaultDisplayed = original == null && effective != null;
+        RuleValue displayed = row.displayValue.apply(row.defaultDisplayed ? effective : original);
+        row.control.load(displayed);
+        row.control.rememberLoaded(original);
+        row.loadedInputs = List.copyOf(row.control.inputText());
+        row.loaded = true;
+        restorePendingInput(row);
+    }
+
+    void reloadField(FormRow row) {
+        if (!row.attached) return;
+        view.session.clearPendingInput(row.path);
+        view.loadedRevision = view.session.revision();
+        RuleValue owner = view.basePath.isEmpty() ? view.session.root() : view.session.valueAt(view.basePath);
+        loadRow(row, owner);
+    }
+
     private void restorePendingInput(FormRow row) {
         EditSession.PendingInput pending = view.session.pendingInput(row.path);
         if (pending == null) return;
@@ -122,126 +74,162 @@ final class FormCommit {
         retainRowInput(row);
     }
 
-    /**
-     * 保存会话内输入，不改变规则 JSON 或配置历史。
-     */
     void retainPendingInputs() {
-        // 历史或结构操作已恢复路径时，旧控件不得再按旧路径覆盖会话输入。
         if (view.loadedRevision != view.session.revision()) return;
         for (FormRow row : view.rows) {
             row.control.retainChildInputs();
-            if (!row.loaded) continue;
-            List<String> text = row.control.inputText();
-            if (!text.equals(row.loadedInputs)) {
-                view.session.retainPendingInput(row.path, text, row.visible ? row.control.issues(row.path) : List.of());
-            } else view.session.clearPendingInput(row.path);
+            retainRowInput(row);
         }
     }
 
-    /**
-     * 只更新一行的会话保留输入：tick 收尾的行在 finishInput 规范化文本后调用，
-     * 因此不必在 tick 末尾再扫全表比较所有行。
-     *
-     * @param row 本次结束编辑的行
-     */
     void retainRowInput(FormRow row) {
-        if (view.loadedRevision != view.session.revision() || !row.loaded) return;
+        if (view.loadedRevision != view.session.revision() || !row.attached || !row.loaded) return;
         List<String> text = row.control.inputText();
-        if (!text.equals(row.loadedInputs)) {
-            view.session.retainPendingInput(row.path, text, row.visible ? row.control.issues(row.path) : List.of());
+        List<FormIssue> issues = row.visible ? row.control.issues(row.path) : List.of();
+        if (!text.equals(row.loadedInputs) || !text.isEmpty() && issues.stream().anyMatch(FormIssue::blocking)) {
+            view.session.retainPendingInput(row.path, text, issues);
         } else {
             view.session.clearPendingInput(row.path);
         }
     }
 
-    boolean applyToDraft(boolean finish) {
+    boolean commitPendingInputs() { return submit(InputMode.FINISH); }
+    boolean applyToDraft() { return submit(InputMode.IDLE); }
+
+    private boolean submit(InputMode mode) {
         if (view.loadedRevision != view.session.revision()) {
             reload();
             return false;
         }
         retainPendingInputs();
-        RuleValue draft = view.session.root();
         boolean written = false;
-        for (FormRow row : view.rows) {
-            if (!row.visible || row.field.isNote() || row.path.isEmpty()) {
-                continue;
-            }
-            if (finish) row.control.finishInput();
-            if ((!finish && row.control.isEditing()) || (!row.control.inputText().isEmpty()
-                    && row.control.issues(row.path).stream().anyMatch(FormIssue::blocking))) continue;
-            RuleValue next = row.control.store();
-            RuleValue current = draft.valueAt(row.path);
-            if (Objects.equals(current, next)) {
-                if (finish || !row.control.isEditing()) acceptInput(row);
-                continue;
-            }
-            writeField(row, next);
-            acceptInput(row);
-            written = true;
+        for (FormRow row : List.copyOf(view.rows)) {
+            if (!row.attached || !row.visible || row.field.isDisplayOnly() || row.path.isEmpty()) continue;
+            if (mode == InputMode.FINISH) row.control.finishInput();
+            if (!row.attached) continue;
+            List<FieldChange> fields = new ArrayList<>();
+            collect(view, row, mode, fields);
+            written |= write(fields, view.undoOperation(row));
         }
         retainPendingInputs();
         return written;
     }
 
-    void acceptInput(FormRow row) {
-        row.loadedInputs = List.copyOf(row.control.inputText());
-        row.control.rememberLoaded(view.session.valueAt(row.path));
-        row.control.inputAccepted();
-        view.session.clearPendingInput(row.path);
-    }
-
-    // 文本提交、卡片移除和目录添加共用写入入口。
-    void writeField(FormRow row, @Nullable RuleValue next) {
-        RuleValue draft = view.session.root();
-        RuleValue current = draft.valueAt(row.path);
-        if (Objects.equals(current, next)) return;
-        RuleValue before = current == null ? null : current.deepCopy();
-        boolean resultField = ResultStructure.isResultPath(row.path);
-        String categoryBefore = resultField ? RuleCategoryAssignment.derive(draft) : null;
-        view.session.clearPendingInput(row.path);
-        view.session.apply(opKeyFor(row), edits -> {
-            if (next == null) edits.removeAt(row.path);
-            else edits.setAt(row.path, next.deepCopy());
-            if (RuleFields.FLUIDS.equals(row.field.name())) edits.removeAt(view.childPath(RuleFields.FLUID));
-            if (RuleFields.CATALYST_ITEMS.equals(row.field.name())) {
-                RuleValue amounts = edits.valueAt(view.childPath(RuleFields.ITEM_COUNTS));
-                if (amounts != null && amounts.isMapping()) {
-                    RuleValue.Mapping selected = RuleValue.mapping();
-                    for (String id : stringReferences(next)) {
-                        RuleValue amount = amounts.has(id) ? amounts.child(id) : null;
-                        if (amount != null) selected.put(id, amount.deepCopy());
-                    }
-                    edits.setAt(view.childPath(RuleFields.ITEM_COUNTS), selected.build());
-                }
+    private static void collect(FormView form, FormRow row, InputMode mode, List<FieldChange> fields) {
+        if (!row.attached || !row.visible || row.field.isDisplayOnly()) return;
+        List<FormView> children = row.control.childForms();
+        if (!children.isEmpty()) {
+            for (FormView child : children) {
+                if (child.loadedRevision != child.session.revision()) child.reload();
+                for (FormRow nested : child.rows) collect(child, nested, mode, fields);
             }
-            view.notifyFieldWritten(edits, row.path, before);
-            // 产出参数补齐后才可能解码成功；分类与字段及其关联更新共用一条撤销记录。
-            if (resultField) RuleCategoryAssignment.follow(edits, categoryBefore);
-        });
-        view.loadedRevision = view.session.revision();
-        if (RuleFields.CATALYST_ITEMS.equals(row.field.name())) {
-            // 只刷新数量行，保留其它字段尚未提交的输入。
-            for (FormRow quantity : view.rows)
-                if (quantity.control instanceof ItemCountsControl counts
-                        && isCatalystQuantityField(quantity.field.name())) {
-                    counts.setReferences(stringReferences(next));
-                    int fallback = quantity.field.intMin(CatalystCost.DEFAULT_COUNT);
-                    counts.setDefaultCount(fallback);
-                    counts.load(draft.valueAt(quantity.path));
-                    // 定点刷新被重载行的输入基线与会话保留：它们已等于草稿值，不再算待提交输入
-                    quantity.loadedInputs = List.copyOf(quantity.control.inputText());
-                    view.session.clearPendingInput(quantity.path);
+            return;
+        }
+        if (mode == InputMode.IDLE && row.control.isEditing()
+                || row.control.issues(row.path).stream().anyMatch(FormIssue::blocking)) return;
+        fields.add(new FieldChange(form, row, row.path, copy(form.session.valueAt(row.path)), row.control.draftValue()));
+    }
+
+    void writeField(FormRow row, @Nullable RuleValue next) {
+        if (!row.attached || view.loadedRevision != view.session.revision()) return;
+        List<FieldChange> fields = new ArrayList<>();
+        if (row.control.childForms().isEmpty()) {
+            fields.add(new FieldChange(view, row, row.path, copy(view.session.valueAt(row.path)), copy(next)));
+        } else {
+            collect(view, row, InputMode.FINISH, fields);
+        }
+        write(fields, view.undoOperation(row));
+    }
+
+    private boolean write(List<FieldChange> fields, String operation) {
+        if (fields.isEmpty() || fields.stream().anyMatch(field -> !field.attached())) return false;
+        view.rootForm().retainPendingInputs();
+        List<FieldChange> changed = fields.stream().filter(FieldChange::changed).toList();
+        long revision = view.session.revision();
+        if (fields.stream().anyMatch(field -> field.form.loadedRevision != revision)) return false;
+        Set<FormView> forms = new LinkedHashSet<>();
+        for (FieldChange field : changed) {
+            for (FormView form = field.form; form != null; form = form.parent) forms.add(form);
+        }
+        List<Consumer<RuleDraft>> related = new ArrayList<>();
+        for (FormView form : forms) {
+            Consumer<RuleDraft> edit = form.relatedEdit();
+            if (edit != null) related.add(edit);
+        }
+        // 已提交字段的输入不进入撤销前快照，撤销后显示历史值；非法兄弟字段仍保留。
+        for (FieldChange field : fields) view.session.clearPendingInput(field.path);
+        if (!changed.isEmpty()) {
+            view.session.apply(operation, edits -> {
+                for (FieldChange field : changed) {
+                    if (field.next == null) edits.removeAt(field.path);
+                    else edits.setAt(field.path, field.next.deepCopy());
+                    field.form.notifyFieldWritten(edits, field.path, field.before);
                 }
-            // 数量行的图标/滑条高度可能随条目变化，让下一次布局重新测量
-            view.invalidateMeasure();
+                for (Consumer<RuleDraft> edit : related) edit.accept(edits);
+            });
+        }
+        if (!changed.isEmpty()) synchronize(view.rootForm());
+        for (FieldChange field : fields) {
+            if (field.attached()) field.form.acceptInput(field.row);
+        }
+        // 回调可能重载或卸载字段，接受基线必须在它们之前完成。
+        for (FieldChange field : changed) {
+            if (field.attached()) field.form.notifyFieldCommitted(field.path);
+        }
+        return !changed.isEmpty();
+    }
+
+    void acceptInput(FormRow row) {
+        if (!row.attached) return;
+        row.control.acceptValue(view.session.valueAt(row.path));
+        row.loadedInputs = List.copyOf(row.control.inputText());
+        List<FormIssue> issues = row.control.issues(row.path);
+        if (!row.loadedInputs.isEmpty() && issues.stream().anyMatch(FormIssue::blocking)) {
+            view.session.retainPendingInput(row.path, row.loadedInputs, issues);
+        } else {
+            view.session.clearPendingInput(row.path);
         }
     }
 
-    // 撤销操作名：来源列表单独成项，其余交给控件自报
-    private static String opKeyFor(FormRow row) {
-        if (row.path.equals(RuleFields.SOURCE) || row.path.startsWith(RuleFields.SOURCE + ".")) {
-            return EditSession.OP_SET_SOURCE;
+    private static void synchronize(FormView form) {
+        form.loadedRevision = form.session.revision();
+        RuleValue accepted = form.basePath.isEmpty() ? form.session.root() : form.session.valueAt(form.basePath);
+        form.acceptedObject = form.parent == null ? null : copy(accepted);
+        for (FormRow row : form.rows) {
+            if (!row.control.childForms().isEmpty()) row.control.rememberLoaded(form.session.valueAt(row.path));
+            for (FormView child : row.control.childForms()) synchronize(child);
         }
-        return row.control.undoOpKey();
+    }
+
+    void changeStructure(String relative, Runnable change, Supplier<RuleValue> candidate) {
+        commitPendingInputs();
+        FormRow row = view.rows.stream().filter(field -> field.field.name().equals(relative)).findFirst().orElseThrow();
+        if (!row.attached) return;
+        RuleValue before = copy(view.session.valueAt(row.path));
+        List<Consumer<RuleDraft>> related = new ArrayList<>();
+        for (FormView form = view; form != null; form = form.parent) {
+            Consumer<RuleDraft> edit = form.relatedEdit();
+            if (edit != null) related.add(edit);
+        }
+        // 子项重排的输入路径映射与容器变更必须记录在同一次历史中；候选读取本身是纯操作。
+        view.session.apply(view.undoOperation(row), edits -> {
+            if (!row.control.inputText().isEmpty()) {
+                // 卡片文本按整行保存；条目增删后为新布局建立独立输入身份。
+                view.session.clearPendingInput(row.path);
+                view.session.recordInputStructure(Set.of(row.path), Set.of(row.path));
+            }
+            change.run();
+            edits.setAt(row.path, candidate.get());
+            view.notifyFieldWritten(edits, row.path, before);
+            for (Consumer<RuleDraft> edit : related) edit.accept(edits);
+        });
+        synchronize(view.rootForm());
+        acceptInput(row);
+        view.notifyFieldCommitted(row.path);
+        view.invalidateMeasure();
+    }
+
+    private static @Nullable RuleValue copy(@Nullable RuleValue value) {
+        return value == null ? null : value.deepCopy();
     }
 }

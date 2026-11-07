@@ -356,7 +356,7 @@ final class ClimateControl extends FormControl {
     }
 
     @Override
-    @Nullable RuleValue store() {
+    @Nullable RuleValue draftValue() {
         // 未编辑且两端文本未变：保持 JSON 原样（缺失键不会变成空对象）
         if (!isEdited() && minInput.value().trim().equals(loadedMin.trim())
                 && maxInput.value().trim().equals(loadedMax.trim())) {

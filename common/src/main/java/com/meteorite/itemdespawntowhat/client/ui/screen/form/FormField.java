@@ -33,7 +33,7 @@ public final class FormField {
     public String path() { requireAttached(); return row.path; }
 
     /** 当前控件的未提交值，不改变草稿。 */
-    public @Nullable RuleValue pendingValue() { requireAttached(); return row.control.store(); }
+    public @Nullable RuleValue pendingValue() { requireAttached(); return row.control.draftValue(); }
 
     /** 覆盖行高；非正数恢复控件默认高度。 */
     public void setHeight(int height) { requireAttached(); row.control.setHeightOverride(height); owner.invalidateMeasure(); }
@@ -54,7 +54,7 @@ public final class FormField {
     public void suppressHintTooltip() { requireAttached(); row.hintTooltipEnabled = false; }
 
     /** 缺省显示值不落入未编辑字段。 */
-    public void defaultValue(Supplier<RuleValue> value) { requireAttached(); row.defaultValue = value; owner.reload(); }
+    public void defaultValue(Supplier<RuleValue> value) { requireAttached(); row.defaultValue = value; owner.reloadField(row); }
 
     /** 只改变常用交互窗口，保留合法域与输入缓冲。 */
     public void sliderWindow(double min, double max) {
@@ -69,6 +69,28 @@ public final class FormField {
         if (!(row.control instanceof ItemCountsControl counts)) throw new IllegalArgumentException("Not item counts: " + path());
         counts.setReferences(references); owner.invalidateMeasure();
     }
+
+    /** 装配动态引用与数量显示值；每次加载时读取当前草稿。 */
+    public void bindItemCounts(Supplier<List<String>> references, @Nullable Supplier<RuleValue> defaults) {
+        requireAttached();
+        if (!(row.control instanceof ItemCountsControl counts)) throw new IllegalArgumentException("Not item counts: " + path());
+        row.beforeLoad = () -> {
+            counts.setDefaultCount(row.field.intMin(1));
+            counts.setReferences(references.get());
+        };
+        if (defaults != null) {
+            row.defaultValue = defaults;
+            row.displayValue = original -> {
+                RuleValue.Mapping merged = RuleValue.mapping(defaults.get());
+                if (original != null && original.isMapping()) original.entries().forEach(merged::put);
+                return original == null || original.isMapping() ? merged.build() : original;
+            };
+        }
+        reload();
+    }
+
+    /** 重载受关联写影响的单行，其余输入保持原位。 */
+    public void reload() { requireAttached(); owner.reloadField(row); }
 
     /** 同表单的数量门槛/消耗行按物品交错排布。 */
     public void pairBelow(FormField lower) {

@@ -86,7 +86,7 @@ final class BoolControl extends FormControl {
     }
 
     @Override
-    @Nullable RuleValue store() {
+    @Nullable RuleValue draftValue() {
         // 用户没点过开关：保持 JSON 原样（省略 enabled 的后端默认 true 不会被写成 false）
         if (!isEdited()) {
             return originalValue();

@@ -439,7 +439,8 @@ final class RuleEditorListPage implements EditorPage {
     // 列表条目操作随选中状态同步：启停对任何条目可用（只读的是内容，不是启停），
     // 删除仍只对内容可写的条目开放，编辑恒为「编辑」并打开沙盒。
     // 切换按钮只显示下一步动作，布局按当前文案计算。
-    public void updateButtons() {
+    /** 在布局和输入前同步本页动作与可编辑状态。 */
+    public void prepare() {
         String id = selectedRuleId();
         boolean active = shell.editable();
         for (UiButton button : listButtons) {
@@ -492,7 +493,6 @@ final class RuleEditorListPage implements EditorPage {
     @Override
     public void layout(UiRect area, UiRect footer) {
         listBar.layout(footer.y(), footer.width());
-        updateButtons();
         int headerHeight = globalBar.preferredHeight(area.width());
         globalBar.layout(area.y(), area.width());
         int searchY = area.y() + headerHeight + RuleEditorPageSupport.PAD;

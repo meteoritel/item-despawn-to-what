@@ -117,7 +117,6 @@ final class RuleEditorDebugPage implements EditorPage {
         toolsButton = button(EDIT_UI + "debug.button.tools", UiButtonVariant.SECONDARY, DebugWorkbenchHooks::open);
         bottomBar.set(List.of(fillButton, deleteButton, toolsButton, back));
         members.addAll(List.of(countField, bottomBar));
-        updateButtons();
     }
 
     private UiButton button(String labelKey, UiButtonVariant variant, Runnable action) {
@@ -154,7 +153,6 @@ final class RuleEditorDebugPage implements EditorPage {
         }
         int created = model.createTestRules(count);
         shell.refreshList();
-        updateButtons();
         shell.setNotice(created > 0
                         ? Component.translatable(UI + "notice.filled", created, model.testRuleCount())
                         : Component.translatable(UI + "notice.fill_noop", count),
@@ -184,7 +182,6 @@ final class RuleEditorDebugPage implements EditorPage {
     private void deleteTestRules() {
         int affected = model.deleteTestRules();
         shell.refreshList();
-        updateButtons();
         shell.setNotice(Component.translatable(UI + "notice.deleted", affected, model.testRuleCount()),
                 EditorShell.NoticeLevel.INFO);
     }
@@ -215,7 +212,6 @@ final class RuleEditorDebugPage implements EditorPage {
 
     @Override
     public void layout(UiRect area, UiRect footer) {
-        updateButtons();
         bottomBar.layout(footer.x(), footer.y(), footer.width());
         int labelWidth = font.width(Component.translatable(UI + "count_label"));
         int fieldWidth = Math.clamp(area.width() - labelWidth - RuleEditorPageSupport.PAD, 0, COUNT_FIELD_MAX_WIDTH);
@@ -255,7 +251,8 @@ final class RuleEditorDebugPage implements EditorPage {
     // ---- 状态同步 ----
 
     // 每帧同步按钮可用状态：冻结时全部禁用，没有测试规则时删除按钮禁用
-    public void updateButtons() {
+    /** 在布局和输入前同步本页动作与可编辑状态。 */
+    public void prepare() {
         boolean editable = shell.editable();
         if (toolsButton != null) { toolsButton.setEnabled(!shell.saving() && DebugWorkbenchHooks.available()); }
         boolean hasTestRules = model.testRuleCount() > 0;

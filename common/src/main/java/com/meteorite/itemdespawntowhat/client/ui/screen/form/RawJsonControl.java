@@ -40,7 +40,7 @@ final class RawJsonControl extends FormControl {
     }
 
     @Override
-    @Nullable RuleValue store() {
+    @Nullable RuleValue draftValue() {
         // 只读控件：未编辑时原样返回装载值（显式 null 也必须保留），避免被 applyToDraft 误删
         if (!isEdited()) {
             return originalValue();

@@ -59,7 +59,6 @@ final class RuleEditorPageInput implements UiInteractionSession.Target {
         }
         // 行内删除先于列表选中与拖动排序，避免叉号触发双击激活或拖动。
         if (pages.resultsSection.clickRemove(mouseX, mouseY, button)) {
-            pages.actions.flushRebuild();
             return true;
         }
         boolean handled = pages.content.widgets.mousePressed(context);
@@ -74,7 +73,6 @@ final class RuleEditorPageInput implements UiInteractionSession.Target {
                 interaction.begin(this, UiInteractionSession.Source.POINTER, button);
             }
         }
-        pages.actions.flushRebuild();
         return handled;
     }
 
@@ -84,7 +82,6 @@ final class RuleEditorPageInput implements UiInteractionSession.Target {
         boolean changed = dragActive && from >= 0 && to >= 0 && from != to;
         resetDrag();
         if (changed) pages.resultsSection.moveEffect(from, to);
-        pages.actions.flushRebuild();
         return true;
     }
 
@@ -122,13 +119,11 @@ final class RuleEditorPageInput implements UiInteractionSession.Target {
 
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         boolean consumed = pages.content.widgets.keyPressed(keyCode, scanCode, modifiers);
-        pages.actions.flushRebuild();
         return consumed;
     }
 
     public boolean charTyped(char codePoint, int modifiers) {
         boolean consumed = pages.content.widgets.charTyped(codePoint, modifiers);
-        pages.actions.flushRebuild();
         return consumed;
     }
 

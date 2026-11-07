@@ -147,7 +147,7 @@ final class ListControl extends FormControl {
     }
 
     @Override
-    @Nullable RuleValue store() {
+    @Nullable RuleValue draftValue() {
         // 未编辑且条目未变：保持 JSON 原样（缺失键不会变成空数组）
         if (!isEdited() && editor.items().equals(loadedItems)) {
             return originalValue();

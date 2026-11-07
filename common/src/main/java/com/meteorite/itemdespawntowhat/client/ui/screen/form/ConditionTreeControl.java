@@ -298,7 +298,7 @@ final class ConditionTreeControl extends FormControl {
     }
 
     @Override
-    @Nullable RuleValue store() {
+    @Nullable RuleValue draftValue() {
         // 用户没改过条件树：原样返回装载值，避免重编码把原 JSON 规范化成新值
         if (!isEdited()) {
             return originalValue();
