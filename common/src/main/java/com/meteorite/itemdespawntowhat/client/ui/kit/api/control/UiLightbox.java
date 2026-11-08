@@ -8,7 +8,10 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputScope;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIcon;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiLayer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiNineSlice;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiRenderLayers;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlStyle;
@@ -16,6 +19,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiStyleSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiMinecraftTheme;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
 
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -37,8 +41,8 @@ import org.lwjgl.glfw.GLFW;
  * 图片用 {@code UiImageView}，场景条件树这类自绘内容由宿主适配器实现（它只要把视口、
  * 绘制、缩放、平移与命中按契约暴露出来）。因此同一个外壳既能看图片，也能放大整棵树。</p>
  *
- * <p>本类刻意**不依赖** {@code OverlayLayer}：宿主用 {@code LightboxOverlay} 适配器把它接进
- * 模态层，从而保持 kit 与宿主层单向依赖（overlay → kit）。坐标一律为宿主 GUI 逻辑坐标。</p>
+ * <p>覆盖职责由内部 {@link UiOverlay} 统一持有；宿主在输入前调用 {@link #prepare(Font, int, int)}，
+ * 再将稳定的 {@link #layer()} 放入呈现清单。坐标一律为宿主 GUI 逻辑坐标。</p>
  *
  * <p>控制栏与文字默认跟随原版主题；
  * 宿主可用 {@link #setStyle(UiControlStyle)} / {@link #setTextColor(int)} 覆盖。</p>
@@ -46,7 +50,7 @@ import org.lwjgl.glfw.GLFW;
  * <p>焦点由 {@link UiFocusManager} 按视觉顺序登记（关闭 → 上一张/下一张 → 缩小/放大/适应窗口），
  * Enter 与 Space 都用于激活焦点控件；ESC 与关闭按钮请求关闭，具体关闭动作由宿主传入的 {@code onClose} 执行。</p>
  */
-public final class UiLightbox implements UiInputTarget {
+public final class UiLightbox implements UiInputTarget, UiLayoutSource {
     private static final int MARGIN = 12;
     /**
      * 底部控制栏高度：内容视口在它上方，控制栏不会被内容覆盖。
@@ -199,8 +203,10 @@ public final class UiLightbox implements UiInputTarget {
     private final Labels labels;
     private final Runnable onClose;
     private final UiControlGroup controls = new UiControlGroup();
-    private final UiInputScope inputScope = new UiInputScope(this);
+    private final UiOverlay overlay = new UiOverlay(this);
+    private final UiInputScope inputScope = overlay.inputScope();
     private final UiFocusManager focus = inputScope.focus();
+    private final UiLayer layer = new UiLayer(inputScope, this::renderLayer, this);
     private Content content;
     @Nullable
     private UiNineSlice surface;
@@ -251,6 +257,13 @@ public final class UiLightbox implements UiInputTarget {
     private int displayedIndex = Integer.MIN_VALUE;
     private int displayedTotal = Integer.MIN_VALUE;
     private Component positionText = Component.empty();
+    private String titleText = "";
+    private String descriptionText = "";
+    private UiRect titleRect = new UiRect(0, 0, 0, 0);
+    private UiRect descriptionRect = new UiRect(0, 0, 0, 0);
+    private UiRect zoomRect = new UiRect(0, 0, 0, 0);
+    private UiRect positionRect = new UiRect(0, 0, 0, 0);
+    private UiRect hintRect = new UiRect(0, 0, 0, 0);
 
     public UiLightbox(Labels labels, Content content, Runnable onClose) {
         this.labels = Objects.requireNonNull(labels);
@@ -267,6 +280,23 @@ public final class UiLightbox implements UiInputTarget {
      */
     public UiInputScope inputScope() {
         return inputScope;
+    }
+
+    /** 呈现清单直接复用此描述，遮罩、作用域与布局均来自同一灯箱。 */
+    public UiLayer layer() { return layer; }
+
+    /** 输入选域前完成几何、主题与读数准备；resize 保留内容缩放。 */
+    public void prepare(Font font, int width, int height) {
+        setBounds(width, height);
+        if (this.font != font || themeRevision != theme.revision()) {
+            if (!textColorPinned) textColor = stylePinned ? styleTextColor : theme.surfaces().text();
+            if (!maskColorPinned) maskColor = theme.surfaces().modalDim();
+            controls.controls().forEach(control -> control.setTextColor(textColor));
+            themeRevision = theme.revision();
+            dirty = true;
+        }
+        this.font = font;
+        layout(font);
     }
 
     // ---------- 宿主配置 ----------
@@ -349,6 +379,7 @@ public final class UiLightbox implements UiInputTarget {
 
     public void setBarHint(@Nullable Component hint) {
         this.barHint = hint;
+        dirty = true;
     }
 
     /**
@@ -376,11 +407,13 @@ public final class UiLightbox implements UiInputTarget {
     }
 
     /**
-     * 资源重载：内容自行丢弃派生缓存并重新求 fit。
+     * 资源重载：内容自行处理派生缓存，外壳重新测量当前语言下的文案与读数。
      */
     public void invalidateResources() {
         content.invalidateResources();
         displayedZoom = Integer.MIN_VALUE;
+        displayedIndex = Integer.MIN_VALUE;
+        displayedTotal = Integer.MIN_VALUE;
         dirty = true;
     }
 
@@ -396,29 +429,27 @@ public final class UiLightbox implements UiInputTarget {
 
     /** 在宿主选定的作用域内绘制遮罩、内容、前景与唯一提示。 */
     public void render(GuiGraphics graphics, Font font, UiPointer incomingPointer, float partialTick) {
-        if (themeRevision != theme.revision()) {
-            if (!textColorPinned) textColor = stylePinned ? styleTextColor : theme.surfaces().text();
-            if (!maskColorPinned) maskColor = theme.surfaces().modalDim();
-            controls.controls().forEach(control -> control.setTextColor(textColor));
-            themeRevision = theme.revision();
-        }
-        this.font = font;
-        layout(font);
+        renderLayer(graphics, font, incomingPointer, 0);
+    }
+
+    private void renderLayer(GuiGraphics graphics, Font font, UiPointer incomingPointer, int depth) {
+        prepare(font, width, height);
         UiPointer pointer = incomingPointer.resolve(this).forTarget(this);
-        graphics.fill(0, 0, width, height, maskColor);
-        if (surface != null) surface.render(graphics,
-                new UiRect(panelX - 6, panelY - 6, panelWidth + 12, panelHeight + 12));
-        UiRenderLayers.draw(graphics, 0, () -> content.render(graphics, font, pointer));
-        UiRenderLayers.draw(graphics, UiRenderLayers.FOREGROUND, () -> renderForeground(graphics, font, pointer));
-        renderTooltip(graphics, font, pointer);
+        overlay.render(graphics, new UiRect(0, 0, width, height), depth, maskColor, () -> {
+            if (surface != null) surface.render(graphics,
+                    new UiRect(panelX - 6, panelY - 6, panelWidth + 12, panelHeight + 12));
+            UiRenderLayers.draw(graphics, UiRenderLayers.CONTENT, () -> content.render(graphics, font, pointer));
+            UiRenderLayers.draw(graphics, UiRenderLayers.FOREGROUND, () -> renderForeground(graphics, font, pointer));
+            renderTooltip(graphics, font, pointer);
+        });
     }
 
     private void renderForeground(GuiGraphics graphics, Font font, UiPointer pointer) {
         if (title != null) {
-            graphics.drawString(font, title, panelX, panelY, textColor, false);
+            graphics.drawString(font, titleText, titleRect.x(), titleRect.y(), textColor, false);
         }
         if (description != null) {
-            graphics.drawString(font, description, panelX, panelY + font.lineHeight + TEXT_GAP, textColor, false);
+            graphics.drawString(font, descriptionText, descriptionRect.x(), descriptionRect.y(), textColor, false);
         }
         Component placeholder = content.placeholder();
         if (placeholder != null) {
@@ -437,22 +468,25 @@ public final class UiLightbox implements UiInputTarget {
 
     // 底部控制栏：左侧图集导航与页码、右侧缩放读数与缩放/适应窗口按钮；内容视口在它上方，因此不会被覆盖。
     private void renderBar(GuiGraphics graphics, Font font) {
+        if (positionRect.width() > 0) graphics.drawString(font, positionText, positionRect.x(), positionRect.y(), textColor, false);
+        if (zoomRect.width() > 0) graphics.drawString(font, zoomText, zoomRect.x(), zoomRect.y(), textColor, false);
+        if (barHint != null && hintRect.width() > 0) graphics.drawString(font, barHint, hintRect.x(), hintRect.y(), textColor, false);
+    }
+
+    private void layoutBar(Font font) {
         int y = panelY + panelHeight - BAR_HEIGHT + 3;
         int right = panelX + panelWidth;
-        // 读数画在按钮组左侧/右侧；面板过窄时宁可不画，也不让两段文字重叠。
         int positionX = panelX + (BUTTON + BUTTON_GAP) * 2 + 4;
         int zoomX = right - (BUTTON * 3 + BUTTON_GAP * 2) - 6 - zoomTextWidth;
         if (surface != null) zoomX = right - 84 + (42 - zoomTextWidth) / 2;
-        // 面板过窄时宁可不画读数；阈值按「右侧有没有页码」决定，无图集时不因页码位置白让出空间。
         boolean withGallery = gallery != null && gallery.total() > 1;
-        if (zoomX < (withGallery ? positionX + 8 : panelX)) return;
-        if (gallery != null && gallery.total() > 1) {
-            graphics.drawString(font, positionText, positionX, y, textColor, false);
-        }
-        graphics.drawString(font, zoomText, zoomX, y, textColor, false);
-        if (barHint != null && !withGallery && font.width(barHint) < right - 112 - panelX) {
-            graphics.drawString(font, barHint, panelX, y, textColor, false);
-        }
+        int positionWidth = withGallery ? font.width(positionText) : 0;
+        boolean showReadouts = zoomX >= (withGallery ? positionX + positionWidth + BUTTON_GAP : panelX);
+        positionRect = new UiRect(positionX, y, showReadouts ? positionWidth : 0, font.lineHeight);
+        zoomRect = new UiRect(zoomX, y, showReadouts ? zoomTextWidth : 0, font.lineHeight);
+        int hintWidth = barHint == null ? 0 : font.width(barHint);
+        hintRect = new UiRect(panelX, y,
+                showReadouts && !withGallery && hintWidth + BUTTON_GAP < zoomX - panelX ? hintWidth : 0, font.lineHeight);
     }
 
     // ---------- 布局 ----------
@@ -462,6 +496,7 @@ public final class UiLightbox implements UiInputTarget {
             applyDeferredFit();
             refreshPositionText();
             refreshZoomText();
+            layoutBar(font);
             return;
         }
         dirty = false;
@@ -470,7 +505,11 @@ public final class UiLightbox implements UiInputTarget {
         panelWidth = Math.max(1, width - MARGIN * 2);
         panelHeight = Math.max(1, height - MARGIN * 2);
         int textHeight = 0;
+        titleRect = new UiRect(panelX, panelY, Math.max(0, panelWidth - BUTTON - BUTTON_GAP), font.lineHeight);
+        titleText = title == null ? "" : TextScroll.trimToWidth(font, title.getString(), titleRect.width());
         if (title != null) textHeight += font.lineHeight + TEXT_GAP;
+        descriptionRect = new UiRect(panelX, panelY + textHeight, panelWidth, font.lineHeight);
+        descriptionText = description == null ? "" : TextScroll.trimToWidth(font, description.getString(), descriptionRect.width());
         if (description != null) textHeight += font.lineHeight + TEXT_GAP;
         if (surface != null) textHeight = Math.max(BUTTON + 4, textHeight);
         viewport = new UiRect(panelX, panelY + textHeight, panelWidth,
@@ -513,6 +552,27 @@ public final class UiLightbox implements UiInputTarget {
         refreshPositionText();
         // 宽度由 refreshZoomText 在读数变化时测一次；此处不再重复测量同一字符串。
         refreshZoomText();
+        layoutBar(font);
+    }
+
+    /** 导出与绘制共用的面板、视口、文字读数和实际控件几何。 */
+    @Override public List<UiLayoutNode> layoutNodes() {
+        if (font == null) return List.of();
+        layout(font);
+        List<UiLayoutNode> children = new ArrayList<>();
+        children.add(new UiLayoutNode(UiLayoutNode.Kind.FRAME, viewport, Component.empty(), 0, 0, true, true, List.of()));
+        if (title != null) children.add(textNode(font, titleRect, Component.literal(titleText)));
+        if (description != null) children.add(textNode(font, descriptionRect, Component.literal(descriptionText)));
+        if (positionRect.width() > 0) children.add(textNode(font, positionRect, positionText));
+        if (zoomRect.width() > 0) children.add(textNode(font, zoomRect, Component.literal(zoomText)));
+        if (barHint != null && hintRect.width() > 0) children.add(textNode(font, hintRect, barHint));
+        controls.controls().forEach(control -> children.addAll(control.layoutNodes()));
+        return List.of(new UiLayoutNode(UiLayoutNode.Kind.MODAL, new UiRect(panelX, panelY, panelWidth, panelHeight),
+                title, 0, 0, true, true, children));
+    }
+
+    private static UiLayoutNode textNode(Font font, UiRect rect, Component text) {
+        return new UiLayoutNode(UiLayoutNode.Kind.ROW, rect, text, font.width(text), rect.width(), true, true, List.of());
     }
 
     private UiControl place(Font font, String key, Component symbol, Component name, int x, int y) {
@@ -549,7 +609,8 @@ public final class UiLightbox implements UiInputTarget {
      */
     private void applyDeferredFit() {
         if (!needFit) return;
-        if (content.contentWidth() <= 0 || content.contentHeight() <= 0) return;
+        if (viewport.width() <= 0 || viewport.height() <= 0
+                || content.contentWidth() <= 0 || content.contentHeight() <= 0) return;
         needFit = false;
         content.fit();
     }

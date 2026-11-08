@@ -4,6 +4,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.LightboxImage;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiControlGroup;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiFloatingPanel;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiImageView;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiIconLightboxContent;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiLightbox;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
@@ -20,6 +21,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiOrthoLink;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiStyleSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiSurfaceRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiControlStyle;
@@ -28,6 +30,8 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import org.jetbrains.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.List;
@@ -52,6 +56,8 @@ final class KitSurfacesExample implements UiWidget, UiLayoutSource {
     private final UiNavigationHistory<Integer> history = new UiNavigationHistory<>(4);
     private final UiImageView image;
     private final UiLightbox lightbox;
+    private final UiIconLightboxContent iconContent;
+    private UiLightbox.Content activeContent;
     private final List<UiLayer> overlayLayers;
     private Runnable overlayChanged = () -> { };
     private UiRect bounds = new UiRect(0, 0, 0, 0);
@@ -83,6 +89,8 @@ final class KitSurfacesExample implements UiWidget, UiLayoutSource {
         });
         ResourceLocation texture = ResourceLocation.withDefaultNamespace("textures/block/stone.png");
         image = new UiImageView(LightboxImage.whole(texture, texture, 16, 16, label("image"), label("image.description")), null, true);
+        iconContent = new UiIconLightboxContent(scaledIcon(texture), theme);
+        activeContent = image;
         lightbox = new UiLightbox(new UiLightbox.Labels() {
             @Override public Component close() { return label("image.close"); }
             @Override public Component zoomIn() { return label("image.in"); }
@@ -91,16 +99,15 @@ final class KitSurfacesExample implements UiWidget, UiLayoutSource {
             @Override public Component previous() { return label("history.back"); }
             @Override public Component next() { return label("history.next"); }
             @Override public Component position(int index, int total) { return Component.translatable(KitShowcaseContent.UI + "showcase.position", index, total); }
+            @Override public Component zoomReadout(int percent) { return Component.translatable(KitShowcaseContent.UI + "showcase.image.zoom", percent); }
         }, image, this::closeImage);
         lightbox.setTheme(theme);
         lightbox.setText(label("image"), label("image.description"));
-        lightbox.inputScope().setEscape(this::closeImage);
-        overlayLayers = List.of(new UiLayer(lightbox.inputScope(),
-                lightbox::render,
-                this::overlayNodes));
+        overlayLayers = List.of(lightbox.layer());
         actions.setTheme(theme);
         actions.beginUpdate();
-        action("image", () -> { imageOpen = true; overlayChanged.run(); });
+        action("image", () -> openImage(image, "image", "image.description"));
+        action("image.icon", () -> openImage(iconContent, "image.icon", "image.icon.description"));
         action("panel.collapse", () -> panel.setCollapsed(!panel.isCollapsed()));
         action("panel.dock", () -> panel.setDock(UiFloatingPanel.Dock.TOP_RIGHT));
         action("panel.close", () -> panelVisible = !panelVisible);
@@ -110,6 +117,19 @@ final class KitSurfacesExample implements UiWidget, UiLayoutSource {
         actions.endUpdate();
         rebuildDocument();
     }
+    private UiIcon scaledIcon(ResourceLocation texture) {
+        UiIcon sprite = new UiIcon.Sprite(texture, 0, 0, 16, 16, 16, 16);
+        UiIcon item = new UiIcon.Item(new ItemStack(Items.GOLD_INGOT));
+        UiIcon rendered = new UiIcon.Rendered(56, 32, (graphics, box) -> {
+            theme.drawInset(graphics, box);
+            int iconWidth = Math.max(0, box.width() / 2 - 4);
+            int iconHeight = Math.max(0, box.height() - 4);
+            sprite.renderScaled(graphics, new UiRect(box.x() + 2, box.y() + 2, iconWidth, iconHeight), theme);
+            item.renderScaled(graphics, new UiRect(box.x() + box.width() / 2 + 2, box.y() + 2, iconWidth, iconHeight), theme);
+        });
+        return new UiIcon.Themed(56, 32, rendered::renderScaled, rendered::prepare);
+    }
+
     private void action(String key, Runnable action) {
         actions.obtain(key).configure(font, label(key), null, List.of(), action::run);
     }
@@ -124,7 +144,15 @@ final class KitSurfacesExample implements UiWidget, UiLayoutSource {
     public void addFocusTargets(Consumer<UiFocusTarget> sink) { actions.addFocusTargets(sink); }
     List<UiLayer> overlayLayers() { return imageOpen ? overlayLayers : List.of(); }
     void setOnOverlayChanged(Runnable handler) { overlayChanged = handler; }
+    private void openImage(UiLightbox.Content content, String title, String description) {
+        activeContent = content;
+        lightbox.setContent(content);
+        lightbox.setText(label(title), label(description));
+        imageOpen = true;
+        overlayChanged.run();
+    }
     private void closeImage() { imageOpen = false; overlayChanged.run(); lightbox.onClosed(); }
+    void prepareLightbox(int width, int height) { lightbox.prepare(font, width, height); }
     void invalidateResources() { document.invalidateLayout(); unprofiled.invalidateLayout(); lightbox.invalidateResources(); }
     void close() { closeImage(); }
     @Override public UiRect bounds() { return bounds; }
@@ -159,7 +187,6 @@ final class KitSurfacesExample implements UiWidget, UiLayoutSource {
         document.setViewport(x + 6, contentTop + 6, Math.max(0, docWidth - 12), Math.max(0, contentHeight - 12));
         panel.setWorkArea(new UiRect(x + docWidth + GUTTER, contentTop, Math.max(0, width - docWidth - GUTTER), contentHeight));
         if (initial) panel.setBounds(x + docWidth + GUTTER + 8, contentTop + 12, Math.max(1, docWidth - 20), 75);
-        lightbox.setBounds(x + width + 12, y + height + 12);
         stateBlock = new UiRect(x, stateTop, width, stateHeight);
         stateValue = state();
         stateLines = WorkbenchLayout.wrapLines(font, stateValue.getString(), width, STATE_LINES);
@@ -190,7 +217,7 @@ final class KitSurfacesExample implements UiWidget, UiLayoutSource {
     }
     private Component state() {
         return Component.translatable(KitShowcaseContent.UI + "showcase.surfaces.state", page, hits, panel.isCollapsed(),
-                document.metrics().builds(), document.metrics().layouts(), unprofiled.metrics().renderNanos(), image.zoomPercent());
+                document.metrics().builds(), document.metrics().layouts(), unprofiled.metrics().renderNanos(), activeContent.zoomPercent());
     }
     @Override public @Nullable UiPointerHit hitTest(double x, double y) {
         UiPointerHit hit = actions.hitTest(x, y);
@@ -215,11 +242,6 @@ final class KitSurfacesExample implements UiWidget, UiLayoutSource {
         nodes.add(node(UiLayoutNode.Kind.FRAME, stateBlock, label("surfaces.state.label"), List.of(
                 node(UiLayoutNode.Kind.ROW, stateBlock, stateValue, List.of()))));
         return nodes;
-    }
-    private List<UiLayoutNode> overlayNodes() {
-        return List.of(node(UiLayoutNode.Kind.MODAL, lightbox.viewport(), label("image"),
-                List.of(node(UiLayoutNode.Kind.ROW, lightbox.viewport(),
-                        Component.translatable(KitShowcaseContent.UI + "showcase.image.zoom", image.zoomPercent()), List.of()))));
     }
     private static UiLayoutNode node(UiLayoutNode.Kind kind, UiRect rect, Component text, List<UiLayoutNode> children) {
         return new UiLayoutNode(kind, rect, text, 0, 0, true, true, children);

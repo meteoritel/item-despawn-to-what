@@ -2,6 +2,10 @@ package com.meteorite.itemdespawntowhat.client.debug.rule_scene;
 
 import com.meteorite.itemdespawntowhat.client.debug.kit.WorkbenchLayout;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiTransform;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiControl;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiRenderLayers;
@@ -17,7 +21,7 @@ import net.minecraft.world.item.ItemStack;
 /**
  * 规则场景页的内容排版与动效：舞台卡、输入槽条、触发卡与结果卡。
  *
- * <p>只负责绘制与布局，屏幕外壳、导航和计时由宿主负责。</p>
+ * <p>持有稳定的舞台入口与同一套舞台绘制；屏幕负责输入路由、覆盖面、计时和帧预算。</p>
  */
 public final class RuleSceneView implements AutoCloseable {
 
@@ -38,29 +42,53 @@ public final class RuleSceneView implements AutoCloseable {
 
     private final RuleSceneModel model;
     private final RuleSceneStage stage;
-    private final List<UiLayoutNode> nodes = new ArrayList<>();
+    private final UiControl stageEntry = new UiControl();
+    private final Runnable onOpen;
+    private UiRect stageCard = new UiRect(0, 0, 0, 0);
+    private UiRect stageBox = new UiRect(0, 0, 0, 0);
+    private UiRect inputCard = new UiRect(0, 0, 0, 0);
+    private UiRect triggerCard = new UiRect(0, 0, 0, 0);
+    private UiRect resultCard = new UiRect(0, 0, 0, 0);
 
-    /** 以样例 id 建立视图与舞台。 */
-    public RuleSceneView(RuleSceneModel model, String id) {
+    /** 以样例 id 建立舞台，入口激活交给宿主打开当前时间的查看器。 */
+    public RuleSceneView(RuleSceneModel model, String id, Runnable onOpen) {
         this.model = model;
         this.stage = new RuleSceneStage(model, id);
+        this.onOpen = onOpen;
+        stageEntry.setFocusable(true);
     }
 
-    /** 绘制整块内容区。 */
-    public void render(GuiGraphics graphics, Font font, UiRect content, long elapsed, UiHostTheme theme) {
+    // 布局在输入前完成，舞台绘制、入口命中和快照共用同一可见矩形。
+    void layout(Font font, UiRect content) {
         UiRect left = leftColumn(content);
-        UiRect stageCard = new UiRect(left.x(), left.y(), left.width(), left.height() - INPUT_CARD_HEIGHT - GAP);
-        UiRect inputCard = new UiRect(left.x(), stageCard.bottom() + GAP, left.width(), INPUT_CARD_HEIGHT);
+        stageCard = new UiRect(left.x(), left.y(), left.width(), Math.max(0, left.height() - INPUT_CARD_HEIGHT - GAP));
+        inputCard = new UiRect(left.x(), stageCard.bottom() + GAP, left.width(), INPUT_CARD_HEIGHT);
         UiRect right = rightColumn(content);
-        UiRect triggerCard = new UiRect(right.x(), right.y(), right.width(), TRIGGER_CARD_HEIGHT);
-        UiRect resultCard = new UiRect(right.x(), triggerCard.bottom() + GAP, right.width(), resultCardHeight());
+        triggerCard = new UiRect(right.x(), right.y(), right.width(), TRIGGER_CARD_HEIGHT);
+        resultCard = new UiRect(right.x(), triggerCard.bottom() + GAP, right.width(), resultCardHeight());
+        int stageX = stageCard.x() + 6;
+        int stageY = stageCard.y() + CARD_TITLE_HEIGHT + 3;
+        stageBox = new UiRect(stageX, stageY,
+                Math.max(0, Math.min(stageCard.right() - 6, content.right()) - stageX),
+                Math.max(0, Math.min(stageCard.bottom() - 6, content.bottom()) - stageY));
+        stageEntry.setBounds(stageBox.x(), stageBox.y(), stageBox.width(), stageBox.height());
+        stageEntry.setEnabled(stageBox.width() > 0 && stageBox.height() > 0);
+        stageEntry.configure(font, Component.empty(), null,
+                List.of(Component.translatable(RuleSceneModel.UI + "stage.open_hint")), onOpen::run);
+        stageEntry.setAccessibleName(Component.translatable(RuleSceneModel.UI + "stage.open"));
+    }
 
+    /** 绘制已经准备的内容区，入口只补焦点轮廓，舞台画面保持完整。 */
+    public void render(GuiGraphics graphics, Font font, long elapsed, UiHostTheme theme, UiPointer pointer) {
         drawCard(graphics, theme, stageCard);
         drawCardTitle(graphics, font, theme, stageCard, RuleSceneModel.UI + "stage");
-        UiRect stageBox = new UiRect(stageCard.x() + 6, stageCard.y() + CARD_TITLE_HEIGHT + 3,
-                stageCard.width() - 12, stageCard.height() - CARD_TITLE_HEIGHT - 9);
-        stage.render(graphics, stageBox, elapsed, theme);
-        drawConditions(graphics, font, theme, stageBox, elapsed);
+        renderStage(graphics, font, stageBox, elapsed, theme);
+        Component open = Component.translatable(RuleSceneModel.UI + "stage.open");
+        graphics.drawString(font, open, stageCard.right() - 8 - font.width(open), stageCard.y() + 5,
+                theme.palette().controls().accent(), false);
+        if (stageEntry.isFocusVisible() || pointer.forTarget(stageEntry).contains(stageBox)) {
+            UiRenderLayers.draw(graphics, UiRenderLayers.FOREGROUND, () -> theme.drawFocusOutline(graphics, stageBox));
+        }
 
         drawCard(graphics, theme, inputCard);
         drawInputs(graphics, font, theme, inputCard, elapsed);
@@ -72,19 +100,50 @@ public final class RuleSceneView implements AutoCloseable {
         drawResults(graphics, font, theme, resultCard, elapsed);
 
         drawFlowArrows(graphics, theme, stageCard, triggerCard, resultCard, elapsed);
-
-        nodes.clear();
-        nodes.add(frame(stageCard, RuleSceneModel.UI + "stage"));
-        nodes.add(frame(inputCard, RuleSceneModel.UI + "inputs"));
-        nodes.add(frame(triggerCard, RuleSceneModel.UI + "trigger"));
-        nodes.add(frame(resultCard, RuleSceneModel.UI + "result"));
     }
 
-    /** 当前帧的布局节点，供探针断言。 */
-    public List<UiLayoutNode> layoutNodes() { return List.copyOf(nodes); }
+    /** 当前布局保留四个卡片 Frame，并在舞台 Frame 中公开真实可聚焦入口。 */
+    public List<UiLayoutNode> layoutNodes() {
+        return List.of(new UiLayoutNode(UiLayoutNode.Kind.FRAME, stageCard, Component.translatable(RuleSceneModel.UI + "stage"),
+                        0, stageCard.width(), true, true, stageEntry.layoutNodes()),
+                frame(inputCard, RuleSceneModel.UI + "inputs"), frame(triggerCard, RuleSceneModel.UI + "trigger"),
+                frame(resultCard, RuleSceneModel.UI + "result"));
+    }
 
+    UiControl stageEntry() { return stageEntry; }
+    void beginFrame() { stage.beginFrame(); }
+    void endFrame() { stage.endFrame(); }
+
+    // 捕获逻辑画布和时间；放大后仍使用同一舞台所有者，三维工作区按实际像素重新绘制。
+    UiIcon snapshot(Font font, long elapsed, UiHostTheme theme) {
+        UiRect canvas = new UiRect(0, 0, stageBox.width(), stageBox.height());
+        return new UiIcon.Themed(canvas.width(), canvas.height(), (graphics, target, source) -> {
+            graphics.pose().pushPose();
+            try {
+                graphics.pose().translate(target.x(), target.y(), 0);
+                graphics.pose().scale((float) target.width() / canvas.width(), (float) target.height() / canvas.height(), 1);
+                renderStage(graphics, font, canvas, elapsed, theme);
+            } finally {
+                graphics.pose().popPose();
+            }
+        }, () -> { });
+    }
+
+    private void renderStage(GuiGraphics graphics, Font font, UiRect box, long elapsed, UiHostTheme theme) {
+        if (box.width() == 0 || box.height() == 0) return;
+        stage.render(graphics, box, elapsed, theme);
+        UiTransform.enableScissor(graphics, box);
+        try {
+            UiRenderLayers.draw(graphics, UiRenderLayers.FOREGROUND, () -> drawConditions(graphics, font, theme, box, elapsed));
+        } finally {
+            UiTransform.disableScissor(graphics);
+        }
+    }
+
+    /** 关闭本视图拥有的舞台资源。 */
     @Override
     public void close() {
+        stageEntry.endInteraction(UiInteractionSession.EndReason.UNMOUNTED);
         stage.close();
     }
 

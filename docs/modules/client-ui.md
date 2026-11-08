@@ -272,7 +272,13 @@ resize 保留已有页面、文本控件与编辑会话，只重排几何；单�
 
 ### 调试工作台
 
-`DebugWorkbenchScreen` 位于 common dev 的 client/debug，目录显式装配组件展台、组合交互、独立 kit 展示、图标预览、规则场景和测试规则草稿。NeoForge probe 客户端事件装配 Ctrl+F8；main 的 `DebugWorkbenchHooks` 只持有打开动作。草稿工具保留在编辑器，预览和本地场景由各自 Screen 持有状态与资源。独立 kit 展示使用 UiThemedScreen、UiInputScope、UiLayers 和 UiModalStack，内容只依赖 kit、原版类型与本地模型；外围目录注入导航与可选预览工厂，`KitSkinSamples` 提供默认、改色、资源和 painter 主题。展示包含文本/数值/列表、嵌套滚动、文档 Frame、浮板、灯箱、连线、导航、双点阵和 Layers 空间页。Layers 在显式背景上以相反顺序混排 Sprite、文字与立体、平面、透明、附魔物品，有世界时通过外层注入的工厂增加旋转方块场景；本页支持前景/兄弟重叠开关、统一提示和布局节点。kit 预算展示以 B 轮换默认、小预算、几何过限、请求容量拒绝/恢复四种模式。F6 换肤，基础页 G 修改单个点阵配置、R 发起真实资源重载。图标预览继续提供独立入口。纯 kit 样例由 `common:compileUiKitSamples` 在排除产品 main 输出的 classpath 上编译，工作台只负责外层接入。场景使用 UiInputScope、UiInputRouter 和 UiModalStack；模态切换取消持续交互，返回编辑器时重建屏幕并复用有效工作区。规则场景把样例规则装配成 3D 舞台：左列是结构场景与输入、催化槽，右列是触发与产出卡，条件以胶囊标签叠在舞台底部；13 条样例覆盖全部条件与效果类型，Space 暂停、R 重播、1–4 定位阶段、←/→ 切换样例，右下角显示样例计数与操作提示，该工具需要已加载世界。
+`DebugWorkbenchScreen` 位于 common dev 的 client/debug，目录显式装配组件展台、组合交互、独立 kit 展示、图标预览、规则场景和测试规则草稿。NeoForge probe 客户端事件装配 Ctrl+F8；main 的 `DebugWorkbenchHooks` 只持有打开动作。草稿工具保留在编辑器，预览和本地场景由各自 Screen 持有状态与资源。独立 kit 展示使用 UiThemedScreen、UiInputScope、UiLayers 和 UiModalStack，内容只依赖 kit、原版类型与本地模型；外围目录注入导航与可选预览工厂，`KitSkinSamples` 提供默认、改色、资源和 painter 主题。展示包含文本/数值/列表、嵌套滚动、文档 Frame、浮板、灯箱、连线、导航、双点阵和 Layers 空间页。Layers 在显式背景上以相反顺序混排 Sprite、文字与立体、平面、透明、附魔物品，有世界时通过外层注入的工厂增加旋转方块场景；本页支持前景/兄弟重叠开关、统一提示和布局节点。kit 预算展示以 B 轮换默认、小预算、几何过限、请求容量拒绝/恢复四种模式。F6 换肤，基础页 G 修改单个点阵配置、R 发起真实资源重载。图标预览继续提供独立入口。纯 kit 样例由 `common:compileUiKitSamples` 在排除产品 main 输出的 classpath 上编译，工作台只负责外层接入。场景使用 UiInputScope、UiInputRouter 和 UiModalStack；模态切换取消持续交互，返回编辑器时重建屏幕并复用有效工作区。
+
+规则场景由 `RuleSceneScreen extends UiScreen` 装配 `UiLayers`，`RuleSceneView` 先布局再绘制：左列是结构场景与输入、催化槽，右列是触发与产出卡，条件以胶囊标签叠在舞台底部。样例覆盖条件与效果类型；←/→ 切换样例，R 重播，1–4 定位阶段，Space 暂停；舞台入口持焦时 Enter/Space 打开查看器，也可左键点击主舞台内容框。该工具需要已加载世界。
+
+舞台灯箱使用 `UiIconLightboxContent` 重绘同一 `RuleSceneStage` 与条件胶囊，结构、天空、天气、物品和氛围共享打开时的 elapsed。灯箱打开时固定时间并保留原暂停状态，底页快捷键由活动域隔离；关闭时恢复舞台焦点并校准播放锚点。滚轮按指针缩放，左键拖动平移，控制栏提供缩放与 fit；Esc 先结束手势，再关闭灯箱，底页 Esc 返回工作台。
+
+共享 `PreviewIcons` 与独立舞台各有一对 GUI 帧包络，覆盖底页和灯箱的全部绘制；两次舞台呈现共用场景几何和单帧预算。舞台在帧入口观察 `PreviewResources.generation()`，世代变化时释放并重建预览所有者，保留模型与时间状态；资源卸载由屏幕 hook 释放。灯箱文案与入口位于 dev 双语资源，kit 公开面按 main 直接引用口径登记为 library。
 
 `FormView.layoutNodes` 保留字段作用域；CardListControl 导出卡片及子控件，UiCatalogGrid 导出当前可见目录行，RuleNameInput 导出真实文本框。`RuleEditorScreen.layoutNodes` 沿实际呈现清单汇集节点；保存层导出面板、文本、进度条和按钮，picker 与 modal 按当前显示选择导出。保存按钮资格与文案在布局时同步；picker 动画每个可见绘制帧推进一次，事件重排读取当前进度。自动化定位使用实际层级和几何。工作台组件状态在同一页面可见、可滚动、可重置，详见 [GUI 探针](../guides/gui-probes.md)。
 

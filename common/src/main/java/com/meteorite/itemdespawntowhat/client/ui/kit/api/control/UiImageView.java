@@ -30,13 +30,6 @@ import java.util.Objects;
  */
 public final class UiImageView implements UiLightbox.Content {
     /**
-     * 缩放步进（有限步进）：每次滚轮/按钮改变一档。
-     */
-    private static final double STEP = 1.25;
-    private static final double MIN_SCALE = 0.05;
-    private static final double MAX_SCALE = 8.0;
-
-    /**
      * 缺图重查间隔（帧）：20 帧，60 FPS 下约 0.33 秒。
      */
     private static final int RECHECK_INTERVAL = 20;
@@ -44,10 +37,7 @@ public final class UiImageView implements UiLightbox.Content {
     private final LightboxImage image;
     @Nullable
     private final Component missingText;
-    private UiRect viewport = new UiRect(0, 0, 0, 0);
-    private double scale = 1.0;
-    private double offsetX;
-    private double offsetY;
+    private final LightboxViewport view;
     /**
      * 小图默认不主动放大；true 时 fit 允许放大到视口。
      */
@@ -75,6 +65,7 @@ public final class UiImageView implements UiLightbox.Content {
      */
     public UiImageView(LightboxImage image, @Nullable Component missingText, boolean allowUpscale) {
         this.image = Objects.requireNonNull(image);
+        view = new LightboxViewport(image.width(), image.height());
         this.missingText = missingText;
         this.allowUpscale = allowUpscale;
         this.available = resolveAvailability();
@@ -94,25 +85,17 @@ public final class UiImageView implements UiLightbox.Content {
 
     @Override
     public void setViewport(UiRect viewport) {
-        this.viewport = Objects.requireNonNull(viewport);
-        // resize 只重新钳制平移、保留用户缩放；首次布局与换内容由外壳紧接着调用 fit()。
-        clampOffsets();
+        view.setViewport(Objects.requireNonNull(viewport));
     }
 
     /**
      * contain 适配：按视口与图片尺寸取较小比例，小图默认不放大（scale 上限 1.0），最后钳制在
-     * [MIN_SCALE, MAX_SCALE]；偏移归零表示居中。
+     * 既有缩放范围；偏移归零表示居中。
      */
     @Override
     public void fit() {
-        int viewWidth = viewport.width();
-        int viewHeight = viewport.height();
-        double max = allowUpscale ? MAX_SCALE : 1.0;
-        double contain = Math.min(viewWidth / (double) image.width(), viewHeight / (double) image.height());
-        scale = Math.clamp(Math.min(max, contain), MIN_SCALE, MAX_SCALE);
-        offsetX = 0;
-        offsetY = 0;
-        clampOffsets();
+        double maximum = allowUpscale ? LightboxViewport.MAX_SCALE : 1.0;
+        view.fit(Math.min(maximum, view.containScale()), LightboxViewport.MIN_SCALE, LightboxViewport.MAX_SCALE);
     }
 
     /**
@@ -120,49 +103,24 @@ public final class UiImageView implements UiLightbox.Content {
      */
     @Override
     public boolean zoom(double amount, double anchorX, double anchorY) {
-        if (amount == 0 || !Double.isFinite(anchorX) || !Double.isFinite(anchorY)) return false;
-        double target = Math.clamp(amount > 0 ? scale * STEP : scale / STEP, MIN_SCALE, MAX_SCALE);
-        if (target == scale) return false;
-        double previousScale = scale;
-        double previousOffsetX = offsetX;
-        double previousOffsetY = offsetY;
-        // 指针下的内容点（相对图片中心的像素坐标）在缩放前后必须落在同一个屏幕位置。
-        double centerX = viewport.x() + viewport.width() / 2.0;
-        double centerY = viewport.y() + viewport.height() / 2.0;
-        double contentX = (anchorX - centerX - offsetX) / scale;
-        double contentY = (anchorY - centerY - offsetY) / scale;
-        scale = target;
-        offsetX = anchorX - centerX - contentX * scale;
-        offsetY = anchorY - centerY - contentY * scale;
-        clampOffsets();
-        return scale != previousScale || offsetX != previousOffsetX || offsetY != previousOffsetY;
+        return view.zoom(amount, anchorX, anchorY);
     }
 
     @Override
-    public boolean zoomBy(int direction) {
-        if (direction == 0) return false;
-        return zoom(direction, viewport.x() + viewport.width() / 2.0, viewport.y() + viewport.height() / 2.0);
-    }
+    public boolean zoomBy(int direction) { return view.zoomBy(direction); }
 
     @Override
     public boolean panBy(double screenDx, double screenDy) {
-        // 只有从视口内按下的拖动才平移；在遮罩/控制栏上拖动不该带着图片跑。
-        if (session == null || !session.owns(this) || !Double.isFinite(screenDx) || !Double.isFinite(screenDy))
-            return false;
-        double previousOffsetX = offsetX;
-        double previousOffsetY = offsetY;
-        offsetX += screenDx;
-        offsetY += screenDy;
-        clampOffsets();
-        return offsetX != previousOffsetX || offsetY != previousOffsetY;
+        return session != null && session.owns(this) && view.panBy(screenDx, screenDy);
     }
 
     @Override
     public boolean mousePressed(UiInputContext context) {
-        if (context.button() != 0 || !viewport.contains(context.pointerX(), context.pointerY())) return false;
+        int button = context.button();
+        if (button != 0 || !view.viewport().contains(context.pointerX(), context.pointerY())) return false;
 
         session = context.scope().interaction();
-        session.begin(this, UiInteractionSession.Source.POINTER, context.button());
+        session.begin(this, UiInteractionSession.Source.POINTER, button);
         return true;
     }
 
@@ -174,8 +132,7 @@ public final class UiImageView implements UiLightbox.Content {
     }
 
     @Override
-    public void interactionEnded(UiInteractionSession.EndReason reason) {
-    }
+    public void interactionEnded(UiInteractionSession.EndReason reason) { session = null; }
 
     @Override
     public boolean mouseDragged(UiInputContext context, double dragX, double dragY) {
@@ -183,9 +140,7 @@ public final class UiImageView implements UiLightbox.Content {
     }
 
     @Override
-    public int zoomPercent() {
-        return (int) Math.round(scale * 100.0);
-    }
+    public int zoomPercent() { return view.zoomPercent(); }
 
     @Override
     public @Nullable UiTarget hit(double x, double y) {
@@ -211,16 +166,12 @@ public final class UiImageView implements UiLightbox.Content {
     /** {@inheritDoc} */
     @Override
     public void render(GuiGraphics graphics, Font font, UiPointer incomingPointer) {
-        if (!available || viewport.width() <= 0 || viewport.height() <= 0) return;
-        double destWidth = image.width() * scale;
-        double destHeight = image.height() * scale;
-        int x = (int) Math.round(viewport.x() + (viewport.width() - destWidth) / 2.0 + offsetX);
-        int y = (int) Math.round(viewport.y() + (viewport.height() - destHeight) / 2.0 + offsetY);
-        // 严格裁剪到视口：放大后的图不会画到控制栏、标题或遮罩上。
+        UiRect viewport = view.viewport();
+        if (!available || viewport.width() == 0 || viewport.height() == 0) return;
+        UiRect target = view.contentBounds();
         UiTransform.enableScissor(graphics, viewport);
         try {
-            graphics.blit(image.texture(), x, y, Math.max(1, (int) Math.round(destWidth)),
-                    Math.max(1, (int) Math.round(destHeight)),
+            graphics.blit(image.texture(), target.x(), target.y(), target.width(), target.height(),
                     image.u(), image.v(), image.width(), image.height(),
                     image.textureWidth(), image.textureHeight());
         } finally {
@@ -229,26 +180,6 @@ public final class UiImageView implements UiLightbox.Content {
     }
 
     // ---------- 内部 ----------
-
-    // 目标尺寸不超过视口时该轴居中锁定；超过时限制在可滚范围内，并清掉 NaN 之类的非法值。
-    private void clampOffsets() {
-        double destWidth = image.width() * scale;
-        double destHeight = image.height() * scale;
-        if (!Double.isFinite(offsetX)) offsetX = 0;
-        if (!Double.isFinite(offsetY)) offsetY = 0;
-        if (destWidth <= viewport.width()) {
-            offsetX = 0;
-        } else {
-            double limit = (destWidth - viewport.width()) / 2.0;
-            offsetX = Math.clamp(offsetX, -limit, limit);
-        }
-        if (destHeight <= viewport.height()) {
-            offsetY = 0;
-        } else {
-            double limit = (destHeight - viewport.height()) / 2.0;
-            offsetY = Math.clamp(offsetY, -limit, limit);
-        }
-    }
 
     // 缺图状态下由外壳每帧调用一次占位查询，这里做限频重查：
     // 贴图由资源包补齐时无需宿主接线也能恢复显示；可用状态不重查，绘制路径仍然零 IO。

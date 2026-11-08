@@ -128,7 +128,7 @@ public final class PreviewScenes implements AutoCloseable {
             if (canPrepare(scene)) { graphics.flush(); prepare(scene); }
             if (scene.state == PreviewState.READY) {
                 if (subject instanceof PreviewSubject.Item item) {
-                    new UiIcon.Item(item.stack()).render(graphics, box.x() + (box.width() - 16) / 2, box.y() + (box.height() - 16) / 2);
+                    new UiIcon.Item(item.stack()).renderScaled(graphics, box, theme);
                 } else {
                     try {
                         UiSceneView.render(graphics, box, scene, new UiSceneCamera(motion.yaw(clock.getAsLong()),
@@ -136,8 +136,8 @@ public final class PreviewScenes implements AutoCloseable {
                     } catch (RuntimeException exception) { fail(scene, PreviewState.FAILED, exception); }
                 }
             }
-            if (scene.state == PreviewState.PREPARING && preparing != null) preparing.render(graphics, box.x(), box.y(), theme);
-            if (scene.state.unavailable()) fallback.render(graphics, box.x(), box.y(), theme);
+            if (scene.state == PreviewState.PREPARING && preparing != null) preparing.renderScaled(graphics, box, theme);
+            if (scene.state.unavailable()) fallback.renderScaled(graphics, box, theme);
         }, () -> prefetch(id, subject));
     }
 

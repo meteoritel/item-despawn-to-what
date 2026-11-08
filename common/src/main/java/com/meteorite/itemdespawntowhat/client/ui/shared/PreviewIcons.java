@@ -131,7 +131,7 @@ public final class PreviewIcons {
                         delegate = current.icon(id, subject, size, rotating ? motion : fixed,
                                 UiSceneStyle.icon(), preparing, fallback);
                     }
-                    delegate.render(graphics, box.x(), box.y(), theme);
+                    delegate.renderScaled(graphics, box, theme);
                 }
             };
             return new UiIcon.Themed(size, size, painter, () -> scenes().prefetch(id, subject));
@@ -195,9 +195,9 @@ public final class PreviewIcons {
         return new UiIcon.Themed(size, size, (graphics, box, theme) -> {
             scenes();
             var resource = StructurePreviewResources.get(id, WORKERS);
-            if (resource.subject() != null) icon(id.toString(), resource.subject(), size, STRUCTURE).render(graphics, box.x(), box.y(), theme);
-            else if (resource.state() == PreviewState.PREPARING) preparing.render(graphics, box.x(), box.y(), theme);
-            else if (resource.state().unavailable()) fallback.render(graphics, box.x(), box.y(), theme);
+            if (resource.subject() != null) icon(id.toString(), resource.subject(), size, STRUCTURE).renderScaled(graphics, box, theme);
+            else if (resource.state() == PreviewState.PREPARING) preparing.renderScaled(graphics, box, theme);
+            else if (resource.state().unavailable()) fallback.renderScaled(graphics, box, theme);
         }, () -> {
             PreviewScenes owner = scenes();
             var resource = StructurePreviewResources.get(id, WORKERS);

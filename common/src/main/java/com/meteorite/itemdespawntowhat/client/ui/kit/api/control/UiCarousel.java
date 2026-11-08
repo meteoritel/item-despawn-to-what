@@ -85,18 +85,6 @@ public final class UiCarousel {
         prepare(milliseconds);
         int index = index(milliseconds);
         if (index < 0) return;
-        UiIcon icon = icons.get(index);
-        if (icon instanceof UiIcon.Themed themed) themed.painter().render(graphics, box, theme);
-        else if (icon instanceof UiIcon.Rendered rendered) rendered.painter().render(graphics, box);
-        else {
-            float scale = Math.min((float) box.width() / icon.width(), (float) box.height() / icon.height());
-            graphics.pose().pushPose();
-            try {
-                graphics.pose().translate(box.x() + (box.width() - icon.width() * scale) / 2,
-                        box.y() + (box.height() - icon.height() * scale) / 2, 0);
-                graphics.pose().scale(scale, scale, 1);
-                icon.render(graphics, 0, 0, theme);
-            } finally { graphics.pose().popPose(); }
-        }
+        icons.get(index).renderScaled(graphics, box, theme);
     }
 }

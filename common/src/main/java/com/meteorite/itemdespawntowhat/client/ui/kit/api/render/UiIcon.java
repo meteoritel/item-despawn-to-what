@@ -18,6 +18,27 @@ public sealed interface UiIcon permits UiIcon.Item, UiIcon.Sprite, UiIcon.Render
     /** 按使用位置提供主题；真实物品和贴图保留自身视觉语义。 */
     default void render(GuiGraphics graphics, int x, int y, UiStyleSource theme) { render(graphics, x, y); }
 
+    /** 在目标框内等比居中绘制；自绘内容按目标尺寸重绘，空框跳过。 */
+    default void renderScaled(GuiGraphics graphics, UiRect box, UiStyleSource theme) {
+        if (box.width() == 0 || box.height() == 0) return;
+        UiRect target = contained(this, box);
+        graphics.pose().pushPose();
+        try {
+            graphics.pose().translate(target.x(), target.y(), 0);
+            graphics.pose().scale((float) target.width() / width(), (float) target.height() / height(), 1);
+            render(graphics, 0, 0, theme);
+        } finally {
+            graphics.pose().popPose();
+        }
+    }
+
+    private static UiRect contained(UiIcon icon, UiRect box) {
+        double scale = Math.min(box.width() / (double) icon.width(), box.height() / (double) icon.height());
+        int width = Math.max(1, (int) Math.round(icon.width() * scale));
+        int height = Math.max(1, (int) Math.round(icon.height() * scale));
+        return new UiRect(box.x() + (box.width() - width) / 2, box.y() + (box.height() - height) / 2, width, height);
+    }
+
     /** 缓存内容与主题分离的图标；来源在绘制时传入，不捕获屏幕。 */
     record Themed(int width, int height, ThemePainter painter, Runnable preparation) implements UiIcon {
         /** 保持可测量尺寸与有效绘制回调。 */
@@ -30,6 +51,11 @@ public sealed interface UiIcon permits UiIcon.Item, UiIcon.Sprite, UiIcon.Render
         @Override public void render(GuiGraphics graphics, int x, int y) { render(graphics, x, y, UiMinecraftTheme.INSTANCE); }
         @Override public void render(GuiGraphics graphics, int x, int y, UiStyleSource theme) {
             painter.render(graphics, new UiRect(x, y, width, height), theme);
+        }
+        /** 将实际绘制框交给 painter，保留主题和目标像素尺寸。 */
+        @Override public void renderScaled(GuiGraphics graphics, UiRect box, UiStyleSource theme) {
+            if (box.width() == 0 || box.height() == 0) return;
+            painter.render(graphics, contained(this, box), theme);
         }
     }
 
@@ -58,6 +84,11 @@ public sealed interface UiIcon permits UiIcon.Item, UiIcon.Sprite, UiIcon.Render
         @Override public void prepare() { preparation.run(); }
         @Override public void render(GuiGraphics graphics, int x, int y) {
             painter.render(graphics, new UiRect(x, y, width, height));
+        }
+        /** 自绘内容直接按目标框重绘，避免先绘制为名义尺寸再拉伸。 */
+        @Override public void renderScaled(GuiGraphics graphics, UiRect box, UiStyleSource theme) {
+            if (box.width() == 0 || box.height() == 0) return;
+            painter.render(graphics, contained(this, box));
         }
     }
 

@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.debug.rule_scene;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiTransform;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.preview.PreviewBudget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.preview.PreviewScene;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.preview.PreviewScenes;
@@ -11,9 +12,11 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.preview.UiSceneStyle;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.preview.UiSceneView;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiRenderLayers;
 import com.meteorite.itemdespawntowhat.client.ui.shared.PreviewIcons;
+import com.meteorite.itemdespawntowhat.client.ui.shared.PreviewResources;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import java.util.List;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
 
@@ -34,7 +37,8 @@ public final class RuleSceneStage implements AutoCloseable {
     private static final int RAIN_DROPS = 46;
 
     private final RuleSceneModel model;
-    private final PreviewScenes scenes;
+    private PreviewScenes scenes;
+    private Object resourceGeneration;
     private final String sceneId;
     private final PreviewSubject.Structure subject;
     private final boolean isNether;
@@ -51,6 +55,7 @@ public final class RuleSceneStage implements AutoCloseable {
         this.model = model;
         this.sceneId = "rule_scene:" + id;
         this.subject = new PreviewSubject.Structure(RuleSceneStructure.build(model));
+        this.resourceGeneration = PreviewResources.generation();
         this.scenes = PreviewIcons.createScenes(BUDGET);
         this.isNether = hasDimension(model, "the_nether");
         this.isEnd = hasDimension(model, "the_end");
@@ -62,9 +67,23 @@ public final class RuleSceneStage implements AutoCloseable {
         this.hasFluid = find(model, RuleSceneModel.FluidPresent.class) != null;
     }
 
-    /** 绘制一帧舞台；调用方负责外框与标题。 */
-    public void render(GuiGraphics graphics, UiRect box, long elapsed, UiHostTheme theme) {
+    // 同一 GUI 帧可绘制底页与灯箱，两次 draw 共用一次预算与异步交接。
+    void beginFrame() {
+        Object generation = PreviewResources.generation();
+        if (resourceGeneration != generation) {
+            scenes.close();
+            scenes = PreviewIcons.createScenes(BUDGET);
+            resourceGeneration = generation;
+        }
         scenes.beginFrame();
+    }
+
+    void endFrame() { scenes.endFrame(); }
+
+    /** 在宿主 GUI 帧包络中绘制舞台；调用方负责外框与标题。 */
+    public void render(GuiGraphics graphics, UiRect box, long elapsed, UiHostTheme theme) {
+        if (box.width() == 0 || box.height() == 0) return;
+        UiTransform.enableScissor(graphics, box);
         try {
             PreviewScene scene = scenes.request(sceneId, subject);
             drawSky(graphics, box);
@@ -73,27 +92,24 @@ public final class RuleSceneStage implements AutoCloseable {
             } else {
                 drawStatus(graphics, box, scene, theme);
             }
-            graphics.enableScissor(box.x(), box.y(), box.right(), box.bottom());
-            try {
-                drawAmbient(graphics, box);
-                drawSkyLight(graphics, box, elapsed);
-                drawWeather(graphics, box, elapsed);
-                drawVignette(graphics, box);
-                drawYLevel(graphics, box);
-                drawRipples(graphics, box, elapsed);
-                drawTriggerPulse(graphics, box, elapsed, theme);
-                drawItems(graphics, box, elapsed);
-            } finally {
-                graphics.disableScissor();
-            }
+            drawAmbient(graphics, box);
+            drawSkyLight(graphics, box, elapsed);
+            drawWeather(graphics, box, elapsed);
+            drawVignette(graphics, box);
+            drawYLevel(graphics, box);
+            drawRipples(graphics, box, elapsed);
+            drawTriggerPulse(graphics, box, elapsed, theme);
+            drawItems(graphics, box, elapsed);
         } finally {
-            scenes.endFrame();
+            UiTransform.disableScissor(graphics);
         }
     }
 
+    /** 释放舞台所有者；再次进入帧包络时按当前世代建立资源。 */
     @Override
     public void close() {
         scenes.close();
+        resourceGeneration = null;
     }
 
     // 天空底色先于三维内容绘制，结构之外的区域因此不会露出窗口灰底
@@ -120,7 +136,7 @@ public final class RuleSceneStage implements AutoCloseable {
                 : Component.translatable(RuleSceneModel.UI + "stage.failed");
         int x = box.x() + (box.width() - 60) / 2;
         int y = box.y() + box.height() / 2;
-        graphics.drawString(net.minecraft.client.Minecraft.getInstance().font, text, x, y,
+        graphics.drawString(Minecraft.getInstance().font, text, x, y,
                 theme.surfaces().secondaryText(), false);
     }
 
@@ -279,11 +295,13 @@ public final class RuleSceneStage implements AutoCloseable {
             if (items.get(index).count() > 1) {
                 String label = "×" + items.get(index).count();
                 graphics.pose().pushPose();
-                graphics.pose().translate(x + 12, y + 12, UiRenderLayers.FOREGROUND);
-                graphics.pose().scale(1.15F, 1.15F, 1.0F);
-                graphics.drawString(net.minecraft.client.Minecraft.getInstance().font, label, 0, 0,
-                        0xFFFFFFFF, true);
-                graphics.pose().popPose();
+                try {
+                    graphics.pose().translate(x + 12, y + 12, UiRenderLayers.FOREGROUND);
+                    graphics.pose().scale(1.15F, 1.15F, 1.0F);
+                    graphics.drawString(Minecraft.getInstance().font, label, 0, 0, 0xFFFFFFFF, true);
+                } finally {
+                    graphics.pose().popPose();
+                }
             }
         }
     }
@@ -294,8 +312,9 @@ public final class RuleSceneStage implements AutoCloseable {
         try {
             graphics.pose().translate(centerX, centerY, UiRenderLayers.CONTENT);
             graphics.pose().scale(scale, scale, 1.0F);
-            graphics.renderItem(stack, -8, -8);
-            graphics.renderItemDecorations(net.minecraft.client.Minecraft.getInstance().font, stack, -8, -8);
+            UiRenderLayers.item(graphics, new UiRect(-8, -8, 16, 16), local -> local.renderItem(stack, -8, -8));
+            UiRenderLayers.draw(graphics, UiRenderLayers.FOREGROUND,
+                    () -> graphics.renderItemDecorations(Minecraft.getInstance().font, stack, -8, -8));
         } finally {
             graphics.pose().popPose();
         }

@@ -12,8 +12,9 @@
  *   <li>{@code UiControlGroup}: library；用途：复用控件实例、按层序命中并收集焦点目标；当前无直接生产引用</li>
  *   <li>{@code UiFloatingPanel}: library；用途：通用浮动调板：标题栏可拖动、可折叠，支持贴边吸附与贴底抽屉，内容由宿主注入；当前无直接生产引用</li>
  *   <li>{@code UiIconStrip}: host</li>
+ *   <li>{@code UiIconLightboxContent}: library；用途：任意 UiIcon 的灯箱适配，按目标尺寸重绘并共享缩放与平移；当前无直接生产引用</li>
  *   <li>{@code UiImageView}: library；用途：灯箱的图片内容适配，负责适框、缩放与平移；当前无直接生产引用</li>
- *   <li>{@code UiLightbox}: library；用途：灯箱外壳：可复用的模态查看器——遮罩、内容视口、标题与描述、控制按钮组、键盘焦点与关闭语义；当前无直接生产引用</li>
+ *   <li>{@code UiLightbox}: library；用途：灯箱外壳：统一覆盖作用域、prepare/layer、内容视口、控制栏与真实布局快照；当前无直接生产引用</li>
  *   <li>{@code UiProgressBar}: host</li>
  *   <li>{@code UiScrollView}: host</li>
  *   <li>{@code UiTarget}: library；用途：实际命中的只读提示来源，由 UiPointerHit.tooltip 公开返回；当前无直接生产引用</li>

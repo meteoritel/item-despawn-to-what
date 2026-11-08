@@ -201,6 +201,7 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
                 Math.max(0, WorkbenchLayout.contentBottom(height) - CONTENT_TOP));
         inputs.setBounds(bounds.x(), bounds.y(), bounds.width(), bounds.height());
         surfaces.setBounds(bounds.x(), bounds.y(), bounds.width(), bounds.height());
+        surfaces.prepareLightbox(width, height);
         layers.setBounds(bounds.x(), bounds.y(), bounds.width(), bounds.height());
         modals.setBounds(0, 0, width, height);
         modals.refreshLayout();

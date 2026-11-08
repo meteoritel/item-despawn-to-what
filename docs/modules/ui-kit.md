@@ -221,7 +221,7 @@ sequenceDiagram
 
 ### 统一预览场景
 
-宿主通过 `PreviewScenes.request` 查询状态或 `icon` 接回 `UiIcon.Rendered`，每帧绘制前调用 `beginFrame`，绘制后调用 `endFrame`。物品委托原版 GUI 绘制；方块／流体按 RenderType 合并静态几何，实体与方块实体持有独立实例并调用原版 renderer。结构在局部坐标组合这两层，液体补区段原点，静态提交经过邻面与外部可达性剔除，完整占位仍供 AO、邻居与着色查询。
+宿主通过 `PreviewScenes.request` 查询状态或 `icon` 接回 `UiIcon.Themed`，每帧绘制前调用 `beginFrame`，绘制后调用 `endFrame`。物品委托原版 GUI 绘制；方块／流体按 RenderType 合并静态几何，实体与方块实体持有独立实例并调用原版 renderer。结构在局部坐标组合这两层，液体补区段原点，静态提交经过邻面与外部可达性剔除，完整占位仍供 AO、邻居与着色查询。
 
 `PreviewBudget` 由构造注入，默认值见其 `DEFAULT`。单场景、GPU 总量、pending 预留、请求数和逐帧次数/纳秒预算贯穿 CPU 编译、完成交接和 GPU 淘汰。每帧实例准备与上传共用软时间预算，实际绘制优先，帧末剩余额度用于预取，预算等待保持 PREPARING。请求槽位满且当前没有可淘汰场景时返回终态 `CAPACITY_REJECTED`，reason 带请求标识和容量上限；几何或字节超限仍为 `TOO_LARGE`。拒绝句柄不进入准备队列，容量恢复后再次 `request` 可获得新句柄，已拒绝句柄保持终态。`UiIcon.prepare` 仅登记内容；宿主为准备态和不可用状态分别提供占位。过期请求退出准备队列，晚到结果释放前仍计入待上传预算。半透明保留 quad 中心与索引类型，按预览视角每 15° yaw 档更新索引；同内容同相位共享缓存。实体与方块实体在渲染线程加载载荷、测量真实输出；平台适配直接装配 Display 的冻结渲染快照。
 
@@ -255,6 +255,10 @@ sequenceDiagram
 
 `UiOverlay` 持有覆盖面的唯一阻断作用域、保焦背景命中、遮罩与局部内容层，模态、灯箱、保存层和 picker 共享它。`UiModal.closeWhen` 为正常关闭请求提供否决；Esc、背景、取消、确认与正常栈关闭统一经 `requestClose`，确认动作仅在关闭成功后执行。栈 `remove/clear` 用于宿主生命周期强制移除。保存阶段与取消协议仍由宿主解释。
 
+`UiLightbox.prepare(font, width, height)` 在输入选域前准备视口、控制栏、读数和焦点集合；`layer()` 返回稳定呈现项，内部 `UiOverlay` 持有唯一作用域并按清单深度绘制一次遮罩。`layoutNodes()` 导出真实面板、内容视口、文字与控件几何，独立 `render` 入口复用相同呈现实现。语言资源失效和主题 revision 重新测量文案；resize 保留内容缩放，首次展示和换内容执行 fit。
+
+`UiImageView` 与 `UiIconLightboxContent` 通过包内 `LightboxViewport` 共用连续 contain、1.25 倍步进、指针锚点和平移钳制。图片保留既有缩放范围与 `allowUpscale`；图标内容的 fit 覆盖实际视口，手动范围随 fit 倍率扩展。拖动以实际 Content 作为作用域会话目标，图标资源仍由宿主释放。`UiIcon.renderScaled` 在目标框内等比居中，Themed/Rendered 直接按目标框重绘，Item/Sprite 复用原绘制器；轮播及预览 wrapper 使用同一入口转发矩形。
+
 `UiLayer` 引用稳定作用域、绘制动作和布局来源。`UiLayers` 将基础内容与有序覆盖面组合为当前清单，顶项提供活动域，各项按自己的作用域解析指针，并按绘制次序汇集布局节点。清单位置提供覆盖深度，遮罩和内容包络仍由 `UiOverlay` 应用一次；显示关系由宿主决定。
 
 `UiModal` 将裁剪内正文与 footer 登记为实际成员，保留正文快捷键、Esc 关闭次序与消息滚动。`UiModalStack` 持有通用模态与栈政策，`UiButtonWidget` 让默认按钮和宿主按钮共用 footer；栈在结构变化时派生稳定呈现项清单，淡入与错位排版仍归栈；独立绘制入口与 `UiLayers` 复用同一呈现实现。宿主注入焦点播报与业务历史。编辑保存、草稿和 type picker 的优先级仍由宿主解释。可运行接入见开发工作台 `KitShowcaseScreen`、`KitInputsExample` 与 `KitSurfacesExample`。
@@ -263,7 +267,7 @@ sequenceDiagram
 
 ### 纯样例与独立编译
 
-`KitSkinSamples` 展示默认、局部配色、sprite/九宫格与 painter 配方，以及单控件完整覆盖；展示屏幕以 F6 或 Theme 按钮轮换相同内容的主题。Surfaces 页展示通用角色，输入、模态和滚动页共用同一 Context。
+`KitSkinSamples` 展示默认、局部配色、sprite/九宫格与 painter 配方，以及单控件完整覆盖；展示屏幕以 F6 或 Theme 按钮轮换相同内容的主题。Surfaces 页展示通用角色、图片灯箱和经 Themed/Rendered 转发的矩形图标灯箱；灯箱使用自身 prepare、layer 与布局快照。输入、模态和滚动页共用同一 Context。
 
 `common/src/dev/java/com/meteorite/itemdespawntowhat/client/debug/kit` 是公开面消费样例。`common:compileUiKitSamples` 只编译 kit 与该样例根，classpath 排除产品 main 输出；common 的 `check` 已依赖它。工作台运行同一份样例，外层注入导航、宿主主题和可选 preview 工厂。样例自己关闭拥有的场景与点阵，executor 归工厂宿主；样例不进入正式 main jar。
 
