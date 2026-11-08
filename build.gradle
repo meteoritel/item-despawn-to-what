@@ -8,6 +8,7 @@ plugins {
 // 发布边界检查使用已经生成的各端产物，开发源集只参与编译检查。
 tasks.register('checkProbePackaging', Exec) {
     dependsOn ':common:assemble', ':fabric:assemble', ':neoforge:assemble'
+    mustRunAfter 'checkRepository'
     commandLine 'python', rootProject.file('tools/check-probe-packaging.py')
 }
 // 全仓检查由根任务持有；多个子项目的 check 只引用同一个任务图节点。
@@ -38,10 +39,19 @@ tasks.register('checkGuiCases', Exec) {
     workingDir rootProject.projectDir
     commandLine 'python', rootProject.file('tools/gui-probes/gen-case-reference.py'), '--check'
 }
+tasks.register('checkSourceRepository', Exec) {
+    group = 'verification'
+    description = '按固定顺序校验源码、语言、UI kit、GUI 用例与后端序列文档。'
+    workingDir rootProject.projectDir
+    commandLine 'python', rootProject.file('tools/check-all.py')
+}
+tasks.named('checkConfigReference') {
+    mustRunAfter tasks.named('checkSourceRepository')
+}
 tasks.register('checkRepository') {
     group = 'verification'
-    description = '校验依赖隔离、文档、语言、UI kit、配置参考与 GUI 用例契约的一致性。'
-    dependsOn 'checkIsolation', 'checkDocs', 'checkI18n', 'checkUiKitBoundaries', 'checkConfigReference', 'checkGuiCases'
+    description = '汇总顺序源码校验与构建导出的配置参考校验。'
+    dependsOn 'checkSourceRepository', 'checkConfigReference'
 }
 subprojects {
     plugins.withId('java') {

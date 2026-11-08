@@ -8,7 +8,7 @@ import re
 from dataclasses import replace
 from pathlib import Path
 
-from java_references import Source, TypeIndex, boundary_lines
+from toolslib.java_references import Source, TypeIndex, boundary_lines
 from toolslib.checks import CheckResult, Finding, configure_console, execute
 from toolslib.repo import collect_files, repo_root
 

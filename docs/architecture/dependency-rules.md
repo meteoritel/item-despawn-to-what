@@ -4,7 +4,7 @@ layer: 2
 audience: 修改 import、移动类、新增平台接入或 UI kit 用法的开发者
 authority:
   - tools/check-isolation.py
-  - tools/java_references.py
+  - tools/toolslib/java_references.py
   - tools/check-ui-kit-boundaries.py
   - settings.gradle
   - common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/package-info.java
@@ -15,7 +15,7 @@ authority:
 ## TL;DR
 
 - 方向只朝下：契约 `core/api` 只引用自身；加载层不认识模型；底层实现不依赖命令、调试、网络与宿主。
-- 静态引用与关键结构由 `tools/check-isolation.py` 校验，UI kit 白名单由专用脚本校验；Gradle `checkRepository` 汇总门禁，其余设计方向通过评审核对。
+- 静态引用与关键结构由 `tools/check-isolation.py` 校验，UI kit 白名单由专用脚本校验；源码顺序入口与 Gradle 汇总门禁见[仓库工具入口](../../tools/README.md)，其余设计方向通过评审核对。
 - 现存跨包只读例外集中在本页表格，新增同类引用先在表内登记。
 
 ## 适用对象

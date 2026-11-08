@@ -13,7 +13,7 @@ from pathlib import Path
 from toolslib.checks import CheckResult, Finding, run
 from toolslib.repo import collect_files
 
-from java_references import Source, TypeIndex
+from toolslib.java_references import Source, TypeIndex
 
 # 平台源集到各自加载器 API 前缀的映射：加载器 API 只允许出现在这里
 PLATFORM_LOADERS = {"fabric": "net.fabricmc.", "neoforge": "net.neoforged."}

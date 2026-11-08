@@ -23,20 +23,8 @@ import report  # noqa: E402
 import sheet  # noqa: E402
 from client import Client, ProbeError, REPO_ROOT, TOOLS_DIR  # noqa: E402
 from record import RunRecord, FILES, case_verdict  # noqa: E402
-from case_contract import assertion_query, finish_check, json_equal, validate_case, check_local_handlers  # noqa: E402
-
-LANG_DIR = REPO_ROOT / "common/src/main/resources/assets/itemdespawntowhat/lang"
-
-
-def load_lang():
-    """读取两份语言文件：期望文案只从语言文件取，脚本不重复硬编码。"""
-    langs = {}
-    for name in ("en_us", "zh_cn"):
-        with open(os.path.join(LANG_DIR, name + ".json"), encoding="utf-8") as handle:
-            langs[name] = json.load(handle)
-        dev = Path(REPO_ROOT) / "common/src/dev/resources/assets/idtw_probe/lang" / (name + ".json")
-        langs[name].update(json.loads(dev.read_text(encoding="utf-8")))
-    return langs
+from case_contract import ContractError, assertion_query, finish_check, json_equal  # noqa: E402
+from case_files import load_cases, load_lang  # noqa: E402
 
 
 def clamp(value, low, high):
@@ -362,26 +350,6 @@ def run_case(probe, case, langs, settle_timeout_ms):
     return result, metrics
 
 
-def load_cases(cases_dir, only):
-    cases = []
-    for entry in sorted(os.listdir(cases_dir)):
-        if not entry.endswith(".json"):
-            continue
-        with open(os.path.join(cases_dir, entry), encoding="utf-8") as handle:
-            case = json.load(handle)
-        case.setdefault("name", os.path.splitext(entry)[0])
-        if only and case["name"] not in only:
-            continue
-        cases.append(case)
-    missing = set(only) - {case["name"] for case in cases}
-    if missing: raise ProbeError("未知 --only: " + ", ".join(sorted(missing)))
-    check_local_handlers(Path(LIB_DIR) / "prelude.js")
-    langs = load_lang()
-    for case in cases:
-        validate_case(case, langs)
-    return cases
-
-
 def build_metrics(probe, phases, case_metrics, total_ms):
     """汇总全链路 metrics：phases / evals / settle / 每用例耗时与 eval 数。"""
     if probe is None:
@@ -439,7 +407,10 @@ def main(argv):
                         help="自适应 settle 的等待上限（毫秒）")
     parser.add_argument("--validate", action="store_true", help="离线校验用例与目标")
     args = parser.parse_args(argv)
-    cases = load_cases(args.cases, args.only)
+    try:
+        cases = load_cases(REPO_ROOT, Path(args.cases), args.only)
+    except ContractError as failure:
+        raise ProbeError(str(failure)) from failure
     if not cases: raise ProbeError("没有匹配用例")
     if args.validate:
         print("validated %d cases" % len(cases))
@@ -447,7 +418,7 @@ def main(argv):
 
     run_dir = os.path.abspath(args.run_dir)
     os.makedirs(run_dir, exist_ok=True)
-    langs = load_lang()
+    langs = load_lang(REPO_ROOT)
     started = time.perf_counter()
     metadata = {
         "title": "GUI 探针报告",

@@ -4,19 +4,20 @@ import argparse
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
-from client import REPO_ROOT  # noqa: E402
 from case_contract import document  # noqa: E402
-from run import load_cases  # noqa: E402
+from case_files import load_cases  # noqa: E402
 from toolslib.checks import CheckResult, Finding, execute  # noqa: E402
+from toolslib.repo import repo_root  # noqa: E402
 
 START = "<!-- gui-case-contract:start -->"
 END = "<!-- gui-case-contract:end -->"
 
 
-def generate(check_only):
-    load_cases(REPO_ROOT / "tools/gui-probes/cases", [])
-    path = REPO_ROOT / "docs/guides/gui-probes.md"
+def generate(root: Path, check_only: bool) -> CheckResult:
+    load_cases(root, root / "tools/gui-probes/cases", [])
+    path = root / "docs/guides/gui-probes.md"
     original = path.read_bytes().decode("utf-8")
     if original.count(START) != 1 or original.count(END) != 1:
         raise ValueError("GUI 指南缺少唯一契约受管块")
@@ -33,8 +34,14 @@ def generate(check_only):
     return result
 
 
-if __name__ == "__main__":
+def main() -> int:
+    """显式输入根目录用于离线校验，默认从工具位置定位仓库。"""
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--root", help="仓库根目录；默认从工具位置定位")
     parser.add_argument("--check", action="store_true", help="只读检查，不改文件")
     args = parser.parse_args()
-    raise SystemExit(execute(lambda: generate(args.check)))
+    return execute(lambda: generate(repo_root(args.root), args.check))
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
