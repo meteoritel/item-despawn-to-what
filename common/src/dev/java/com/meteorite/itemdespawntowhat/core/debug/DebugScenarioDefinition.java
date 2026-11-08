@@ -13,9 +13,7 @@ import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
 import com.meteorite.itemdespawntowhat.core.model.RuleValidation;
 import com.meteorite.itemdespawntowhat.core.runtime.RuleIndex;
 import com.meteorite.itemdespawntowhat.core.type.BuiltinTypeRegistries;
-import com.mojang.serialization.JsonOps;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.RegistryOps;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.item.Item;
 
@@ -65,12 +63,11 @@ final class DebugScenarioDefinition {
                 "$origin_y_plus_3", (long) y + 3);
         JsonArray parameters = resolve(spec.rules(), variables).getAsJsonArray();
         JsonObject expected = resolve(spec.expected(), variables).getAsJsonObject();
-        var codec = RuleCodecs.codec(types.effectTypes(), types.conditionTypes());
-        var ops = RegistryOps.create(JsonOps.INSTANCE, server.registryAccess());
+        var decoder = RuleCodecs.decoder(server.registryAccess(), types.effectTypes(), types.conditionTypes());
         List<LoadedRule<Rule>> loaded = new ArrayList<>();
         IssueCollector issues = new IssueCollector();
         for (JsonElement element : parameters) {
-            Rule decoded = codec.parse(ops, element).getOrThrow();
+            Rule decoded = decoder.decode(element.getAsJsonObject(), issues).getOrThrow();
             if (!RuleValidation.validate(decoded, types.effectTypes(), types.conditionTypes(), issues, "debug:" + spec.key())) {
                 throw new IllegalArgumentException(issues.errors().toString());
             }

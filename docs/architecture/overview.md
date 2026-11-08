@@ -68,7 +68,7 @@ flowchart LR
 | 内置数据包 | jar 内 `data/<ns>/idtw/rules/*.json` | 默认规则与示例，只读；层优先级最低 |
 | 世界数据包 | 存档内 `datapacks/<pack>/data/<ns>/idtw/rules/*.json` | 存档级规则，只读；覆盖同 id 内置规则 |
 | config 覆盖层 | `config/<overlay_directory>/rules/*.json` | 编辑器的规则内容写入目标；覆盖同 id 其它层规则 |
-| 模组配置 | `config/<overlay_directory>/server.json` | 调度预算、检查间隔、实体状态时长、邻近产物阈值等运行参数；缺失时由 `ServerConfig.loadOrCreate` 落盘默认值 |
+| 模组配置 | `config/itemdespawntowhat/server.json` | 调度预算、检查间隔、实体状态时长、邻近产物阈值等运行参数；读取与迁移由 `ServerConfig.loadOrCreate` 装配 |
 | 命令 | `/idtw` 命令树 | 规则查询、启停、重载与编辑器入口；权限判定见 [RuleCommandTree](../../common/src/main/java/com/meteorite/itemdespawntowhat/core/command/RuleCommandTree.java) |
 | 编辑协议上行载荷 | `core/network/transport` | 独占会话的取锁、确认、心跳、快照与目录请求、变更集提交、取消保存 |
 | 平台生命周期事件 | fabric 与 neoforge 的 `runtime/RuleRuntimeEvents` | 服务端启停、数据包重载、实体入世界与离开、维度加载与卸载、服务器 tick 结束 |
@@ -113,6 +113,7 @@ flowchart LR
 
 ### 失败与降级
 
+- 初始化先完成配置与覆盖层文档准备，再发布本轮规则和编辑状态；文件工作归唯一队列，注册表校验在公共 tick 预算内续接，见 [ADR-0062](../adr/0062-release-config-migrations.md)。
 - 启动失败就地降级回未启动状态并记录原因，异常不外泄到平台启动流程；修正原因后重启服务端即可恢复。
 - 规则加载按文件与条目分级拒载：文件解析失败拒载整文件，单条非法只拒载该条，其余照常；问题以错误与告警分级进入 `IssueCollector`。
 - 数据包重载先构建新索引与候选结构，构建完成才整体换入；失败发生在换入之前，旧索引与追踪继续服务，失败回执写明本次未应用任何变更。保存流程把「已写盘、重载失败」作为独立终态回执，见 [错误与状态码](../api/errors.md)。

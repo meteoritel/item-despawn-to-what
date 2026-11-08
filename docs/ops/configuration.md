@@ -10,7 +10,7 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat/core/config、co
 ## TL;DR
 
 - 模组级服务端配置固定位于 `config/itemdespawntowhat/server.json`，两端共用同一份实现与同一个文件。
-- 文件缺失时写出默认配置，解析失败时报告问题并按默认值启动；未知键按完整路径记 WARN，缺失键取默认值。
+- 文件带 `config_version`，缺省固定按格式 1 准备；完整校验后备份并安全写回。未知键记 WARN，业务字段缺省取默认值。
 - 配置在运行时启动时读取一次，改完重启服务端生效；规则重载不重新读取本文件。
 
 ## 适用对象
@@ -19,7 +19,7 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat/core/config、co
 
 ## 定位与读取
 
-`server.json` 只承载运行时行为参数，与[规则 JSON](../api/rule-json.md)完全分离：规则描述「什么物品变成什么」，本文件描述「服务端用多少资源、按什么节奏去做」。文件路径固定，不受 `overlay_directory` 影响，避免引导期出现自引用。
+`server.json` 承载运行时行为参数与文件格式元数据，与[规则 JSON](../api/rule-json.md)分别管理：规则描述「什么物品变成什么」，本文件描述「服务端用多少资源、按什么节奏去做」。文件路径固定，不受 `overlay_directory` 影响，避免引导期出现自引用。
 
 ```mermaid
 flowchart TB
@@ -27,13 +27,30 @@ flowchart TB
     B -->|不存在| C[写出默认值并返回默认]
     B -->|存在| D[有界解析 JSON]
     D -->|失败| E[记 ERROR 并回退默认]
-    D -->|成功| W[按声明识别未知键并记 WARN]
+    D -->|成功| V[识别格式版本并准备当前文档]
+    V -->|版本或转换失败| X[记录原因并结束本轮模组装配]
+    V -->|成功| W[按声明识别未知键并记 WARN]
     W --> F[Codec 读取并校验: 缺省取默认]
-    F -->|失败| E
-    F --> G[换算派生值并注入运行时]
+    F -->|当前格式业务失败| E
+    F -->|旧格式转换后校验失败| X
+    F --> S[需要更新时备份并原子写回]
+    S --> G[换算派生值并注入运行时]
 ```
 
-已有文件的解析或读取失败以 ERROR Issue 报告并回退默认配置，原文件保留。根对象及 `nearby_products` 的未知键以 WARN Issue 报告完整路径，其余合法字段继续读取；值类型与区间交由 Codec 校验。缺失文件使用 Codec 写出默认值，等于默认值的键会被省略；写出失败记日志 WARN，仍按默认配置启动。
+已有文件的读取、JSON 语法或当前格式业务校验失败以 ERROR Issue 报告并回退默认配置，原文件保留。根对象及 `nearby_products` 的未知键以 WARN Issue 报告完整路径，其余合法字段继续读取；值类型与区间交由 Codec 校验。缺失文件写出带版本的默认值，等于默认值的业务键会被省略；创建失败记 WARN，仍按默认配置启动。
+
+### 格式迁移与恢复
+
+`ServerConfigDocument` 持有 `config_version` 与固定基线，运行参数 Codec 只负责业务字段。`JsonDocumentMigrations` 在独立 JSON 副本上按相邻格式推进，输出显式版本；正式发布兼容边界与 release 映射见 [ADR-0062](../adr/0062-release-config-migrations.md)。迁移保留原始显式值、未知键和动态缺省，完整校验成功后才交付配置。
+
+自动写回先核对源字节，在配置目录的 `.migration-backups/` 保留独立 `.bak`，写同目录临时文件，再次核对源字节后原子替换。备份独立保留，临时文件在收尾时清理；当前文档未变化时跳过写回。
+
+| 情况 | 处理 |
+|---|---|
+| 版本类型非法、超前、低于基线或转换失败 | 保留源文，记录原因，结束本轮模组装配 |
+| 旧格式转换后业务校验失败 | 保留源文，结束本轮模组装配 |
+| 写回失败且原文完整，包括原子移动不可用 | 使用已验证内存配置并记 WARN，下次初始化重试 |
+| 源文被外部修改或提交后源状态无法确认 | 保留恢复依据，结束本轮模组装配；核对文件与备份后重启 |
 
 ## 字段分组
 
@@ -54,7 +71,7 @@ flowchart TB
 | 结算恢复 | 当前会话内结算失败后的重试上限 | `settlement_recovery_max_attempts` | 转化运行时 |
 | 调试 | 常规日志与调试场景准备预算 | `debug_logging`、`debug_scenario_prepare_batch_size`、`debug_scenario_prepare_budget_us` | 调试层 |
 
-新产物保护与转化冷却的秒数允许写 0，表示不授予对应状态时长；邻近容量上限的 0 表示关闭对应检查，合法区间见生成键表。`max_work_units_per_tick` 缺省时动态回退到本次配置的 `max_checks_per_tick`，显式填写时使用显式值。类型或区间错误使整份配置回退默认值。
+新产物保护与转化冷却的秒数允许写 0，表示不授予对应状态时长；邻近容量上限的 0 表示关闭对应检查，合法区间见生成键表。`max_work_units_per_tick` 缺省时动态回退到本次配置的 `max_checks_per_tick`，显式填写时使用显式值。当前格式的类型或区间错误使整份配置回退默认值。
 
 三轴偏移上限各默认 6，以整数格为单位，0 将对应轴固定为零。开屏载荷下发当前上限，重新打开编辑器即可刷新滑条合法域；超出当前上限的规则在加载和保存时报告问题。
 

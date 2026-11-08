@@ -29,16 +29,28 @@ public final class ConfigReferenceExporter {
         verifyKeys(ServerConfig.MAP_CODEC, ServerConfig.FIELDS);
         verifyKeys(NearbyProductLimits.MAP_CODEC, NearbyProductLimits.FIELDS);
         JsonObject defaults = ConfigField.defaults(ServerConfig.FIELDS);
+        defaults.addProperty(ServerConfigDocument.VERSION.name(), ServerConfigDocument.CURRENT_VERSION);
         ServerConfig decoded = ServerConfig.CODEC.parse(JsonOps.INSTANCE, defaults).getOrThrow();
         if (!ServerConfig.DEFAULT.equals(decoded)) {
             throw new IllegalStateException("完整默认参考配置与运行 DEFAULT 不一致");
         }
         JsonObject result = new JsonObject();
         JsonArray fields = new JsonArray();
+        fields.add(ServerConfigDocument.VERSION.reference());
         ServerConfig.FIELDS.forEach(field -> fields.add(field.reference()));
         result.add("fields", fields);
         result.add("defaults", defaults);
-        result.add("written_defaults", ServerConfig.CODEC.encodeStart(JsonOps.INSTANCE, ServerConfig.DEFAULT).getOrThrow());
+        JsonObject written = ServerConfigDocument.encode(ServerConfig.DEFAULT);
+        var expectedKeys = ServerConfig.FIELDS.stream().map(ConfigField::name).collect(Collectors.toSet());
+        expectedKeys.add(ServerConfigDocument.VERSION.name());
+        var defaultKeys = ServerConfig.FIELDS.stream().filter(field -> field.fallback() == null)
+                .map(ConfigField::name).collect(Collectors.toSet());
+        defaultKeys.add(ServerConfigDocument.VERSION.name());
+        if (!expectedKeys.containsAll(written.keySet()) || !defaults.keySet().equals(defaultKeys)
+                || !written.has(ServerConfigDocument.VERSION.name())) {
+            throw new IllegalStateException("配置文件元数据与参考投影不一致");
+        }
+        result.add("written_defaults", written);
         Path output = Path.of(args[0]);
         Files.createDirectories(output.toAbsolutePath().getParent());
         Files.writeString(output, new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create().toJson(result) + "\n",

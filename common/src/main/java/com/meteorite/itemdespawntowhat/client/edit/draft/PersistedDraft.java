@@ -7,6 +7,7 @@ import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.client.edit.EditorChangeSet;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.core.service.edit.RuleEdit;
+import com.meteorite.itemdespawntowhat.core.model.RuleDocuments;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -75,10 +76,15 @@ record PersistedDraft(
                 json.get("created").getAsBoolean(),
                 json.get("deleted").getAsBoolean(),
                 readEnableIntent(json),
-                json.has("baseline") ? json.getAsJsonObject("baseline") : null,
-                json.get("draft").getAsJsonObject(),
+                json.has("baseline") ? currentDocument(json.getAsJsonObject("baseline")) : null,
+                currentDocument(json.get("draft").getAsJsonObject()),
                 readPendingInputs(json),
                 json.get("saved_at").getAsLong());
+    }
+
+    // 空对象只承载启停意图；其余文档失败时交给仓库保留原文件并报告。
+    private static JsonObject currentDocument(JsonObject source) {
+        return source.isEmpty() ? source : RuleDocuments.upgrade(source).getOrThrow().document();
     }
 
     // 输入文本按控件顺序保存为字符串数组，损坏形状交由仓库报告。

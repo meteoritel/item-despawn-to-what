@@ -81,7 +81,7 @@ flowchart LR
 | `EditorSessionView` / `EditorSaveView` / `ResourceView`（client/net） | 只读值模型 | 会话、保存与资源状态；终态在接纳时一次转换为 `EditorSaveOutcome`，序号只随匹配回执递增 | 界面模块、状态所有者 |
 | `EditorScreenHooks` / `EditorScreenOpener` / `EditorOpenRequest`（client/net） | 界面注册槽 | 会话建立与失效时通知界面；请求字段与服务端打开载荷一一对应 | 界面模块 |
 | `EditSession`（client/edit） | 撤销聚合根 | 每次编辑压入快照历史，维护撤销与重做栈、脏标记与未完成输入；不区分只读条目 | `RuleDraft`、界面表单 |
-| `RuleDraft`（client/edit） | 草稿聚合根 | 保存服务器基线、工作副本与删除标记；路径级读写与条件树、候选结构处理 | `DraftPaths`、条件编解码、界面表单 |
+| `RuleDraft`（client/edit） | 草稿聚合根 | 经共享规则文档入口准备服务器基线与工作副本；保存删除标记、路径级读写与条件树、候选结构 | `RuleDocuments`、`DraftPaths`、条件编解码、界面表单 |
 | `EditorChangeSet`（client/edit） | 变更集组装 | 按 id 收集内容动作与启停动作，分别去重后序列化成一份提交载荷 | `RuleEdit`、`RuleEditorModel` |
 | `RuleValue` / `ResultStructure`（client/edit） | 只读值与结构语义 | 严格读取文本、布尔与文本列表；共用结果形状、路径判定、候选效果定位及条件宿主结构快照 | 会话、表单与摘要 |
 | `FieldPath` / 包内 `DraftPaths`（client/edit） | 字段位置与 JSON 遍历 | 前者持有不可变键与下标段、作用域代数和文本边界解析；后者按位置读取并严格写入已有容器 | 会话、表单、`RuleDraft` |
@@ -94,6 +94,12 @@ flowchart LR
 | `DraftConflicts` / `DraftConflict`（client/edit/draft） | 恢复规则 | 按目标存在性、创建意图与原始基线判定整条规则冲突 | `RestoredDraft`、界面模型 |
 
 ## 4. 关键流程
+
+### 规则文档准备
+
+普通打开、复制、来源恢复与源码替换均经 `RuleDraft` 准备当前文档；失败保留原规则体，交给编辑校验和服务端提交报告问题。`PersistedDraft` 读取时同时准备基线和工作副本，`DraftConflicts` 用同版服务端基线比较；空对象继续表示仅启停意图，草稿包装版本与输入路径格式维持原契约。规则格式策略见[规则 JSON](../api/rule-json.md)。
+
+规则集合导出先补回分类，再经 `RuleDocuments` 准备并显式写出版本与稳定 id；规则默认启用取内容值。`RulePackExporter` 在客户端生成 zip，列表沿用已保存且无问题的条目过滤。
 
 ### 协议工作区状态机
 

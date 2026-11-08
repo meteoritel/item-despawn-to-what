@@ -18,9 +18,11 @@ This guide covers all basic top-level fields for configuring conversion rules, w
 | `source` | Which dropped items this rule targets | Object with non-empty `items` | **Required** | Yes |
 | `triggers` | Despawn trigger kinds to listen for | `natural`, `fire`, `lava`, `cactus` | `["natural"]` | Yes |
 | `trigger_after_seconds` | Wait duration before natural despawn triggers | Non-negative integer (seconds) | `300` | Yes |
-| `schema_version` | Rule schema format version | Fixed positive integer `1` | `1` (can be omitted) | Yes |
+| `schema_version` | Rule schema format version | Currently integer `1` | Missing means fixed baseline `1` | Yes |
 
 *Note: For output products and item costs (`effects`, `outcomes`, `source_cost`, `combination`), see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).*
+
+Loading prepares supported rule formats as current documents. New saves and exports explicitly include `schema_version`. Datapacks are converted in memory; config overlay files that pass preparation are backed up and upgraded during server initialization. Invalid versions or failed conversions appear in the issue list.
 
 ---
 

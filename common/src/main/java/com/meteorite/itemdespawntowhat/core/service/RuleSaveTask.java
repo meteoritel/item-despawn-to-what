@@ -11,6 +11,7 @@ import com.meteorite.itemdespawntowhat.core.model.Rule;
 import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
 import com.meteorite.itemdespawntowhat.core.model.RuleValidation;
 import com.meteorite.itemdespawntowhat.core.service.edit.RuleEditChangeSet;
+import com.meteorite.itemdespawntowhat.core.service.edit.RuleEdit;
 import com.meteorite.itemdespawntowhat.core.service.edit.RuleSaveStatus;
 import com.meteorite.itemdespawntowhat.core.service.edit.RuleSaveProgress;
 import com.meteorite.itemdespawntowhat.core.runtime.RuleIndex;
@@ -72,6 +73,7 @@ final class RuleSaveTask implements ServerTask {
     private boolean detached;
     private @Nullable Throwable pendingFailure;
     private RawReload reload;
+    private final List<RuleEdit> preparedEdits = new ArrayList<>();
     private final List<LoadedRule<Rule>> decoded = new ArrayList<>();
     private List<LoadedRule<Rule>> readyRules = List.of();
     private ServerTask apply;
@@ -202,8 +204,9 @@ final class RuleSaveTask implements ServerTask {
             case VALIDATE -> {
                 if (cursor < changes.edits().size()) {
                     IssueCollector local = new IssueCollector();
-                    RuleSubmissionValidator.validateEdit(changes.edits().get(cursor++), server,
+                    RuleEdit preparedEdit = RuleSubmissionValidator.prepareEdit(changes.edits().get(cursor++), server,
                             context.typeRegistries(), reloadContext.loadContext().runtimeLimits(), local);
+                    if (preparedEdit != null) { preparedEdits.add(preparedEdit); }
                     appendIssues(local);
                     if (local.hasErrors()) { finish(RuleSaveStatus.VALIDATION_FAILED, local.format()); }
                 } else if (!changes.hasContentEdits()) {
@@ -214,6 +217,7 @@ final class RuleSaveTask implements ServerTask {
                     });
                     phase = Phase.READ;
                 } else {
+                    changes = new RuleEditChangeSet(changes.expectedVersion(), preparedEdits);
                     RuleEditChangeSet submitted = changes;
                     byte[] expectedRevision = diskRevision.clone();
                     write = store.submit("save-write", () -> {

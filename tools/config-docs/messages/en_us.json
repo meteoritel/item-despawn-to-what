@@ -1,4 +1,8 @@
 {
+  "config_version": {
+    "description": "Configuration format version; absent means format 1 from release 2.0.0.",
+    "advice": "Managed by the mod; upgrades convert the file and keep a backup."
+  },
   "check_interval_ticks": {
     "description": "How long to wait before checking a condition again while it does not hold. The first retry uses this interval, and every retry after that doubles it",
     "advice": "Lower it to convert sooner after a condition starts holding. Raise it to check less often when many drops are loaded"

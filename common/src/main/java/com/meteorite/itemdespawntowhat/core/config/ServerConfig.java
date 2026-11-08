@@ -1,25 +1,15 @@
 package com.meteorite.itemdespawntowhat.core.config;
 
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
-import com.meteorite.itemdespawntowhat.core.api.RuleDecodeBudget;
 import com.meteorite.itemdespawntowhat.core.api.RuleRuntimeLimits;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
-import com.mojang.serialization.DataResult;
-import com.mojang.serialization.JsonOps;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
-import java.util.Objects;
 import java.util.List;
 import java.util.stream.Stream;
 
@@ -36,8 +26,6 @@ public record ServerConfig(
         String overlayDirectory,
         NearbyProductLimits nearbyProducts
 ) {
-
-    private static final Logger LOGGER = LogManager.getLogger();
 
     // 默认值：20 tick 检查间隔、退避上限 5 秒、每 tick 最多 512 次检查
     public static final int DEFAULT_CHECK_INTERVAL_TICKS = 20;
@@ -485,48 +473,16 @@ public record ServerConfig(
      * @return 本次读取的配置或默认配置
      */
     public static ServerConfig loadOrCreate(Path file, IssueCollector issues) {
-        if (file == null) {
-            return DEFAULT;
-        }
-        if (!Files.isRegularFile(file)) {
-            // 缺失即落盘，方便用户直接编辑；失败只告警，不影响服务端启动
-            try {
-                DEFAULT.save(file);
-                LOGGER.info("已生成默认模组配置：{}", file);
-            } catch (IOException e) {
-                LOGGER.warn("写出默认模组配置失败：{}", file, e);
-            }
-            return DEFAULT;
-        }
-        try {
-            String text = Files.readString(file, StandardCharsets.UTF_8);
-            RuleDecodeBudget.ParseResult document = RuleDecodeBudget.parse(text);
-            if (!document.ok()) {
-                // 嵌套超深与语法非法同样按解析失败上报，与下方 CODEC 分支共用同一前缀
-                issues.error("server.json 解析失败: " + document.failureReason(), file.toString(), null);
-                return DEFAULT;
-            }
-            JsonElement json = Objects.requireNonNull(document.element());
-            ConfigField.warnUnknown(json, FIELDS, issues, file.toString(), "");
-            DataResult<ServerConfig> result = CODEC.parse(JsonOps.INSTANCE, json);
-            Optional<ServerConfig> parsed = result.resultOrPartial(message ->
-                    issues.error("server.json 解析失败: " + message, file.toString(), null));
-            return parsed.orElse(DEFAULT);
-        } catch (IOException | RuntimeException e) {
-            issues.error("server.json 读取失败: " + e, file.toString(), null);
-            return DEFAULT;
-        }
+        return ServerConfigDocument.load(file, issues);
     }
 
-    // 把当前配置写回文件（缺失目录会自动创建）
+    /**
+     * 创建当前带版本配置；已有文件由加载迁移路径安全更新。
+     * @param file 新文件路径
+     * @throws IOException 文件已存在或创建失败时
+     */
     public void save(Path file) throws IOException {
-        DataResult<JsonElement> encoded = CODEC.encodeStart(JsonOps.INSTANCE, this);
-        JsonObject json = encoded.result().orElseThrow().getAsJsonObject();
-        Path parent = file.getParent();
-        if (parent != null) {
-            Files.createDirectories(parent);
-        }
-        Files.writeString(file, json.toString(), StandardCharsets.UTF_8);
+        ServerConfigDocument.save(this, file);
     }
 
     /** 按检查间隔指数退避，封顶 backoffMaxTicks；失败次数从 0 开始。 */

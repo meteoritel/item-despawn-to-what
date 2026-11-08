@@ -22,6 +22,7 @@ import com.meteorite.itemdespawntowhat.core.runtime.LifespanProvider;
 import com.meteorite.itemdespawntowhat.core.runtime.RuleIndex;
 import com.meteorite.itemdespawntowhat.core.type.BuiltinTypeRegistries;
 import com.meteorite.itemdespawntowhat.core.service.RuleOverlayStore;
+import com.meteorite.itemdespawntowhat.core.service.RuleOverlayMigration;
 import com.meteorite.itemdespawntowhat.core.service.RuleEditService;
 import com.meteorite.itemdespawntowhat.core.service.RuleEditSessionLimits;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler;
@@ -76,6 +77,9 @@ public final class RuleRuntimeHostCore {
     private volatile ConversionRuntime runtime;
     private RuleSaveReloadContext saveReloadContext;
     private AuthoringHost authoring;
+    private record Initialization(MinecraftServer server, ServerConfig config, BuiltinTypeRegistries registries,
+            Path overlay, AuthoringHost authoring, ConversionRuntime runtime, RuleOverlayMigration migration) { }
+    private Initialization initialization;
     private @Nullable RuleLoadResult<Rule> publishedRules;
     private Map<ResourceLocation, Boolean> publishedOverrides = Map.of();
 
@@ -149,7 +153,8 @@ public final class RuleRuntimeHostCore {
     public RuleRuntimeDiagnosticsContext diagnosticsContext() { return commandContext; }
 
     /**
-     * 启动运行时：读配置 → 建注册表 → 加载规则 → 建运行时 → 对全部已加载维度排队回扫。
+     * 开始初始化：读配置 → 建注册表与文件所有者 → 排队迁移覆盖层。
+     * 后续 tick 推进迁移并完成加载；规则与编辑状态发布后，对全部已加载维度排队回扫。
      * 必须等到服务端就绪（全部维度已创建）才能回扫，否则会漏掉启动期已存在的掉落物；
      * 回扫本身是分步续接任务，启动回调只负责入队，不在服务端线程同步遍历整维。
      * 回调链上的可预期异常就地降级：实例回到确定的未启动状态并记录原因，异常不外泄到平台启动流程。
@@ -164,14 +169,37 @@ public final class RuleRuntimeHostCore {
             RuleOverlayStore.requireIdle();
 
             IssueCollector configIssues = new IssueCollector();
-            ServerConfig config = loadServerConfig(configIssues);
-            logIssues(configIssues, "读取 server.json");
+            ServerConfig config;
+            try { config = loadServerConfig(configIssues); }
+            finally { logIssues(configIssues, "读取 server.json"); }
 
             BuiltinTypeRegistries registries = BuiltinTypeRegistries.create();
             Path overlay = Services.PLATFORM.getConfigDir().resolve(config.overlayDirectory());
-            authoring = new AuthoringHost(server, overlay);
-            ConversionRuntime newRuntime = new ConversionRuntime(config, registries, platform.lifespan(config));
+            AuthoringHost preparingAuthoring = new AuthoringHost(server, overlay);
+            try {
+                ConversionRuntime preparingRuntime = new ConversionRuntime(config, registries, platform.lifespan(config));
+                RuleOverlayMigration migration = preparingAuthoring.migrateOverlay(
+                        context(server.getResourceManager(), server.registryAccess(), overlay, registries, server, config.runtimeLimits()), registries);
+                initialization = new Initialization(server, config, registries, overlay, preparingAuthoring, preparingRuntime, migration);
+                preparingRuntime.scheduleTask(migration, migration, 0);
+            } catch (RuntimeException failure) {
+                preparingAuthoring.close();
+                throw failure;
+            }
+        } catch (RuntimeException failure) {
+            degradeStartFailure(failure);
+        }
+    }
 
+    private void finishInitialization(Initialization preparing) {
+        MinecraftServer server = preparing.server();
+        ServerConfig config = preparing.config();
+        BuiltinTypeRegistries registries = preparing.registries();
+        Path overlay = preparing.overlay();
+        ConversionRuntime newRuntime = preparing.runtime();
+        try {
+            logIssues(preparing.migration().issues(), "覆盖层格式迁移");
+            if (preparing.migration().failure() != null) { throw preparing.migration().failure(); }
             RuleSaveReloadContext saveContext = captureSaveContext(
                     context(server.getResourceManager(), server.registryAccess(), overlay, registries, server,
                             config.runtimeLimits()));
@@ -183,6 +211,8 @@ public final class RuleRuntimeHostCore {
             logLoadResult("服务端启动", result);
 
             platform.sampleReferenceLifespan(server);
+            authoring = preparing.authoring();
+            initialization = null;
             currentServer = server;
             serverConfig = config;
             typeRegistries = registries;
@@ -286,6 +316,12 @@ public final class RuleRuntimeHostCore {
 
     /** 服务端停止：释放全部维度的追踪状态与到期任务，并清空运行时状态。 */
     public void shutdown() {
+        Initialization preparing = initialization;
+        initialization = null;
+        if (preparing != null) {
+            preparing.runtime().shutdown();
+            preparing.authoring().close();
+        }
         AuthoringHost editing = authoring;
         authoring = null;
         if (editing != null) { editing.close(); }
@@ -348,11 +384,15 @@ public final class RuleRuntimeHostCore {
         RuntimeObserver observer = RuntimeObserver.current();
         observer.runtimeTickStarted(server);
         try {
-            ConversionRuntime current = runtime;
-            if (current != null) {
-                current.onServerTick(server);
+            Initialization preparing = initialization;
+            if (preparing != null) {
+                preparing.runtime().tickInitialization(server);
+                if (preparing.migration().finished()) { finishInitialization(preparing); }
+            } else {
+                ConversionRuntime current = runtime;
+                if (current != null) { current.onServerTick(server); }
+                RuleEditServerHandler.tick(server, editContext);
             }
-            RuleEditServerHandler.tick(server, editContext);
         } finally {
             observer.runtimeTickFinished(server);
         }

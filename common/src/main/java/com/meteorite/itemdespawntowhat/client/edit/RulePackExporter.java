@@ -8,6 +8,7 @@ import com.google.gson.JsonParser;
 import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.load.RulePaths;
+import com.meteorite.itemdespawntowhat.core.model.RuleDocuments;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
@@ -33,11 +34,11 @@ import org.jetbrains.annotations.Nullable;
  * 规则导出：把列表中的规则写成一个可跨设备共享的数据包 zip。
  *
  * <p>导出包沿用数据包层的目录契约 {@code data/<ns>/idtw/rules/**}{@code .json}，因此解压或直接
- * 放进存档的 {@code datapacks/} 目录即可被服务端按普通数据包读取。规则体取列表当前显示的内容，
- * 未保存的草稿也会被导出；每条规则强制写回自身 id，避免单对象文件按路径推导出不同身份。</p>
+ * 放进存档的 {@code datapacks/} 目录即可被服务端按普通数据包读取。规则体取列表允许导出的已保存内容，
+ * 格式由共享规则文档入口准备；每条规则强制写回自身 id，避免单对象文件按路径推导出不同身份。</p>
  *
  * <p>导出是客户端的本地文件操作：目标目录相对游戏根目录，与草稿仓库
- * {@link com.meteorite.itemdespawntowhat.client.edit.draft.DraftStore} 的相对路径口径一致，
+ * {@code DraftStore} 的相对路径口径一致，
  * 不依赖加载器 API，也不写入服务端的覆盖层或数据包目录。</p>
  *
  * <p><b>导出预检</b>：写盘前先检查全部条目能否落成数据包内的规则文件，任何一条不可写都整体拒绝
@@ -83,7 +84,7 @@ public final class RulePackExporter {
      * 文本（{@link RuleValue#toJson()}），导出线程只处理不可变值。</p>
      *
      * @param id       规则 id，同时决定数据包内的命名空间与文件路径
-     * @param bodyJson 规则体的紧凑 JSON 文本，取列表当前显示的草稿或生效视图
+     * @param bodyJson 规则体的紧凑 JSON 文本，取列表允许导出的已保存视图
      */
     public record RuleEntry(String id, String bodyJson) {
     }
@@ -225,7 +226,7 @@ public final class RulePackExporter {
             if (!parsed.isJsonObject()) {
                 return null;
             }
-            JsonObject json = parsed.getAsJsonObject();
+            JsonObject json = RuleDocuments.upgrade(parsed.getAsJsonObject()).getOrThrow().document();
             json.addProperty(RuleFields.ID, entry.id());
             return json;
         } catch (RuntimeException exception) {

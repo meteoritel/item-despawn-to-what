@@ -63,7 +63,8 @@ Here is the default configuration generated on first startup:
     "entity_radius": 6,
     "experience_orb_limit": 64,
     "experience_radius": 6
-  }
+  },
+  "config_version": 1
 }
 ```
 <!-- config-reference:defaults:end -->
@@ -77,6 +78,7 @@ Time parameters are specified in game ticks (normally 20 ticks = 1 second).
 <!-- config-reference:fields:begin -->
 | Field | What It Does | Type / Range | Default | When to Change It |
 | --- | --- | --- | --- | --- |
+| `config_version` | Configuration format version; absent means format 1 from release 2.0.0. | Integer [1, 1] | `1` | Managed by the mod; upgrades convert the file and keep a backup. |
 | `check_interval_ticks` | How long to wait before checking a condition again while it does not hold. The first retry uses this interval, and every retry after that doubles it | Integer [1, 1200] ticks | `20` | Lower it to convert sooner after a condition starts holding. Raise it to check less often when many drops are loaded |
 | `backoff_max_ticks` | The cap on that doubling. A condition that stays false waits at most this long before the next check | Integer [1, 72000] ticks | `100` | Lower it so a rule that will hold later retries sooner. Raise it to save more performance at the cost of slower reaction |
 | `max_checks_per_tick` | The checks-per-tick ceiling, used only while `max_work_units_per_tick` is absent | Integer [1, 100000] | `512` | Change it only when you want to control how many checks run per tick. Most servers never need this |

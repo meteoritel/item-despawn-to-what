@@ -321,6 +321,14 @@ public final class ConversionRuntime {
     }
 
     /**
+     * 初始化期仅推进公共调度器；规则转换和结算恢复在宿主发布后开始。
+     * @param server 本次初始化的服务端
+     */
+    public void tickInitialization(MinecraftServer server) {
+        scheduler.tick(server.overworld().getGameTime());
+    }
+
+    /**
      * 每 tick 推进一次公共预算：所有维度的检查与效果共享同一份时间与工作量额度。
      * 时钟取主世界游戏刻（各维度 DerivedLevelData 共用同一值），所有维度按同一时刻推进。
      */

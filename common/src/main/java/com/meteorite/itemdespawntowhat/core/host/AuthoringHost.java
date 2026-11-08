@@ -6,6 +6,9 @@ import com.meteorite.itemdespawntowhat.core.service.EditSessionManager;
 import com.meteorite.itemdespawntowhat.core.service.RuleEditPermissions;
 import com.meteorite.itemdespawntowhat.core.service.RuleEditService;
 import com.meteorite.itemdespawntowhat.core.service.RuleOverlayStore;
+import com.meteorite.itemdespawntowhat.core.service.RuleOverlayMigration;
+import com.meteorite.itemdespawntowhat.core.service.RuleLoadContext;
+import com.meteorite.itemdespawntowhat.core.type.BuiltinTypeRegistries;
 import java.nio.file.Path;
 import net.minecraft.server.MinecraftServer;
 
@@ -30,6 +33,16 @@ public final class AuthoringHost implements AutoCloseable {
             store.close();
             throw failure;
         }
+    }
+
+    /**
+     * 在编辑入口发布前准备覆盖层升级，文件仍由本宿主持有的存储独占。
+     * @param context 当前加载上下文
+     * @param types 已冻结类型声明
+     * @return 等待公共调度器推进的初始化任务
+     */
+    public RuleOverlayMigration migrateOverlay(RuleLoadContext context, BuiltinTypeRegistries types) {
+        return new RuleOverlayMigration(store, context, types);
     }
 
     /** @return 当前实例的编辑编排能力 */

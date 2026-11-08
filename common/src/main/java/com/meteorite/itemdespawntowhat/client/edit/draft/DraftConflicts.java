@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.edit.draft;
 
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
+import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import org.jetbrains.annotations.Nullable;
 
 /** 草稿恢复时的整条规则冲突分类，不修改草稿、基线或界面状态。 */
@@ -18,7 +19,7 @@ public final class DraftConflicts {
             reason = DraftConflict.Reason.TARGET_EXISTS;
         } else if (!draft.created() && serverBody == null) {
             reason = DraftConflict.Reason.TARGET_MISSING;
-        } else if (serverBody != null && (draft.baseline() == null || !draft.baseline().equals(serverBody))) {
+        } else if (serverBody != null && (draft.baseline() == null || !draft.baseline().equals(RuleDraft.of(serverBody).root()))) {
             reason = DraftConflict.Reason.REMOTE_CHANGED;
         } else {
             return null;

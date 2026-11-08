@@ -36,7 +36,7 @@ artifacts {
 def configDocsClasses = layout.buildDirectory.dir('config-docs/classes')
 tasks.register('compileConfigDocs', JavaCompile) {
     dependsOn tasks.named('classes')
-    source rootProject.file('tools/config-docs/ConfigReferenceExporter.java')
+    source rootProject.fileTree('tools/config-docs') { include '*.java' }
     classpath = sourceSets.main.runtimeClasspath
     destinationDirectory = configDocsClasses
     javaCompiler = javaToolchains.compilerFor { languageVersion = JavaLanguageVersion.of(21) }
@@ -53,6 +53,16 @@ tasks.register('exportConfigReference', JavaExec) {
     inputs.files(sourceSets.main.runtimeClasspath, configDocsClasses)
     outputs.file(output)
 }
+
+tasks.register('verifyConfigMigrations', JavaExec) {
+    group = 'verification'
+    description = '离线核对已发布 JSON 版本语义与实际文件迁移提交。'
+    dependsOn tasks.named('compileConfigDocs')
+    classpath = files(configDocsClasses) + sourceSets.main.runtimeClasspath
+    mainClass = 'com.meteorite.itemdespawntowhat.core.config.MigrationVerification'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('verifyConfigMigrations') }
 
 // 同一份开发样板只与 kit 源码、MC 及许可依赖编译，产品 main 产物不进入 classpath。
 tasks.register('compileUiKitSamples', JavaCompile) {

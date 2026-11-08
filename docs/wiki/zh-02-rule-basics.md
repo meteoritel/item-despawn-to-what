@@ -18,9 +18,11 @@
 | `source` | 监听哪些掉落物 | 对象，`items` 为非空列表 | **必填** | 是 |
 | `triggers` | 监听的消失方式列表 | `natural` / `fire` / `lava` / `cactus` | 默认为 `["natural"]` | 是 |
 | `trigger_after_seconds` | 自然消失前的触发等待秒数 | 非负整数（秒） | `300` | 是 |
-| `schema_version` | 规则格式版本 | 固定正整数 `1` | `1`（日常可省略） | 是 |
+| `schema_version` | 规则格式版本 | 当前为整数 `1` | 缺省固定按基线 `1` 解释 | 是 |
 
 *注：转化的产物与消耗成本（`effects`、`outcomes`、`source_cost`、`combination` 等）请查阅 [候选结果与结算](zh-05-outcomes-and-settlement)。*
+
+规则加载先将受支持的格式准备为当前文档，新保存和导出会显式携带 `schema_version`。数据包只在内存中转换；config 覆盖层在服务端初始化时备份并升级成功准备的文件。非法版本或转换失败的规则会在问题列表中报告。
 
 ---
 

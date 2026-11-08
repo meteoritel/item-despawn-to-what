@@ -4,9 +4,11 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
+import com.meteorite.itemdespawntowhat.core.api.JsonDocumentMigrations;
 import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
+import com.meteorite.itemdespawntowhat.core.model.RuleDocuments;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -24,7 +26,7 @@ import org.jetbrains.annotations.Nullable;
  */
 public final class RuleDraft {
 
-    // 服务器下发的原始 JSON，作为 dirty 判定基线
+    // 按当前格式准备的服务器 JSON，作为 dirty 判定基线
     private final JsonObject original;
     private JsonObject working;
     // 覆盖层删除意图（不写入 working，提交时转换为 DELETE 动作）
@@ -44,7 +46,8 @@ public final class RuleDraft {
      * 从服务器下发的规则 JSON 建立草稿
      */
     public static RuleDraft of(JsonObject source) {
-        return new RuleDraft(source.deepCopy(), source.deepCopy());
+        JsonObject current = prepareDocument(source);
+        return new RuleDraft(current, current.deepCopy());
     }
 
     /**
@@ -52,6 +55,11 @@ public final class RuleDraft {
      */
     public static RuleDraft of(RuleValue source) {
         return of(source == null || !source.isMapping() ? new JsonObject() : source.unwrap().getAsJsonObject());
+    }
+
+    // 无法识别的版本保留原文供修复；表单与服务端提交仍会报告版本错误。
+    private static JsonObject prepareDocument(JsonObject source) {
+        return RuleDocuments.upgrade(source).result().map(JsonDocumentMigrations.Result::document).orElseGet(source::deepCopy);
     }
 
     // 内容变更计数：只在内容真正变化时推进，供变更检测与脏标记缓存使用
@@ -310,7 +318,7 @@ public final class RuleDraft {
      * 用快照整体替换工作副本（撤销/重做与草稿恢复使用，不改变 original 基线）
      */
     public void replaceWith(JsonObject source) {
-        this.working = source == null ? new JsonObject() : source.deepCopy();
+        this.working = prepareDocument(source == null ? new JsonObject() : source);
         this.mutations++;
     }
 

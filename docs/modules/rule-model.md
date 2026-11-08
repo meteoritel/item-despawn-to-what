@@ -68,7 +68,7 @@ flowchart LR
 | 类型（`core/model` 下） | 角色 | 职责 | 协作对象 |
 |---|---|---|---|
 | `Rule` | 聚合根 | 规则唯一配置单元；紧凑构造器规范化展示名、空条件、空消失方式与空候选；派生 `complexity()`、`isRunnable()`、`effectiveTriggers()`、`effectiveOutcomes()`、`allEffects()` | `RuleCodecs` 解码、`RuleValidation` 校验、运行时索引 |
-| `RuleCodecs` | 编解码入口 | 保留规则、候选与催化剂的 MapCodec，以实际 keys 派生解码字段集合；组装递归条件树 Codec；`decoder(...)` 在解码前做顶层未知字段告警、候选结果与 `catalyst_cost` 的未知字段报错、条件树规模预检 | `TypeDispatch`、`RuleDecodeBudget`、`OutcomeCandidate`、各枚举 CODEC |
+| `RuleCodecs` / `RuleDocuments` | 文档准备与编解码入口 | `RuleDocuments` 声明格式并复用纯迁移；`decoder(...)` 先准备当前文档，再做字段与条件树预算预检；当前 MapCodec 处理模型编解码并显式输出版本 | `JsonDocumentMigrations`、`TypeDispatch`、`RuleDecodeBudget`、`OutcomeCandidate` |
 | `RuleValidation` | 校验入口 | 结构档检查 id、触发时间、源匹配、`effects`/`outcomes` 二选一、`schema_version`、固定成本、展示名码点、条件树结构与规模；注册表档对每个效果与条件叶先执行绑定声明检查，再调业务语义和运行期限额钩子，并报告未注册类型；运行期上限档再叠加服务端配置的放置半径上限 | `IssueCollector`、`ParamChecks`、`RefChecks`、`TypeRegistry` |
 | `ConditionExpression` / `ConditionNode` / `ConditionTrees` / `ConditionLimits` | 条件树（数据 + 算法 + 限额） | 表达式只有一个根节点，`null` 表示无条件；节点分组合、取反与条件叶，构造器只做不可变拷贝，非空与规模在 `isStructurallyValid()` 与解码期判定；遍历产出与 JSON 一致的字段路径并统计叶数/节点数/深度，`replaceAt`/`updateTermsAt` 为纯函数结构变换（非法路径返回原树并记 WARN）；叶数、节点数、深度、效果数与源匹配项上限集中在限额常量，节点与深度直接引用 `RuleDecodeBudget` 的同一常量 | `RuleCodecs`、运行时求值器、编辑器、`RuleValidation` |
 | `EffectOffset` | 值对象 | 行为相对冻结触发点的三轴整数格偏移；零默认、子字段声明、Codec、原点加法与服务端逐轴限额校验集中于该对象 | 公共效果参数、运行时原点解析与编辑器投影 |
@@ -85,7 +85,8 @@ JSON → 模型的解码与校验链：
 ```mermaid
 flowchart TB
     A["规则 JSON 对象"] --> B["RuleCodecs.decoder"]
-    B --> C["解码前检查"]
+    B --> V["RuleDocuments：固定基线、严格版本与连续转换"]
+    V --> C["当前文档的解码前检查"]
     C -->|顶层未知字段| C1["WARN，不阻断"]
     C -->|候选结果 / catalyst_cost 未知字段| C2["ERROR"]
     C -->|条件树规模预检 RuleDecodeBudget| C3["超限 ERROR 并拒绝该条"]
@@ -97,7 +98,7 @@ flowchart TB
     G -->|有 ERROR| I["拒绝该条，其余条目照常加载"]
 ```
 
-模型 → JSON 的编码回写（编辑器保存、快照装配）：
+模型 → JSON 的编码（快照装配）：
 
 ```mermaid
 flowchart LR
@@ -107,7 +108,7 @@ flowchart LR
     V --> W["装配层原子落盘 / 快照下发"]
 ```
 
-编码未注册类型会抛 `IllegalStateException`（编程错误），保存路径必须把它转成用户可读错误。
+模型 Codec 消费已经准备的当前文档；原始持久文档走 `RuleCodecs.decoder`。编辑保存由 `RuleSubmissionValidator.prepareEdit` 返回已验证的当前 JSON，保留模型外字段。编码未注册类型会抛 `IllegalStateException`（编程错误），调用方将其转成可定位问题。版本与拒载契约见[规则 JSON](../api/rule-json.md)。
 
 ## 5. 扩展点与约束
 
@@ -125,7 +126,7 @@ flowchart LR
 - Codec 层不得产出 `null`：DFU 的 `DataResult` 内部使用 `Optional.of`，可空字段以 `Optional` 承载，并在记录构造的最后一步回落为可空字段。
 - 空表达式与空组合节点必须可构造、可序列化（编辑器中间态），非空性与规模只在 `isStructurallyValid()` 与解码期强制。
 - 未知字段按层级给出不同严重级：规则顶层告警，类型参数、条件节点、候选结果与 `catalyst_cost` 对象按错误级拒绝。
-- `effects` 与 `outcomes` 二选一；`schema_version` 只接受当前契约版本；条件数组、`groups` 字段、叶级取反与整型 `catalyst_cost` 在解码期给出可定位的错误并拒绝该条。
+- `effects` 与 `outcomes` 二选一；文档准备输出当前契约版本，再由 `RuleValidation` 检查；条件数组、`groups` 字段、叶级取反与整型 `catalyst_cost` 在解码期给出可定位的错误并拒绝该条。
 - 条件树结构变换是纯函数：非法路径返回原树并记 WARN，实现不就地修改入参、不产生 `null` 中间态。
 
 ### 改动后的验证

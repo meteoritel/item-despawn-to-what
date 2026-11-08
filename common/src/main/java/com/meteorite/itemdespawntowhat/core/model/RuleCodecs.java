@@ -43,8 +43,8 @@ public final class RuleCodecs {
     /** 触发时间默认值：对齐原版掉落物 300 秒的消失直觉 */
     public static final int DEFAULT_TRIGGER_AFTER_SECONDS = 300;
 
-    /** 当前规则契约结构版本；声明其它值一律拒绝 */
-    public static final int DEFAULT_SCHEMA_VERSION = 1;
+    /** 当前规则契约结构版本；历史文件由 RuleDocuments 准备后解码。 */
+    public static final int DEFAULT_SCHEMA_VERSION = RuleDocuments.CURRENT_VERSION;
 
     /** 规则内容未声明 enabled 时的默认启用值：默认启用是本服状态缺席时的继承值 */
     public static final boolean DEFAULT_ENABLED = true;
@@ -146,7 +146,7 @@ public final class RuleCodecs {
                 outcomeCodec.codec().listOf().optionalFieldOf(RuleFields.OUTCOMES, List.of())
                         .forGetter(Rule::outcomes),
                 effectCodec.listOf().optionalFieldOf(RuleFields.EFFECTS, List.of()).forGetter(Rule::effects),
-                Codec.INT.optionalFieldOf(RuleFields.SCHEMA_VERSION, DEFAULT_SCHEMA_VERSION)
+                Codec.INT.fieldOf(RuleFields.SCHEMA_VERSION)
                         .forGetter(Rule::schemaVersion)
         ).apply(instance, (id, enabled, priority, displayName, notes, source, conditions, triggerAfterSeconds,
                            triggers, sourceCost, catalystCost, consumeFluid, combination, outcomes, effects, schemaVersion) ->
@@ -175,7 +175,14 @@ public final class RuleCodecs {
         Set<String> ruleFields = fields(codecs.rule(), ops);
         Set<String> outcomeFields = fields(codecs.outcome(), ops);
         Set<String> catalystFields = fields(CatalystCost.MAP_CODEC, ops);
-        return (body, issues) -> {
+        return (source, issues) -> {
+            var migrated = RuleDocuments.upgrade(source);
+            if (migrated.error().isPresent()) {
+                String reason = migrated.error().orElseThrow().message();
+                issues.error(reason, null, RuleFields.SCHEMA_VERSION);
+                return DataResult.error(() -> reason);
+            }
+            JsonObject body = migrated.result().orElseThrow().document();
             warnUnknownFields(body, issues, ruleFields);
             boolean fieldsValid = checkOutcomeFields(body, issues, outcomeFields);
             fieldsValid &= checkCatalystCostFields(body, issues, catalystFields);

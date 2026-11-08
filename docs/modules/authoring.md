@@ -78,6 +78,7 @@ flowchart LR
 | `RuleEditService` | 应用服务 | 按准入结论校验会话归属、幂等回放、构造保存任务、产出语义回执、按需安排新快照与来源读取；业务模型位于 `core/service/edit` | `EditSessionManager`、`RuleSaveTask`、`RuleSnapshotTask`、`RuleCatalogService` |
 | `EditSessionManager` / `RuleEditSessionLimits` | 目标锁 | 单目标全局唯一会话的状态机；租约、心跳与申请窗口以服务端活动 tick 计时；状态仅描述会话归属与迁移 | `EditAdmission`、`RuleEditService` |
 | `RuleOverlayStore` | 文件侧并发边界 | 后台文件调用队列、磁盘修订指纹、覆盖层根目录就绪与停滞检测 | `RuleOverlayWriter`、`RuleSaveTask`、`RuleSnapshotTask` |
+| `RuleOverlayMigration` | 初始化续接 | 唯一文件队列扫描原始文件与数组位置，公共 tick 预算内完整校验，逐文件备份并安全提交 | `AuthoringHost`、`RuleOverlayStore`、`RuleSubmissionValidator`、`JsonFileMigration` |
 | `RuleOverlayWriter` | 原子落盘 | 加载原始字节、按规则 id 建位置索引、临时文件写入、元数据与内容两段复核、`.bak` 备份、原子替换与唯一提交确认点、失败逆序回滚 | `RuleSaveTask`、`RuleOverlayStore` |
 | `RuleSaveTask` | 保存编排 | 续接任务：请求、校验、写入、提交启用状态、重读、解码、建索引、发布；纯启停批次后台读取稳定来源后重建索引；每步受预算与会话有效性约束，取消与失效给出确定终态 | `RuleSubmissionValidator`、`RuleOverlayWriter`、`RuleEnableApplyService`、`RuleIndex`、运行时发布 |
 | `RuleEnableApplyService` | 启用状态应用 | 提交同批启停动作、按调用方本次读取的来源重建索引并交给运行时发布；内容与状态都不变时回答无变化 | `RuleEnableState`、`RuleLoadingService`、`RuleIndex`、运行时发布 |
@@ -149,11 +150,11 @@ flowchart TB
     Q -->|"否"| V2["VALIDATE：逐条校验启停动作"]
     Q -->|"是"| D{"期望版本等于服务端版本"}
     D -->|"否"| R1["整批拒绝：版本冲突"]
-    D -->|"是"| E["VALIDATE：逐条校验新增/更新/删除"]
+    D -->|"是"| E["VALIDATE：逐条准备并校验当前文档"]
     E -->|"存在错误"| R2["整批拒绝：校验失败，附问题清单"]
     V2 -->|"存在错误"| R2
     V2 -->|"通过"| S0["APPLY：写入本服启用状态 → 用已捕捉的基底重建索引 → 发布（换入 + 逐维排队回扫）"]
-    E --> F["WRITE：加载原始字节与位置索引"]
+    E --> F["WRITE：已准备变更集 + 原始字节与位置索引"]
     F --> G["临时文件写入 → 元数据复核 → .bak 备份 → 内容复核 → 原子替换"]
     G --> H{"唯一提交确认点"}
     H -->|"会话已取消"| RB["逆序回滚并复原 .bak"]
@@ -174,6 +175,8 @@ flowchart TB
 - **应用后的会话**：没有待执行释放请求时，保存终态交付后会话由 APPLYING 回到 ACTIVE，目标锁与编辑器界面保持；保存期间收到的释放请求（含玩家离线或失权）在此刻执行并结束会话。
 
 实现约束：提交确认点只有一处，取消与回滚都以它为界；撤销顺序是逆序逐个用原始字节写回，新增文件直接删除；目标路径必须在覆盖层根目录内，含非法路径段或符号链接祖先的目标直接拒绝。
+
+`RuleSubmissionValidator.prepareEdit` 返回完整验证通过的当前规则文档，`RuleSaveTask` 收集结果后重建变更集，写入器消费这份文档。初始化自动迁移也使用该校验入口，但按原文件位置处理全部条目，保留单对象或数组形状及原有 id 声明方式。备份位于覆盖层根的 `.migration-backups/`，独立于普通保存备份；文件失败粒度及初始化发布时点由 [ADR-0062](../adr/0062-release-config-migrations.md) 定义。
 
 ### 4.5 命令权限口径
 

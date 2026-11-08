@@ -11,6 +11,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import java.util.Objects;
 
 import com.google.gson.JsonObject;
+import com.meteorite.itemdespawntowhat.client.edit.RuleCategoryAssignment;
 import com.meteorite.itemdespawntowhat.client.edit.RuleCategorySkeleton;
 import com.meteorite.itemdespawntowhat.client.edit.RulePackExporter;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
@@ -381,7 +382,7 @@ final class RuleEditorListPage implements EditorPage {
             if (!snapshot.exportable() || (!option.includeDatapack() && !isOverlayOrigin(snapshot.origin()))) {
                 continue;
             }
-            RuleValue body = model.displayBody(id);
+            RuleValue body = RuleCategoryAssignment.seed(model.displayBody(id), snapshot.category());
             if (body != null) {
                 // 规则值只反映草稿实时内容，跨线程读取不安全：先在客户端线程取成不可变 JSON 文本快照
                 entries.add(new RulePackExporter.RuleEntry(id, body.toJson()));

@@ -23,7 +23,7 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat/platform、core/
 - **公共宿主** `RuleRuntimeHostCore`：引导、数据包重载、停服、维度回扫，以及掉落物进入/离开、环境致死与自然消失判定；统一编排运行时、编辑交付、观测窗口与租约过期，持有一次存档生命周期的当前服务端、配置、注册表、覆盖层、运行时与保存重载上下文。
 - **窄接口适配**：以 `RuleAuthoringContext` 提供业务能力，`RuleEditServerContext` 在其上组合传输与发包，`RuleCommandContext` 提供命令能力；开发诊断单独取得宿主的 `RuleRuntimeDiagnosticsContext`。
 - **平台能力注入**：`IPlatformHelper` 由 `ServiceLoader` 发现唯一实现，具体能力面见接口本身；实体状态的读写也在这里，两端使用各自的持久化容器。
-- **模组级配置读取**：`ServerConfig.loadOrCreate` 负责 `server.json` 的读取、缺失即落盘与坏文件降级，两端共用同一实现与同一份文件。
+- **模组级配置读取**：`ServerConfig.loadOrCreate` 委托配置文档 Adapter 识别格式、校验与安全写回，两端共用同一实现与同一份文件；处理语义见[运行配置](../ops/configuration.md)。
 - **两端加载器接入**：入口类、事件订阅、Mixin、网络载荷注册、命令注册、客户端初始化。
 
 规则读取与合并、运行时调度与结算、编辑会话与落盘、界面渲染分别由 [规则加载](rule-loading.md)、[转化运行时](conversion-runtime.md)、[编辑与落盘](authoring.md)、[编辑器界面](client-ui.md) 负责，本模块只提供它们所需的平台侧入口与生命周期钩子。
@@ -124,15 +124,20 @@ sequenceDiagram
     C->>C: BuiltinTypeRegistries.create()
     C->>C: new AuthoringHost(server, overlayRoot)
     C->>R: new ConversionRuntime(config, registries, lifespan)
+    C->>C: migrateOverlay：唯一文件队列扫描并准备文件
+    P->>C: 后续 tickServer(server)
+    C->>R: tickInitialization：公共调度器推进有界校验与提交
+    Note over C,R: 迁移收尾前，规则与编辑保持未就绪
     C->>C: 读基底规则并 loadAndValidate
     C->>R: replaceRules(...)
     C->>C: sampleReferenceLifespan(server)
+    C->>C: 发布运行时与编辑入口
     C->>C: DropStateStore.configure(保护刻数, 冷却刻数)
     C->>R: 对全部已加载维度 rescan
     Note over C: 任一步抛异常 → 释放本轮状态并记录降级原因
 ```
 
-启动必须等到全部维度创建完成后才能回扫，否则启动期已存在的掉落物会被漏掉；异常在宿主内消化，不逃逸到平台启动回调。
+初始化由 started 事件发起，经后续 tick 续接，迁移收尾后从当前资源管理器加载规则。初始化阶段只推进同一公共调度器，规则转换和结算恢复在发布后开始。回扫在全部维度创建后排队，包含初始化期间已存在的掉落物；初始化失败由宿主释放本轮状态并降级。格式迁移的文件所有权见 [ADR-0062](../adr/0062-release-config-migrations.md)。
 
 ### 数据包重载与保存后重建
 
@@ -155,7 +160,7 @@ flowchart TD
 
 ### 服务端 tick
 
-两端 tick 结束事件只调用 `RuleRuntimeHost.core().tickServer(server)`。共享宿主依次开始观测、推进运行时共享预算、推进编辑交付并结束观测；租约过期按服务端 tick 计数的每秒节拍在观测窗口外执行。开始与结束使用同一个 Observer，结束放在 `finally` 中；业务异常继续沿原调用栈传播，其后的业务步骤中止。
+两端 tick 结束事件只调用 `RuleRuntimeHost.core().tickServer(server)`。共享宿主在观测窗口中按状态推进初始化，或推进运行时共享预算与编辑交付；租约过期按服务端 tick 计数的每秒节拍在观测窗口外执行。开始与结束使用同一个 Observer，结束放在 `finally` 中；业务异常继续沿原调用栈传播，其后的业务步骤中止。
 
 NeoForge 开发场景在正式 tick 后以 `LOWEST` 优先级推进；停服前以 `HIGHEST` 先释放夹具，再由正式事件关闭宿主。
 
