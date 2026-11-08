@@ -333,7 +333,7 @@ var __gp = (function () {
     gallery:reachWorkbench,
     interactions:reachWorkbench,
     previews:reachWorkbench,
-    rule_flow:reachWorkbench
+    rule_scene:reachWorkbench
   };
   function reachStep(target) {
     if (MC.getOverlay() !== null) return {done:false,action:"wait-resource-overlay"};
@@ -346,9 +346,9 @@ var __gp = (function () {
   }
   function reachWorkbench(target) {
     var screen = screenName();
-      if (target.scene === 'rule_flow' && !inWorld()) return menuStep(target.world);
+      if (target.scene === 'rule_scene' && !inWorld()) return menuStep(target.world);
       if (target.scene === 'previews' && !inWorld()) return menuStep(target.world);
-      if (screen === 'RuleFlowScreen' && target.scene === 'rule_flow') return {done:true};
+      if (screen === 'RuleSceneScreen' && target.scene === 'rule_scene') return {done:true};
       if (screen === 'PreviewExamplesScreen' && target.scene === 'previews') return {done:true};
       if (screen === 'KitShowcaseScreen' && target.scene === 'kit_showcase') return {done:true};
       if (screen === 'Gallery' && target.kind === 'scene' && candidates({lang:'gui.itemdespawntowhat.debug.workbench.'+target.scene,kind:'FRAME'}).length === 1) return {done:true};
@@ -365,7 +365,7 @@ var __gp = (function () {
     if (!menu.done) return menu;
     if (screen !== 'RuleEditorScreen') {
       if (String(Workspace.instance().session().state()) === 'ACTIVE') {
-        if (screen === 'Gallery' || screen === 'PreviewExamplesScreen' || screen === 'KitShowcaseScreen' || screen === 'RuleFlowScreen') return {action:key(256)};
+        if (screen === 'Gallery' || screen === 'PreviewExamplesScreen' || screen === 'KitShowcaseScreen' || screen === 'RuleSceneScreen') return {action:key(256)};
         if (screen === 'Directory') return {action:clickTarget({lang:'gui.itemdespawntowhat.debug.workbench.drafts',kind:'CONTROL'})};
       }
       return editorStep();
@@ -390,7 +390,7 @@ var __gp = (function () {
   function menuStep(worldName) {
     var screen = screenName();
     if (inWorld()) return { done: true, screen: screen };
-    if (screen === 'KitShowcaseScreen' || screen === 'Gallery' || screen === 'Directory' || screen === 'RuleFlowScreen') {
+    if (screen === 'KitShowcaseScreen' || screen === 'Gallery' || screen === 'Directory' || screen === 'RuleSceneScreen') {
       return { done: false, action: 'leave-local-workbench', result: key(256) };
     }
     if (screen === 'TitleScreen') {

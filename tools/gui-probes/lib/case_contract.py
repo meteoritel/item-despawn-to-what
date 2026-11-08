@@ -31,7 +31,7 @@ STARTS = {
     "workbench": {},
     "scene": {"scene": Field("string", True)},
 }
-SCENES = ("gallery", "interactions", "previews", "kit_showcase", "rule_flow")
+SCENES = ("gallery", "interactions", "previews", "kit_showcase", "rule_scene")
 ACTIONS = {
     "click": {"selector": SELECTOR},
     "type": {"text": S, "unique_text": B},

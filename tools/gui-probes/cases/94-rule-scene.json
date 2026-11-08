@@ -1,0 +1,336 @@
+{
+  "name": "rule-scene",
+  "description": "规则三维场景：首样例三阶段截图，其余样例逐条触发阶段截图",
+  "start": {
+    "kind": "scene",
+    "scene": "rule_scene",
+    "world": "test",
+    "timeout_seconds": 180
+  },
+  "window": {
+    "width": 1600,
+    "height": 1000,
+    "scale": 2
+  },
+  "steps": [
+    {
+      "assert": {
+        "name": "规则场景页标题",
+        "kind": "value_equals",
+        "query": {
+          "source": "screen_title"
+        },
+        "expected_lang": "gui.itemdespawntowhat.debug.workbench.rule_scene"
+      }
+    },
+    {
+      "assert": {
+        "name": "舞台区块",
+        "kind": "text_present",
+        "selector": {
+          "kind": "FRAME",
+          "lang": "gui.itemdespawntowhat.debug.workbench.rule_scene.stage"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "输入区块",
+        "kind": "text_present",
+        "selector": {
+          "kind": "FRAME",
+          "lang": "gui.itemdespawntowhat.debug.workbench.rule_scene.inputs"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "触发区块",
+        "kind": "text_present",
+        "selector": {
+          "kind": "FRAME",
+          "lang": "gui.itemdespawntowhat.debug.workbench.rule_scene.trigger"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "结果区块",
+        "kind": "text_present",
+        "selector": {
+          "kind": "FRAME",
+          "lang": "gui.itemdespawntowhat.debug.workbench.rule_scene.result"
+        }
+      }
+    },
+    {
+      "assert": {
+        "name": "操作提示行",
+        "kind": "text_present",
+        "selector": {
+          "kind": "ROW",
+          "lang": "gui.itemdespawntowhat.debug.workbench.rule_scene.hint"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "key",
+        "code": 32
+      }
+    },
+    {
+      "action": {
+        "kind": "key",
+        "code": 50
+      }
+    },
+    {
+      "shot": "94-rule-scene-01.png"
+    },
+    {
+      "action": {
+        "kind": "key",
+        "code": 51
+      }
+    },
+    {
+      "shot": "94-rule-scene-02.png"
+    },
+    {
+      "action": {
+        "kind": "key",
+        "code": 52
+      }
+    },
+    {
+      "shot": "94-rule-scene-03.png"
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "text": "▶"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "key",
+        "code": 51
+      }
+    },
+    {
+      "shot": "94-rule-scene-04.png"
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "text": "▶"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "key",
+        "code": 51
+      }
+    },
+    {
+      "shot": "94-rule-scene-05.png"
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "text": "▶"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "key",
+        "code": 51
+      }
+    },
+    {
+      "shot": "94-rule-scene-06.png"
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "text": "▶"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "key",
+        "code": 51
+      }
+    },
+    {
+      "shot": "94-rule-scene-07.png"
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "text": "▶"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "key",
+        "code": 51
+      }
+    },
+    {
+      "shot": "94-rule-scene-08.png"
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "text": "▶"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "key",
+        "code": 51
+      }
+    },
+    {
+      "shot": "94-rule-scene-09.png"
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "text": "▶"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "key",
+        "code": 51
+      }
+    },
+    {
+      "shot": "94-rule-scene-10.png"
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "text": "▶"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "key",
+        "code": 51
+      }
+    },
+    {
+      "shot": "94-rule-scene-11.png"
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "text": "▶"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "key",
+        "code": 51
+      }
+    },
+    {
+      "shot": "94-rule-scene-12.png"
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "text": "▶"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "key",
+        "code": 51
+      }
+    },
+    {
+      "shot": "94-rule-scene-13.png"
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "text": "▶"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "key",
+        "code": 51
+      }
+    },
+    {
+      "shot": "94-rule-scene-14.png"
+    },
+    {
+      "action": {
+        "kind": "click",
+        "selector": {
+          "kind": "CONTROL",
+          "text": "▶"
+        }
+      }
+    },
+    {
+      "action": {
+        "kind": "key",
+        "code": 51
+      }
+    },
+    {
+      "shot": "94-rule-scene-15.png"
+    },
+    {
+      "assert": {
+        "name": "停在最后一条样例",
+        "kind": "text_present",
+        "selector": {
+          "kind": "ROW",
+          "has_text": "13 / 13"
+        }
+      }
+    }
+  ]
+}
