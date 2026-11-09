@@ -5,6 +5,7 @@
  * 消费角色中 host 表示 kit 外生产源码直接引用，library 表示供其它宿主使用，example 表示装配示例。
  * library 项逐项注明用途与 kit 外当前无直接生产引用；公开返回链随用途说明；嵌套公开契约随顶层类型维护。</p>
  * <ul>
+ *   <li>{@code UiDocumentHit}: library；用途：文档行和图标的内容坐标命中、payload 与动作；当前无直接生产引用</li>
  *   <li>{@code UiDocument}: library；用途：只读文档排版、渲染与命中查询；内容版本和脏标记门控缓存，绘制与指针解析复用几何；当前无直接生产引用</li>
  *   <li>{@code UiFlowLayout}: host</li>
  *   <li>{@code UiFormLayout}: host</li>

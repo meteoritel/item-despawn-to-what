@@ -3,7 +3,7 @@ package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
 import java.util.function.Consumer;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;

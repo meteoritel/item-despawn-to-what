@@ -1,9 +1,9 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.control;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiRenderLayers;
 import org.jetbrains.annotations.Nullable;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiTransform;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiStyleSource;
@@ -167,16 +167,25 @@ public final class UiScrollView implements UiInteractionSession.Target {
         setOffset(next);
     }
 
+    /** GUI 点转内容点；纯换算不检查视口，捕获拖动可传越界点。 */
     public double toContentX(double screenX) {
         return screenX - viewport.x();
     }
 
+    /** GUI 点转内容点，保留小数精度。 */
     public double toContentY(double screenY) {
         return screenY - viewport.y() + offset;
     }
 
+    /** 内容纵坐标落到 GUI 逻辑像素，在绘制边界四舍五入。 */
     public int toScreenY(double contentY) {
         return (int) Math.round(viewport.y() + contentY - offset);
+    }
+
+    /** 内容矩形转 GUI 矩形；当前视口与偏移为整数平移，尺寸保持。 */
+    public UiRect toScreen(UiRect contentRect) {
+        return new UiRect(viewport.x() + contentRect.x(), toScreenY(contentRect.y()),
+                contentRect.width(), contentRect.height());
     }
 
     // ---------- 变换与裁剪 ----------
@@ -189,7 +198,7 @@ public final class UiScrollView implements UiInteractionSession.Target {
     /** 使用独立裁剪范围进入内容坐标，偏移与坐标换算仍由同一视口持有。 */
     public void push(GuiGraphics graphics, UiRect clip) {
         graphics.flush();
-        UiTransform.enableScissor(graphics, clip);
+        UiRenderLayers.enableScissor(graphics, clip);
         graphics.pose().pushPose();
         graphics.pose().translate(viewport.x(), viewport.y() - offset, 0.0F);
     }
@@ -197,7 +206,7 @@ public final class UiScrollView implements UiInteractionSession.Target {
     // 退出内容坐标：先弹回宿主 pose，再恢复上一层裁剪（原版 scissor 交集栈）。
     public void pop(GuiGraphics graphics) {
         graphics.pose().popPose();
-        UiTransform.disableScissor(graphics);
+        UiRenderLayers.disableScissor(graphics);
     }
 
     // ---------- 滚动条 ----------

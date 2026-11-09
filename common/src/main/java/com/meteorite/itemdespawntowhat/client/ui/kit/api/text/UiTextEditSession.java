@@ -6,6 +6,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
+import java.util.Objects;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -14,7 +15,16 @@ import java.util.function.BooleanSupplier;
  */
 public final class UiTextEditSession implements UiInputTarget {
     /** 原版模型的差异端口；选择和指针寻址继续使用原版实现。 */
-    public interface Model extends UiTextSelection.Target {
+    public interface Model {
+        /** 光标的 UTF-16 索引。 */
+        int cursor();
+        /** 选择锚点的 UTF-16 索引。 */
+        int anchor();
+        /** 按模型所用的指针坐标空间寻址；捕获时允许视口外坐标。 */
+        void seek(double pointerX, double pointerY);
+        /** 恢复 UTF-16 选区，保留锚点到光标的方向。 */
+        void select(int anchor, int cursor);
+
         /** 当前模型文本。 */
         String value();
 
@@ -24,6 +34,16 @@ public final class UiTextEditSession implements UiInputTarget {
         /** 拒绝用户输入后的恢复；不能预检的模型可保留其实际光标位置。 */
         default void restoreRejected(String text) {
             write(text);
+        }
+    }
+
+    /** 光标与选择锚点按 UTF-16 位置保存，与原版文本控件的坐标一致。 */
+    public record Snapshot(String text, int cursor, int anchor) {
+        /** 文本非空，UTF-16 索引钳制到该快照原文范围内。 */
+        public Snapshot {
+            Objects.requireNonNull(text);
+            cursor = Math.clamp(cursor, 0, text.length());
+            anchor = Math.clamp(anchor, 0, text.length());
         }
     }
 
@@ -52,7 +72,8 @@ public final class UiTextEditSession implements UiInputTarget {
 
     /** 围绕一次原版输入记录实际变化；纯选择或拒绝输入不记历史。 */
     public boolean edit(BooleanSupplier input) {
-        UiTextHistory.Snapshot before = snapshot();
+        endInteraction(UiInteractionSession.EndReason.RELEASE);
+        Snapshot before = snapshot();
         boolean handled = input.getAsBoolean();
         history.record(before, snapshot());
         return handled;
@@ -68,12 +89,12 @@ public final class UiTextEditSession implements UiInputTarget {
     }
 
     /** 读取当前文本、光标与选择方向，供换宽重建使用。 */
-    public UiTextHistory.Snapshot snapshot() {
-        return new UiTextHistory.Snapshot(model.value(), model.cursor(), model.anchor());
+    public Snapshot snapshot() {
+        return new Snapshot(model.value(), model.cursor(), model.anchor());
     }
 
     /** 在当前原版模型中静默恢复快照，保留局部历史与选择方向。 */
-    public void restore(UiTextHistory.Snapshot snapshot) {
+    public void restore(Snapshot snapshot) {
         acceptance.silently(() -> {
             model.write(snapshot.text());
             model.select(snapshot.anchor(), snapshot.cursor());
@@ -83,7 +104,8 @@ public final class UiTextEditSession implements UiInputTarget {
 
     /** 执行局部撤销或重做；恢复后只通知一次文本变化。 */
     public void applyHistory(UiHistoryShortcut shortcut) {
-        UiTextHistory.Snapshot snapshot = shortcut == UiHistoryShortcut.UNDO ? history.undo() : history.redo();
+        endInteraction(UiInteractionSession.EndReason.RELEASE);
+        Snapshot snapshot = shortcut == UiHistoryShortcut.UNDO ? history.undo() : history.redo();
         if (snapshot == null) return;
         restore(snapshot);
         acceptance.notifyChanged();

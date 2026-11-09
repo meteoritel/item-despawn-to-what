@@ -1,7 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.render;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiTransform;
 import java.util.function.Consumer;
 import net.minecraft.client.gui.GuiGraphics;
 
@@ -44,11 +43,11 @@ public record UiTooltipPanel(UiRect bounds, UiRect contentBounds) {
         if (contentBounds.width() <= 0 || contentBounds.height() <= 0) return;
         UiRenderLayers.draw(graphics, UiRenderLayers.TOOLTIP, () -> {
             background.accept(bounds);
-            UiTransform.enableScissor(graphics, contentBounds);
+            UiRenderLayers.enableScissor(graphics, contentBounds);
             try {
                 content.accept(contentBounds);
             } finally {
-                UiTransform.disableScissor(graphics);
+                UiRenderLayers.disableScissor(graphics);
             }
         });
     }

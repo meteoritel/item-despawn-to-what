@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiCyclicRangeValue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.number.UiValueInteraction;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;

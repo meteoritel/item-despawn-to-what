@@ -1,9 +1,9 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.layout;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiRenderLayers;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiTransform;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIcon;
@@ -183,6 +183,41 @@ public final class UiDocument implements UiInputTarget {
     }
 
     /**
+     * 导出调用方 GUI 坐标快照，包含本文档及 Frame 内子文档的实际平移与缩放。
+     * 节点边界在最终 GUI 像素四舍五入；外层 pose 由宿主继续转换，快照保持只读。
+     */
+    public List<UiLayoutNode> screenLayoutNodes() {
+        return screenLayoutNodes(1, 0, 0);
+    }
+
+    private List<UiLayoutNode> screenLayoutNodes(double parentScale, double parentX, double parentY) {
+        layout();
+        double scale = parentScale * transform.scale();
+        double x = parentX + parentScale * transform.toScreenX(0);
+        double y = parentY + parentScale * transform.toScreenY(0);
+        List<UiLayoutNode> nodes = new ArrayList<>(blocks.length);
+        for (LayoutBlock block : blocks) {
+            UiRect local = block.rect();
+            int left = (int) Math.round(x + local.x() * scale);
+            int top = (int) Math.round(y + local.y() * scale);
+            UiRect rect = new UiRect(left, top, (int) Math.round(x + local.right() * scale) - left,
+                    (int) Math.round(y + local.bottom() * scale) - top);
+            if (block.row() != null) {
+                RowPaint row = block.row();
+                nodes.add(new UiLayoutNode(UiLayoutNode.Kind.ROW, rect, row.label(),
+                        (int) Math.round(row.textWidth() * scale), (int) Math.round(row.textBand() * scale),
+                        true, true, List.of()));
+            } else if (block.frame() != null) {
+                nodes.add(new UiLayoutNode(UiLayoutNode.Kind.FRAME, rect, Component.empty(), 0, 0,
+                        true, true, block.frame().screenLayoutNodes(scale, x, y)));
+            } else {
+                nodes.add(new UiLayoutNode(UiLayoutNode.Kind.DIVIDER, rect, Component.empty(), 0, 0, true, true, List.of()));
+            }
+        }
+        return List.copyOf(nodes);
+    }
+
+    /**
      * 导出一份只读排版快照，全部节点矩形按 {@code (dx, dy)} 平移。
      * 子文档的块坐标相对自身内容原点，宿主并回父文档坐标时用这里的偏移量结算。
      */
@@ -273,11 +308,11 @@ public final class UiDocument implements UiInputTarget {
         int height = rowHeight(row);
         int cursor = row.indent() + PADDING;
         @Nullable UiIcon leadingIcon = null;
-        @Nullable UiTarget leadingTarget = null;
+        @Nullable UiDocumentHit leadingTarget = null;
         UiNode.InlineIcon leading = row.leading();
         if (leading != null) {
             leadingIcon = leading.icon();
-            leadingTarget = new UiTarget(UiTarget.Kind.ICON, index, leading.payload(),
+            leadingTarget = new UiDocumentHit(UiDocumentHit.Kind.ICON, index, leading.payload(),
                     new UiRect(cursor, y + (height - leadingIcon.height()) / 2, leadingIcon.width(), leadingIcon.height()),
                     leading.tooltip(), leading.action());
             cursor += leadingIcon.width() + ICON_GAP;
@@ -290,20 +325,20 @@ public final class UiDocument implements UiInputTarget {
         int textBudget = Math.max(MIN_TEXT_BUDGET, viewport.width() - textX - iconsWidth - PADDING);
         int laidOutTextWidth = Math.min(textWidth, textBudget);
         int x = textX + laidOutTextWidth;
-        UiTarget[] iconTargets = new UiTarget[row.icons().size()];
+        UiDocumentHit[] iconTargets = new UiDocumentHit[row.icons().size()];
         UiIcon[] icons = new UiIcon[iconTargets.length];
         for (int i = 0; i < icons.length; i++) {
             UiNode.InlineIcon inline = row.icons().get(i);
             UiIcon icon = inline.icon();
             x += ICON_GAP;
             UiRect iconRect = new UiRect(x, y + (height - icon.height()) / 2, icon.width(), icon.height());
-            iconTargets[i] = new UiTarget(UiTarget.Kind.ICON, index, inline.payload(), iconRect,
+            iconTargets[i] = new UiDocumentHit(UiDocumentHit.Kind.ICON, index, inline.payload(), iconRect,
                     inline.tooltip(), inline.action());
             icons[i] = icon;
             x += icon.width();
         }
         UiRect rect = new UiRect(row.indent(), y, x + PADDING - row.indent(), height);
-        UiTarget target = new UiTarget(UiTarget.Kind.ROW, index, row.payload(), rect, row.tooltip(), row.action());
+        UiDocumentHit target = new UiDocumentHit(UiDocumentHit.Kind.ROW, index, row.payload(), rect, row.tooltip(), row.action());
         RowPaint paint = new RowPaint(row.text().getVisualOrderText(), label, row.color(), textX,
                 y + (height - measurer.lineHeight()) / 2, textWidth, textBudget,
                 leadingIcon, leadingTarget, target, icons, iconTargets, branch);
@@ -326,7 +361,7 @@ public final class UiDocument implements UiInputTarget {
             boolean hovering = pointer.contains(viewport);
             double localX = transform.toLocalX(mouseX);
             double localY = transform.toLocalY(mouseY);
-            UiTransform.enableScissor(graphics, viewport);
+            UiRenderLayers.enableScissor(graphics, viewport);
             transform.push(graphics);
             try {
                 double top = transform.toLocalY(viewport.y());
@@ -355,7 +390,7 @@ public final class UiDocument implements UiInputTarget {
             } finally {
                 // 先提交仍受裁剪约束的顶点，再恢复外层状态，避免延迟批次泄漏。
                 graphics.pose().popPose();
-                UiTransform.disableScissor(graphics);
+                UiRenderLayers.disableScissor(graphics);
             }
         }
         metrics.rendered(start);
@@ -365,7 +400,7 @@ public final class UiDocument implements UiInputTarget {
                            double left, double top, double right, double bottom, int thickness,
                            boolean hovered, int ticks) {
         if (row.branch() != null) renderBranch(graphics, row.branch(), thickness);
-        UiTarget leading = row.leadingTarget();
+        UiDocumentHit leading = row.leadingTarget();
         if (row.leading() != null && leading != null) {
             UiRect rect = leading.rect();
             if (rect.right() > left && rect.x() < right && rect.bottom() > top && rect.y() < bottom) {
@@ -395,12 +430,13 @@ public final class UiDocument implements UiInputTarget {
                 branch.verticalToY() + thickness, branchColor);
     }
 
+    /** 查询文档语义命中；返回的矩形属于实际叶子文档的内容坐标。 */
     @Nullable
-    public UiTarget hit(double mouseX, double mouseY) {
+    public UiDocumentHit hit(double mouseX, double mouseY) {
         layout();
         long start = metrics.start();
-        UiPointerHit resolved = hitTest(mouseX, mouseY);
-        UiTarget result = resolved == null ? null : resolved.tooltip();
+        ResolvedHit resolved = resolveHit(mouseX, mouseY);
+        UiDocumentHit result = resolved == null ? null : resolved.target();
         metrics.hit(start);
         return result;
     }
@@ -423,8 +459,8 @@ public final class UiDocument implements UiInputTarget {
 
     /** 行绘制数据与命中目标共用自然坐标，避免缩放时重建矩形。 */
     private record RowPaint(FormattedCharSequence text, Component label, int color, int textX, int textY,
-                            int textWidth, int textBand, @Nullable UiIcon leading, @Nullable UiTarget leadingTarget,
-                            UiTarget target, UiIcon[] icons, UiTarget[] iconTargets,
+                            int textWidth, int textBand, @Nullable UiIcon leading, @Nullable UiDocumentHit leadingTarget,
+                            UiDocumentHit target, UiIcon[] icons, UiDocumentHit[] iconTargets,
                             @Nullable BranchPaint branch) {}
 
     /**
@@ -437,6 +473,15 @@ public final class UiDocument implements UiInputTarget {
     /** 只读命中与绘制共享排版缓存，Frame 保留子文档归属。 */
     @Override
     public @Nullable UiPointerHit hitTest(double x, double y) {
+        ResolvedHit resolved = resolveHit(x, y);
+        if (resolved == null) return null;
+        UiDocumentHit target = resolved.target();
+        return resolved.input().withTextTooltip(target.tooltip(), target.rect());
+    }
+
+    private record ResolvedHit(UiDocumentHit target, UiPointerHit input) { }
+
+    private @Nullable ResolvedHit resolveHit(double x, double y) {
         layout();
         if (!viewport.contains(x, y)) return null;
         double localX = transform.toLocalX(x);
@@ -445,18 +490,18 @@ public final class UiDocument implements UiInputTarget {
         if (index >= blocks.length || !blocks[index].rect().contains(localX, localY)) return null;
         LayoutBlock block = blocks[index];
         if (block.frame() != null) {
-            UiPointerHit child = block.frame().hitTest(localX, localY);
-            return child == null ? null : child.within(this);
+            ResolvedHit child = block.frame().resolveHit(localX, localY);
+            return child == null ? null : new ResolvedHit(child.target(), child.input().within(this));
         }
         RowPaint row = block.row();
         if (row == null) return null;
-        UiTarget target = row.target();
+        UiDocumentHit target = row.target();
         if (row.leadingTarget() != null && row.leadingTarget().rect().contains(localX, localY))
             target = row.leadingTarget();
-        else for (UiTarget icon : row.iconTargets()) {
+        else for (UiDocumentHit icon : row.iconTargets()) {
             if (icon.rect().contains(localX, localY)) { target = icon; break; }
         }
-        return UiPointerHit.leaf(this, localX, localY).withTooltip(target);
+        return new ResolvedHit(target, UiPointerHit.leaf(this, localX, localY));
     }
 
 }

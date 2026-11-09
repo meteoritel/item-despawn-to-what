@@ -1,7 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.number;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 
 import java.util.Objects;
 
@@ -239,12 +238,8 @@ public final class UiRangeSlider extends AbstractRangeCore<UiRangeValue> {
     public boolean setSelectedValueOrPresent(double raw, boolean fine) {
         if (!Double.isFinite(raw) || !isEnabled() || isDragging()) return false;
         if (value.isPresent(selectedEnd)) return setSelectedValue(raw, fine);
-        interaction.finishBeforeDiscreteChange();
-        UiRangeValue candidate = value.withValue(selectedEnd, boundEnd(selectedEnd, policy.clamp(raw)));
-        beginOperation();
-        previewValue(candidate);
-        endInteraction(UiInteractionSession.EndReason.RELEASE);
-        return true;
+        return interaction.changeOnce(
+                () -> value.withValue(selectedEnd, boundEnd(selectedEnd, policy.clamp(raw))), this::previewValue);
     }
 
     // 当前端数值；端点不存在时返回 NaN
@@ -254,7 +249,7 @@ public final class UiRangeSlider extends AbstractRangeCore<UiRangeValue> {
 
     // 命中端点；两端重叠（区分不出）时返回 null
     @Override
-    protected @Nullable UiRangeEnd hitEnd(double pointerX) {
+    @Nullable UiRangeEnd hitEnd(double pointerX) {
         boolean low = this.value.isPresent(UiRangeEnd.LOW);
         boolean high = this.value.isPresent(UiRangeEnd.HIGH);
         if (low && high) {
@@ -270,7 +265,7 @@ public final class UiRangeSlider extends AbstractRangeCore<UiRangeValue> {
 
     // 两端都不存在时没有可操作的端点
     @Override
-    protected boolean canStartPress() {
+    boolean canStartPress() {
         return !this.value.isEmpty();
     }
 
@@ -293,15 +288,8 @@ public final class UiRangeSlider extends AbstractRangeCore<UiRangeValue> {
 
     private boolean oneShotSelected(double raw, boolean fine) {
         if (!value.isPresent(selectedEnd) || isDragging()) return false;
-        interaction.finishBeforeDiscreteChange();
-        double bounded = this.boundEnd(this.selectedEnd, this.policy.snap(raw, fine));
-        UiRangeValue candidate = this.value.withValue(this.selectedEnd, bounded);
-        if (!candidate.equals(this.value)) {
-            this.beginOperation();
-            this.previewValue(candidate);
-            this.endInteraction(UiInteractionSession.EndReason.RELEASE);
-        }
-        return true;
+        return interaction.changeOnce(
+                () -> value.withValue(selectedEnd, boundEnd(selectedEnd, policy.snap(raw, fine))), this::previewValue);
     }
 
     private void previewSelected(double raw, boolean fine) {
@@ -314,23 +302,22 @@ public final class UiRangeSlider extends AbstractRangeCore<UiRangeValue> {
         this.previewValue(this.value.withValue(this.selectedEnd, bounded));
     }
 
-    private boolean previewValue(UiRangeValue next) {
+    private void previewValue(UiRangeValue next) {
         if (next.equals(this.value)) {
-            return false;
+            return;
         }
         this.value = next;
         this.backfillInvalid = false;
         this.interaction.preview(next);
-        return true;
     }
 
     @Override
-    protected UiRangeValue snapshotValue() {
+    UiRangeValue snapshotValue() {
         return value;
     }
 
     @Override
-    protected void restoreValue(UiRangeValue restored) {
+    void restoreValue(UiRangeValue restored) {
         value = restored;
     }
 

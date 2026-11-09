@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.tree.UiTreePath;

@@ -2,7 +2,7 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContainer;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputScope;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;

@@ -1,6 +1,5 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.input;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
 
 import java.util.Objects;
 import java.util.function.Consumer;

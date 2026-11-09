@@ -20,18 +20,18 @@ abstract class AbstractRangeCore<V> implements UiRangeControl {
     /**
      * 两端重叠时无法按距离区分，点击改为切换当前端。
      */
-    protected static final int OVERLAP_TOLERANCE_PX = 4;
+    static final int OVERLAP_TOLERANCE_PX = 4;
 
     private final UiWidgetShell shell = new UiWidgetShell(this, this::endInteraction);
-    protected final SliderInteraction<V> interaction;
-    protected UiRangeEnd selectedEnd = UiRangeEnd.LOW;
-    protected @Nullable Function<Double, Component> formatter;
-    protected @Nullable Component label;
+    final SliderInteraction<V> interaction;
+    UiRangeEnd selectedEnd = UiRangeEnd.LOW;
+    @Nullable Function<Double, Component> formatter;
+    @Nullable Component label;
     // 手柄宽度由当前宿主皮肤提供，命中与绘制使用同一几何。
     private int thumbWidth = 3;
     private @Nullable UiValueInteraction.Listener<V> listener;
 
-    protected AbstractRangeCore(BiPredicate<V, V> equivalent) {
+    AbstractRangeCore(BiPredicate<V, V> equivalent) {
         interaction = new SliderInteraction<>(this, Objects::nonNull, equivalent,
                 this::snapshotValue, this::restoreValue, this::listener);
     }
@@ -104,7 +104,7 @@ abstract class AbstractRangeCore<V> implements UiRangeControl {
     /**
      * 指针是否位于当前控件几何内。
      */
-    public boolean containsPointer(double pointerX, double pointerY) {
+    final boolean containsPointer(double pointerX, double pointerY) {
         return bounds().contains(pointerX, pointerY);
     }
 
@@ -217,7 +217,7 @@ abstract class AbstractRangeCore<V> implements UiRangeControl {
     }
 
     // 端点选择是区间专属，标量只组合相同的会话实现。
-    protected final boolean beginPress(UiInputContext context) {
+    final boolean beginPress(UiInputContext context) {
         if (!shell.isInteractive() || context.button() != GLFW.GLFW_MOUSE_BUTTON_LEFT
                 || !containsPointer(context.pointerX(), context.pointerY()) || !canStartPress()) return false;
         if (isDragging()) endInteraction(UiInteractionSession.EndReason.RELEASE);
@@ -259,36 +259,32 @@ abstract class AbstractRangeCore<V> implements UiRangeControl {
         interaction.finish(reason);
     }
 
-    protected final boolean cancelInteraction() {
+    final boolean cancelInteraction() {
         return interaction.cancel();
-    }
-
-    protected final void beginOperation() {
-        interaction.beginOperation();
     }
 
     /**
      * 本模型的不可变值快照。
      */
-    protected abstract V snapshotValue();
+    abstract V snapshotValue();
 
     /**
      * 取消时在通知监听器前恢复实际模型。
      */
-    protected abstract void restoreValue(V value);
+    abstract void restoreValue(V value);
 
     /**
      * 两端重叠或无法区分时返回 null，由区间切换当前端。
      */
-    protected abstract @Nullable UiRangeEnd hitEnd(double pointerX);
+    abstract @Nullable UiRangeEnd hitEnd(double pointerX);
 
     /**
      * 在本模型可用端之间切换当前端。
      */
-    protected abstract UiRangeEnd cycleSelectedEnd();
+    abstract UiRangeEnd cycleSelectedEnd();
 
     /**
      * 本模型是否存在可开始指针操作的端点。
      */
-    protected abstract boolean canStartPress();
+    abstract boolean canStartPress();
 }

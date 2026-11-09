@@ -3,7 +3,7 @@ package com.meteorite.itemdespawntowhat.client.ui.kit.api.control;
 import java.util.function.Consumer;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContainer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
@@ -170,10 +170,10 @@ public final class UiControlGroup implements UiInputContainer {
     }
 
     /**
-     * 唯一命中目标；宿主用它派生 tooltip 或执行动作。
+     * 唯一提示来源；激活由命中控件的输入契约处理。
      */
     @Nullable
-    public UiTarget targetAt(double x, double y) {
+    public UiPointerHit.TextTooltip tooltipAt(double x, double y) {
         UiPointerHit hit = hitTest(x, y);
         return hit == null ? null : hit.tooltip();
     }

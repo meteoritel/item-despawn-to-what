@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.control;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiFlatText;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.UiTextValue;
@@ -11,7 +11,6 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiHistoryShortcut;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.UiTextHistory;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiStyleSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiMinecraftTheme;
 import java.util.Objects;
@@ -434,7 +433,7 @@ public final class UiTextArea implements UiShellWidget, UiTextValue, UiLayoutSou
     /** {@inheritDoc} */
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        endInteraction(UiInteractionSession.EndReason.RELEASE);
+        scroll.endInteraction(UiInteractionSession.EndReason.RELEASE);
         if (!isVisible() || !isFocused() || (!editable && !selectableWhenReadOnly)) {
             return false;
         }
@@ -445,6 +444,7 @@ public final class UiTextArea implements UiShellWidget, UiTextValue, UiLayoutSou
             return true;
         }
         if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+            editSession.endInteraction(UiInteractionSession.EndReason.RELEASE);
             if (onCancel != null) {
                 onCancel.run();
                 return true;
@@ -462,7 +462,7 @@ public final class UiTextArea implements UiShellWidget, UiTextValue, UiLayoutSou
     /** {@inheritDoc} */
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
-        endInteraction(UiInteractionSession.EndReason.RELEASE);
+        scroll.endInteraction(UiInteractionSession.EndReason.RELEASE);
         if (!isVisible() || !editable || !isFocused()) {
             return false;
         }
@@ -530,7 +530,7 @@ public final class UiTextArea implements UiShellWidget, UiTextValue, UiLayoutSou
 
     // 按点击位置定位光标
     private void seekCursor(double mouseX, double mouseY) {
-        textField.seekCursorToPoint(mouseX - (bounds().x() + PADDING_X), mouseY - (bounds().y() + PADDING_Y) + scroll.offset());
+        textField.seekCursorToPoint(scroll.toContentX(mouseX), scroll.toContentY(mouseY));
         scrollToCursor();
     }
 
@@ -547,7 +547,7 @@ public final class UiTextArea implements UiShellWidget, UiTextValue, UiLayoutSou
         if (width == textWidth) {
             return;
         }
-        UiTextHistory.Snapshot snapshot = editSession.snapshot();
+        UiTextEditSession.Snapshot snapshot = editSession.snapshot();
         this.textWidth = width;
         this.textField = createField(width);
         editSession.restore(snapshot);

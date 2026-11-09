@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.control;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
@@ -127,7 +127,7 @@ public final class UiLightbox implements UiInputTarget, UiLayoutSource {
         /** 内容默认报告自身和提示；复合内容可返回更深的归属链。 */
         @Override
         default UiPointerHit hitTest(double x, double y) {
-            return UiPointerHit.leaf(this, x, y).withTooltip(hit(x, y));
+            return UiPointerHit.leaf(this, x, y);
         }
 
         /**
@@ -182,11 +182,6 @@ public final class UiLightbox implements UiInputTarget, UiLayoutSource {
          * 当前缩放百分比，用于读数；不适用时返回 100。
          */
         int zoomPercent();
-
-        /**
-         * 内容的命中目标（例如树里的行）；没有可命中内容时返回 null。
-         */
-        @Nullable UiTarget hit(double x, double y);
 
         /**
          * 缺图/资源不可用时的占位文案；{@code null} 表示内容正常。

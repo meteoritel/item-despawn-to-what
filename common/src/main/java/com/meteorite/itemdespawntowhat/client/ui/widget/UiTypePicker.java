@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import org.jetbrains.annotations.Nullable;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;

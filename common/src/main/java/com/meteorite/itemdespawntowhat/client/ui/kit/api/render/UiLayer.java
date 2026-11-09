@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.render;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputScope;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutSource;
 import net.minecraft.client.gui.Font;

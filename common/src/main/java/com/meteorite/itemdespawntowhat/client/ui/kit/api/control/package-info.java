@@ -17,7 +17,6 @@
  *   <li>{@code UiLightbox}: library；用途：灯箱外壳：统一覆盖作用域、prepare/layer、内容视口、控制栏与真实布局快照；当前无直接生产引用</li>
  *   <li>{@code UiProgressBar}: host</li>
  *   <li>{@code UiScrollView}: host</li>
- *   <li>{@code UiTarget}: library；用途：实际命中的只读提示来源，由 UiPointerHit.tooltip 公开返回；当前无直接生产引用</li>
  *   <li>{@code UiWidget}: host</li>
  *   <li>{@code UiWidgetShell}: host</li>
  *   <li>{@code UiShellWidget}: host</li>

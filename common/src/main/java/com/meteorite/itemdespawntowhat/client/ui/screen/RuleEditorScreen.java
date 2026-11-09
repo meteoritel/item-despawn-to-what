@@ -12,7 +12,7 @@ import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
 import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDescriptors;
 import com.meteorite.itemdespawntowhat.client.net.RuleEditClientWorkspace;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiFlatText;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;

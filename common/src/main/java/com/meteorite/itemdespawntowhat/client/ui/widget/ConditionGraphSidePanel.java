@@ -5,7 +5,6 @@ import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphRen
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiRenderLayers;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiTransform;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import net.minecraft.Util;
 import net.minecraft.client.gui.Font;
@@ -66,7 +65,7 @@ final class ConditionGraphSidePanel {
     void render(GuiGraphics graphics, UiRect viewport, Component title, Runnable content) {
         UiRect rect = bounds(viewport);
         if (rect.width() <= 0 || rect.height() <= 0) return;
-        UiTransform.enableScissor(graphics, viewport);
+        UiRenderLayers.enableScissor(graphics, viewport);
         try {
             UiRenderLayers.draw(graphics, UiRenderLayers.SIDE_PANEL, () -> {
                 graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), theme.palette().canvas().canvasPickerFill());
@@ -80,7 +79,7 @@ final class ConditionGraphSidePanel {
                 content.run();
             });
         } finally {
-            UiTransform.disableScissor(graphics);
+            UiRenderLayers.disableScissor(graphics);
         }
     }
 }

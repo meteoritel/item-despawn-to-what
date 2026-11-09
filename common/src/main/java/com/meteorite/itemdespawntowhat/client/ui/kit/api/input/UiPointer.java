@@ -1,8 +1,6 @@
-package com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry;
+package com.meteorite.itemdespawntowhat.client.ui.kit.api.input;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import org.jetbrains.annotations.Nullable;
 
 /** 绘制指针快照；保存原始坐标、作用域门禁、捕获所有者和一次解析结果。 */

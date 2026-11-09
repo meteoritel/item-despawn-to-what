@@ -12,22 +12,9 @@ import org.lwjgl.glfw.GLFW;
 /**
  * 单行与多行文本共用的鼠标选择：固定锚点、Shift 扩选与矩形外拖动。
  */
-public final class UiTextSelection implements UiInputTarget, UiInteractionSession.Target {
+final class UiTextSelection implements UiInputTarget, UiInteractionSession.Target {
 
-    /**
-     * 宿主提供文本模型与坐标映射；光标和锚点采用模型的 UTF-16 索引。
-     */
-    public interface Target {
-        int cursor();
-
-        int anchor();
-
-        void seek(double pointerX, double pointerY);
-
-        void select(int anchor, int cursor);
-    }
-
-    private final Target target;
+    private final UiTextEditSession.Model target;
     private UiInteractionSession capture;
     private UiRect bounds = new UiRect(0, 0, 0, 0);
     private boolean enabled = true;
@@ -36,7 +23,7 @@ public final class UiTextSelection implements UiInputTarget, UiInteractionSessio
     private int initialAnchor;
     private int initialCursor;
 
-    public UiTextSelection(Target target) {
+    public UiTextSelection(UiTextEditSession.Model target) {
         this.target = Objects.requireNonNull(target, "Text selection target");
     }
 

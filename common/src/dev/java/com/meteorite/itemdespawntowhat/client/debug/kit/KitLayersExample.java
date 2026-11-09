@@ -2,7 +2,7 @@ package com.meteorite.itemdespawntowhat.client.debug.kit;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiControlGroup;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;

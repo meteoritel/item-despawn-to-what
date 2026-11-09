@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.text;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiRenderLayers;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiTransform;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.internal.render.UiScissor;
@@ -21,7 +22,7 @@ import net.minecraft.util.FormattedCharSequence;
  * <p>裁剪使用 pose 感知的 scissor：调用点可能已经处于内容变换（缩放/平移）之中，
  * 而原版 {@code GuiGraphics.enableScissor} 只吃 GUI 逻辑坐标，因此先把矩形换算一次
  * （换算核心与 {@link UiTransform} 共用，统一由 kit 内部裁剪实现负责）。
- * 与 {@link UiTransform#enableScissor} 的区别是有意的：这里向外取整且不提交绘制批次——
+ * 与 {@link UiRenderLayers#enableScissor} 的区别是有意的：这里向外取整且不提交绘制批次——
  * 文本走 {@code drawString}，它在非 managed 上下文里会立刻 endBatch，多一次 flush 只会多切一次批次；
  * 视口裁剪用于 blit 这类不自动 endBatch 的绘制，必须向内取整并在切换前提交。
  * 原版 scissor 是栈式交集，嵌套调用在退出时自动恢复外层裁剪。</p>

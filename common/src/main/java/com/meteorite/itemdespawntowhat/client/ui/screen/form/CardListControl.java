@@ -8,7 +8,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiSurfaceRole;
 import java.util.function.Consumer;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogSelectionBinding.Mode;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;

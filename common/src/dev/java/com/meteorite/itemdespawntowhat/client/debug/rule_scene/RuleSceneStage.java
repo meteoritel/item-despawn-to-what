@@ -1,7 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.debug.rule_scene;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiTransform;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.preview.PreviewBudget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.preview.PreviewScene;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.preview.PreviewScenes;
@@ -83,7 +82,7 @@ public final class RuleSceneStage implements AutoCloseable {
     /** 在宿主 GUI 帧包络中绘制舞台；调用方负责外框与标题。 */
     public void render(GuiGraphics graphics, UiRect box, long elapsed, UiHostTheme theme) {
         if (box.width() == 0 || box.height() == 0) return;
-        UiTransform.enableScissor(graphics, box);
+        UiRenderLayers.enableScissor(graphics, box);
         try {
             PreviewScene scene = scenes.request(sceneId, subject);
             drawSky(graphics, box);
@@ -101,7 +100,7 @@ public final class RuleSceneStage implements AutoCloseable {
             drawTriggerPulse(graphics, box, elapsed, theme);
             drawItems(graphics, box, elapsed);
         } finally {
-            UiTransform.disableScissor(graphics);
+            UiRenderLayers.disableScissor(graphics);
         }
     }
 

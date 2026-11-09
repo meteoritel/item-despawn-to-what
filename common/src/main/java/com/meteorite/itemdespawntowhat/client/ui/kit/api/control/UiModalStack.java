@@ -4,7 +4,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiHistoryShortcut;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutSource;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiStyleSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.style.UiMinecraftTheme;

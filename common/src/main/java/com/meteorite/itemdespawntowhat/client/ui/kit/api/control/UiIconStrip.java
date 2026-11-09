@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.control;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
@@ -185,10 +185,10 @@ public final class UiIconStrip implements UiInteractionSession.Target, UiFocusTa
     }
 
     /**
-     * 命中的格子目标（含 tooltip 与动作）；供宿主显示提示或做光标反馈。
+     * 命中格子的提示目标；供宿主显示提示或做光标反馈。
      */
     @Nullable
-    public UiTarget hit(double x, double y) {
+    public UiPointerHit.TextTooltip hit(double x, double y) {
         int index = indexAt(x, y);
         return index < 0 ? null : cells.get(index).control.hit(x, y);
     }

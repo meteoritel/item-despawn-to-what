@@ -7,7 +7,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiLayer;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.Util;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContainer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiChildren;
 import com.meteorite.itemdespawntowhat.client.net.RuleEditClientWorkspace;

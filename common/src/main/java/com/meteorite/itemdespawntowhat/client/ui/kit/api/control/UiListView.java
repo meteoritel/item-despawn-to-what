@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.control;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiRowMetrics;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
@@ -305,9 +305,8 @@ public final class UiListView<T> implements UiShellWidget {
      */
     public @Nullable UiRect rowBounds(int index) {
         if (index < 0 || index >= items.size()) return null;
-        UiRect viewport = scrollView.viewport();
-        return new UiRect(viewport.x(), viewport.y() + index * rowHeight - scrollView.offset(),
-                scrollView.contentWidth(), rowContentHeight());
+        return scrollView.toScreen(new UiRect(0, index * rowHeight,
+                scrollView.contentWidth(), rowContentHeight()));
     }
 
     // 供宿主绘制行级覆盖层；返回与实际视口相交的可见矩形。
@@ -325,7 +324,7 @@ public final class UiListView<T> implements UiShellWidget {
         if (items.isEmpty()) {
             return -1;
         }
-        int contentY = (int) Math.floor(mouseY - scrollView.viewport().y()) + scrollView.offset();
+        int contentY = (int) Math.floor(scrollView.toContentY(mouseY));
         return Math.clamp(Math.floorDiv(contentY, Math.max(1, rowHeight)), 0, items.size() - 1);
     }
 

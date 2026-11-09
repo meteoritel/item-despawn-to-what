@@ -9,7 +9,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiFooterHost;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiTextInput;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiScrollView;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiRowMetrics;
 import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogSelectionBinding.Mode;

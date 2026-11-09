@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.number;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidgetShell;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusState;
@@ -491,12 +491,7 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInt
 
     // 一次性用户操作：Home/End、启用后的 PageUp/PageDown
     private void oneShot(double target, boolean fine) {
-        if (isDragging()) return;
-        interaction.finishBeforeDiscreteChange();
-        double next = policy.snap(target, fine);
-        if (next == value || !interaction.beginOperation()) return;
-        preview(next);
-        interaction.end(UiInteractionSession.EndReason.RELEASE);
+        interaction.changeOnce(() -> policy.snap(target, fine), this::preview);
     }
 
     // Esc：只回退进行中的交互；没有交互时返回 false 交给宿主关闭页面
@@ -505,15 +500,14 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInt
     }
 
     // 预览新值；同值不回调，保证无变化不产生历史。用户操作一律先收进显示窗口，提交仍用精确值
-    private boolean preview(double next) {
+    private void preview(double next) {
         double target = clampToWindow(next);
         if (!Double.isFinite(target) || target == value) {
-            return false;
+            return;
         }
         value = target;
         backfillInvalid = false;
         interaction.preview(value);
-        return true;
     }
 
     /**

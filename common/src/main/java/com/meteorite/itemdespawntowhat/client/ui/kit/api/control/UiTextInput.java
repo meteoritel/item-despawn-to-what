@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.control;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.UiSingleLineEditor;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.UiTextEditSession;
@@ -389,7 +389,6 @@ public final class UiTextInput implements UiSingleLineEditor, UiShellWidget, UiL
     /** {@inheritDoc} */
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        editSession.endInteraction(UiInteractionSession.EndReason.RELEASE);
         if (!isVisible() || !editBox.isFocused()) {
             return false;
         }
@@ -399,6 +398,7 @@ public final class UiTextInput implements UiSingleLineEditor, UiShellWidget, UiL
             return true;
         }
         if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
+            editSession.endInteraction(UiInteractionSession.EndReason.RELEASE);
             UiInputScope scope = focusState().scope();
             if (scope == null || !scope.interaction().end(this, UiInteractionSession.EndReason.RELEASE)) {
                 if (onCommit != null) onCommit.accept(editBox.getValue());
@@ -406,6 +406,7 @@ public final class UiTextInput implements UiSingleLineEditor, UiShellWidget, UiL
             return true;
         }
         if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+            editSession.endInteraction(UiInteractionSession.EndReason.RELEASE);
             if (onCancel != null) {
                 onCancel.run();
                 return true;
@@ -418,7 +419,6 @@ public final class UiTextInput implements UiSingleLineEditor, UiShellWidget, UiL
     /** {@inheritDoc} */
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
-        editSession.endInteraction(UiInteractionSession.EndReason.RELEASE);
         if (!isVisible()) {
             return false;
         }

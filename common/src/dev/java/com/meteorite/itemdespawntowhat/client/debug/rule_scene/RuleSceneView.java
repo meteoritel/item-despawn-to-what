@@ -2,8 +2,7 @@ package com.meteorite.itemdespawntowhat.client.debug.rule_scene;
 
 import com.meteorite.itemdespawntowhat.client.debug.kit.WorkbenchLayout;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiTransform;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiControl;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
@@ -132,11 +131,11 @@ public final class RuleSceneView implements AutoCloseable {
     private void renderStage(GuiGraphics graphics, Font font, UiRect box, long elapsed, UiHostTheme theme) {
         if (box.width() == 0 || box.height() == 0) return;
         stage.render(graphics, box, elapsed, theme);
-        UiTransform.enableScissor(graphics, box);
+        UiRenderLayers.enableScissor(graphics, box);
         try {
             UiRenderLayers.draw(graphics, UiRenderLayers.FOREGROUND, () -> drawConditions(graphics, font, theme, box, elapsed));
         } finally {
-            UiTransform.disableScissor(graphics);
+            UiRenderLayers.disableScissor(graphics);
         }
     }
 

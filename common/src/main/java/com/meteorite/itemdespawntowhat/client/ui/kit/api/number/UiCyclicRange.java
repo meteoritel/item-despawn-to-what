@@ -1,7 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.number;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 
 import java.util.List;
 import java.util.Objects;
@@ -221,7 +220,7 @@ public final class UiCyclicRange extends AbstractRangeCore<UiCyclicRangeValue> {
 
     // 命中端点；两端重叠（区分不出）时返回 null，由调用方切换当前端
     @Override
-    protected @Nullable UiRangeEnd hitEnd(double pointerX) {
+    @Nullable UiRangeEnd hitEnd(double pointerX) {
         int lowX = this.xOf(this.from);
         int highX = this.xOf(this.to);
         if (Math.abs(lowX - highX) <= OVERLAP_TOLERANCE_PX) {
@@ -231,7 +230,7 @@ public final class UiCyclicRange extends AbstractRangeCore<UiCyclicRangeValue> {
     }
 
     @Override
-    protected boolean canStartPress() {
+    boolean canStartPress() {
         return true;
     }
 
@@ -242,42 +241,34 @@ public final class UiCyclicRange extends AbstractRangeCore<UiCyclicRangeValue> {
     }
 
     private boolean oneShotSelected(double raw) {
-        if (isDragging()) return false;
-        interaction.finishBeforeDiscreteChange();
-        double next = this.snapTick(raw);
-        if (next == this.selectedTick()) {
-            return true;
-        }
-        this.beginOperation();
-        this.previewSelected(next);
-        this.endInteraction(UiInteractionSession.EndReason.RELEASE);
-        return true;
+        return interaction.changeOnce(() -> selectedEnd == UiRangeEnd.LOW
+                ? new UiCyclicRangeValue(snapTick(raw), to) : new UiCyclicRangeValue(from, snapTick(raw)),
+                next -> previewSelected(selectedEnd == UiRangeEnd.LOW ? next.from() : next.to()));
     }
 
-    private boolean previewSelected(double raw) {
+    private void previewSelected(double raw) {
         double next = this.snapTick(raw);
         if (this.selectedEnd == UiRangeEnd.LOW) {
             if (next == this.from) {
-                return false;
+                return;
             }
             this.from = next;
         } else {
             if (next == this.to) {
-                return false;
+                return;
             }
             this.to = next;
         }
         this.interaction.preview(snapshotValue());
-        return true;
     }
 
     @Override
-    protected UiCyclicRangeValue snapshotValue() {
+    UiCyclicRangeValue snapshotValue() {
         return new UiCyclicRangeValue(from, to);
     }
 
     @Override
-    protected void restoreValue(UiCyclicRangeValue restored) {
+    void restoreValue(UiCyclicRangeValue restored) {
         from = restored.from();
         to = restored.to();
     }

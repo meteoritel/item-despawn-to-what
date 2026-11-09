@@ -34,9 +34,9 @@ kit 是记录来源与差异的维护副本，按可独立发布的库 API 维�
 
 ### 能力包与导出
 
-公开入口位于 `client/ui/kit/api`：input 持有作用域、交互与焦点，geometry 持有坐标变换，render 持有通用绘制，control 组合控件与容器，style 提供原版默认主题并接收宿主主题；number、text、layout、tree 分别持有对应契约与算法，preview 拥有场景及资源。包级入口见 [api/package-info.java](../../common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/api/package-info.java)。
+公开入口位于 `client/ui/kit/api`：input 持有指针快照、作用域、交互与焦点，geometry 持有几何与坐标变换，render 持有通用绘制和 pose 感知裁剪，control 组合控件与容器，style 提供原版默认主题并接收宿主主题；number、text、layout、tree 分别持有对应契约与算法，preview 拥有场景及资源。包级入口见 [api/package-info.java](../../common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/api/package-info.java)。
 
-公开具体类直接承载状态与算法。输入和焦点的包内协作、数值包内的 `SliderInteraction`、`SliderTrack` 与区间内核 `AbstractRangeCore`、preview 的句柄与场景引擎保留在各自能力包中，由 Java 可见性保护。跨能力共用的 pose 裁剪实现位于 `internal/render`，由文本绘制与视口变换调用；宿主导入统一面向 api。
+公开具体类直接承载状态与算法。输入和焦点的包内协作、文本包内的选择与历史、数值包内的 `SliderInteraction`、`SliderTrack` 与区间内核 `AbstractRangeCore`、preview 的句柄与场景引擎保留在各自能力包中，由 Java 可见性保护。跨能力共用的 pose 裁剪实现位于 `internal/render`，公开入口为 `UiRenderLayers.enableScissor/disableScissor`；宿主导入统一面向 api。
 
 ### 对外入口
 
@@ -47,7 +47,7 @@ kit 是记录来源与差异的维护副本，按可独立发布的库 API 维�
 - **控件实现者**：实现 `UiInputTarget`，需要键盘焦点时再实现 `UiFocusTarget`；指针、键盘重复与数值文本编辑登记到所属作用域的 `UiInteractionSession`，数值快照交给 `UiValueInteraction<V>`，标量、普通区间与有向周期区间使用各自不可变值和等价规则。
 - **树与数据适配方**：`UiTreeEditor.Adapter` 提供不可变节点的读取、替换与容量，`UiTreeCodec` 提供外部表示编解码，`UiTreeMoveInteraction` 把拖动绑定到捕获。
 - **数值字段装配方**：`UiNumberPolicy` + `UiSliderWindow` 描述合法域与显示窗口，`UiNumbers` 负责显示与解析，`UiValueTextBinding` 负责数值文本的双向同步；`UiNumberField` 组合标量核心与宿主提供的 `UiSingleLineEditor` 端口。
-- **诊断与自动化测试方**：`UiLayoutSource` 把当前排版导成 `UiLayoutNode` 只读快照（矩形、文案、测量宽度与带宽），`UiDocument#layoutNodes` 给出文档自己的行几何；快照只读、不参与绘制与命中，[GUI 探针](../guides/gui-probes.md) 据此断言界面几何。
+- **诊断与自动化测试方**：`UiLayoutSource` 把当前排版导成 `UiLayoutNode` 只读快照（矩形、文案、测量宽度与带宽）。`UiDocument.layoutNodes` 返回内容坐标，`screenLayoutNodes` 合成本文档及嵌套 Frame 的实际平移与缩放，返回调用方 GUI 坐标；外层 pose 继续由宿主转换。快照只读、不参与绘制与命中，[GUI 探针](../guides/gui-probes.md) 据此断言界面几何。
 
 ### 本项目消费与库入口
 
@@ -110,7 +110,7 @@ flowchart LR
 |---|---|---|---|
 | `UiStyleSource` | 扩展点 | 按角色给出控件与滑块皮肤、tooltip skin、通用语义色和度量；默认复用原版主题 | 宿主主题、`UiControl`、`UiScalarSlider` |
 | `UiControlStyle` / `UiControlRole` / `UiSliderSkin` / `UiSliderRole` | 注入值 | 角色只表达语义（如主要、次要、危险等操作语义，以及紧凑、宽松两档几何尺度）；交互状态由样式按 `State` 解析，不属于角色；皮肤把“样式 + 画法”配成一对，使两者来自同一套主题 | 主题实现、控件渲染 |
-| `UiDocument` / `UiNode` | 只读排版聚合根 | 把文档内容块排成几何并缓存；渲染、提示和命中查询共用几何，命中数据由宿主解释 | 布局类型、`UiPointerHit`、`UiRenderLayers` |
+| `UiDocument` / `UiNode` / `UiDocumentHit` | 只读排版聚合根 | 把文档内容块排成几何并缓存；渲染、提示和命中查询共用几何，行/图标的 payload 与 action 由宿主解释 | 布局类型、`UiPointerHit`、`UiRenderLayers` |
 | `UiControl` / `UiControlGroup` | 控件聚合根 | 控件按角色取样式并解析交互状态；控件组按稳定 key 复用实例、按层序命中并给 tooltip | `UiStyleSource`、`UiFocusManager` |
 | `UiWidgetShell` / `UiShellWidget` | 可组合控件状态 | 本地矩形、资格、焦点视图、显式名称及失效收尾；Widget 通过可选默认方法复用状态，包装与核心共享实例 | `UiFocusTarget`、`UiControl`、宿主控件 |
 | `UiLabelPresentation` | 实例标签呈现 | 语义内容、视觉文本、按字体与语言失效的测量，以及悬停滚动计时 | `TextScroll`、按钮、数量行 |
@@ -130,7 +130,7 @@ flowchart LR
 | `UiFocusFollow` / `UiFocusManager.Listener` | 焦点效果 | 用注入的归属与内容坐标把目标滚入视口；组合效果按顺序执行，名称交给宿主播报 | `UiScrollView`、宿主 `UiNarration` |
 | `UiTreeEditor` / `UiTreeEditor.Adapter` / `UiTreeCodec` | 树聚合根与扩展点 | 绑定宿主不可变节点做结构操作，配置变更与视图变更分开上报；一次操作以一条 `Change` 提交 | `UiTreePath`、`UiTreeMoveInteraction`、宿主节点 |
 | `UiTreeProjection` / `UiTreeViewState` / `UiTreeNavigation` / `UiTreeRowMarker` | 树展示原语 | 每个结构版本建立先序索引；每个视图独立保存选择与折叠；可见行统一导航与标记命中，完整旧新路径映射迁移状态 | 管理树、条件摘要、`UiTreeEditor` |
-| `UiTextValue` / `UiTextEditSession` | 文本契约与协调 | session 组合码点接纳、局部历史与指针选择；回填和历史恢复共用原版 Model adapter，光标与锚点按 UTF-16 保存 | 单行、多行文本与字段控件 |
+| `UiTextValue` / `UiTextEditSession` | 文本契约与协调 | session 组合码点接纳、局部历史与指针选择；Model 直接提供文本与选区端口，Snapshot 按 UTF-16 保存光标与锚点 | 单行、多行文本与字段控件 |
 | `UiScrollView` / `UiScrollView.Policy` | 滚动所有者 | 统一偏移、范围、对齐、视口变换与拖动；政策配置步长对齐、滑块、抓取外扩、按下居中与轨道留宽 | 列表、树、目录网格、焦点跟随 |
 | `preview/PreviewScenes` | 场景所有者 | 有界请求、异步几何交接、实例准备、逐帧上传与释放 | 宿主 `PreviewIcons`、平台 `Geometry` |
 | `preview/PreviewSubject` / `PreviewStructure` | 内容契约 | 物品、状态与 NBT 快照，原版结构解码与完整占位 | 场景缓存与资源读取 |
@@ -197,6 +197,8 @@ sequenceDiagram
 
 `UiScalarSlider` 与区间内核组合包内 `SliderInteraction<V>`，共用会话开始、来源与按键匹配、释放、取消恢复和拖动锚点；值快照继续由 `UiValueInteraction<V>` 按模型自己的有效性与等价规则管理。结束先摘除会话关联，取消先恢复模型再通知监听器。轨道几何由 `SliderTrack` 使用真实手柄宽度计算；端点缺席、对端约束、周期方向、环绕和最后刻度由具体模型解释。`UiNumberField` 的并排文本与宿主区间壳的按需精确输入都经 `UiValueTextBinding` 消费同一操作生命周期。
 
+离散数值编辑统一经 `SliderInteraction.changeOnce` 结清旧操作、计算候选并完成一次 begin/preview/end；同值跳过，开始失败保持原值，监听器重入后按操作身份收尾。文本输入和局部历史应用由 `UiTextEditSession` 在修改前以 RELEASE 结束选择；单行 Enter/Escape 和多行滚动条保留各自的结束语义。
+
 ### 焦点与激活
 
 控件先声明焦点能力；`UiControl.setFocusable` 与动作独立。左键点击可聚焦目标转焦，不可聚焦的交互区域保留旧焦点，纯背景清焦。作用域退出挂起逻辑焦点，返回时恢复仍合格的目标，否则选择首个目标；交互会话随退出结束。
@@ -210,6 +212,8 @@ sequenceDiagram
 宿主先完成布局和作用域同步，再调用 `scope.pointer(x, y).resolve(content)`；控件组内绘制共用此快照，以 `forTarget` 选择所属分支，坐标变换保留同一所有者链。容器按逆绘制顺序、裁剪和变换实现 `hitTest`；列表与网格直接定位行列。点击按事件时几何重新解析。快照只读，不保存另一棵输入树。
 
 `UiPointerHit.Row` 保存所属容器、行索引、稳定 key 和屏幕矩形；列表、网格、树与表单将当前行附到命中结果，hover、选择和提示复用各自事件或绘制快照。滚动视口只做几何，业务提示由宿主投影到 hit。普通文本与富说明通过 `withTextTooltip` / `withPresentation` 注入，根调用 `renderTooltip` 统一呈现。
+
+普通提示使用 `UiPointerHit.TextTooltip`，只保存叶子坐标空间的矩形与文案。文档 `hit` 返回 `UiDocumentHit`，承载行/图标索引、payload 与 action；`hitTest` 复用同一解析，只贡献输入归属和提示。灯箱自定义 `Content` 通过 `hitTest` 接入该输入路径，动作解释留在内容自身。
 
 活动作用域允许 hover；POINTER 会话只允许捕获目标所属分支反馈，并在持续交互期间关闭 tooltip。KEY/TEXT 会话保留普通 hover。最上层命中即确定唯一提示来源，空提示也阻断向下查找；`UiControlGroup` 与 `UiLightbox` 共用这一结果。`UiTooltipPanel.contentWidth` 在折行前扣除宿主边距和 padding，普通提示与语义说明面板保留各自宽度上限和画法；正文无可用宽度时跳过绘制。
 
@@ -282,7 +286,7 @@ sequenceDiagram
 - 指针释放优先交给匹配会话；同域已消费的按下在无会话时向根内容释放一次。切域、关屏使配对失效。
 - 子内容通过有类型的 `addFocusTargets` 贡献目标，作用域根按结构版本使用 `UiFocusManager.updateTargets` 同步收集；收集成功才提交，异常保留旧列表并退出更新状态。手工登记配对错误与刷新时漏结束显式报错。
 - `UiScrollView` 默认按像素滚动；`Policy` 的对齐步长作用于所有偏移写入、范围和 ensure-visible。目录网格按整行配置，视口不足一行时保留一个裁剪显示的内容单元。
-- 内容命中使用 `UiScrollView.hitContentY(x,y)`，视口外与滚动条区域返回空；`toContentX/Y` 保持纯坐标换算。
+- 内容命中使用 `UiScrollView.hitContentY(x,y)`，视口外与滚动条区域返回空；`toContentX/Y` 保持 double 纯换算，捕获拖动可传越界点。内容矩形经 `toScreen(UiRect)` 转回 GUI，纵坐标经 `toScreenY` 在最终像素边界取整。
 - 滚动条统一由 `UiScrollView.renderScrollbar(graphics, styleSource)` 读取主题轨道与 thumb painter。`push(graphics, clip)` 将裁剪矩形与内容变换分开，文本和代码正文使用局部内容坐标。
 - `TextInputSupport` 共用输入底与焦点呈现；单行 EditBox 与多行 MultilineTextField 各自保留原版编辑模型。通用单行端口位于 text 的 `UiSingleLineEditor`。
 - 局部 tooltip、侧板和深度公式由 `UiRenderLayers` 统一；`UiOverlay` 组合遮罩和内容，容器在宿主选定的外层深度中安排局部前景。
@@ -297,7 +301,7 @@ sequenceDiagram
 - **新增主题或皮肤**：实现 `UiStyleSource`，同一角色重复调用返回稳定值，根上下文发布变化版本；滑块务必以 `UiSliderSkin` 成对给出样式与画法，使 `UiSliderPainter.Frame` 携带的样式与轨道用色同源。宿主侧的落点见 [client-ui](client-ui.md)。
 - **新增数值字段**：`UiNumberPolicy` 描述合法域、粗细步长与整数策略，`UiSliderWindow` 描述这一段域映射到轨道的哪一截，`UiNumbers` 负责显示与解析，精确输入用 `UiValueTextBinding` 绑定。窗口只影响几何，超出窗口但仍在合法域内的值继续精确显示与编辑。
 - **新增树或树操作**：提供 `UiTreeEditor.Adapter`（不可变节点、容量、可接受子节点）与 `UiTreeCodec`；结构操作统一走 `UiTreeEditor`，拖动走 `UiTreeMoveInteraction`，一次拖动只提交一次。
-- **新增文本适配**：实现 `UiTextValue`，每个控件持有一份 `UiTextEditSession`，通过 Model adapter 读取原版文本与选择；session 统一回填、接纳、历史通知与指针选择。现有单行下限为 1、多行为 0；原生模型差异留在适配器。
+- **新增文本适配**：实现 `UiTextValue`，每个控件持有一份 `UiTextEditSession`；`UiTextEditSession.Model` 提供文本、cursor/anchor、seek/select，`Snapshot` 保存原文与 UTF-16 选区。session 统一回填、接纳、历史通知与指针选择；选择器和历史为包内实现。现有单行下限为 1、多行为 0；原生模型差异留在适配器。
 - **新增展示输入**：转换为 `PreviewSubject` 后复用 `PreviewScenes`；平台差异通过 `Geometry` 注入，状态与文案由宿主适配。独立库调用方同样每帧推进预算并显式 close。
 - **新增画布能力**：tidy 布局、点阵网格、正交连线、框选各有单一入口；图标统一从 `UiIconSheet` 的图集切片取，图标条按同一格子尺寸重排。
 

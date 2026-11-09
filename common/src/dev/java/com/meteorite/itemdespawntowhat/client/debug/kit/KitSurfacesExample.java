@@ -6,9 +6,9 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiFloatingPanel
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiImageView;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiIconLightboxContent;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiLightbox;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiDocumentHit;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidget;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiTransform;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiFocusTarget;
@@ -227,7 +227,7 @@ final class KitSurfacesExample implements UiWidget, UiLayoutSource {
     }
     @Override public boolean mousePressed(UiInputContext context) {
         if (actions.mousePressed(context) || panelVisible && panel.mousePressed(context)) return true;
-        UiTarget hit = document.hit(context.pointerX(), context.pointerY());
+        UiDocumentHit hit = document.hit(context.pointerX(), context.pointerY());
         if (hit == null) return false;
         hits++;
         return true;
@@ -235,7 +235,7 @@ final class KitSurfacesExample implements UiWidget, UiLayoutSource {
     @Override public List<UiLayoutNode> layoutNodes() {
         List<UiLayoutNode> nodes = new ArrayList<>();
         actions.controls().forEach(control -> nodes.addAll(control.layoutNodes()));
-        nodes.addAll(document.layoutNodes(document.viewport().x(), document.viewport().y()));
+        nodes.addAll(document.screenLayoutNodes());
         if (panelVisible) nodes.add(node(UiLayoutNode.Kind.FRAME, panel.bounds(), label("panel"),
                 List.of(node(UiLayoutNode.Kind.CONTROL, new UiRect(panel.bounds().x(), panel.bounds().y(),
                         panel.bounds().width() - 20, font.lineHeight + 4), label("panel"), List.of()))));

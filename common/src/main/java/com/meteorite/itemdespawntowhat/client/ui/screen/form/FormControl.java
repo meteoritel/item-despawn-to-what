@@ -2,7 +2,7 @@ package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
 import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointer;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;

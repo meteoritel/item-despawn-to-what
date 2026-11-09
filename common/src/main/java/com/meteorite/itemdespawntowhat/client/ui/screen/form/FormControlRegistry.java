@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointer;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.TextScroll;
 import net.minecraft.network.chat.Component;

@@ -2,7 +2,7 @@ package com.meteorite.itemdespawntowhat.client.ui.kit.api.control;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointer;
 import org.jetbrains.annotations.Nullable;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import net.minecraft.client.gui.Font;

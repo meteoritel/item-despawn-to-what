@@ -1,22 +1,15 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.text;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.text.UiTextEditSession.Snapshot;
+
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Objects;
 import org.jetbrains.annotations.Nullable;
 
 /** 控件局部文本历史；宿主负责快照采集、回填和变化通知。 */
-public final class UiTextHistory {
+final class UiTextHistory {
     public static final int DEFAULT_CAPACITY = 100;
-
-    /** 光标与选择锚点按 UTF-16 位置保存，与原版文本控件的坐标一致。 */
-    public record Snapshot(String text, int cursor, int anchor) {
-        public Snapshot {
-            Objects.requireNonNull(text);
-            cursor = Math.clamp(cursor, 0, text.length());
-            anchor = Math.clamp(anchor, 0, text.length());
-        }
-    }
 
     private record Edit(Snapshot before, Snapshot after) {}
 
@@ -68,8 +61,6 @@ public final class UiTextHistory {
         return edit.after();
     }
 
-    public boolean canUndo() { return !undo.isEmpty(); }
-    public boolean canRedo() { return !redo.isEmpty(); }
 
     /** 装载不同文本时清空，避免历史跨字段或跨装载基线串联。 */
     public void clear() {

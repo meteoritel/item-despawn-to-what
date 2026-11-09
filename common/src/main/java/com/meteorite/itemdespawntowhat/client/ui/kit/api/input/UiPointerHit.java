@@ -1,6 +1,5 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.input;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiFlatText;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiTooltipPanel;
@@ -15,7 +14,13 @@ import org.jetbrains.annotations.Nullable;
 
 /** 一次无副作用命中的归属链；局部坐标与实际叶子一起保留，供绘制和焦点政策共用。 */
 public record UiPointerHit(List<UiInputTarget> owners, double x, double y,
-                           @Nullable UiFocusTarget focus, @Nullable UiTarget tooltip, List<Row> rows, @Nullable Tooltip presentation) {
+                           @Nullable UiFocusTarget focus, @Nullable TextTooltip tooltip, List<Row> rows, @Nullable Tooltip presentation) {
+    /** 普通提示只持有叶子坐标空间内的几何与文案；不承担文档动作或业务身份。 */
+    public record TextTooltip(UiRect rect, List<Component> tooltip) {
+        /** 提示内容在一次命中内保持稳定。 */
+        public TextTooltip { tooltip = List.copyOf(tooltip); }
+    }
+
     /** 行身份只附着实际命中，不额外创建 Widget 或 Tab 位。 */
     public record Row(UiInputTarget owner, int index, Object key, UiRect bounds) { }
 
@@ -27,7 +32,7 @@ public record UiPointerHit(List<UiInputTarget> owners, double x, double y,
 
     /** 创建普通叶子或归属链，尚未附加行与富提示。 */
     public UiPointerHit(List<UiInputTarget> owners, double x, double y,
-                        @Nullable UiFocusTarget focus, @Nullable UiTarget tooltip) {
+                        @Nullable UiFocusTarget focus, @Nullable TextTooltip tooltip) {
         this(owners, x, y, focus, tooltip, List.of(), null);
     }
     /** 已解析但没有实际命中的快照，避免下层重复解析或穿透。 */
@@ -61,7 +66,7 @@ public record UiPointerHit(List<UiInputTarget> owners, double x, double y,
     }
 
     /** 保留命中归属，附加已经选定的提示来源。 */
-    public UiPointerHit withTooltip(@Nullable UiTarget target) {
+    public UiPointerHit withTooltip(@Nullable TextTooltip target) {
         return new UiPointerHit(owners, x, y, focus, target, rows, presentation);
     }
 
@@ -83,7 +88,7 @@ public record UiPointerHit(List<UiInputTarget> owners, double x, double y,
     }
     /** 普通提示也从同一次命中产生；空内容显式截断下层查询。 */
     public UiPointerHit withTextTooltip(List<Component> text, UiRect bounds) {
-        return withTooltip(new UiTarget(UiTarget.Kind.ROW, -1, null, bounds, text, null));
+        return withTooltip(new TextTooltip(bounds, text));
     }
     /** 富提示与普通提示共用唯一目标和门禁。 */
     public UiPointerHit withPresentation(@Nullable Tooltip painter) {

@@ -4,7 +4,7 @@ import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiShellWidget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidgetShell;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiRowMetrics;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;

@@ -1,9 +1,9 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.control;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiRenderLayers;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiTransform;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIcon;
@@ -43,7 +43,7 @@ public final class UiControl implements UiButtonWidget, UiShellWidget, UiInterac
     private List<Component> tooltip = List.of();
     @Nullable
     private UiAction action;
-    private UiTarget target = new UiTarget(UiTarget.Kind.ROW, 0, null, bounds(), List.of(), null);
+    private UiPointerHit.TextTooltip target = new UiPointerHit.TextTooltip(bounds(), List.of());
     private UiStyleSource theme = UiMinecraftTheme.INSTANCE;
     private UiControlRole role = UiControlRole.SECONDARY;
     private long themeRevision = -1;
@@ -288,13 +288,12 @@ public final class UiControl implements UiButtonWidget, UiShellWidget, UiInterac
     }
 
     private void rebuildTarget() {
-        target = new UiTarget(icon == null ? UiTarget.Kind.ROW : UiTarget.Kind.ICON,
-                0, label(), bounds(), tooltip, action);
+        target = new UiPointerHit.TextTooltip(bounds(), tooltip);
     }
 
-    /** 命中当前可见且可用的矩形时返回提示与动作目标，否则返回 null。 */
+    /** 命中当前可见且可用的矩形时返回只读提示目标，否则返回 null。 */
     @Nullable
-    public UiTarget hit(double x, double y) {
+    public UiPointerHit.TextTooltip hit(double x, double y) {
         if (!isHittable()) return null;
         return bounds().contains(x, y) ? target : null;
     }
@@ -330,12 +329,12 @@ public final class UiControl implements UiButtonWidget, UiShellWidget, UiInterac
         int textY = bounds().y() + (bounds().height() - font.lineHeight) / 2;
         int textMax = Math.max(0, bounds().right() - 2 - textX);
         boolean clip = needsClip(x, iconY, iconWidth, iconHeight, textX, textY, textWidth, font.lineHeight);
-        if (clip) UiTransform.enableScissor(graphics, bounds());
+        if (clip) UiRenderLayers.enableScissor(graphics, bounds());
         try {
             if (icon != null) icon.render(graphics, x, iconY, theme);
             label.render(graphics, font, new UiRect(textX, textY, textMax, font.lineHeight), textColor(), hovered);
         } finally {
-            if (clip) UiTransform.disableScissor(graphics);
+            if (clip) UiRenderLayers.disableScissor(graphics);
         }
         if (isFocusVisible()) renderFocusOutline(graphics);
     }
@@ -377,7 +376,7 @@ public final class UiControl implements UiButtonWidget, UiShellWidget, UiInterac
     /** 使用当前布局解析实际命中，保留容器归属与叶子身份。 */
     @Override
     public @Nullable UiPointerHit hitTest(double x, double y) {
-        UiTarget target = hit(x, y);
+        UiPointerHit.TextTooltip target = hit(x, y);
         return target == null ? null : UiPointerHit.leaf(this, x, y).withTooltip(target);
     }
 

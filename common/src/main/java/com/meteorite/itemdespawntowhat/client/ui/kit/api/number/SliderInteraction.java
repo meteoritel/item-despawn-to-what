@@ -17,6 +17,8 @@ import java.util.function.Supplier;
 final class SliderInteraction<V> {
     private final UiInteractionSession.Target owner;
     private final UiValueInteraction<V> values;
+    private final BiPredicate<V, V> equivalent;
+    private long operationId;
     private final Supplier<V> snapshot;
     private final Consumer<V> restore;
     private final Supplier<UiValueInteraction.@Nullable Listener<V>> listener;
@@ -30,6 +32,7 @@ final class SliderInteraction<V> {
                       Supplier<UiValueInteraction.@Nullable Listener<V>> listener) {
         this.owner = owner;
         values = new UiValueInteraction<>(valid, equivalent);
+        this.equivalent = equivalent;
         this.snapshot = snapshot;
         this.restore = restore;
         this.listener = listener;
@@ -52,7 +55,22 @@ final class SliderInteraction<V> {
     }
 
     boolean beginOperation() {
-        return values.begin(snapshot.get(), listener.get());
+        if (values.isActive()) return false;
+        long started = ++operationId;
+        return values.begin(snapshot.get(), listener.get()) && values.isActive() && operationId == started;
+    }
+
+    // 候选值在旧操作收尾后计算，监听器重入开始的新操作不由本次离散输入结束。
+    boolean changeOnce(Supplier<V> candidate, Consumer<V> preview) {
+        if (isDragging()) return false;
+        finishBeforeDiscreteChange();
+        V next = candidate.get();
+        if (equivalent.test(next, snapshot.get())) return true;
+        if (!beginOperation()) return false;
+        long started = operationId;
+        preview.accept(next);
+        if (values.isActive() && operationId == started) end(UiInteractionSession.EndReason.RELEASE);
+        return true;
     }
 
     boolean beginPointer(UiInputContext context) {

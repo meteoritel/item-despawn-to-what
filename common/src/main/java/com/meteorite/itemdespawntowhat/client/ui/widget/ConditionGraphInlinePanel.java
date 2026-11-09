@@ -1,7 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiRenderLayers;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 
@@ -9,7 +10,6 @@ import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphSid
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphSidePanel.SIDE_PANEL_PADDING;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiTransform;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.tree.UiTreePath;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiConditionGraphEditor.InlineEditor;
@@ -167,13 +167,13 @@ final class ConditionGraphInlinePanel {
             return;
         }
         panel.render(graphics, bounds, title, () -> {
-            UiTransform.enableScissor(graphics, editor.bounds());
+            UiRenderLayers.enableScissor(graphics, editor.bounds());
             try {
                 boolean interactive = !closing && pointer.contains(bounds)
                         && pointer.contains(panelRect);
                 editor.render(graphics, renderFont, pointer.restrict(interactive));
             } finally {
-                UiTransform.disableScissor(graphics);
+                UiRenderLayers.disableScissor(graphics);
             }
         });
     }

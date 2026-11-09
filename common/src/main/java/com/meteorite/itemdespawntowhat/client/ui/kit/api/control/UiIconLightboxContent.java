@@ -1,8 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.control;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiRenderLayers;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiTransform;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIcon;
@@ -73,8 +73,6 @@ public final class UiIconLightboxContent implements UiLightbox.Content {
     @Override public void interactionEnded(UiInteractionSession.EndReason reason) { session = null; }
     /** {@inheritDoc} */
     @Override public int zoomPercent() { return view.zoomPercent(); }
-    /** 图标只读展示，提示由灯箱控件和宿主入口提供。 */
-    @Override public @Nullable UiTarget hit(double x, double y) { return null; }
     /** 准备和失败占位由图标自身按统一目标框绘制。 */
     @Override public @Nullable Component placeholder() { return null; }
 
@@ -83,8 +81,8 @@ public final class UiIconLightboxContent implements UiLightbox.Content {
         UiRect viewport = view.viewport();
         if (viewport.width() == 0 || viewport.height() == 0) return;
         icon.prepare();
-        UiTransform.enableScissor(graphics, viewport);
+        UiRenderLayers.enableScissor(graphics, viewport);
         try { icon.renderScaled(graphics, view.contentBounds(), theme); }
-        finally { UiTransform.disableScissor(graphics); }
+        finally { UiRenderLayers.disableScissor(graphics); }
     }
 }

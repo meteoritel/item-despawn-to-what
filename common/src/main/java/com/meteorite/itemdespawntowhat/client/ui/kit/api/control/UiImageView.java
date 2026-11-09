@@ -1,8 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit.api.control;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiRenderLayers;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiTransform;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 
@@ -142,10 +142,6 @@ public final class UiImageView implements UiLightbox.Content {
     @Override
     public int zoomPercent() { return view.zoomPercent(); }
 
-    @Override
-    public @Nullable UiTarget hit(double x, double y) {
-        return null;
-    }
 
     @Override
     public @Nullable Component placeholder() {
@@ -169,13 +165,13 @@ public final class UiImageView implements UiLightbox.Content {
         UiRect viewport = view.viewport();
         if (!available || viewport.width() == 0 || viewport.height() == 0) return;
         UiRect target = view.contentBounds();
-        UiTransform.enableScissor(graphics, viewport);
+        UiRenderLayers.enableScissor(graphics, viewport);
         try {
             graphics.blit(image.texture(), target.x(), target.y(), target.width(), target.height(),
                     image.u(), image.v(), image.width(), image.height(),
                     image.textureWidth(), image.textureHeight());
         } finally {
-            UiTransform.disableScissor(graphics);
+            UiRenderLayers.disableScissor(graphics);
         }
     }
 

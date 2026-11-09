@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.client.ui.kit.api.render;
 import net.minecraft.client.gui.GuiGraphics;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.internal.render.UiModelSurface;
+import com.meteorite.itemdespawntowhat.client.ui.kit.internal.render.UiScissor;
 import java.util.function.Consumer;
 
 /** 同一作用域内统一背景、模型和前景；每层弹窗完整覆盖上一层及其 tooltip。 */
@@ -23,6 +24,23 @@ public final class UiRenderLayers {
     private static final int VANILLA_ITEM_OFFSET = 150;
 
     private UiRenderLayers() { }
+
+    /**
+     * 在内容变换入栈前设置视口裁剪；按调用方 pose 换算为 GUI 像素，向内取整并先提交绘制批次。
+     * 1.21.1 的原版裁剪入口不读取 pose，本入口保持视口独立于内容平移与缩放。
+     */
+    public static void enableScissor(GuiGraphics graphics, UiRect viewport) {
+        // 向内取整保证边界外不泄漏；切换前提交绘制批次，因为 blit 这类绘制在非 managed
+        // 上下文里不会自动 endBatch（GuiGraphics.flushIfUnmanaged 只覆盖 fill/drawString）。
+        UiScissor.enable(graphics, viewport.x(), viewport.y(), viewport.right(), viewport.bottom(), false, true);
+    }
+
+    /** 提交当前裁剪内批次，再恢复上一层裁剪；与 enableScissor 在 finally 中配对。 */
+    public static void disableScissor(GuiGraphics graphics) {
+        graphics.flush();
+        graphics.disableScissor();
+    }
+
 
     /**
      * 相对当前作用域绘制，提交缓冲并在异常时恢复矩阵。

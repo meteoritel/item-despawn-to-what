@@ -1,11 +1,12 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiRenderLayers;
 import com.meteorite.itemdespawntowhat.client.edit.FieldPath;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiShellWidget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidgetShell;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 
@@ -1052,7 +1053,7 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
                 ? graph.hotspotAt(localX, localY) : null;
 
         renderer.drawCanvasBackground(graphics, bounds());
-        transform.enableScissor(graphics);
+        UiRenderLayers.enableScissor(graphics, transform.viewport());
         renderer.drawDotGrid(graphics, transform, viewport);
         transform.push(graphics);
         try {
@@ -1065,7 +1066,7 @@ public final class UiConditionGraphEditor implements UiInteractionSession.Target
             }
         } finally {
             graphics.pose().popPose();
-            UiTransform.disableScissor(graphics);
+            UiRenderLayers.disableScissor(graphics);
         }
         if (emptyTree) {
             renderer.drawEmptyMessage(graphics, renderFont, viewport, transform, emptyMessage);

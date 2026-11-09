@@ -7,7 +7,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContainer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiChildren;
 import java.util.function.Consumer;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointer;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;

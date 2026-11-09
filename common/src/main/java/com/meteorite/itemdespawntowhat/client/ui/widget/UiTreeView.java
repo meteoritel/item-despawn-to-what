@@ -4,7 +4,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiShellWidget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.control.UiWidgetShell;
 import org.jetbrains.annotations.Nullable;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointerHit;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.geometry.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInteractionSession;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.input.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.tree.UiTreePath;
@@ -301,7 +301,7 @@ public final class UiTreeView<T> implements UiShellWidget, UiLayoutSource {
             UiRect text = textRect(row, rowWidth, row.depth * INDENT_WIDTH);
             Component label = row.node.label();
             rows.add(new UiLayoutNode(UiLayoutNode.Kind.ROW,
-                    new UiRect(viewport.x() + text.x(), viewport.y() + row.top - offset, text.width(), text.height()),
+                    scrollView.toScreen(text),
                     label, font.width(label), text.width(), true, true, List.of()));
         }
         return List.of(new UiLayoutNode(UiLayoutNode.Kind.TREE, bounds(), Component.empty(), 0, 0,
@@ -409,9 +409,8 @@ public final class UiTreeView<T> implements UiShellWidget, UiLayoutSource {
         for (VisibleRow<T> row : visibleRows)
             if (row.node == node) {
                 int inset = row.depth * INDENT_WIDTH + MARKER_WIDTH;
-                return new UiRect(scrollView.viewport().x() + inset,
-                        scrollView.viewport().y() + row.top - scrollView.offset(),
-                        Math.max(0, scrollView.contentWidth() - inset), row.height);
+                return scrollView.toScreen(new UiRect(inset, row.top,
+                        Math.max(0, scrollView.contentWidth() - inset), row.height));
             }
         return new UiRect(0, 0, 0, 0);
     }
@@ -617,7 +616,7 @@ public final class UiTreeView<T> implements UiShellWidget, UiLayoutSource {
         if (hit != null) return hit.within(this);
         int index = indexAt(x, y);
         UiPointerHit leaf = UiPointerHit.leaf(this, x, y);
-        return index < 0 ? leaf : leaf.withRow(this, index, visibleRows.get(index), new UiRect(scrollView.viewport().x(), scrollView.toScreenY(visibleRows.get(index).top), scrollView.contentWidth(), visibleRows.get(index).height));
+        return index < 0 ? leaf : leaf.withRow(this, index, visibleRows.get(index), scrollView.toScreen(new UiRect(0, visibleRows.get(index).top, scrollView.contentWidth(), visibleRows.get(index).height)));
     }
 
 }
