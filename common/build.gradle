@@ -76,3 +76,26 @@ tasks.register('compileUiKitSamples', JavaCompile) {
     options.encoding = 'UTF-8'
 }
 tasks.named('check') { dependsOn tasks.named('compileUiKitSamples') }
+
+def interfaceToolClasses = layout.buildDirectory.dir('ui-kit-interface/classes')
+tasks.register('compileUiKitInterfaceTool', JavaCompile) {
+    source rootProject.fileTree('tools/ui-kit-interface') { include '*.java' }
+    classpath = files()
+    destinationDirectory = interfaceToolClasses
+    javaCompiler = javaToolchains.compilerFor { languageVersion = JavaLanguageVersion.of(21) }
+    options.encoding = 'UTF-8'
+}
+tasks.register('exportUiKitInterface', JavaExec) {
+    group = 'verification'
+    description = '使用 JDK 语言模型核对 kit 嵌套、继承与 protected 有效公开面。'
+    dependsOn tasks.named('compileUiKitInterfaceTool')
+    classpath = files(interfaceToolClasses) + sourceSets.main.compileClasspath.minus(sourceSets.main.output)
+    mainClass = 'ExportInterface'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    args file('src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit').absolutePath,
+            rootProject.file(providers.gradleProperty('kitInterfaceOutput').getOrElse('tools/ui-kit-interface/api.txt')).absolutePath,
+            providers.gradleProperty('kitInterfaceMode').getOrElse('check'),
+            rootProject.file('tools/ui-kit-interface/dependencies.txt').absolutePath,
+            mod_id
+}
+tasks.named('check') { dependsOn tasks.named('exportUiKitInterface') }

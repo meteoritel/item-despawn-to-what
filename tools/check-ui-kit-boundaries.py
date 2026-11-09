@@ -16,12 +16,9 @@ KIT_PATH = "common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit"
 KIT_PACKAGE = "com.meteorite.itemdespawntowhat.client.ui.kit"
 HOST_PREFIX = "com.meteorite"
 SAMPLE_PATH = "common/src/dev/java/com/meteorite/itemdespawntowhat/client/debug/kit"
-ALLOWED_PREFIXES = ("java.", "javax.", "net.minecraft.", "org.jetbrains.", "org.joml.", "org.lwjgl.")
-ALLOWED_CLASSES = frozenset("com.mojang.blaze3d." + name for name in (
-    "platform.Lighting", "vertex.PoseStack", "vertex.VertexConsumer", "systems.RenderSystem",
-    "vertex.BufferBuilder", "vertex.ByteBufferBuilder", "vertex.DefaultVertexFormat", "vertex.MeshData",
-    "vertex.VertexBuffer", "vertex.VertexFormat", "vertex.VertexSorting", "vertex.BufferUploader",
-    "pipeline.TextureTarget", "platform.GlStateManager"))
+DEPENDENCIES = (Path(__file__).parent / "ui-kit-interface/dependencies.txt").read_text(encoding="utf-8").splitlines()
+ALLOWED_PREFIXES = tuple(rule[:-1] for rule in DEPENDENCIES if rule.endswith(".*"))
+ALLOWED_CLASSES = frozenset(rule for rule in DEPENDENCIES if not rule.endswith(".*"))
 ALLOWED_CLASS_KEYS = frozenset(name.casefold() for name in ALLOWED_CLASSES)
 FORBIDDEN_PREFIXES = ("net.fabricmc.", "net.neoforged.", "com.google.gson.")
 ROLE = re.compile(r"<li>\{@code ([A-Za-z_][A-Za-z0-9_]*)\}: (host|library|example)(?:；([^<]*))?</li>")
@@ -182,6 +179,9 @@ def check(root: Path, kit_path: str = KIT_PATH, kit_package: str = KIT_PACKAGE,
                 if not (package + ".").startswith(preview) and target.startswith(preview):
                     result.findings.append(Finding(relative, "基础 kit 反向引用 preview", target, line.number))
                 if target == kit_package or target.startswith(kit_package + "."):
+                    if package == api_package + ".geometry" and target.startswith((api_package + ".input.",
+                            api_package + ".control.", api_package + ".render.", internal_package + ".")):
+                        result.findings.append(Finding(relative, "geometry 只持有几何，不引用输入或绘制实现", target, line.number))
                     continue
                 if line.imported:
                     reason = next(("禁用依赖 " + prefix for prefix in FORBIDDEN_PREFIXES if target.startswith(prefix)), None)

@@ -2,7 +2,7 @@
 title: UI kit（client/ui/kit）
 layer: 3
 audience: 客户端界面开发者、宿主主题与控件适配实现者、需要复用通用 UI 原语的开发者
-authority: common/client/ui/kit/api、common/client/ui/kit/internal、tools/check-ui-kit-boundaries.py
+authority: common/client/ui/kit/api、common/client/ui/kit/internal、tools/check-ui-kit-boundaries.py、tools/ui-kit-interface
 ---
 
 # UI kit
@@ -80,7 +80,7 @@ flowchart LR
     EDIT --> KIT
 ```
 
-边界由脚本强制：`python tools/check-ui-kit-boundaries.py`，白名单为 `java.*`、`javax.*`、`net.minecraft.*`、`org.jetbrains.*`、`org.joml.*`、`org.lwjgl.*`，另按脚本的 `ALLOWED_CLASSES` 精确放行光照、顶点构建、GPU 缓冲、TextureTarget、GlStateManager 与 RenderSystem 类型。preview 单向引用基础能力，基础能力的全部子包受同一规则约束。宿主只引用 api，api 的公开/protected 声明保持在导出面内，具体类可继承包内实现父类，公开类型与消费角色逐目录核验。退出码 0 通过、1 存在违规、2 配置错误。
+依赖白名单的事实源为 `tools/ui-kit-interface/dependencies.txt`，原始文本检查与 JDK 符号检查共用它。`python tools/check-ui-kit-boundaries.py` 核验消费角色、导出类型和依赖方向；geometry 只持有几何，preview 单向引用基础能力。`common:exportUiKitInterface` 读取实际类型符号，核对任意写法的外部类型、宿主资源命名空间与本地化 key，并比较有效 public/protected 签名基线；继承自包内父类的成员也进入清单。宿主只引用 api，公开类型与消费角色逐目录登记。命令与退出码见[依赖规则](../architecture/dependency-rules.md)和[工具入口](../../tools/README.md)。
 
 ### 被谁依赖
 
@@ -313,7 +313,7 @@ sequenceDiagram
 
 ### 约束
 
-- kit 的 import 只落在白名单内；新增依赖先改检查脚本与 `package-info.java` 的依赖说明，再加代码。
+- kit 的类型依赖只落在 `tools/ui-kit-interface/dependencies.txt` 白名单内；新增依赖同步该事实源与相关 `package-info.java` 的依赖说明。
 - 普通内容输入沿树派发一次，同一作用域只有一个持续交互会话，每个活动目标都收到结束原因。
 - 宿主只选择活动作用域；普通命中与焦点政策、持续交互派发及作用域切换由 kit 统一处理。
 - 尺寸钳制统一在 kit 内完成：控件、文档视口与滚动视图把负尺寸钳到 0，灯箱的最小边长钳到 1；只有 `UiRect` 在构造期拒绝负尺寸。

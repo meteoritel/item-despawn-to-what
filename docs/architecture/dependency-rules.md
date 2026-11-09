@@ -6,6 +6,8 @@ authority:
   - tools/check-isolation.py
   - tools/toolslib/java_references.py
   - tools/check-ui-kit-boundaries.py
+  - tools/ui-kit-interface/ExportInterface.java
+  - tools/ui-kit-interface/dependencies.txt
   - settings.gradle
   - common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/package-info.java
 ---
@@ -34,7 +36,7 @@ authority:
 | D6 | 命令、调试、网络是使用方 | `core/command`、`core/debug`、`core/network` → 运行时与编辑服务 | `tools/check-isolation.py` 禁止底层实现反向引用使用方 |
 | D7 | 宿主是唯一向上装配点 | `core/host` → `core` 其余包与 `platform/Services` | `tools/check-isolation.py` 禁止底层实现反向引用宿主 |
 | D8 | 客户端单向分层 | `client/net` → 协议与业务模型；`client/edit` → core 与 `client/ui/kit`；`client/ui` → `client/edit`、`client/net` | `tools/check-isolation.py` + 评审 |
-| D9 | UI kit 独立于本模组业务，宿主消费公开入口 | `kit` 只引用自身与白名单；宿主 → `kit/api`；api 导出声明保留在公开面内 | `tools/check-ui-kit-boundaries.py` |
+| D9 | UI kit 独立于本模组业务，宿主消费公开入口 | `kit` 只引用自身与白名单；宿主 → `kit/api`；api 导出声明保留在公开面内 | `tools/check-ui-kit-boundaries.py` + `common:exportUiKitInterface` |
 | D10 | 平台隔离 | `net.fabricmc.*`、`net.neoforged.*` 只出现在 `fabric/`、`neoforge/` | `tools/check-isolation.py` |
 | D11 | 跨加载器隔离 | `fabric/` 引用 `net.fabricmc.*`，`neoforge/` 引用 `net.neoforged.*`，两者互不引用对方加载器 API | `tools/check-isolation.py` |
 | D12 | 端隔离 | 客户端类（`net.minecraft.client.*`、`com.meteorite.itemdespawntowhat.client.*`）只出现在路径含 `/client/` 的源码 | `tools/check-isolation.py` |
@@ -90,16 +92,25 @@ flowchart LR
 - host 对应 kit 外 common/Fabric/NeoForge main 的静态引用；library 与 example 保持零直接生产消费，library 逐项说明用途与当前无直接生产引用。dev/probe 和注释分别识别；公开声明闭包另外报告类型可达，实际返回链由调用点核对；
 - kit 外源码只引用 api；公开/protected 声明、父类型、record 组件及接口隐式公开成员按有限词法规则检查 internal 类型泄漏；公开签名类型须登记，具体类的包内实现父类保留 Java 可见性；
 - `api/preview` 允许引用基础能力；全部基础子包对 preview 的 import 与全限定反向引用报错；
-- import 白名单为 `java.*`、`javax.*`、`net.minecraft.*`、`org.jetbrains.*`、`org.joml.*`、`org.lwjgl.*`；`com.mojang.blaze3d` 的光照、顶点、GPU 缓冲、TextureTarget、GlStateManager 与 RenderSystem 类型按脚本精确放行；
+- geometry 保留几何与坐标变换，指针快照归 input，裁剪入口归 render；geometry 对 input、control、render 与 internal 的引用报错；
+- import 白名单从 `tools/ui-kit-interface/dependencies.txt` 读取，涵盖 JDK、原版、annotations、JOML 与 LWJGL 包，以及逐类登记的 Blaze3D 渲染依赖；
 - 本模组其它包、`net.fabricmc.*`、`net.neoforged.*`、`com.google.gson.*` 判违规。
 
 纯样例根还核对本地模型、kit.api 公开入口与原版/许可依赖，产品类型和 kit.internal 均报违规。`common:compileUiKitSamples` 同时以 kit + 纯样例作为源码输入，classpath 排除产品 main 输出，Java 编译负责实际类型可见性。
 
 运行方式：`python tools/check-ui-kit-boundaries.py`；可通过 `--root`、`--kit-path`、`--kit-package`、`--host-prefix` 与可重复的 `--sample-path` 配置扫描目标，默认值对应当前项目。通过返回 0，有违规返回 1，必需输入缺失或目录无效返回 2。
 
+### 有效公开面与符号检查
+
+`common:exportUiKitInterface` 用 JDK 21 语言模型分析 kit 源码，classpath 排除产品 main 输出。它与文本检查共用 `dependencies.txt`，按真实类型符号核对白名单外引用，包括全限定写法和推断类型；对 `Component.translatable*`、`ResourceLocation` 工厂的常量参数核对宿主本地化 key 和资源命名空间。
+
+有效签名基线为 `tools/ui-kit-interface/api.txt`，包括可见嵌套类型、接口隐式成员、record 组件与访问器、继承的 public/protected 成员、泛型约束、throws 和常量。包内父类的可访问成员按调用方类型替换泛型后进入清单；调用顺序、坐标、线程与所有权由对应 JavaDoc 说明。分析同时执行 kit 的 JavaDoc 语法和引用检查。
+
+默认模式核对基线，差异输出到同目录 `.actual` 文件并令任务失败；明确变更 Interface 后显式更新基线。命令见[仓库工具入口](../../tools/README.md#ui-kit-interface)。
+
 ### 构建与持续集成
 
-根任务 `checkRepository` 组合隔离、文档、i18n、UI kit、`checkConfigReference` 与 `checkGuiCases`，各子项目 `check` 依赖同一根任务，common 的 `check` 另依赖 `compileUiKitSamples`。GUI 门禁只读核对用例、handler 和指南契约受管块。发布包隔离仍由 `checkProbePackaging` 消费各端 assemble 产物；单次 build 中每个根任务执行一次。
+根任务 `checkRepository` 组合隔离、文档、i18n、UI kit、`checkConfigReference` 与 `checkGuiCases`，各子项目 `check` 依赖同一根任务，common 的 `check` 另依赖 `compileUiKitSamples` 和 `exportUiKitInterface`。GUI 门禁只读核对用例、handler 和指南契约受管块。发布包隔离仍由 `checkProbePackaging` 消费各端 assemble 产物；单次 build 中每个根任务执行一次。
 
 PR、`1.21.1` 分支 push 和 release 的 build 使用同一门禁；环境提供 JDK 21 与 Python。Wiki 发布在写入远端前运行 `checkConfigReference`。
 

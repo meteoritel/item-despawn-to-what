@@ -46,7 +46,18 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/dsh-build.ps1 -Tasks b
 
 根 `checkSourceRepository` 调用源码顺序入口；`checkRepository` 汇总它和配置参考校验。配置参考先由 `:common:exportConfigReference` 导出 schema，发布产物检查先依赖各端 `assemble`。同一任务图中配置参考检查排在源码校验后，打包检查排在仓库门禁后；前置编译与 assemble 由 Gradle 调度。
 
-完整 `build` 还执行迁移验证、UI kit 样板与开发源码编译。现有单项 Gradle 检查任务仍可按需调用。
+完整 `build` 还执行迁移验证、UI kit 有效公开面核对、纯样例与开发源码编译。现有单项 Gradle 检查任务仍可按需调用。
+
+### UI kit Interface
+
+`common:exportUiKitInterface` 使用 JDK 21 读取 kit 的真实符号与有效 public/protected 成员，比较 `tools/ui-kit-interface/api.txt`。外部依赖白名单集中在 `tools/ui-kit-interface/dependencies.txt`；宿主资源引用及 JavaDoc 检查随同执行。该任务和 `compileUiKitSamples` 均接入 common 的 `check`。
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/dsh-build.ps1 -Tasks ':common:exportUiKitInterface'
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/dsh-build.ps1 -Tasks ':common:exportUiKitInterface -PkitInterfaceMode=write'
+```
+
+默认 `check` 模式在差异时失败，并输出 `api.txt.actual` 供核对；批准 Interface 变更后使用 `write` 更新基线，再执行标准 build。`-PkitInterfaceOutput=相对仓库路径` 可指定输出位置。工具源码与任务定义分别位于 `tools/ui-kit-interface/ExportInterface.java` 和 `common/build.gradle`；签名范围与依赖政策见[依赖规则](../docs/architecture/dependency-rules.md#有效公开面与符号检查)。
 
 ## 按用途选择工具
 
