@@ -252,7 +252,7 @@ resize 保留已有页面、文本控件与编辑会话，只重排几何；单�
 
 目录只登记可见行及上下相邻一行的预取，标签轮播登记当前与下一成员；实际绘制优先消耗共享准备预算，帧末再处理预取。准备态使用低对比度中性槽位，不可用终态使用问号标记。方块与方块实体沿共用视图绕模型中心旋转，与实体使用同一周期和相位，取景使用整圈固定包围。
 
-`PreviewResources.screenClosed` 在关闭与 removed 路径保留最近实际展示的 READY 场景，最多保留 64 个场景和 64 个 renderer 实例，15 秒后释放；重复关闭通知共用同一到期时间。几何继续受场景所有者的 GPU 预算约束。客户端 tick 在关屏后继续观察到期、世界、语言和模型世代，失效时立即释放；重新打开恢复逐帧推进。
+`PreviewResources.screenClosed` 在关闭与 removed 路径保留最近实际展示的 READY 场景，最多保留 64 个场景和 64 个 renderer 实例，15 秒后释放；重复关闭通知共用同一到期时间。几何继续受场景所有者的 GPU 预算约束。客户端 tick 在关屏后继续观察到期、世界、语言和模型世代，失效时立即释放；重新打开恢复逐帧推进。`PreviewIcons.renderFrame` 包住完整 GUI 呈现，委托场景所有者统一执行帧前预算与 finally 帧末交接。`PreviewResources.generation` 世代改变和 `release` 都释放共享模型工作区；Fabric 的 CLIENT_STOPPING 与 NeoForge 的 GameShuttingDownEvent 接入终止清理。
 
 ### 图标开发验收入口
 

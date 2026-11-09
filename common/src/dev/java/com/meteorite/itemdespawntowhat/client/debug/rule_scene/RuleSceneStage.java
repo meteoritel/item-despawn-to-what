@@ -67,17 +67,16 @@ public final class RuleSceneStage implements AutoCloseable {
     }
 
     // 同一 GUI 帧可绘制底页与灯箱，两次 draw 共用一次预算与异步交接。
-    void beginFrame() {
+    void renderFrame(Runnable painter) {
         Object generation = PreviewResources.generation();
         if (resourceGeneration != generation) {
             scenes.close();
             scenes = PreviewIcons.createScenes(BUDGET);
             resourceGeneration = generation;
         }
-        scenes.beginFrame();
+        scenes.renderFrame(painter);
     }
 
-    void endFrame() { scenes.endFrame(); }
 
     /** 在宿主 GUI 帧包络中绘制舞台；调用方负责外框与标题。 */
     public void render(GuiGraphics graphics, UiRect box, long elapsed, UiHostTheme theme) {

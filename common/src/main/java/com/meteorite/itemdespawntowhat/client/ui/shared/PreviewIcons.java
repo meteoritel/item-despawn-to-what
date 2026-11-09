@@ -73,15 +73,12 @@ public final class PreviewIcons {
         budget = next;
     }
 
-    /** 每个宿主屏幕在绘制第一枚图标前调用一次。 */
-    public static void beginFrame() {
+    /** 屏幕底页与覆盖层共享一个完整帧预算，异常时仍完成场景交接。 */
+    public static void renderFrame(Runnable painter) {
         PreviewScenes owner = scenes();
         retainedUntil = 0;
-        owner.beginFrame();
+        owner.renderFrame(painter);
     }
-
-    /** 可见图标绘制完毕后，用剩余的共享预算推进预取。 */
-    public static void endFrame() { if (scenes != null) scenes.endFrame(); }
 
     /** 关屏保留近期就绪内容，重复关闭通知沿用同一到期时间。 */
     public static void retainRecent() {

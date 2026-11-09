@@ -144,17 +144,7 @@ public final class RuleSceneScreen extends UiScreen implements UiLayoutSource {
     /** 两个资源所有者各自只推进一次，包住底页和灯箱的全部绘制。 */
     @Override protected void renderUi(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics, mouseX, mouseY, partialTick);
-        PreviewIcons.beginFrame();
-        try {
-            view.beginFrame();
-            try {
-                layers.render(graphics, font, mouseX, mouseY);
-            } finally {
-                view.endFrame();
-            }
-        } finally {
-            PreviewIcons.endFrame();
-        }
+        PreviewIcons.renderFrame(() -> view.renderFrame(() -> layers.render(graphics, font, mouseX, mouseY)));
     }
 
     private void renderBase(GuiGraphics graphics, UiPointer pointer) {

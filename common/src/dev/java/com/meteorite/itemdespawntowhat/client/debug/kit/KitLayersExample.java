@@ -103,9 +103,8 @@ final class KitLayersExample implements UiWidget, UiLayoutSource, AutoCloseable 
         int y = contentRect.y();
         if (previewFactory != null) {
             if (scenes == null) scenes = previewFactory.apply(PreviewBudget.DEFAULT);
-            scenes.beginFrame();
         }
-        try {
+        Runnable painter = () -> {
             UiIcon preview = scenes == null ? null : scenes.icon("mixed-stone",
                     new PreviewSubject.Block(Blocks.STONE.defaultBlockState(), null), 32,
                     new PreviewMotion(0, 10_000), UiSceneStyle.icon(), sprite);
@@ -122,9 +121,9 @@ final class KitLayersExample implements UiWidget, UiLayoutSource, AutoCloseable 
                     renderMixed(graphics, font, items.get(i), x + i * step, itemY, reverse);
                 if (preview != null) renderMixed(graphics, font, preview, x + items.size() * step, itemY - 2, reverse);
             }
-        } finally {
-            if (scenes != null) scenes.endFrame();
-        }
+        };
+        if (scenes == null) painter.run();
+        else scenes.renderFrame(painter);
         graphics.drawString(font, state(), stateRect.x(), stateRect.y(), theme.textColor(true), false);
         if (foreground) UiRenderLayers.draw(graphics, UiRenderLayers.FOREGROUND, () -> {
             UiRect panel = new UiRect(x + 8, y + 8, Math.clamp(bounds.width() - 16, 0, 180), 56);

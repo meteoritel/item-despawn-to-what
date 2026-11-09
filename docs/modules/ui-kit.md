@@ -225,13 +225,17 @@ sequenceDiagram
 
 ### 统一预览场景
 
-宿主通过 `PreviewScenes.request` 查询状态或 `icon` 接回 `UiIcon.Themed`，每帧绘制前调用 `beginFrame`，绘制后调用 `endFrame`。物品委托原版 GUI 绘制；方块／流体按 RenderType 合并静态几何，实体与方块实体持有独立实例并调用原版 renderer。结构在局部坐标组合这两层，液体补区段原点，静态提交经过邻面与外部可达性剔除，完整占位仍供 AO、邻居与着色查询。
+宿主通过 `PreviewScenes.request` 查询状态或 `icon` 接回 `UiIcon.Themed`；每个场景所有者每个真实 GUI 帧调用一次 `renderFrame(Runnable)`，包住底页与全部覆盖层。该入口在 finally 中完成帧末交接，绘制异常继续传给宿主；同一所有者的帧入口按顺序调用。物品委托原版 GUI 绘制；方块／流体按 RenderType 合并静态几何，实体与方块实体持有独立实例并调用原版 renderer。结构在局部坐标组合这两层，液体补区段原点，静态提交经过邻面与外部可达性剔除，完整占位仍供 AO、邻居与着色查询。
 
 `PreviewBudget` 由构造注入，默认值见其 `DEFAULT`。单场景、GPU 总量、pending 预留、请求数和逐帧次数/纳秒预算贯穿 CPU 编译、完成交接和 GPU 淘汰。每帧实例准备与上传共用软时间预算，实际绘制优先，帧末剩余额度用于预取，预算等待保持 PREPARING。请求槽位满且当前没有可淘汰场景时返回终态 `CAPACITY_REJECTED`，reason 带请求标识和容量上限；几何或字节超限仍为 `TOO_LARGE`。拒绝句柄不进入准备队列，容量恢复后再次 `request` 可获得新句柄，已拒绝句柄保持终态。`UiIcon.prepare` 仅登记内容；宿主为准备态和不可用状态分别提供占位。过期请求退出准备队列，晚到结果释放前仍计入待上传预算。半透明保留 quad 中心与索引类型，按预览视角每 15° yaw 档更新索引；同内容同相位共享缓存。实体与方块实体在渲染线程加载载荷、测量真实输出；平台适配直接装配 Display 的冻结渲染快照。
 
-文本、Sprite、Item 和场景的外部基准统一为 `UiRenderLayers.CONTENT`。`model` 与 `item` 在透明颜色和独立深度工作区绘制，再把颜色以调用方内容平面合成；回调只使用传入的局部 `GuiGraphics`，`item` 在该上下文内补偿原版物品偏移。模型内部深度不进入主 GUI 深度缓冲，同层混排按绘制顺序覆盖，前景、tooltip 与上层覆盖面按整个内容块覆盖。工作区按实际 GUI 像素取样并裁剪到布局框和父裁剪交集，每次绘制清空颜色与深度；渲染线程共享工作区，尺寸按需增长，不缓存单个图标颜色。`UiScreen` 在资源失效和卸载时释放工作区，直接使用原版 Screen 的宿主在卸载时调用 `releaseModels`。
+文本、Sprite、Item 和场景的外部基准统一为 `UiRenderLayers.CONTENT`。`model` 与 `item` 在透明颜色和独立深度工作区绘制，再把颜色以调用方内容平面合成；回调只使用传入的局部 `GuiGraphics`，`item` 在该上下文内补偿原版物品偏移。模型内部深度不进入主 GUI 深度缓冲，同层混排按绘制顺序覆盖，前景、tooltip 与上层覆盖面按整个内容块覆盖。工作区按实际 GUI 像素取样并裁剪到布局框和父裁剪交集，每次绘制清空颜色与深度；渲染线程共享工作区，尺寸按需增长，不缓存单个图标颜色。宿主在资源世代失效和客户端终止时调用 `UiRenderLayers.releaseModels`，`UiScreen` 卸载也会提前释放。场景 close、共享工作区释放和宿主 executor 关闭分别由各自所有者处理。
 
 `UiSceneView` 统一适框、相机、满亮与绘制状态恢复；静态几何和实例 renderer 都输出到独立工作区。方块、方块实体与实体默认 10 秒一圈并共享相位，结构 20 秒一圈，物品与流体 yaw 45° 静态，默认 pitch 22°；时间与开关由宿主注入。宿主关屏可用 `retainRecent` 裁剪近期 READY 场景，并分别限制场景与 renderer 实例数量；关闭所有者取消旧任务并释放 CPU/GPU 资源，晚到结果在交接处释放；executor 归宿主，关闭场景所有者后可继续用于新场景。`UiModelBounds.measure` 仅为空几何返回空值，渲染异常和非有限顶点进入既有失败分类。架构取舍见 [ADR-0057](../adr/0057-preview-visible-preparation-and-retention.md)。
+
+`Geometry.block/fluid` 在宿主 executor 工作线程运行，同一 Adapter 可被不同场景并发调用；只读场景快照与任务独占的 pose、random、CPU buffers 由 kit 提供。实体状态准备、renderer、GPU 上传与释放运行于渲染线程。资源重载或 close 后，已运行任务的晚到结果由场景所有者释放。
+
+本项目的完整平台装配包括 Fabric 的 `FabricPreviewGeometry`、`ItemDespawnToWhatClient` 安装入口，以及 NeoForge 的 `NeoForgePreviewGeometry`、`ClientSetup` 安装入口。两个 Adapter 均依赖本端 `mixin/client/DisplayPreviewAccessor`，在各端 `itemdespawntowhat.mixins.json` 的 client 列表登记；初始化调用 `PreviewIcons.install`。Display 的冻结渲染状态依赖这一整组装配。
 
 ### 样式注入到渲染
 

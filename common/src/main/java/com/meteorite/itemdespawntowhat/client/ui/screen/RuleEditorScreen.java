@@ -232,10 +232,10 @@ public final class RuleEditorScreen extends UiThemedScreen implements UiLayoutSo
     // 绘制消费根准备阶段已提交的几何
     @Override
     protected void renderThemedUi(@NotNull GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        PreviewIcons.beginFrame();
-        layers.select().render(graphics, font, mouseX, mouseY);
-        graphics.flush();
-        PreviewIcons.endFrame();
+        PreviewIcons.renderFrame(() -> {
+            layers.select().render(graphics, font, mouseX, mouseY);
+            graphics.flush();
+        });
     }
 
     private void renderPage(GuiGraphics graphics, Font renderFont, UiPointer pointer, int depth) {

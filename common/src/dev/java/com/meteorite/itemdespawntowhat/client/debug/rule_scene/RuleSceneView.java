@@ -110,8 +110,7 @@ public final class RuleSceneView implements AutoCloseable {
     }
 
     UiControl stageEntry() { return stageEntry; }
-    void beginFrame() { stage.beginFrame(); }
-    void endFrame() { stage.endFrame(); }
+    void renderFrame(Runnable painter) { stage.renderFrame(painter); }
 
     // 捕获逻辑画布和时间；放大后仍使用同一舞台所有者，三维工作区按实际像素重新绘制。
     UiIcon snapshot(Font font, long elapsed, UiHostTheme theme) {

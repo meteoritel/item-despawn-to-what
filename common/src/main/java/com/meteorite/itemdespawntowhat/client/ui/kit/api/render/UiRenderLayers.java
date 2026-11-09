@@ -79,7 +79,10 @@ public final class UiRenderLayers {
         model(graphics, bounds, local -> draw(local, CONTENT - VANILLA_ITEM_OFFSET, () -> painter.accept(local)));
     }
 
-    /** 释放共享模型工作区；UiScreen 自动调用，直接接入原版 Screen 的宿主在卸载时调用。 */
+    /**
+     * 在渲染线程释放客户端共享模型工作区，下次绘制按需重建；不关闭任何 PreviewScenes 或宿主 executor。
+     * 宿主在模型/世界资源世代失效和客户端终止时调用；UiScreen 卸载也可提前释放。
+     */
     public static void releaseModels() {
         UiModelSurface.release();
     }

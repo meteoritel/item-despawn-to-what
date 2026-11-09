@@ -69,8 +69,7 @@ public final class KitPreviewBudgetExample implements AutoCloseable {
     public void render(GuiGraphics graphics, Font font, int width, int height) {
         if (scenes == null) { scenes = factory.apply(BUDGETS.get(mode)); generation++; }
         nodes.clear();
-        scenes.beginFrame();
-        try {
+        scenes.renderFrame(() -> {
             int left = WorkbenchLayout.INSET;
             int contentWidth = WorkbenchLayout.contentWidth(width);
             int bottom = WorkbenchLayout.contentBottom(height);
@@ -132,7 +131,7 @@ public final class KitPreviewBudgetExample implements AutoCloseable {
                     BUDGETS.get(mode).gpuBytes(), BUDGETS.get(mode).pendingBytes());
             graphics.drawString(font, WorkbenchLayout.ellipsize(font, memoryText, contentWidth), left, memoryY, secondary, false);
             nodes.add(row(new UiRect(left, memoryY, contentWidth, font.lineHeight), memoryText));
-        } finally { scenes.endFrame(); }
+        });
     }
     /** 仅导出实际渲染帧的状态。 */
     public List<UiLayoutNode> layoutNodes() { return List.copyOf(nodes); }

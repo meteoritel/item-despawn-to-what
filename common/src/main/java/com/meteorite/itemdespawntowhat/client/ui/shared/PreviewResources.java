@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.shared;
 
 import net.minecraft.client.Minecraft;
+import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiRenderLayers;
 import net.minecraft.Util;
 import net.minecraft.locale.Language;
 import net.minecraft.world.level.block.Blocks;
@@ -16,6 +17,7 @@ public final class PreviewResources {
 
     /** 世界和语言当帧失效；模型身份探测在客户端游戏 tick 内合并。 */
     public static Object generation() {
+        Object previousEpoch = epoch;
         Minecraft minecraft = Minecraft.getInstance();
         Object nextWorld = minecraft.level;
         Object nextLanguage = Language.getInstance();
@@ -32,6 +34,7 @@ public final class PreviewResources {
             probedTick = tick;
             if (models != nextModels) { models = nextModels; epoch = new Object(); }
         }
+        if (epoch != previousEpoch) UiRenderLayers.releaseModels();
         return epoch;
     }
 
@@ -46,6 +49,7 @@ public final class PreviewResources {
 
     /** 显式清理资源缓存；外部持有的 wrapper 下次绘制会按新世代取值。 */
     public static void release() {
+        UiRenderLayers.releaseModels();
         PreviewIcons.clear();
         CatalogPreviewIcons.clear();
         world = null;

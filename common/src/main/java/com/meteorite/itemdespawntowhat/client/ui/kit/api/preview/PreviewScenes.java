@@ -49,12 +49,19 @@ public final class PreviewScenes implements AutoCloseable {
 
     /** 平台几何入口，所有参数均为原版类型；实现负责选择真实模型渲染层。 */
     public interface Geometry {
-        /** 装配平台需要的冻结实体渲染状态，不推进游戏 tick。 */
+        /** 渲染线程装配冻结实体状态；不推进游戏 tick，不与同一实体的绘制并发。 */
         void prepareEntity(@NotNull Entity entity);
-        /** 按平台模型层提交普通方块，buffers 按层合并整个场景。 */
+        /**
+         * 在宿主 executor 工作线程提交普通方块；不同场景可以并发调用同一 Adapter。
+         * blocks 是本任务的只读快照，pose、buffers、random 由任务独占；不访问活动世界或修改共享渲染状态。
+         * 重载或 close 后正在运行的任务仍可完成，所有者负责释放晚到结果；不得在此上传或释放 GPU 缓冲。
+         */
         void block(@NotNull BlockState state, @NotNull BlockPos pos, @NotNull BlockAndTintGetter blocks, @NotNull PoseStack pose,
                    @NotNull Function<RenderType, VertexConsumer> buffers, @NotNull RandomSource random);
-        /** 提交流体段内顶点，调用方负责补区段原点。 */
+        /**
+         * 与 block 相同的 executor、并发和只读契约；buffers 为本任务独占的 CPU 顶点输出。
+         * 输出段内坐标，由调用方补区段原点；renderer 的实例准备及 GPU 上传仍归渲染线程。
+         */
         void fluid(@NotNull BlockPos pos, @NotNull BlockAndTintGetter blocks,
                    @NotNull Function<RenderType, VertexConsumer> buffers,
                    @NotNull BlockState state, @NotNull FluidState fluid);
@@ -141,8 +148,19 @@ public final class PreviewScenes implements AutoCloseable {
         }, () -> prefetch(id, subject));
     }
 
+    /**
+     * 在渲染线程执行一个真实 GUI 帧；底页、覆盖层和重复图标共用该帧预算。
+     * 每个所有者每帧调用一次且不嵌套；内容绘制抛出异常仍执行帧末交接，异常继续传给宿主。
+     * 场景 request/prefetch 可以在布局阶段登记，实际绘制放在本作用域中。
+     */
+    public void renderFrame(Runnable painter) {
+        beginFrame();
+        try { painter.run(); }
+        finally { endFrame(); }
+    }
+
     /** 开始一帧并交接任务；绘制与帧末预取共用实例准备、上传次数和软时间预算。 */
-    public void beginFrame() {
+    private void beginFrame() {
         if (closed) return;
         frame++;
         receive();
@@ -151,7 +169,7 @@ public final class PreviewScenes implements AutoCloseable {
     }
 
     /** 可见内容绘制后用剩余预算预热邻近项；过期请求退出队列，已运行任务完成后释放结果。 */
-    public void endFrame() {
+    private void endFrame() {
         if (closed) return;
         for (PreviewScene scene : new ArrayList<>(scenes.values()).reversed()) {
             if (scene.state != PreviewState.PREPARING) continue;

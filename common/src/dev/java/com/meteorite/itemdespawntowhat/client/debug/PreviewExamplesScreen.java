@@ -13,7 +13,6 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.layout.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.preview.PreviewMotion;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.preview.PreviewSubject;
-import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.api.render.UiRenderLayers;
 import com.meteorite.itemdespawntowhat.client.ui.shared.PreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.shared.PreviewResources;
@@ -113,7 +112,10 @@ final class PreviewExamplesScreen extends Screen implements UiLayoutSource {
     @Override public void render(@NotNull GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         if (resources != Language.getInstance()) { budgets.invalidateResources(); resources = Language.getInstance(); }
         nodes.clear();
-        PreviewIcons.beginFrame();
+        PreviewIcons.renderFrame(() -> renderExamples(graphics, mouseX, mouseY, partialTick));
+    }
+
+    private void renderExamples(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics, mouseX, mouseY, partialTick);
         WorkbenchLayout.drawPage(graphics, font, theme, width, height, title);
         long[] memory = PreviewIcons.memoryBytes();
@@ -128,7 +130,6 @@ final class PreviewExamplesScreen extends Screen implements UiLayoutSource {
         if (budgetsVisible) {
             budgets.render(graphics, font, width, height);
             nodes.addAll(budgets.layoutNodes());
-            PreviewIcons.endFrame();
             return;
         }
         int top = WorkbenchLayout.CONTENT_TOP;
@@ -184,7 +185,7 @@ final class PreviewExamplesScreen extends Screen implements UiLayoutSource {
                 UiRect rect = new UiRect(WorkbenchLayout.INSET, visibleTop, contentWidth, Math.min(ROW_HEIGHT, bottom - visibleTop));
                 nodes.add(new UiLayoutNode(UiLayoutNode.Kind.ROW, rect, Component.literal(label), font.width(label), contentWidth, true, true, List.of()));
             }
-        } finally { graphics.disableScissor(); graphics.flush(); PreviewIcons.endFrame(); }
+        } finally { graphics.disableScissor(); graphics.flush(); }
     }
 
     /** 图标预先在浅色槽位里排好，深色贴图不会直接压在窗口底色上。 */

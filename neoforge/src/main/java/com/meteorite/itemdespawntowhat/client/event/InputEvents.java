@@ -8,12 +8,19 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.neoforge.event.GameShuttingDownEvent;
 
 /**
  * 客户端 tick 入口：驱动编辑工作区的会话心跳。
  */
 @EventBusSubscriber(modid = ItemDespawnToWhat.MOD_ID, value = Dist.CLIENT)
 public class InputEvents {
+
+    /** 客户端终止时在渲染线程释放预览资源与共享工作区。 */
+    @SubscribeEvent
+    public static void onGameShuttingDown(GameShuttingDownEvent event) {
+        PreviewResources.release();
+    }
 
     @SubscribeEvent
     public static void onClientTick(ClientTickEvent.Post event) {
