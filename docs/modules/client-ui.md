@@ -278,7 +278,9 @@ resize 保留已有页面、文本控件与编辑会话，只重排几何；单�
 
 舞台灯箱使用 `UiIconLightboxContent` 重绘同一 `RuleSceneStage` 与条件胶囊，结构、天空、天气、物品和氛围共享打开时的 elapsed。灯箱打开时固定时间并保留原暂停状态，底页快捷键由活动域隔离；关闭时恢复舞台焦点并校准播放锚点。滚轮按指针缩放，左键拖动平移，控制栏提供缩放与 fit；Esc 先结束手势，再关闭灯箱，底页 Esc 返回工作台。
 
-共享 `PreviewIcons` 与独立舞台各有一对 GUI 帧包络，覆盖底页和灯箱的全部绘制；两次舞台呈现共用场景几何和单帧预算。舞台在帧入口观察 `PreviewResources.generation()`，世代变化时释放并重建预览所有者，保留模型与时间状态；资源卸载由屏幕 hook 释放。灯箱文案与入口位于 dev 双语资源，kit 公开面按 main 直接引用口径登记为 library。
+目录中的 `kit_container` 使用玩家原版背包 Menu 展示 `AbstractContainerScreen` 组合接入，仅在当前 Menu 为 inventoryMenu 时开放。独立 kit 展示的 Models 页提供本地树与自定义文本模型，Surfaces 页提供自定义文档灯箱；接入契约见 [UI kit：纯样例与独立编译](ui-kit.md#纯样例与独立编译)。
+
+共享 `PreviewIcons` 与独立舞台各有一次 `renderFrame` GUI 帧包络，覆盖底页和灯箱的全部绘制；两次舞台呈现共用场景几何和单帧预算。舞台在帧入口观察 `PreviewResources.generation()`，世代变化时释放并重建预览所有者，保留模型与时间状态；资源卸载由屏幕 hook 释放。灯箱文案与入口位于 dev 双语资源，kit 公开面按 main 直接引用口径登记为 library。
 
 `FormView.layoutNodes` 保留字段作用域；CardListControl 导出卡片及子控件，UiCatalogGrid 导出当前可见目录行，RuleNameInput 导出真实文本框。`RuleEditorScreen.layoutNodes` 沿实际呈现清单汇集节点；保存层导出面板、文本、进度条和按钮，picker 与 modal 按当前显示选择导出。保存按钮资格与文案在布局时同步；picker 动画每个可见绘制帧推进一次，事件重排读取当前进度。自动化定位使用实际层级和几何。工作台组件状态在同一页面可见、可滚动、可重置，详见 [GUI 探针](../guides/gui-probes.md)。
 

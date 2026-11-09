@@ -288,5 +288,22 @@
   "gui.itemdespawntowhat.debug.workbench.lightbox.next": "下一项",
   "gui.itemdespawntowhat.debug.workbench.lightbox.position": "%s / %s",
   "gui.itemdespawntowhat.debug.workbench.lightbox.zoom_readout": "%s%%",
-  "gui.itemdespawntowhat.debug.workbench.lightbox.hint": "滚轮缩放 · 拖动平移"
+  "gui.itemdespawntowhat.debug.workbench.lightbox.hint": "滚轮缩放 · 拖动平移",
+  "gui.itemdespawntowhat.debug.workbench.kit_container": "Kit 原版容器",
+  "gui.itemdespawntowhat.debug.workbench.container.title": "Kit 背包组合接入",
+  "gui.itemdespawntowhat.debug.workbench.container.overlay": "打开覆盖层",
+  "gui.itemdespawntowhat.debug.workbench.showcase.models.title": "模型",
+  "gui.itemdespawntowhat.debug.workbench.showcase.models.text": "自定义文本模型",
+  "gui.itemdespawntowhat.debug.workbench.showcase.models.root": "根节点",
+  "gui.itemdespawntowhat.debug.workbench.showcase.models.first": "第一个",
+  "gui.itemdespawntowhat.debug.workbench.showcase.models.second": "第二个",
+  "gui.itemdespawntowhat.debug.workbench.showcase.models.move": "将首项移到第二项之后",
+  "gui.itemdespawntowhat.debug.workbench.showcase.models.fold": "折叠 / 展开",
+  "gui.itemdespawntowhat.debug.workbench.showcase.models.invalid": "树操作无效",
+  "gui.itemdespawntowhat.debug.workbench.showcase.canvas": "文档灯箱",
+  "gui.itemdespawntowhat.debug.workbench.showcase.canvas.description": "滚轮缩放，拖动平移，点击行或图标执行动作。",
+  "gui.itemdespawntowhat.debug.workbench.showcase.canvas.row": "文档行动作",
+  "gui.itemdespawntowhat.debug.workbench.showcase.canvas.icon": "行内图标动作",
+  "gui.itemdespawntowhat.debug.workbench.showcase.canvas.child": "子文档视口",
+  "gui.itemdespawntowhat.debug.workbench.showcase.canvas.count": "激活次数：%s"
 }

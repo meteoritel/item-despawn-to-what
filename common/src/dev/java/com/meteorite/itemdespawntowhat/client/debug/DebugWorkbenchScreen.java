@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.debug;
 
 import com.meteorite.itemdespawntowhat.client.debug.kit.KitShowcaseScreen;
+import com.meteorite.itemdespawntowhat.client.debug.kit.KitContainerExample;
 import com.meteorite.itemdespawntowhat.client.debug.rule_scene.RuleSceneScreen;
 import com.meteorite.itemdespawntowhat.client.debug.kit.UiSliderExamples;
 import com.meteorite.itemdespawntowhat.client.debug.kit.WorkbenchLayout;
@@ -41,8 +42,8 @@ import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Consumer;
 import java.util.Objects;
+import java.util.function.Consumer;
 import java.util.function.BooleanSupplier;
 /** 开发客户端工具目录与本地组件场景；每个场景拥有自己的输入、模型和模态。 */
 public class DebugWorkbenchScreen extends Screen {
@@ -95,6 +96,12 @@ public class DebugWorkbenchScreen extends Screen {
             tools = List.of(
                     new Tool("kit_showcase", () -> true, () -> Minecraft.getInstance().setScreen(new KitShowcaseScreen(home, KitSkinSamples.themes(),
                             Minecraft.getInstance().level == null ? null : PreviewIcons::createScenes))),
+                    new Tool("kit_container", () -> Minecraft.getInstance().player != null
+                            && Minecraft.getInstance().player.containerMenu == Minecraft.getInstance().player.inventoryMenu,
+                            () -> {
+                                var player = Objects.requireNonNull(Minecraft.getInstance().player);
+                                Minecraft.getInstance().setScreen(new KitContainerExample(player.inventoryMenu, player.getInventory(), home));
+                            }),
                     new Tool("gallery", () -> true, () -> Minecraft.getInstance().setScreen(new Gallery(home, false))),
                     new Tool("interactions", () -> true, () -> Minecraft.getInstance().setScreen(new Gallery(home, true))),
                     new Tool("rule_scene", () -> Minecraft.getInstance().level != null, () -> Minecraft.getInstance().setScreen(new RuleSceneScreen(home))),

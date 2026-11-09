@@ -53,7 +53,7 @@ kit 是记录来源与差异的维护副本，按可独立发布的库 API 维�
 
 各能力目录的 `package-info.java` 逐项登记 `host`（kit 外本项目生产源码直接引用）、`library`（供其它宿主使用，逐项说明用途与当前无直接生产引用）与 `example`（装配示例）。三类都保留公开契约，dev/probe 使用与生产消费分别识别。
 
-本项目以固定矩形控件、滚动视口、焦点与捕获、树编辑、数值与文本交互装配页面。`UiDocument`/`UiNode` 是只读文档排版、渲染与命中查询入口，当前无直接生产引用；`UiControlGroup`、`UiLightbox`、`UiFloatingPanel`、`UiNavigationHistory` 等保留为库接入能力；开发工作台的 `kit` 示例目录持有 `UiSliderExamples` 与无业务展示内容。`PreviewScene` 经 `request` 返回链在宿主被查询，`UiTextAcceptance` 经编辑会话被 kit 文本控件使用；词法直接引用、公开契约可达与实际调用链分别核对。公开成员与嵌套契约随所属顶层类型维护。
+本项目以固定矩形控件、滚动视口、焦点与捕获、树编辑、数值与文本交互装配页面。`UiDocument`/`UiNode` 是只读文档排版、渲染与命中查询入口，当前无直接生产引用；`UiControlGroup`、`UiLightbox`、`UiFloatingPanel`、`UiNavigationHistory` 等保留为库接入能力；开发工作台的 `kit` 示例目录持有无业务展示内容，覆盖文档、树、文本、控件组与两种屏幕宿主。`PreviewScene` 经 `request` 返回链在宿主被查询，`UiTextAcceptance` 经编辑会话被 kit 文本控件使用；词法直接引用、公开契约可达与实际调用链分别核对。有效公开成员与嵌套契约由 `tools/ui-kit-interface/api.txt` 记录。
 
 ### 依赖方向
 
@@ -259,6 +259,8 @@ sequenceDiagram
 
 `UiScreen` 的 final `render` 依次同步资源、调用每帧一次的 `advanceUiFrame`、执行 `prepareUi` 和 `layoutUi`、刷新作用域，再进入子类 `renderUi`；指针与键盘事件前完成准备和布局，派发结束后再次准备待发布状态。子类的 `inputScope` 只返回当前页或顶层覆盖面的稳定作用域，kit 是唯一应用选择的入口。根通过资源 hook 使自己拥有的缓存失效或释放。
 
+已有原版父类的屏幕可组合 `UiInputRouter`、稳定的 `UiInputScope` 与 `UiLayers`。`KitContainerExample` 继承 `AbstractContainerScreen<InventoryMenu>`，复用玩家原版 inventoryMenu；kit 先处理输入，未消费输入交原版父类，覆盖域活动时阻断底层槽位。样例保留已消费按下的按钮归属以接收迟到释放，removed 关闭 router 并释放共享模型工作区。
+
 `UiInputTarget.addFocusTargets` 是有类型的贡献契约。`UiInputContainer` 只要求提供稳定的 `UiChildren`，默认接入命中、自身归属、焦点贡献、结构版本和普通输入。`UiChildren` 是容器实际成员，绘制遍历同一集合，逆序命中，按声明顺序贡献焦点；成员的 `setTabOrder` 只调整派生导航视图，结构与导航配置改变时才重新排序。结构及子树版本向上传递，`scopeExited` 沿实际成员传播，持续拖动和匹配释放仍由作用域直接送到会话目标。`UiInputScope.refreshFocus` 只在 dirty 或 `focusRevision` 变化时提交索引，其他调用仅刷新资格；独立结构变更可调用 `invalidateFocus`。语义组仍由 `UiFocusTarget.focusTargets` 表达，复合编辑模式保持原有 Tab 锚点。`hasFocus` 使用焦点视图的 `containsFocus` 识别组归属；作用域恢复时重新绑定焦点视图，支持公共 chrome 在多个稳定域之间切换。resize 保持控件与编辑会话，只调整几何；多行换宽通过 snapshot/restore 恢复原版模型、选区与历史。
 
 `UiOverlay` 持有覆盖面的唯一阻断作用域、保焦背景命中、遮罩与局部内容层，模态、灯箱、保存层和 picker 共享它。`UiModal.closeWhen` 为正常关闭请求提供否决；Esc、背景、取消、确认与正常栈关闭统一经 `requestClose`，确认动作仅在关闭成功后执行。栈 `remove/clear` 用于宿主生命周期强制移除。保存阶段与取消协议仍由宿主解释。
@@ -275,7 +277,7 @@ sequenceDiagram
 
 ### 纯样例与独立编译
 
-`KitSkinSamples` 展示默认、局部配色、sprite/九宫格与 painter 配方，以及单控件完整覆盖；展示屏幕以 F6 或 Theme 按钮轮换相同内容的主题。Surfaces 页展示通用角色、图片灯箱和经 Themed/Rendered 转发的矩形图标灯箱；灯箱使用自身 prepare、layer 与布局快照。输入、模态和滚动页共用同一 Context。
+`KitSkinSamples` 展示默认、局部配色、sprite/九宫格与 painter 配方，以及单控件完整覆盖；展示屏幕以 F6 或 Theme 按钮轮换相同内容的主题。Surfaces 页展示图片、图标与自定义文档灯箱；`KitDocumentLightboxContent` 覆盖行/图标动作、提示、子 Frame、缩放与捕获。Models 页的 `KitModelsExample` 用本地不可变树消费 Editor、Projection、ViewState 与 Navigation，工具栏使用 `UiControlGroup` 和 `UiLinearLayout`；`KitTextModelExample` 展示自定义 Model、码点限制、局部历史及 resize 快照恢复。各页共用同一 Context，工作台的 `kit_container` 入口提供原版容器组合样例。
 
 `common/src/dev/java/com/meteorite/itemdespawntowhat/client/debug/kit` 是公开面消费样例。`common:compileUiKitSamples` 只编译 kit 与该样例根，classpath 排除产品 main 输出；common 的 `check` 已依赖它。工作台运行同一份样例，外层注入导航、宿主主题和可选 preview 工厂。样例自己关闭拥有的场景与点阵，executor 归工厂宿主；样例不进入正式 main jar。
 

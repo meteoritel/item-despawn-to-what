@@ -49,8 +49,9 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
     private final UiControlGroup footer = new UiControlGroup();
     private final UiStyleSource theme;
     private final KitInputsExample inputs;
+    private final KitModelsExample models;
     private final UiModalStack modals;
-    private enum Page { CONTROLS, INPUTS, SURFACES, LAYERS }
+    private enum Page { CONTROLS, INPUTS, SURFACES, LAYERS, MODELS }
     private Page page = Page.CONTROLS;
     private final KitSurfacesExample surfaces;
     private final KitLayersExample layers;
@@ -86,12 +87,14 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
         footer.setTheme(theme);
         slider.setTheme(theme, UiSliderRole.COMPACT);
         inputs = new KitInputsExample(theme, font);
+        models = new KitModelsExample(font, theme);
         modals = new UiModalStack(theme);
         navigation.beginUpdate();
         nav("showcase.page.controls", () -> page = Page.CONTROLS);
         nav("showcase.page.inputs", () -> page = Page.INPUTS);
         nav("showcase.page.surfaces", () -> page = Page.SURFACES);
         nav("showcase.layers.title", () -> page = Page.LAYERS);
+        nav("showcase.models.title", () -> page = Page.MODELS);
         nav("showcase.theme", nextTheme);
         nav("showcase.modal", this::openModal);
         navigation.endUpdate();
@@ -177,7 +180,8 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
     public void addFocusTargets(Consumer<UiFocusTarget> sink) {
         navigation.addFocusTargets(sink);
         footer.addFocusTargets(sink);
-        if (page == Page.INPUTS) inputs.addFocusTargets(sink);
+        if (page == Page.MODELS) models.addFocusTargets(sink);
+        else if (page == Page.INPUTS) inputs.addFocusTargets(sink);
         else if (page == Page.SURFACES) surfaces.addFocusTargets(sink);
         else if (page == Page.LAYERS) layers.addFocusTargets(sink);
         else {
@@ -200,6 +204,7 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
         bounds = new UiRect(WorkbenchLayout.INSET, CONTENT_TOP, contentWidth,
                 Math.max(0, WorkbenchLayout.contentBottom(height) - CONTENT_TOP));
         inputs.setBounds(bounds.x(), bounds.y(), bounds.width(), bounds.height());
+        models.setBounds(bounds.x(), bounds.y(), bounds.width(), bounds.height());
         surfaces.setBounds(bounds.x(), bounds.y(), bounds.width(), bounds.height());
         surfaces.prepareLightbox(width, height);
         layers.setBounds(bounds.x(), bounds.y(), bounds.width(), bounds.height());
@@ -237,7 +242,8 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
         WorkbenchLayout.drawPageHeading(graphics, font, theme, width, text("kit_showcase"));
         WorkbenchLayout.drawSubtitle(graphics, font, theme, width, text("kit_showcase.description"));
         navigation.render(graphics, font, pointer);
-        if (page == Page.INPUTS) inputs.render(graphics, font, pointer);
+        if (page == Page.MODELS) models.render(graphics, font, pointer);
+        else if (page == Page.INPUTS) inputs.render(graphics, font, pointer);
         else if (page == Page.SURFACES) surfaces.render(graphics, font, pointer);
         else if (page == Page.LAYERS) layers.render(graphics, font, pointer);
         else renderControls(graphics, pointer);
@@ -310,6 +316,7 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
     public @Nullable UiPointerHit hitTest(double x, double y) {
         UiPointerHit hit = navigation.hitTest(x, y);
         if (hit == null) hit = footer.hitTest(x, y);
+        if (hit == null && page == Page.MODELS) hit = models.hitTest(x, y);
         if (hit == null && page == Page.INPUTS) hit = inputs.hitTest(x, y);
         if (hit == null && page == Page.SURFACES) hit = surfaces.hitTest(x, y);
         if (hit == null && page == Page.LAYERS) hit = layers.hitTest(x, y);
@@ -324,6 +331,7 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
     public boolean mousePressed(UiInputContext context) {
         if (context.hits(navigation)) return navigation.mousePressed(context);
         if (context.hits(footer)) return footer.mousePressed(context);
+        if (page == Page.MODELS) return models.mousePressed(context);
         if (page == Page.INPUTS) return inputs.mousePressed(context);
         if (page == Page.SURFACES) return surfaces.mousePressed(context);
         if (page == Page.LAYERS) return layers.mousePressed(context);
@@ -334,21 +342,22 @@ final class KitShowcaseContent implements UiInputTarget, UiLayoutSource {
 
     @Override
     public boolean mouseScrolled(UiInputContext context, double x, double y) {
-        return page == Page.INPUTS ? inputs.mouseScrolled(context, x, y) : page == Page.CONTROLS && scrollExample.mouseScrolled(context, x, y);
+        return page == Page.MODELS ? models.mouseScrolled(context, x, y) : page == Page.INPUTS ? inputs.mouseScrolled(context, x, y) : page == Page.CONTROLS && scrollExample.mouseScrolled(context, x, y);
     }
 
     @Override public boolean keyPressed(int key, int scan, int mods) {
-        return page == Page.INPUTS ? inputs.keyPressed(key, scan, mods) : page == Page.CONTROLS && slider.isFocused() && slider.keyPressed(key, scan, mods);
+        return page == Page.MODELS ? models.keyPressed(key, scan, mods) : page == Page.INPUTS ? inputs.keyPressed(key, scan, mods) : page == Page.CONTROLS && slider.isFocused() && slider.keyPressed(key, scan, mods);
     }
 
     @Override public boolean charTyped(char value, int mods) {
-        return page == Page.INPUTS && inputs.charTyped(value, mods);
+        return page == Page.MODELS ? models.charTyped(value, mods) : page == Page.INPUTS && inputs.charTyped(value, mods);
     }
 
     @Override
     public List<UiLayoutNode> layoutNodes() {
         List<UiLayoutNode> nodes = new ArrayList<>();
-        if (page == Page.INPUTS) nodes.addAll(inputs.layoutNodes());
+        if (page == Page.MODELS) nodes.addAll(models.layoutNodes());
+        else if (page == Page.INPUTS) nodes.addAll(inputs.layoutNodes());
         else if (page == Page.SURFACES) nodes.addAll(surfaces.layoutNodes());
         else if (page == Page.LAYERS) nodes.addAll(layers.layoutNodes());
         else {

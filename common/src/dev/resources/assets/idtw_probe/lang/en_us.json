@@ -288,5 +288,22 @@
   "gui.itemdespawntowhat.debug.workbench.lightbox.next": "Next",
   "gui.itemdespawntowhat.debug.workbench.lightbox.position": "%s / %s",
   "gui.itemdespawntowhat.debug.workbench.lightbox.zoom_readout": "%s%%",
-  "gui.itemdespawntowhat.debug.workbench.lightbox.hint": "Wheel zoom · Drag pan"
+  "gui.itemdespawntowhat.debug.workbench.lightbox.hint": "Wheel zoom · Drag pan",
+  "gui.itemdespawntowhat.debug.workbench.kit_container": "Kit container",
+  "gui.itemdespawntowhat.debug.workbench.container.title": "Kit inventory integration",
+  "gui.itemdespawntowhat.debug.workbench.container.overlay": "Open overlay",
+  "gui.itemdespawntowhat.debug.workbench.showcase.models.title": "Models",
+  "gui.itemdespawntowhat.debug.workbench.showcase.models.text": "Custom text model",
+  "gui.itemdespawntowhat.debug.workbench.showcase.models.root": "Root",
+  "gui.itemdespawntowhat.debug.workbench.showcase.models.first": "First",
+  "gui.itemdespawntowhat.debug.workbench.showcase.models.second": "Second",
+  "gui.itemdespawntowhat.debug.workbench.showcase.models.move": "Move first after second",
+  "gui.itemdespawntowhat.debug.workbench.showcase.models.fold": "Fold / unfold",
+  "gui.itemdespawntowhat.debug.workbench.showcase.models.invalid": "Invalid tree operation",
+  "gui.itemdespawntowhat.debug.workbench.showcase.canvas": "Document lightbox",
+  "gui.itemdespawntowhat.debug.workbench.showcase.canvas.description": "Scroll to zoom; drag to pan; click a row or icon to activate.",
+  "gui.itemdespawntowhat.debug.workbench.showcase.canvas.row": "Document row action",
+  "gui.itemdespawntowhat.debug.workbench.showcase.canvas.icon": "Inline icon action",
+  "gui.itemdespawntowhat.debug.workbench.showcase.canvas.child": "Nested document viewport",
+  "gui.itemdespawntowhat.debug.workbench.showcase.canvas.count": "Activations: %s"
 }

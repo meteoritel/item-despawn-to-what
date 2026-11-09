@@ -42,7 +42,7 @@ import java.util.function.Consumer;
 final class KitSurfacesExample implements UiWidget, UiLayoutSource {
     private static final int GUTTER = 12;
     private static final int STATE_LINES = 2;
-    private static final int ACTION_COLUMNS = 4;
+    private static final int ACTION_COLUMNS = 5;
     private static final UiSurfaceRole[] SURFACE_ROLES = UiSurfaceRole.values();
     private static final UiControlStyle.State[] SURFACE_STATES = UiControlStyle.State.values();
     private static final int SURFACE_COLUMNS = 7;
@@ -57,6 +57,7 @@ final class KitSurfacesExample implements UiWidget, UiLayoutSource {
     private final UiImageView image;
     private final UiLightbox lightbox;
     private final UiIconLightboxContent iconContent;
+    private final KitDocumentLightboxContent canvas;
     private UiLightbox.Content activeContent;
     private final List<UiLayer> overlayLayers;
     private Runnable overlayChanged = () -> { };
@@ -90,6 +91,7 @@ final class KitSurfacesExample implements UiWidget, UiLayoutSource {
         ResourceLocation texture = ResourceLocation.withDefaultNamespace("textures/block/stone.png");
         image = new UiImageView(LightboxImage.whole(texture, texture, 16, 16, label("image"), label("image.description")), null, true);
         iconContent = new UiIconLightboxContent(scaledIcon(texture), theme);
+        canvas = new KitDocumentLightboxContent(font, theme);
         activeContent = image;
         lightbox = new UiLightbox(new UiLightbox.Labels() {
             @Override public Component close() { return label("image.close"); }
@@ -108,6 +110,7 @@ final class KitSurfacesExample implements UiWidget, UiLayoutSource {
         actions.beginUpdate();
         action("image", () -> openImage(image, "image", "image.description"));
         action("image.icon", () -> openImage(iconContent, "image.icon", "image.icon.description"));
+        action("canvas", () -> openImage(canvas, "canvas", "canvas.description"));
         action("panel.collapse", () -> panel.setCollapsed(!panel.isCollapsed()));
         action("panel.dock", () -> panel.setDock(UiFloatingPanel.Dock.TOP_RIGHT));
         action("panel.close", () -> panelVisible = !panelVisible);
@@ -173,7 +176,7 @@ final class KitSurfacesExample implements UiWidget, UiLayoutSource {
         for (int i = 0; i < actions.size(); i++) {
             actions.controls().get(i).setBounds(x + i % ACTION_COLUMNS * (actionCell + 4), y + capHeight + i / ACTION_COLUMNS * 24, actionCell, 20);
         }
-        int surfaceTop = y + capHeight + 2 * 24;
+        int surfaceTop = y + capHeight + (actions.size() + ACTION_COLUMNS - 1) / ACTION_COLUMNS * 24;
         surfaceCells.clear();
         int surfaceWidth = Math.max(0, width / SURFACE_COLUMNS);
         for (int i = 0; i < SURFACE_ROLES.length; i++) surfaceCells.add(new UiRect(
